@@ -1,0 +1,11 @@
+C:\questionshaper\backend\src\main\java\com\testshaper\repository\UserRepository.java
+C:\questionshaper\backend\src\main\java\com\testshaper\controller\AuthController.java
+C:\questionshaper\backend\src\main\java\com\testshaper\security\CustomUserDetailsService.java
+C:\questionshaper\backend\src\main\java\com\testshaper\common\GlobalExceptionHandler.java
+C:\questionshaper\backend\src\main\java\com\testshaper\QuestionShaperApplication.java
+C:\questionshaper\backend\src\main\java\com\testshaper\security\JwtAuthFilter.java
+C:\questionshaper\backend\src\main\java\com\testshaper\common\ApiResponse.java
+C:\questionshaper\backend\src\main\java\com\testshaper\security\JwtUtil.java
+C:\questionshaper\backend\src\main\java\com\testshaper\config\SecurityConfig.java
+C:\questionshaper\backend\src\main\java\com\testshaper\config\DatabaseSeeder.java
+C:\questionshaper\backend\src\main\java\com\testshaper\entity\User.java
