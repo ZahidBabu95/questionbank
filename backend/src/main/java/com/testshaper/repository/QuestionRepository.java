@@ -9,7 +9,7 @@ import java.util.UUID;
 
 @Repository
 public interface QuestionRepository extends JpaRepository<Question, UUID> {
-    List<Question> findBySubjectId(UUID subjectId);
+    List<Question> findByClassSubjectId(UUID classSubjectId);
 
     List<Question> findByStatus(Question.QuestionStatus status);
 }

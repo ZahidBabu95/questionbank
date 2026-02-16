@@ -40,10 +40,11 @@ const MENU_ITEMS = [
         title: 'Academic Structure',
         icon: <BookOpen size={22} strokeWidth={1.5} />,
         submenu: [
-            { title: 'Classes / Grades', path: '/academic/classes' },
-            { title: 'Subjects', path: '/academic/subjects' },
-            { title: 'Chapters', path: '/academic/chapters' },
-            { title: 'Topics', path: '/academic/topics' },
+            { title: 'Overview', path: '/admin/academic/structure' },
+            { title: 'Classes / Grades', path: '/admin/academic/classes' },
+            { title: 'Subjects', path: '/admin/academic/subjects' },
+            { title: 'Chapters', path: '/admin/academic/chapters' },
+            { title: 'Topics', path: '/admin/academic/topics' },
         ]
     },
     {

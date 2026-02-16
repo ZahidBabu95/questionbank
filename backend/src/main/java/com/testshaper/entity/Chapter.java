@@ -19,6 +19,9 @@ public class Chapter extends BaseTenantEntity {
 
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "subject_id", nullable = false)
-    private Subject subject;
+    @JoinColumn(name = "class_subject_id", nullable = false)
+    private ClassSubject classSubject;
+
+    @OneToMany(mappedBy = "chapter", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<Topic> topics = new java.util.ArrayList<>();
 }

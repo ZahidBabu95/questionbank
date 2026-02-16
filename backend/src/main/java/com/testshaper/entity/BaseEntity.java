@@ -16,6 +16,7 @@ import org.hibernate.type.SqlTypes;
 @MappedSuperclass
 @Getter
 @Setter
+@org.hibernate.annotations.Where(clause = "deleted = false")
 public abstract class BaseEntity {
 
     @Id

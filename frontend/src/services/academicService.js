@@ -23,7 +23,12 @@ const deleteClass = async (id) => {
 };
 
 // --- Subjects ---
-const createSubject = async (classId, data) => {
+const createGlobalSubject = async (data) => {
+    const response = await axios.post(`${API_URL}/subjects`, data, getAuthHeader());
+    return response.data;
+};
+
+const createClassSubject = async (classId, data) => {
     const response = await axios.post(`${API_URL}/classes/${classId}/subjects`, data, getAuthHeader());
     return response.data;
 };
@@ -42,14 +47,24 @@ const deleteSubject = async (id) => {
     await axios.delete(`${API_URL}/subjects/${id}`, getAuthHeader());
 };
 
-// --- Chapters ---
-const createChapter = async (subjectId, data) => {
-    const response = await axios.post(`${API_URL}/subjects/${subjectId}/chapters`, data, getAuthHeader());
+const deleteClassSubject = async (id) => {
+    await axios.delete(`${API_URL}/class-subjects/${id}`, getAuthHeader());
+};
+
+const assignSubjectToClass = async (classId, subjectId, sessionId) => {
+    const response = await axios.post(`${API_URL}/classes/${classId}/subjects/${subjectId}/session/${sessionId}`, {}, getAuthHeader());
     return response.data;
 };
 
-const getChaptersBySubject = async (subjectId) => {
-    const response = await axios.get(`${API_URL}/subjects/${subjectId}/chapters`, getAuthHeader());
+// --- Chapters ---
+// --- Chapters ---
+const createChapter = async (classSubjectId, data) => {
+    const response = await axios.post(`${API_URL}/class-subjects/${classSubjectId}/chapters`, data, getAuthHeader());
+    return response.data;
+};
+
+const getChaptersByClassSubject = async (classSubjectId) => {
+    const response = await axios.get(`${API_URL}/class-subjects/${classSubjectId}/chapters`, getAuthHeader());
     return response.data;
 };
 
@@ -82,9 +97,14 @@ const deleteTopic = async (id) => {
     await axios.delete(`${API_URL}/topics/${id}`, getAuthHeader());
 };
 
+const getActiveSession = async () => {
+    const response = await axios.get(`${API_URL}/sessions/active`, getAuthHeader());
+    return response.data;
+};
+
 export default {
     createClass, getAllClasses, deleteClass,
-    createSubject, getSubjectsByClass, getAllSubjects, deleteSubject,
-    createChapter, getChaptersBySubject, getAllChapters, deleteChapter,
+    createGlobalSubject, createClassSubject, getSubjectsByClass, getAllSubjects, deleteSubject, deleteClassSubject, assignSubjectToClass, getActiveSession,
+    createChapter, getChaptersByClassSubject, getAllChapters, deleteChapter,
     createTopic, getTopicsByChapter, getAllTopics, deleteTopic
 };

@@ -9,5 +9,5 @@ import java.util.UUID;
 
 @Repository
 public interface ChapterRepository extends JpaRepository<Chapter, UUID> {
-    List<Chapter> findBySubjectId(UUID subjectId);
+    List<Chapter> findByClassSubjectId(UUID classSubjectId);
 }

@@ -65,12 +65,8 @@ public class Question extends BaseTenantEntity {
 
     // Academic Mapping
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "academic_class_id")
-    private AcademicClass academicClass;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "subject_id")
-    private Subject subject;
+    @JoinColumn(name = "class_subject_id")
+    private ClassSubject classSubject;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chapter_id")

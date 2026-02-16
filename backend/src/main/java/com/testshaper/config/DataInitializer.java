@@ -1,13 +1,7 @@
 package com.testshaper.config;
 
-import com.testshaper.entity.Institute;
-import com.testshaper.entity.Permission;
-import com.testshaper.entity.Role;
-import com.testshaper.entity.User;
-import com.testshaper.repository.InstituteRepository;
-import com.testshaper.repository.PermissionRepository;
-import com.testshaper.repository.RoleRepository;
-import com.testshaper.repository.UserRepository;
+import com.testshaper.entity.*;
+import com.testshaper.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -30,6 +24,10 @@ public class DataInitializer {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
     private final InstituteRepository instituteRepository;
+    private final AcademicSessionRepository academicSessionRepository;
+    private final SubjectRepository subjectRepository;
+    private final AcademicClassRepository academicClassRepository;
+    private final ClassSubjectRepository classSubjectRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Bean
@@ -59,6 +57,22 @@ public class DataInitializer {
                     institute);
             createUserIfNotFound("teacher@test.com", "Teacher User", "Teacher@123", teacherRole, institute);
             createUserIfNotFound("student@test.com", "Student User", "Student@123", studentRole, institute);
+
+            // 5. Create Academic Data (Session, Class, Subject)
+            AcademicSession currentSession = createSessionIfNotFound("2024", true);
+
+            // AcademicClass class9 = createClassIfNotFound("Class 9", 9);
+            // AcademicClass class10 = createClassIfNotFound("Class 10", 10);
+
+            // Subject math = createSubjectIfNotFound("Mathematics", "MATH", "General
+            // Mathematics");
+            // Subject physics = createSubjectIfNotFound("Physics", "PHYS", "Physics for
+            // Science");
+
+            // 6. Assign Subjects to Classes (Syllabus)
+            // createClassSubjectIfNotFound(class9, math, currentSession);
+            // createClassSubjectIfNotFound(class10, math, currentSession);
+            // createClassSubjectIfNotFound(class10, physics, currentSession);
 
             log.info("Data Initialization Completed.");
         };
@@ -105,6 +119,47 @@ public class DataInitializer {
             user.setActive(true);
             userRepository.save(user);
             log.info("Created user: {}", email);
+        }
+    }
+
+    private AcademicSession createSessionIfNotFound(String name, boolean isActive) {
+        return academicSessionRepository.findByName(name).orElseGet(() -> {
+            AcademicSession session = new AcademicSession();
+            session.setName(name);
+            session.setActive(isActive);
+            return academicSessionRepository.save(session);
+        });
+    }
+
+    private AcademicClass createClassIfNotFound(String name, Integer order) {
+        return academicClassRepository.findAll().stream()
+                .filter(c -> c.getName().equals(name))
+                .findFirst()
+                .orElseGet(() -> {
+                    AcademicClass academicClass = new AcademicClass();
+                    academicClass.setName(name);
+                    academicClass.setOrder(order);
+                    return academicClassRepository.save(academicClass);
+                });
+    }
+
+    private Subject createSubjectIfNotFound(String name, String code, String description) {
+        return subjectRepository.findByCode(code).orElseGet(() -> {
+            Subject subject = new Subject();
+            subject.setName(name);
+            subject.setCode(code);
+            subject.setDescription(description);
+            return subjectRepository.save(subject);
+        });
+    }
+
+    private void createClassSubjectIfNotFound(AcademicClass academicClass, Subject subject, AcademicSession session) {
+        if (classSubjectRepository.findByAcademicClassAndSubjectAndSession(academicClass, subject, session).isEmpty()) {
+            ClassSubject classSubject = new ClassSubject();
+            classSubject.setAcademicClass(academicClass);
+            classSubject.setSubject(subject);
+            classSubject.setSession(session);
+            classSubjectRepository.save(classSubject);
         }
     }
 }

@@ -2,6 +2,7 @@ package com.testshaper.controller;
 
 import com.testshaper.entity.AcademicClass;
 import com.testshaper.entity.Chapter;
+import com.testshaper.entity.ClassSubject;
 import com.testshaper.entity.Subject;
 import com.testshaper.entity.Topic;
 import com.testshaper.service.AcademicService;
@@ -36,15 +37,10 @@ public class AcademicController {
         return ResponseEntity.noContent().build();
     }
 
-    // --- Subjects ---
-    @PostMapping("/classes/{classId}/subjects")
-    public ResponseEntity<Subject> createSubject(@PathVariable UUID classId, @RequestBody Subject subject) {
-        return ResponseEntity.ok(academicService.createSubject(subject, classId));
-    }
-
-    @GetMapping("/classes/{classId}/subjects")
-    public ResponseEntity<List<Subject>> getSubjectsByClass(@PathVariable UUID classId) {
-        return ResponseEntity.ok(academicService.getSubjectsByClass(classId));
+    // --- Subjects (Global) ---
+    @PostMapping("/subjects")
+    public ResponseEntity<Subject> createSubject(@RequestBody Subject subject) {
+        return ResponseEntity.ok(academicService.createSubject(subject));
     }
 
     @GetMapping("/subjects")
@@ -58,15 +54,41 @@ public class AcademicController {
         return ResponseEntity.noContent().build();
     }
 
-    // --- Chapters ---
-    @PostMapping("/subjects/{subjectId}/chapters")
-    public ResponseEntity<Chapter> createChapter(@PathVariable UUID subjectId, @RequestBody Chapter chapter) {
-        return ResponseEntity.ok(academicService.createChapter(chapter, subjectId));
+    // --- Class Subjects (Syllabus) ---
+    @PostMapping("/classes/{classId}/subjects/{subjectId}/session/{sessionId}")
+    public ResponseEntity<ClassSubject> assignSubjectToClass(
+            @PathVariable UUID classId,
+            @PathVariable UUID subjectId,
+            @PathVariable UUID sessionId) {
+        return ResponseEntity.ok(academicService.assignSubjectToClass(classId, subjectId, sessionId));
     }
 
-    @GetMapping("/subjects/{subjectId}/chapters")
-    public ResponseEntity<List<Chapter>> getChaptersBySubject(@PathVariable UUID subjectId) {
-        return ResponseEntity.ok(academicService.getChaptersBySubject(subjectId));
+    @PostMapping("/classes/{classId}/subjects")
+    public ResponseEntity<ClassSubject> createAndAssignSubject(@PathVariable UUID classId,
+            @RequestBody Subject subject) {
+        return ResponseEntity.ok(academicService.createAndAssignSubject(classId, subject));
+    }
+
+    @GetMapping("/classes/{classId}/subjects")
+    public ResponseEntity<List<com.testshaper.dto.ClassSubjectDTO>> getSubjectsByClass(@PathVariable UUID classId) {
+        return ResponseEntity.ok(academicService.getSubjectsByClass(classId));
+    }
+
+    @DeleteMapping("/class-subjects/{id}")
+    public ResponseEntity<Void> deleteClassSubject(@PathVariable UUID id) {
+        academicService.deleteClassSubject(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // --- Chapters ---
+    @PostMapping("/class-subjects/{classSubjectId}/chapters")
+    public ResponseEntity<Chapter> createChapter(@PathVariable UUID classSubjectId, @RequestBody Chapter chapter) {
+        return ResponseEntity.ok(academicService.createChapter(chapter, classSubjectId));
+    }
+
+    @GetMapping("/class-subjects/{classSubjectId}/chapters")
+    public ResponseEntity<List<Chapter>> getChaptersByClassSubject(@PathVariable UUID classSubjectId) {
+        return ResponseEntity.ok(academicService.getChaptersByClassSubject(classSubjectId));
     }
 
     @GetMapping("/chapters")

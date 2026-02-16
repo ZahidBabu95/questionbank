@@ -82,10 +82,10 @@ const ChapterList = () => {
         }
     };
 
-    const fetchChaptersBySubject = async (subjectId) => {
+    const fetchChaptersBySubject = async (classSubjectId) => {
         setLoading(true);
         try {
-            const data = await academicService.getChaptersBySubject(subjectId);
+            const data = await academicService.getChaptersByClassSubject(classSubjectId);
             const sorted = data.sort((a, b) => (a.chapterNumber || 0) - (b.chapterNumber || 0));
             setChapters(sorted);
         } catch (error) {
@@ -98,7 +98,8 @@ const ChapterList = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await academicService.createChapter(formData.subjectId, {
+            const targetSubjectId = formData.subjectId; // Store before clearing
+            await academicService.createChapter(targetSubjectId, {
                 name: formData.name,
                 chapterNumber: formData.chapterNumber
             });
@@ -107,12 +108,13 @@ const ChapterList = () => {
             setFormData({ name: '', chapterNumber: '', academicClassId: '', subjectId: '' });
 
             // Refresh list
-            if (selectedSubject === formData.subjectId || !selectedSubject) {
+            if (selectedSubject === targetSubjectId || !selectedSubject) {
                 if (selectedSubject) fetchChaptersBySubject(selectedSubject);
                 else fetchChapters();
             }
         } catch (error) {
             console.error("Failed to save chapter", error);
+            alert("Failed to save chapter. Check if chapter number already exists for this subject.");
         }
     };
 
@@ -136,7 +138,7 @@ const ChapterList = () => {
                 </div>
                 <button
                     onClick={() => setShowModal(true)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 flex items-center gap-2 transition-all active:scale-95 shadow-sm"
                 >
                     <Plus size={18} /> Add Chapter
                 </button>
@@ -167,7 +169,7 @@ const ChapterList = () => {
                 >
                     <option value="">All Subjects</option>
                     {subjects.map(sub => (
-                        <option key={sub.id} value={sub.id}>{sub.name} ({sub.code})</option>
+                        <option key={sub.classSubjectId} value={sub.classSubjectId}>{sub.subjectName} ({sub.subjectCode})</option>
                     ))}
                 </select>
             </div>
@@ -237,7 +239,7 @@ const ChapterList = () => {
                                 >
                                     <option value="">-- Select Subject --</option>
                                     {subjects.map(sub => (
-                                        <option key={sub.id} value={sub.id}>{sub.name}</option>
+                                        <option key={sub.classSubjectId} value={sub.classSubjectId}>{sub.subjectName}</option>
                                     ))}
                                 </select>
                             </div>

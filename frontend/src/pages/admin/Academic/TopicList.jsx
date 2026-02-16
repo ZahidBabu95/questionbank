@@ -87,9 +87,9 @@ const TopicList = () => {
         }
     };
 
-    const fetchChaptersBySubject = async (subjectId) => {
+    const fetchChaptersBySubject = async (classSubjectId) => {
         try {
-            const data = await academicService.getChaptersBySubject(subjectId);
+            const data = await academicService.getChaptersByClassSubject(classSubjectId);
             setChapters(data);
         } catch (error) {
             console.error("Failed to fetch chapters", error);
@@ -123,7 +123,8 @@ const TopicList = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await academicService.createTopic(formData.chapterId, {
+            const targetChapterId = formData.chapterId; // Store before clearing
+            await academicService.createTopic(targetChapterId, {
                 name: formData.name
             });
 
@@ -131,12 +132,13 @@ const TopicList = () => {
             setFormData({ name: '', academicClassId: '', subjectId: '', chapterId: '' });
 
             // Refresh list
-            if (selectedChapter === formData.chapterId || !selectedChapter) {
+            if (selectedChapter === targetChapterId || !selectedChapter) {
                 if (selectedChapter) fetchTopicsByChapter(selectedChapter);
                 else fetchTopics();
             }
         } catch (error) {
             console.error("Failed to save topic", error);
+            alert("Failed to save topic. Please ensure the topic name is unique within this chapter.");
         }
     };
 
@@ -152,85 +154,89 @@ const TopicList = () => {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800">Topics</h1>
-                    <p className="text-slate-500">Manage topics within chapters.</p>
+        <div className="space-y-4">
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-4 bg-white p-1 rounded-lg border border-slate-200 shadow-sm overflow-x-auto max-w-[800px]">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-100 whitespace-nowrap">
+                        <Filter size={16} className="text-slate-500" />
+                        <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Filter:</span>
+                    </div>
+                    {/* Class Filter */}
+                    <select
+                        className="bg-transparent border-none text-sm text-slate-700 font-medium focus:ring-0 cursor-pointer outline-none min-w-[120px]"
+                        value={selectedClass}
+                        onChange={(e) => { setSelectedClass(e.target.value); setSelectedSubject(""); setSelectedChapter(""); }}
+                    >
+                        <option value="">All Classes</option>
+                        {classes.map(cls => (
+                            <option key={cls.id} value={cls.id}>{cls.name}</option>
+                        ))}
+                    </select>
+                    <div className="w-px h-6 bg-slate-200"></div>
+                    {/* Subject Filter */}
+                    <select
+                        className="bg-transparent border-none text-sm text-slate-700 font-medium focus:ring-0 cursor-pointer outline-none min-w-[150px]"
+                        value={selectedSubject}
+                        onChange={(e) => { setSelectedSubject(e.target.value); setSelectedChapter(""); }}
+                        disabled={!selectedClass}
+                    >
+                        <option value="">-- Subject --</option>
+                        {subjects.map(sub => (
+                            <option key={sub.classSubjectId} value={sub.classSubjectId}>
+                                {sub.subjectName}
+                            </option>
+                        ))}
+                    </select>
+                    <div className="w-px h-6 bg-slate-200"></div>
+                    {/* Chapter Filter */}
+                    <select
+                        className={`bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer outline-none min-w-[150px] ${!selectedSubject ? 'text-slate-400' : 'text-slate-700'}`}
+                        value={selectedChapter}
+                        onChange={(e) => setSelectedChapter(e.target.value)}
+                        disabled={!selectedSubject}
+                    >
+                        <option value="">-- Chapter --</option>
+                        {chapters.map(chap => (
+                            <option key={chap.id} value={chap.id}>{chap.name}</option>
+                        ))}
+                    </select>
                 </div>
+
                 <button
-                    onClick={() => setShowModal(true)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    onClick={() => { setFormData({ name: '', academicClassId: selectedClass, subjectId: selectedSubject, chapterId: selectedChapter }); setShowModal(true); }}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 flex items-center gap-2 transition-all active:scale-95 shadow-sm"
+                    disabled={!selectedChapter}
+                    title={!selectedChapter ? "Select a chapter first" : "Add Topic"}
                 >
                     <Plus size={18} /> Add Topic
                 </button>
             </div>
 
-            {/* Filter */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 flex-wrap">
-                <div className="flex items-center gap-2">
-                    <Filter size={20} className="text-slate-400" />
-                    <span className="text-sm font-medium text-slate-600">Filter:</span>
-                </div>
-                <select
-                    className="bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 outline-none"
-                    value={selectedClass}
-                    onChange={(e) => { setSelectedClass(e.target.value); setSelectedSubject(''); setSelectedChapter(''); }}
-                >
-                    <option value="">All Classes</option>
-                    {classes.map(cls => (
-                        <option key={cls.id} value={cls.id}>{cls.name}</option>
-                    ))}
-                </select>
-
-                <select
-                    className="bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 outline-none min-w-[150px]"
-                    value={selectedSubject}
-                    onChange={(e) => { setSelectedSubject(e.target.value); setSelectedChapter(''); }}
-                    disabled={!selectedClass}
-                >
-                    <option value="">All Subjects</option>
-                    {subjects.map(sub => (
-                        <option key={sub.id} value={sub.id}>{sub.name}</option>
-                    ))}
-                </select>
-
-                <select
-                    className="bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 outline-none min-w-[150px]"
-                    value={selectedChapter}
-                    onChange={(e) => setSelectedChapter(e.target.value)}
-                    disabled={!selectedSubject}
-                >
-                    <option value="">All Chapters</option>
-                    {chapters.map(chap => (
-                        <option key={chap.id} value={chap.id}>{chap.name}</option>
-                    ))}
-                </select>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-slate-50 border-b border-slate-200">
+            <div className="overflow-hidden rounded-lg border border-slate-200">
+                <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-50">
                         <tr>
-                            <th className="px-6 py-4 font-semibold text-slate-600">Topic Name</th>
-                            <th className="px-6 py-4 text-right font-semibold text-slate-600">Actions</th>
+                            <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Topic Name</th>
+                            <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 bg-white">
                         {loading ? (
-                            <tr><td colSpan="2" className="p-8 text-center text-slate-500">Loading...</td></tr>
+                            <tr><td colSpan="2" className="p-8 text-center text-slate-500">Loading topics...</td></tr>
+                        ) : !selectedChapter ? (
+                            <tr><td colSpan="2" className="p-8 text-center text-slate-500">Please select a class, subject, and chapter to view topics.</td></tr>
                         ) : topics.length === 0 ? (
-                            <tr><td colSpan="2" className="p-8 text-center text-slate-500">No topics found.</td></tr>
+                            <tr><td colSpan="2" className="p-8 text-center text-slate-500">No topics found for this chapter.</td></tr>
                         ) : (
                             topics.map(topic => (
-                                <tr key={topic.id} className="hover:bg-slate-50">
-                                    <td className="px-6 py-4 font-medium text-slate-800">{topic.name}</td>
-                                    <td className="px-6 py-4 text-right space-x-2">
+                                <tr key={topic.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-6 py-3 text-sm font-medium text-slate-800">{topic.name}</td>
+                                    <td className="px-6 py-3 text-right space-x-2">
                                         <button
                                             onClick={() => handleDelete(topic.id)}
-                                            className="text-slate-400 hover:text-rose-600"
+                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors"
                                         >
-                                            <Trash2 size={18} />
+                                            <Trash2 size={16} />
                                         </button>
                                     </td>
                                 </tr>
@@ -271,7 +277,7 @@ const TopicList = () => {
                                 >
                                     <option value="">-- Select Subject --</option>
                                     {subjects.map(sub => (
-                                        <option key={sub.id} value={sub.id}>{sub.name}</option>
+                                        <option key={sub.classSubjectId} value={sub.classSubjectId}>{sub.subjectName}</option>
                                     ))}
                                 </select>
                             </div>

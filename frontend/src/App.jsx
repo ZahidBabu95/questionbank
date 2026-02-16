@@ -10,6 +10,7 @@ import GeneralSettings from './pages/admin/Settings/GeneralSettings';
 import SecuritySettings from './pages/admin/Settings/SecuritySettings';
 import BackupSettings from './pages/admin/Settings/BackupSettings';
 import AcademicStructure from './pages/admin/Academic/AcademicStructure';
+import AcademicLayout from './pages/admin/Academic/AcademicLayout';
 import MCQCreate from './pages/admin/QuestionBank/MCQCreate';
 import CQCreate from './pages/admin/QuestionBank/CQCreate';
 import ShortQuestionCreate from './pages/admin/QuestionBank/ShortQuestionCreate';
@@ -25,6 +26,7 @@ import AcademicClassList from './pages/admin/Academic/AcademicClassList';
 import SubjectList from './pages/admin/Academic/SubjectList';
 import ChapterList from './pages/admin/Academic/ChapterList';
 import TopicList from './pages/admin/Academic/TopicList';
+import SessionList from './pages/admin/Academic/SessionList';
 import UnderDevelopment from './components/common/UnderDevelopment';
 
 const ProtectedRoute = ({ children }) => {
@@ -86,12 +88,18 @@ function App() {
                     <Route path="/settings/backup" element={<BackupSettings />} />
                     <Route path="/settings/*" element={<UnderDevelopment featureName="System Settings" />} />
 
+
+
                     {/* Academic */}
-                    <Route path="/academic/structure" element={<AcademicStructure />} />
-                    <Route path="academic/classes" element={<AcademicClassList />} />
-                    <Route path="academic/subjects" element={<SubjectList />} />
-                    <Route path="academic/chapters" element={<ChapterList />} />
-                    <Route path="academic/topics" element={<TopicList />} />
+                    <Route path="/admin/academic" element={<AcademicLayout />}>
+                        <Route index element={<Navigate to="structure" replace />} />
+                        <Route path="sessions" element={<SessionList />} />
+                        <Route path="structure" element={<AcademicStructure />} />
+                        <Route path="classes" element={<AcademicClassList />} />
+                        <Route path="subjects" element={<SubjectList />} />
+                        <Route path="chapters" element={<ChapterList />} />
+                        <Route path="topics" element={<TopicList />} />
+                    </Route>
 
                     {/* Question Bank */}
                     <Route path="/questions" element={<QuestionList />} />

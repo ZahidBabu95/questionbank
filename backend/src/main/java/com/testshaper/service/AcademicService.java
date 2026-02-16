@@ -2,6 +2,7 @@ package com.testshaper.service;
 
 import com.testshaper.entity.AcademicClass;
 import com.testshaper.entity.Chapter;
+import com.testshaper.entity.ClassSubject;
 import com.testshaper.entity.Subject;
 import com.testshaper.entity.Topic;
 
@@ -17,19 +18,27 @@ public interface AcademicService {
 
     void deleteClass(UUID id);
 
-    // Subject
-    Subject createSubject(Subject subject, UUID classId);
+    // Subject (Global)
+    Subject createSubject(Subject subject);
 
-    List<Subject> getSubjectsByClass(UUID classId);
+    // Create subject and assign to class immediately
+    ClassSubject createAndAssignSubject(UUID classId, Subject subject);
+
+    // Class Subject (Syllabus)
+    ClassSubject assignSubjectToClass(UUID classId, UUID subjectId, UUID sessionId);
+
+    List<com.testshaper.dto.ClassSubjectDTO> getSubjectsByClass(UUID classId);
+
+    void deleteClassSubject(UUID id);
 
     List<Subject> getAllSubjects();
 
     void deleteSubject(UUID id);
 
     // Chapter
-    Chapter createChapter(Chapter chapter, UUID subjectId);
+    Chapter createChapter(Chapter chapter, UUID classSubjectId);
 
-    List<Chapter> getChaptersBySubject(UUID subjectId);
+    List<Chapter> getChaptersByClassSubject(UUID classSubjectId);
 
     List<Chapter> getAllChapters();
 

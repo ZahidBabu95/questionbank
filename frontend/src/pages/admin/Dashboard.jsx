@@ -184,7 +184,7 @@ const Dashboard = () => {
                         </button>
                     </div>
 
-                    <div className="flex-1 flex flex-col justify-center">
+                    <div className="flex-1 flex flex-col justify-center min-h-[300px]">
                         <div className="h-[200px] w-full mb-6">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={questionTypeData} layout="vertical" barSize={12}>
