@@ -1,46 +1,58 @@
 package com.testshaper.controller;
 
-import com.testshaper.common.ApiResponse;
-import com.testshaper.security.JwtUtil;
+import com.testshaper.dto.CreateUserDTO;
+import com.testshaper.dto.UserDTO;
+import com.testshaper.service.AuthService;
+import jakarta.validation.Valid;
 import lombok.Data;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
-    @Autowired
-    private AuthenticationManager authenticationManager;
-
-    @Autowired
-    private JwtUtil jwtUtil;
+    private final AuthService authService;
 
     @PostMapping("/login")
-    public ApiResponse<String> login(@RequestBody LoginRequest loginRequest) {
-        try {
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
+    public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody LoginRequest loginRequest) {
+        String token = authService.login(loginRequest.getEmail(), loginRequest.getPassword());
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Login successful",
+                "data", token));
+    }
 
-            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-            String token = jwtUtil.generateToken(userDetails);
+    @PostMapping("/signup")
+    public ResponseEntity<Map<String, Object>> signup(@Valid @RequestBody CreateUserDTO createUserDTO) {
+        UserDTO user = authService.register(createUserDTO);
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "User registered successfully",
+                "data", user));
+    }
 
-            return ApiResponse.success(token, "Login successful");
-        } catch (Exception e) {
-            return ApiResponse.error("Invalid username or password", 401);
-        }
+    @PostMapping("/impersonate/{userId}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<Map<String, Object>> impersonate(
+            @org.springframework.web.bind.annotation.PathVariable java.util.UUID userId) {
+        String token = authService.impersonate(userId);
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Impersonation successful",
+                "data", token));
     }
 
     @Data
     public static class LoginRequest {
-        private String username;
+        private String email;
         private String password;
     }
 }

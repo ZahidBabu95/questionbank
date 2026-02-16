@@ -1,0 +1,10 @@
+**/node_modules/
+**/target/
+**/*.class
+.vscode/
+frontend/dist/
+frontend/build/
+backend/bin/
+*.log
+.DS_Store
+maven-portable/
