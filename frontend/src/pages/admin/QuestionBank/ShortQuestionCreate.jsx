@@ -19,6 +19,8 @@ const ShortQuestionCreate = () => {
         chapterId: '',
         topicId: '',
         questionText: '',
+        stimulus: '', // Optional Stimulus
+        bloomLevel: 'KNOWLEDGE',
         marks: 2,
         difficulty: 'MEDIUM',
         language: 'Bangla',
@@ -85,6 +87,8 @@ const ShortQuestionCreate = () => {
                 difficulty: formData.difficulty,
                 language: formData.language,
                 explanation: formData.explanation,
+                bloomLevel: formData.bloomLevel,
+                stimulus: formData.stimulus,
                 academicClass: { id: formData.academicClassId },
                 classSubject: { id: formData.subjectId },
                 chapter: { id: formData.chapterId },
@@ -148,6 +152,21 @@ const ShortQuestionCreate = () => {
                     </div>
                 </div>
 
+                {/* Stimulus (Optional) */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2"><Book size={18} className="text-emerald-500" /> Stimulus / Stem (উদ্দীপক)</h2>
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Enter Stimulus (Optional)</label>
+                        <ReactQuill
+                            theme="snow"
+                            value={formData.stimulus}
+                            onChange={(val) => setFormData({ ...formData, stimulus: val })}
+                            className="h-24 mb-12"
+                            placeholder="উদ্দীপকটি এখানে লিখুন..."
+                        />
+                    </div>
+                </div>
+
                 {/* Question Details */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2"><FileText size={18} className="text-purple-500" /> Question Details</h2>
@@ -157,15 +176,24 @@ const ShortQuestionCreate = () => {
                         <ReactQuill theme="snow" value={formData.questionText} onChange={(val) => setFormData({ ...formData, questionText: val })} className="h-32 mb-12" />
                     </div>
 
-                    <div className="mb-6">
+                    <div className="mb-6 mt-12">
                         <label className="block text-sm font-medium text-slate-700 mb-1">Sample Answer / Key Points</label>
                         <ReactQuill theme="snow" value={formData.explanation} onChange={(val) => setFormData({ ...formData, explanation: val })} className="h-24 mb-12" placeholder="Enter key points or sample answer..." />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-12">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Marks</label>
                             <input type="number" value={formData.marks} onChange={(e) => setFormData({ ...formData, marks: e.target.value })} className="w-full p-2 border border-slate-300 rounded-lg" min="1" step="0.5" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Cognitive Level</label>
+                            <select value={formData.bloomLevel} onChange={(e) => setFormData({ ...formData, bloomLevel: e.target.value })} className="w-full p-2 border border-slate-300 rounded-lg font-medium text-blue-600">
+                                <option value="KNOWLEDGE">Knowledge (জ্ঞানমূলক)</option>
+                                <option value="COMPREHENSION">Comprehension (অনুধাবনমূলক)</option>
+                                <option value="APPLICATION">Application (প্রয়োগমূলক)</option>
+                                <option value="HIGHER_ORDER">Higher Order (উচ্চতর দক্ষতা)</option>
+                            </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Difficulty</label>

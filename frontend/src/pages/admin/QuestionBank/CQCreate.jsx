@@ -113,6 +113,7 @@ const CQCreate = () => {
 
             const payload = {
                 questionText: combinedHtml,
+                stimulus: formData.stem, // Store in dedicated field too
                 marks: totalMarks,
                 difficulty: formData.difficulty,
                 language: formData.language,
@@ -195,7 +196,7 @@ const CQCreate = () => {
                                 <div className="w-8 pt-3 text-center font-bold text-slate-500 uppercase">{sq.label})</div>
                                 <div className="flex-1">
                                     <label className="block text-xs font-semibold text-slate-500 mb-1">
-                                        Question ({sq.label === 'a' ? 'Knowledge' : sq.label === 'b' ? 'Comprehension' : sq.label === 'c' ? 'Application' : 'Higher Order'})
+                                        Question ({sq.label === 'a' ? 'Knowledge / জ্ঞান' : sq.label === 'b' ? 'Comprehension / অনুধাবন' : sq.label === 'c' ? 'Application / প্রয়োগ' : 'Higher Order / উচ্চতর দক্ষতা'})
                                     </label>
                                     <input
                                         type="text"

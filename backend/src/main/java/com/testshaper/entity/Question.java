@@ -44,6 +44,9 @@ public class Question extends BaseTenantEntity {
     @Column(nullable = false)
     private QuestionStatus status; // DRAFT, PENDING, APPROVED, REJECTED
 
+    @Column(columnDefinition = "LONGTEXT")
+    private String stimulus; // For Bangladeshi "Stimulus/Stem" based questions
+
     // AI Fields (Future Ready)
     @Column(name = "ai_generated")
     private Boolean aiGenerated;
