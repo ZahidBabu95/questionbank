@@ -55,11 +55,11 @@ const MCQCreate = () => {
     };
 
     const handleSubjectChange = async (e) => {
-        const subjectId = e.target.value;
-        setFormData({ ...formData, subjectId, chapterId: '', topicId: '' });
+        const classSubjectId = e.target.value;
+        setFormData({ ...formData, subjectId: classSubjectId, chapterId: '', topicId: '' });
         setChapters([]); setTopics([]);
-        if (subjectId) {
-            const data = await academicService.getChaptersBySubject(subjectId);
+        if (classSubjectId) {
+            const data = await academicService.getChaptersByClassSubject(classSubjectId);
             setChapters(data);
         }
     };
@@ -131,7 +131,7 @@ const MCQCreate = () => {
                     language: formData.language,
                     explanation: formData.explanation,
                     academicClass: { id: formData.academicClassId },
-                    subject: { id: formData.subjectId },
+                    classSubject: { id: formData.subjectId },
                     chapter: { id: formData.chapterId },
                     topic: formData.topicId ? { id: formData.topicId } : null
                 },
@@ -176,7 +176,7 @@ const MCQCreate = () => {
                             <label className="block text-sm font-medium text-slate-700 mb-1">Subject *</label>
                             <select value={formData.subjectId} onChange={handleSubjectChange} disabled={!formData.academicClassId} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100">
                                 <option value="">Select Subject</option>
-                                {subjects.map(subj => <option key={subj.id} value={subj.id}>{subj.name}</option>)}
+                                {subjects.map(subj => <option key={subj.classSubjectId} value={subj.classSubjectId}>{subj.subjectName}</option>)}
                             </select>
                         </div>
                         <div>
