@@ -8,3 +8,4 @@ backend/bin/
 *.log
 .DS_Store
 maven-portable/
+production/
