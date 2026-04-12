@@ -1,0 +1,27 @@
+Account ID: 8d6c84f29b2a0f5b7a7270a5606f88fd
+
+Bucket Name:   qb-storage-01
+
+Access Key ID
+2eae69eddc10cc8dd1e93433eff7c206
+
+
+Secret Access Key
+f8c3fd3686442abd3589767ca4c5681a95a2b6b2f6538b965cf214d6bfca8edf
+
+
+Public Development URL
+https://pub-7634785c99b14d37ac21761bacd8cdd3.r2.dev
+
+
+
+Use jurisdiction-specific endpoints for S3 clients:
+https://8d6c84f29b2a0f5b7a7270a5606f88fd.r2.cloudflarestorage.com
+
+
+
+Account ID: 8d6c84f29b2a0f5b7e7278e5606f80fd (আগের স্ক্রিনশট থেকে প্রাপ্ত)
+R2 Bucket Name: qb-storage-01
+**Access Key ID:**刚刚 যে টোকেনটি বানালেন সেখান থেকে পাওয়া Access Key.
+Secret Access Key: টোকেনের Secret Key.
+Public URL: বাকেটের সেটিংসে "Public Development URL" Enable করার পর যে https://pub-...r2.dev লিংকটি পেয়েছেন সেটি বসিয়ে দিন।

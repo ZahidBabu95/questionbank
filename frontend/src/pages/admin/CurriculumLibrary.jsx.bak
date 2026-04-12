@@ -1,0 +1,1384 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { Upload, FileText, Calendar, Filter, Trash2, Edit3, Eye, Plus, Check, X, BookOpen, GraduationCap, Search, Tag, BarChart3, Archive, Sparkles, Send, Bot, User } from 'lucide-react';
+import axios from '../../utils/axios';
+import ReactMarkdown from 'react-markdown';
+import academicService from '../../services/academicService';
+
+const API = '/v1/curriculum';
+const getAuth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+
+const DOC_TYPES = [
+    { value: 'CURRICULUM', label: 'Curriculum', color: 'bg-blue-100 text-blue-700', icon: '📘' },
+    { value: 'SYLLABUS', label: 'Syllabus', color: 'bg-emerald-100 text-emerald-700', icon: '📗' },
+    { value: 'QUESTION_GUIDELINE', label: 'Question Guideline', color: 'bg-amber-100 text-amber-700', icon: '📙' },
+    { value: 'MARK_DISTRIBUTION', label: 'Mark Distribution', color: 'bg-purple-100 text-purple-700', icon: '📊' },
+    { value: 'SAMPLE_PAPER', label: 'Sample Paper', color: 'bg-rose-100 text-rose-700', icon: '📝' },
+    { value: 'TEXTBOOK', label: 'Textbook', color: 'bg-cyan-100 text-cyan-700', icon: '📖' },
+    { value: 'GUIDE_BOOK', label: 'Guide Book', color: 'bg-orange-100 text-orange-700', icon: '📚' },
+    { value: 'OTHER', label: 'Other', color: 'bg-slate-100 text-slate-700', icon: '📄' },
+];
+
+const EDUCATION_LEVELS = ['PRIMARY', 'JSC', 'SSC', 'HSC', 'DEGREE', 'OTHER'];
+
+const formatFileSize = (bytes) => {
+    if (!bytes) return '—';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+};
+
+const CurriculumLibrary = () => {
+    // Tabs state
+    const [activeTab, setActiveTab] = useState('REPOSITORY');
+    const [documents, setDocuments] = useState([]);
+    const [stats, setStats] = useState(null);
+    const [years, setYears] = useState([]);
+    
+    // Academic Structure for Cascading & Loose Selection
+    const [academicLevels, setAcademicLevels] = useState([]);
+    
+    const [globalLevels, setGlobalLevels] = useState([]);
+    const [globalStreams, setGlobalStreams] = useState([]);
+    const [globalClasses, setGlobalClasses] = useState([]);
+    const [globalSubjects, setGlobalSubjects] = useState([]);
+    
+    // Dynamically Filtered States for Cascading
+    const [filteredStreams, setFilteredStreams] = useState([]);
+    const [filteredClasses, setFilteredClasses] = useState([]);
+    const [filteredSubjects, setFilteredSubjects] = useState([]);
+    
+    const [loading, setLoading] = useState(true);
+
+    // Filters
+    const [filterYear, setFilterYear] = useState('');
+    const [filterType, setFilterType] = useState('');
+    const [filterLevel, setFilterLevel] = useState('');
+    const [filterClass, setFilterClass] = useState('');
+    const [filterSubject, setFilterSubject] = useState('');
+
+    // Upload & Modals
+    const [showUpload, setShowUpload] = useState(false);
+    const [uploadStep, setUploadStep] = useState('METADATA'); // METADATA -> ANALYZING -> REVIEW
+    const [uploadFile, setUploadFile] = useState(null);
+    const [uploadData, setUploadData] = useState({
+        title: '', academicYear: new Date().getFullYear(), docType: 'CURRICULUM',
+        description: '', educationLevel: '', className: '', subjectName: '', tags: '', notes: '', visionEnabled: false
+    });
+    
+    const [showLevelDropdown, setShowLevelDropdown] = useState(false);
+    const [showStreamDropdown, setShowStreamDropdown] = useState(false);
+    const [showClassDropdown, setShowClassDropdown] = useState(false);
+    const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
+    
+    const [uploading, setUploading] = useState(false);
+
+    // Edit modal
+    const [editDoc, setEditDoc] = useState(null);
+
+    // Chunks Modal
+    const [viewChunksDoc, setViewChunksDoc] = useState(null);
+    const [chunksData, setChunksData] = useState([]);
+    const [isLoadingChunks, setIsLoadingChunks] = useState(false);
+
+    // AI Chat State
+    const [chatMessages, setChatMessages] = useState([
+        { role: 'system', text: 'Welcome! I am the QuestionShaper Curriculum Engine. You can ask me questions regarding any syllabus, PDF, or mark distribution uploaded here. I will analyze the PDFs and answer instantly.' }
+    ]);
+    const [chatInput, setChatInput] = useState('');
+    const [isThinking, setIsThinking] = useState(false);
+
+    const handleChatSubmit = async () => {
+        if (!chatInput.trim()) return;
+        const question = chatInput.trim();
+        const newMsg = { role: 'user', text: question };
+        setChatMessages(prev => [...prev, newMsg]);
+        setChatInput('');
+        setIsThinking(true);
+
+        try {
+            const { data } = await axios.post(`${API}/chat`, { question });
+            setChatMessages(prev => [...prev, { role: 'system', text: data.answer }]);
+        } catch (err) {
+            console.error('Chat Error:', err);
+            setChatMessages(prev => [...prev, {
+                role: 'system',
+                text: 'Sorry, unable to establish connection or AI engine error occurred. Please try again.'
+            }]);
+        } finally {
+            setIsThinking(false);
+        }
+    };
+
+    const fetchDocuments = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            if (filterYear) params.append('year', filterYear);
+            if (filterType) params.append('docType', filterType);
+            if (filterLevel) params.append('level', filterLevel);
+            if (filterClass) params.append('className', filterClass);
+            if (filterSubject) params.append('subject', filterSubject);
+            const { data } = await axios.get(`${API}?${params}`);
+            setDocuments(data);
+        } catch (err) { console.error('Error loading documents:', err); }
+        if (!silent) setLoading(false);
+    }, [filterYear, filterType, filterLevel, filterClass, filterSubject]);
+
+    const fetchStats = async () => {
+        try {
+            const { data } = await axios.get(`${API}/stats`);
+            setStats(data);
+        } catch (err) { console.error(err); }
+    };
+
+    const fetchYears = async () => {
+        try {
+            const { data } = await axios.get(`${API}/years`);
+            setYears(data);
+        } catch (err) { console.error(err); }
+    };
+
+    const fetchAcademicStructure = async () => {
+        try {
+            const levels = await academicService.getAllLevels();
+            const subjects = await academicService.getAllSubjects();
+            
+            // Fetch streams for all levels concurrently to build globalStreams
+            let allStreams = [];
+            let allClasses = [];
+            
+            if (levels && levels.length > 0) {
+                const streamPromises = levels.map(l => academicService.getStreamsByLevel(l.id));
+                const streamsArrays = await Promise.all(streamPromises);
+                streamsArrays.forEach((arr, index) => { 
+                    if (arr) {
+                        const levelObj = levels[index];
+                        const mappedArr = arr.map(stream => ({...stream, _levelName: levelObj.name}));
+                        allStreams = [...allStreams, ...mappedArr];
+                    }
+                });
+
+                // Fetch classes for all streams concurrently
+                if (allStreams.length > 0) {
+                    const classPromises = allStreams.map(s => academicService.getClassesByStream(s.id));
+                    const classesArrays = await Promise.all(classPromises);
+                    classesArrays.forEach((arr, index) => {
+                        if (arr) {
+                            const streamObj = allStreams[index];
+                            const mappedClassArr = arr.map(cls => ({
+                                ...cls, 
+                                _streamId: streamObj.id,
+                                _streamName: streamObj.name, 
+                                _streamTag: `Stream:${streamObj.name}`,
+                                _levelName: streamObj._levelName
+                            }));
+                            allClasses = [...allClasses, ...mappedClassArr];
+                        }
+                    });
+                }
+            }
+
+            setAcademicLevels(levels || []);
+            setGlobalLevels(levels || []);
+            setGlobalStreams(allStreams);
+            setGlobalClasses(allClasses);
+            setGlobalSubjects(subjects || []);
+            
+            setFilteredStreams(allStreams);
+            setFilteredClasses(allClasses);
+            setFilteredSubjects(subjects || []);
+        } catch (err) { console.error("Failed to fetch academic structure", err); }
+    };
+
+    // --- Cascading Logic for Edit & Upload Modals ---
+    useEffect(() => {
+        const doc = editDoc || (showUpload ? uploadData : null);
+        if (!doc) return;
+        
+        // 1. Filter Streams by chosen Level(s)
+        const chosenLevels = doc.educationLevel ? doc.educationLevel.split(',').map(s=>s.trim()).filter(Boolean) : [];
+        const validStreams = chosenLevels.length > 0 
+            ? globalStreams.filter(s => chosenLevels.includes(s._levelName))
+            : []; 
+        setFilteredStreams(validStreams);
+        
+        // 2. Filter Classes by chosen Stream(s) BUT ONLY if those streams belong to the chosen levels!
+        const rawChosenStreamNames = doc.tags ? doc.tags.split(',').filter(t => t.includes('Stream:')).map(t => t.replace('Stream:', '').trim()) : [];
+        const validChosenStreams = validStreams.filter(vs => rawChosenStreamNames.includes(vs.name));
+        const validStreamIds = validChosenStreams.map(vs => vs.id);
+        
+        const validClasses = validStreamIds.length > 0
+            ? globalClasses.filter(c => validStreamIds.includes(c._streamId))
+            : []; 
+        setFilteredClasses(validClasses);
+        
+    }, [editDoc?.educationLevel, editDoc?.tags, showUpload, uploadData.educationLevel, uploadData.tags, globalStreams, globalClasses]);
+
+    useEffect(() => {
+        const doc = editDoc || (showUpload ? uploadData : null);
+        if (!doc) return;
+        
+        // 3. Filter Subjects by chosen Class(es) dynamically over API BUT ONLY from currently valid/displayed classes!
+        const fetchLinkedSubjects = async () => {
+            const classNames = doc.className ? doc.className.split(',').map(s=>s.trim()).filter(Boolean) : [];
+            const matchedClasses = filteredClasses.filter(fc => classNames.includes(fc.name));
+            
+            if (matchedClasses.length === 0) {
+                setFilteredSubjects([]); 
+                return;
+            }
+            
+            try {
+                let linkedSubjs = [];
+                const resPromises = matchedClasses.map(cls => academicService.getSubjectsByClass(cls.id));
+                const results = await Promise.all(resPromises);
+                
+                results.forEach(res => {
+                    if (res) {
+                        res.forEach(item => {
+                            const subjObject = {
+                                id: item.subjectId || item.id,
+                                name: item.subjectName || item.name || (item.subject && item.subject.name)
+                            };
+                            
+                            if (subjObject.id && subjObject.name && !linkedSubjs.find(s => s.id === subjObject.id)) {
+                                linkedSubjs.push(subjObject);
+                            }
+                        });
+                    }
+                });
+                
+                setFilteredSubjects(linkedSubjs);
+            } catch (err) {
+                console.error("Failed merging class subjects", err);
+                setFilteredSubjects([]);
+            }
+        };
+        fetchLinkedSubjects();
+    }, [editDoc?.className, showUpload, uploadData.className, globalClasses, globalSubjects, filteredClasses]);
+
+    useEffect(() => { fetchDocuments(); }, [fetchDocuments]);
+    useEffect(() => { fetchStats(); fetchYears(); fetchAcademicStructure(); }, []);
+
+    // Auto-poll if any document is PROCESSING
+    useEffect(() => {
+        const hasProcessing = documents.some(d => d.processingStatus === 'PROCESSING');
+        if (hasProcessing) {
+            const timer = setInterval(() => {
+                fetchDocuments(true);
+                fetchStats();
+            }, 3000);
+            return () => clearInterval(timer);
+        }
+    }, [documents, fetchDocuments, fetchStats]);
+
+    const handleUpload = async (e) => {
+        e.preventDefault();
+        if (!uploadFile) return;
+        setUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', uploadFile);
+            Object.entries(uploadData).forEach(([k, v]) => {
+                if (v !== '' && v !== null) formData.append(k, v);
+            });
+            await axios.post(`${API}/upload`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            setShowUpload(false);
+            setUploadStep('METADATA');
+            setUploadFile(null);
+            setUploadData({ title: '', academicYear: new Date().getFullYear(), docType: 'CURRICULUM', description: '', educationLevel: '', className: '', subjectName: '', tags: '', notes: '', visionEnabled: false });
+            fetchDocuments();
+            fetchStats();
+            fetchYears();
+        } catch (err) {
+            alert('Upload Failed: ' + (err.response?.data?.message || err.message));
+        }
+        setUploading(false);
+    };
+
+    const handleRegenerateChunks = async (id, force = true) => {
+        const msg = force 
+            ? 'Are you sure you want to regenerate AI chunks from scratch? This will delete existing chunks.'
+            : 'Are you sure you want to resume AI processing from where it failed?';
+        if (!window.confirm(msg)) return;
+        try {
+            await axios.post(`${API}/${id}/regenerate-chunks?force=${force}`);
+            alert(force ? 'AI Chunk Regeneration started!' : 'Resumed successfully!');
+            fetchDocuments();
+        } catch (err) { alert('Regeneration Failed'); }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this document?')) return;
+        try {
+            await axios.delete(`${API}/${id}`);
+            fetchDocuments();
+            fetchStats();
+        } catch (err) { alert('Delete Failed'); }
+    };
+
+    const handleUpdate = async (e) => {
+        e.preventDefault();
+        try {
+            await axios.put(`${API}/${editDoc.id}`, editDoc);
+            setEditDoc(null);
+            fetchDocuments();
+        } catch (err) { alert('Update Failed: ' + (err.response?.data?.message || err.message)); }
+    };
+
+    const fetchAndShowChunks = async (doc) => {
+        setViewChunksDoc(doc);
+        setIsLoadingChunks(true);
+        try {
+            const { data } = await axios.get(`${API}/${doc.id}/chunks`);
+            setChunksData(data);
+        } catch (err) {
+            alert('Failed to load extracted chunks.');
+            setViewChunksDoc(null);
+        }
+        setIsLoadingChunks(false);
+    };
+
+    const getTypeInfo = (type) => DOC_TYPES.find(t => t.value === type) || DOC_TYPES[6];
+
+    return (
+        <div className="p-6 bg-gradient-to-br from-slate-50 to-blue-50/30 min-h-screen">
+            {/* Header & Tabs */}
+            <div className="mb-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                            <BookOpen className="text-blue-600" size={28} />
+                            Curriculum Intelligence Engine
+                        </h1>
+                        <p className="text-sm text-slate-500 mt-1">
+                            Upload PDFs and use AI to analyze and manage curriculum rules
+                        </p>
+                    </div>
+                </div>
+
+                {/* Tab Navigation */}
+                <div className="flex bg-white rounded-lg p-1.5 shadow-sm border border-slate-200 inline-flex">
+                    <button
+                        onClick={() => setActiveTab('REPOSITORY')}
+                        className={`flex items-center gap-2 px-5 py-2 rounded-md text-sm font-semibold transition-all ${
+                            activeTab === 'REPOSITORY' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                    >
+                        <Archive size={16} /> Repository (PDF/Docs)
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('AI_CHAT')}
+                        className={`flex items-center gap-2 px-5 py-2 rounded-md text-sm font-semibold transition-all ${
+                            activeTab === 'AI_CHAT' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                    >
+                        <Sparkles size={16} /> AI Curriculum Chatbot
+                    </button>
+                </div>
+            </div>
+
+            {/* Content Switcher */}
+            {activeTab === 'REPOSITORY' && (
+                <div className="animate-in fade-in duration-300">
+                    <div className="flex justify-end mb-4">
+                        <button
+                            onClick={() => setShowUpload(true)}
+                            className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 shadow-sm transition-all font-medium"
+                        >
+                            <Plus size={18} /> Upload New Document
+                        </button>
+                    </div>
+
+                    {/* Stats Cards */}
+                    {stats && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
+                                <div className="flex items-center gap-2 text-slate-500 text-sm mb-1"><Archive size={16} /> Total Documents</div>
+                                <div className="text-2xl font-bold text-slate-800">{stats.totalDocuments || 0}</div>
+                            </div>
+                            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
+                                <div className="flex items-center gap-2 text-slate-500 text-sm mb-1"><Calendar size={16} /> Total Years</div>
+                                <div className="text-2xl font-bold text-slate-800">{stats.years?.length || 0}</div>
+                            </div>
+                            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
+                                <div className="flex items-center gap-2 text-slate-500 text-sm mb-1"><BarChart3 size={16} /> Total Size</div>
+                                <div className="text-2xl font-bold text-slate-800">{formatFileSize(stats.totalSize || 0)}</div>
+                            </div>
+                            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
+                                <div className="flex items-center gap-2 text-slate-500 text-sm mb-1"><Tag size={16} /> Categories</div>
+                                <div className="text-2xl font-bold text-slate-800">{stats.byType ? Object.keys(stats.byType).length : 0}</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Filters */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+                        <div className="flex flex-wrap gap-3 items-center">
+                            <Filter size={16} className="text-slate-400" />
+                            <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
+                                className="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+                                <option value="">All Years</option>
+                                {years.map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                            <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)}
+                                className="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+                                <option value="">All Levels</option>
+                                {EDUCATION_LEVELS.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                            <select value={filterType} onChange={e => setFilterType(e.target.value)}
+                                className="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+                                <option value="">All Types</option>
+                                {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                            </select>
+                            <input type="text" placeholder="Class (e.g. 6-8)..." value={filterClass}
+                                onChange={e => setFilterClass(e.target.value)}
+                                className="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 w-32" />
+                            <div className="flex-1 min-w-[150px] relative">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input type="text" placeholder="Search subject..." value={filterSubject}
+                                    onChange={e => setFilterSubject(e.target.value)}
+                                    className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-blue-500" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Documents Grid */}
+                    {loading ? (
+                        <div className="text-center py-20 text-slate-400">Loading...</div>
+                    ) : documents.length === 0 ? (
+                        <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-300">
+                            <BookOpen size={48} className="mx-auto text-slate-300 mb-4" />
+                            <p className="text-slate-500 mb-2">No documents found</p>
+                            <button onClick={() => setShowUpload(true)} className="text-blue-600 text-sm font-medium hover:underline">
+                                Upload Your First Document →
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {documents.map(doc => {
+                                const typeInfo = getTypeInfo(doc.docType);
+                                return (
+                                    <div key={doc.id} className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-all overflow-hidden group flex flex-col">
+                                        <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+                                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 ${typeInfo.color}`}>
+                                                {typeInfo.icon} {typeInfo.label}
+                                            </span>
+                                            <span className="text-xs text-slate-500 font-medium bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                                                📅 {doc.academicYear}
+                                            </span>
+                                        </div>
+
+                                        <div className="px-4 pb-3 flex-1 flex flex-col">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <h3 className="font-bold text-slate-800 text-sm">{doc.title}</h3>
+                                                {doc.processingStatus === 'COMPLETED' && (
+                                                    <span className="text-emerald-500 bg-emerald-50 p-1 rounded-full shrink-0" title="AI Indexed Successfully">
+                                                        <Sparkles size={12} />
+                                                    </span>
+                                                )}
+                                                {doc.processingStatus === 'FAILED' && (
+                                                    <span className="text-rose-500 bg-rose-50 p-1 rounded-full shrink-0" title={`Failed: ${doc.errorMessage || 'Unknown Error'}`}>
+                                                        <X size={12} />
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {doc.processingStatus === 'PROCESSING' && (
+                                                <div className="mb-3">
+                                                    <div className="flex justify-between text-[10px] font-bold text-indigo-600 mb-1">
+                                                        <span className="flex items-center gap-1"><Bot size={10} className="animate-pulse" /> Processing AI Chunks...</span>
+                                                        <span>{doc.processedChunks || 0} / {doc.totalChunks || '?'}</span>
+                                                    </div>
+                                                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                                        <div className="bg-indigo-600 h-1.5 rounded-full transition-all duration-[2000ms] ease-out relative overflow-hidden" 
+                                                             style={{ width: `${doc.totalChunks > 0 ? ((doc.processedChunks || 0) / doc.totalChunks) * 100 : 0}%` }}>
+                                                            <div className="absolute inset-0 w-full h-full bg-white/20 animate-pulse"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {doc.processingStatus === 'FAILED' && (
+                                                <div className="mb-3 text-[10px] text-rose-600 bg-rose-50 p-2 rounded-md border border-rose-100">
+                                                    Failed to process: {doc.errorMessage}
+                                                    <button onClick={() => handleRegenerateChunks(doc.id, false)} className="block mt-1 font-bold underline hover:text-rose-800">Resume from where it left off</button>
+                                                </div>
+                                            )}
+
+                                            {doc.description && doc.processingStatus !== 'PROCESSING' && (
+                                                <p className="text-xs text-slate-500 line-clamp-2 mb-3 leading-relaxed">{doc.description}</p>
+                                            )}
+                                            <div className="flex flex-wrap gap-1.5 mt-auto">
+                                                {doc.educationLevel && (
+                                                    <span className="text-[10px] bg-indigo-50 border border-indigo-100 text-indigo-600 px-2 py-0.5 rounded-md font-medium">
+                                                        <GraduationCap size={10} className="inline mr-1" />{doc.educationLevel}
+                                                    </span>
+                                                )}
+                                                {doc.subjectName && (
+                                                    <span className="text-[10px] bg-emerald-50 border border-emerald-100 text-emerald-600 px-2 py-0.5 rounded-md font-medium">{doc.subjectName}</span>
+                                                )}
+                                                {doc.className && (
+                                                    <span className="text-[10px] bg-orange-50 border border-orange-100 text-orange-600 px-2 py-0.5 rounded-md font-medium">{doc.className}</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                                            <div className="text-[10px] font-medium text-slate-400">
+                                                <FileText size={12} className="inline mr-1" />
+                                                {doc.fileName || 'Unknown File'} · {formatFileSize(doc.fileSize)}
+                                            </div>
+                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {doc.filePath && (
+                                                    <a href={doc.filePath.startsWith('http') ? doc.filePath : `/api/v1/public/files/${doc.filePath}`}
+                                                       target="_blank" rel="noreferrer"
+                                                       className="p-1.5 text-blue-500 hover:bg-blue-100 rounded-md transition-colors" title="View">
+                                                        <Eye size={14} />
+                                                    </a>
+                                                )}
+                                                <button onClick={() => fetchAndShowChunks(doc)}
+                                                    className="p-1.5 text-indigo-500 hover:bg-indigo-100 rounded-md transition-colors" title="View Extracted AI Data & Images">
+                                                    <Bot size={14} />
+                                                </button>
+                                                <button onClick={() => handleRegenerateChunks(doc.id)}
+                                                    className="p-1.5 text-indigo-500 hover:bg-indigo-100 rounded-md transition-colors" title="Regenerate AI Chunks">
+                                                    <Sparkles size={14} />
+                                                </button>
+                                                <button onClick={() => setEditDoc({...doc})}
+                                                    className="p-1.5 text-emerald-500 hover:bg-emerald-100 rounded-md transition-colors" title="Edit">
+                                                    <Edit3 size={14} />
+                                                </button>
+                                                <button onClick={() => handleDelete(doc.id)}
+                                                    className="p-1.5 text-rose-500 hover:bg-rose-100 rounded-md transition-colors" title="Delete">
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* AI CHAT TAB */}
+            {activeTab === 'AI_CHAT' && (
+                <div className="animate-in fade-in duration-300 w-full max-w-4xl mx-auto">
+                    <div className="bg-white xl:h-[650px] lg:h-[550px] h-[500px] rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+                        {/* Chat Context Header */}
+                        <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-slate-600">
+                                <Bot size={18} className="text-indigo-600" />
+                                <span className="text-sm font-bold">Curriculum Assistant (RAG Engine)</span>
+                            </div>
+                            <div className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full flex items-center gap-1">
+                                <Archive size={12} /> {(stats?.totalDocuments || 0)} Documents Indexed
+                            </div>
+                        </div>
+
+                        {/* Chat Messages */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50 relative">
+                            {chatMessages.map((msg, idx) => (
+                                <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-slate-800 text-white' : 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white'}`}>
+                                        {msg.role === 'user' ? <User size={14} /> : <Bot size={14} />}
+                                    </div>
+                                    <div className={`max-w-[85%] p-4 rounded-2xl text-[14px] leading-relaxed ${
+                                        msg.role === 'user'
+                                            ? 'bg-slate-800 text-white rounded-tr-none shadow-md'
+                                            : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none shadow-sm'
+                                    }`}>
+                                        {msg.role === 'user' ? (
+                                            msg.text
+                                        ) : (
+                                            <div className="prose prose-sm prose-slate max-w-none prose-p:leading-relaxed prose-li:my-1 prose-ul:list-disc prose-ol:list-decimal prose-strong:text-indigo-900 prose-headings:text-slate-800">
+                                                <ReactMarkdown>{msg.text}</ReactMarkdown>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                            {isThinking && (
+                                <div className="flex gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                                        <Bot size={14} />
+                                    </div>
+                                    <div className="bg-white border border-slate-200 px-4 py-5 rounded-2xl rounded-tl-none text-slate-400 flex items-center gap-2 w-20 shadow-sm">
+                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce"></span>
+                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce delay-75"></span>
+                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce delay-150"></span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Quick Prompts */}
+                        {chatMessages.length === 1 && (
+                            <div className="px-6 py-3 flex gap-2 overflow-x-auto no-scrollbar border-t border-slate-100 bg-white">
+                                <button className="whitespace-nowrap px-3 py-1.5 text-[11px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full transition-colors" onClick={() => setChatInput('What is the marks distribution for Class 9 Science?')}>
+                                    Class 9 Science Marks?
+                                </button>
+                                <button className="whitespace-nowrap px-3 py-1.5 text-[11px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full transition-colors" onClick={() => setChatInput('Show the syllabus changes for SSC 2024.')}>
+                                    SSC 2024 Syllabus Changes?
+                                </button>
+                                <button className="whitespace-nowrap px-3 py-1.5 text-[11px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full transition-colors" onClick={() => setChatInput('What are the rules for writing creative questions based on stimuli?')}>
+                                    Creative Question Rules
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Input Box */}
+                        <div className="p-4 bg-white border-t border-slate-200 flex gap-3 items-end">
+                            <textarea
+                                value={chatInput}
+                                onChange={(e) => setChatInput(e.target.value)}
+                                placeholder="Ask me any question regarding the documents..."
+                                className="flex-1 border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none shadow-sm"
+                                rows={2}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handleChatSubmit();
+                                    }
+                                }}
+                            />
+                            <button
+                                onClick={handleChatSubmit}
+                                disabled={!chatInput.trim() || isThinking}
+                                className="mb-[2px] bg-indigo-600 text-white w-12 h-12 flex flex-col items-center justify-center rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md hover:shadow-lg focus:scale-95"
+                            >
+                                <Send size={20} className={chatInput.trim() && !isThinking ? 'ml-1' : ''} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Simple AI Upload & Extract Modal */}
+            {showUpload && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50">
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <Sparkles className="text-indigo-600" size={22} /> Add Document & Extract Data
+                            </h2>
+                            <button onClick={() => { setShowUpload(false); setUploadStep('METADATA'); }} className="text-slate-400 hover:text-slate-600 bg-white shadow-sm p-1.5 rounded-full"><X size={18} /></button>
+                        </div>
+                        
+                        {uploadStep === 'METADATA' && (() => {
+                            return (
+                                <div className="p-6">
+                                    <div className="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-start gap-4">
+                                        <Bot className="text-indigo-600 shrink-0 mt-1" size={24} />
+                                        <div>
+                                            <h4 className="font-bold text-indigo-900 mb-1">Step 1: Set Initial Metadata</h4>
+                                            <p className="text-sm text-indigo-700">Provide the basic details here. AI will use these details and won't overwrite them when you upload the document in the next step!</p>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Document Type</label>
+                                                <select value={uploadData.docType} onChange={e => setUploadData({...uploadData, docType: e.target.value})} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500">
+                                                    {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Applies to Year</label>
+                                                <input type="number" value={uploadData.academicYear} onChange={e => setUploadData({...uploadData, academicYear: parseInt(e.target.value)})} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+                                            </div>
+                                            <div className="col-span-2 bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 flex items-center justify-between">
+                                                <div>
+                                                    <h5 className="font-bold text-indigo-900 flex items-center gap-2"><Eye size={16}/> Multimodal Vision OCR (Beta)</h5>
+                                                    <p className="text-xs font-medium text-indigo-600 mt-0.5">Check this if the document contains Math equations, Physics formulas, or Diagrams. Uses advanced AI to extract Images & LaTeX.</p>
+                                                </div>
+                                                <label className="relative inline-flex flex-shrink-0 items-center cursor-pointer">
+                                                    <input type="checkbox" className="sr-only peer" checked={uploadData.visionEnabled} onChange={e => setUploadData({...uploadData, visionEnabled: e.target.checked})} />
+                                                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100">
+                                            <div className="col-span-2 lg:col-span-1 relative">
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                                                    <GraduationCap size={14} /> Level
+                                                </label>
+                                                <div 
+                                                    className="w-full border border-indigo-200 rounded-lg px-3 py-2.5 text-sm bg-white cursor-pointer flex justify-between items-center shadow-sm hover:bg-slate-50 transition-colors"
+                                                    onClick={() => {
+                                                        setShowLevelDropdown(!showLevelDropdown);
+                                                        setShowStreamDropdown(false);
+                                                        setShowClassDropdown(false);
+                                                        setShowSubjectDropdown(false);
+                                                    }}
+                                                >
+                                                    <span className="truncate text-slate-700 font-medium">
+                                                        {uploadData.educationLevel ? uploadData.educationLevel.substring(0, 30) + (uploadData.educationLevel.length > 30 ? '...' : '') : '-- Select Levels --'}
+                                                    </span>
+                                                    <span className="text-slate-400 text-[10px] font-bold">MULTI</span>
+                                                </div>
+                                                {showLevelDropdown && (
+                                                    <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2">
+                                                        <div className="grid grid-cols-1 gap-1">
+                                                            {academicLevels.map(lvl => {
+                                                                const isChecked = uploadData.educationLevel && uploadData.educationLevel.includes(lvl.name);
+                                                                return (
+                                                                    <label key={lvl.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded-lg text-sm text-slate-700 border border-transparent hover:border-slate-100 transition-colors">
+                                                                        <input 
+                                                                            type="checkbox" 
+                                                                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
+                                                                            checked={isChecked}
+                                                                            onChange={(e) => {
+                                                                                let current = uploadData.educationLevel ? uploadData.educationLevel.split(',').map(s=>s.trim()).filter(Boolean) : [];
+                                                                                if (e.target.checked) {
+                                                                                    if (!current.includes(lvl.name)) current.push(lvl.name);
+                                                                                } else {
+                                                                                    current = current.filter(s => s !== lvl.name);
+                                                                                }
+                                                                                setUploadData(d => ({...d, educationLevel: current.join(', ')}));
+                                                                            }}
+                                                                        />
+                                                                        <span className="font-medium truncate">{lvl.name}</span>
+                                                                    </label>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        <div className="sticky bottom-0 bg-white pt-2 border-t mt-2">
+                                                            <button type="button" onClick={() => setShowLevelDropdown(false)} className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded">Done</button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="col-span-2 lg:col-span-1 relative">
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                                                    <Archive size={14} /> Stream
+                                                </label>
+                                                <div 
+                                                    className="w-full border border-indigo-200 rounded-lg px-3 py-2.5 text-sm bg-white cursor-pointer flex justify-between items-center shadow-sm hover:bg-slate-50 transition-colors"
+                                                    onClick={() => {
+                                                        setShowStreamDropdown(!showStreamDropdown);
+                                                        setShowLevelDropdown(false);
+                                                        setShowClassDropdown(false);
+                                                        setShowSubjectDropdown(false);
+                                                    }}
+                                                >
+                                                    <span className="truncate text-slate-700 font-medium">
+                                                        {uploadData.tags && uploadData.tags.includes('Stream:') 
+                                                            ? uploadData.tags.split(',').filter(t => t.includes('Stream:')).map(t => t.replace('Stream:', '').trim()).join(', ').substring(0, 30) 
+                                                            : '-- Select Streams --'}
+                                                    </span>
+                                                    <span className="text-slate-400 text-[10px] font-bold">MULTI</span>
+                                                </div>
+                                                {showStreamDropdown && (
+                                                    <div className="absolute z-20 w-[300px] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2">
+                                                        <div className="grid grid-cols-1 gap-1">
+                                                            {Array.from(new Map(filteredStreams.map(s => [s.name, s])).values()).map(str => {
+                                                                const tagMatch = `Stream:${str.name}`;
+                                                                const isChecked = uploadData.tags && uploadData.tags.includes(tagMatch);
+                                                                return (
+                                                                    <label key={str.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded-lg text-sm text-slate-700 border border-transparent hover:border-slate-100 transition-colors">
+                                                                        <input 
+                                                                            type="checkbox" 
+                                                                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
+                                                                            checked={isChecked}
+                                                                            onChange={(e) => {
+                                                                                let current = uploadData.tags ? uploadData.tags.split(',').map(s=>s.trim()).filter(Boolean) : [];
+                                                                                if (e.target.checked) {
+                                                                                    if (!current.includes(tagMatch)) current.push(tagMatch);
+                                                                                } else {
+                                                                                    current = current.filter(s => s !== tagMatch);
+                                                                                }
+                                                                                setUploadData(d => ({...d, tags: current.join(', ')}));
+                                                                            }}
+                                                                        />
+                                                                        <span className="font-medium truncate">{str.name}</span>
+                                                                    </label>
+                                                                );
+                                                            })}
+                                                            {filteredStreams.length === 0 && <span className="text-sm p-2 text-slate-400">No linked streams found. Try selecting different level(s).</span>}
+                                                        </div>
+                                                        <div className="sticky bottom-0 bg-white pt-2 border-t mt-2">
+                                                            <button type="button" onClick={() => setShowStreamDropdown(false)} className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded">Done</button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="col-span-2 lg:col-span-1 relative">
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                                                    <BookOpen size={14} /> Class
+                                                </label>
+                                                <div 
+                                                    className="w-full border border-indigo-200 rounded-lg px-3 py-2.5 text-sm bg-white cursor-pointer flex justify-between items-center shadow-sm hover:bg-slate-50 transition-colors"
+                                                    onClick={() => {
+                                                        setShowClassDropdown(!showClassDropdown);
+                                                        setShowSubjectDropdown(false);
+                                                        setShowLevelDropdown(false);
+                                                        setShowStreamDropdown(false);
+                                                    }}
+                                                >
+                                                    <span className="truncate text-slate-700 font-medium">
+                                                        {uploadData.className ? uploadData.className.substring(0, 30) + (uploadData.className.length > 30 ? '...' : '') : '-- Select Classes --'}
+                                                    </span>
+                                                    <span className="text-slate-400 text-[10px] font-bold">MULTI</span>
+                                                </div>
+                                                {showClassDropdown && (
+                                                    <div className="absolute z-20 w-[300px] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2">
+                                                        <div className="grid grid-cols-1 gap-1">
+                                                            {Array.from(new Map(filteredClasses.map(c => [c.name, c])).values()).map(cls => {
+                                                                const isChecked = uploadData.className && uploadData.className.includes(cls.name);
+                                                                return (
+                                                                    <label key={cls.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded-lg text-sm text-slate-700 border border-transparent hover:border-slate-100 transition-colors">
+                                                                        <input 
+                                                                            type="checkbox" 
+                                                                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
+                                                                            checked={isChecked}
+                                                                            onChange={(e) => {
+                                                                                let current = uploadData.className ? uploadData.className.split(',').map(s=>s.trim()).filter(Boolean) : [];
+                                                                                if (e.target.checked) {
+                                                                                    if (!current.includes(cls.name)) current.push(cls.name);
+                                                                                } else {
+                                                                                    current = current.filter(s => s !== cls.name);
+                                                                                }
+                                                                                setUploadData(d => ({...d, className: current.join(', ')}));
+                                                                            }}
+                                                                        />
+                                                                        <span className="font-medium truncate">{cls.name}</span>
+                                                                    </label>
+                                                                );
+                                                            })}
+                                                            {filteredClasses.length === 0 && <span className="text-sm p-2 text-slate-400">No linked classes found. Try selecting different stream(s).</span>}
+                                                        </div>
+                                                        <div className="sticky bottom-0 bg-white pt-2 border-t mt-2">
+                                                            <button type="button" onClick={() => setShowClassDropdown(false)} className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded">Done</button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="col-span-2 lg:col-span-1 relative">
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                                                    <FileText size={14} /> Subject & Paper
+                                                </label>
+                                                <div 
+                                                    className="w-full border border-indigo-200 rounded-lg px-3 py-2.5 text-sm bg-white cursor-pointer flex justify-between items-center shadow-sm hover:bg-slate-50 transition-colors"
+                                                    onClick={() => {
+                                                        setShowSubjectDropdown(!showSubjectDropdown);
+                                                        setShowLevelDropdown(false);
+                                                        setShowStreamDropdown(false);
+                                                        setShowClassDropdown(false);
+                                                    }}
+                                                >
+                                                    <span className="truncate text-slate-700 font-medium">
+                                                        {uploadData.subjectName ? uploadData.subjectName.substring(0, 30) + (uploadData.subjectName.length > 30 ? '...' : '') : '-- Select Subjects --'}
+                                                    </span>
+                                                    <span className="text-slate-400 text-[10px] font-bold">MULTI</span>
+                                                </div>
+                                                {showSubjectDropdown && (
+                                                    <div className="absolute z-20 w-[300px] mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2">
+                                                        <div className="grid grid-cols-1 gap-1">
+                                                            {Array.from(new Map(filteredSubjects.map(s => [s.name, s])).values()).map(sub => {
+                                                                const isChecked = uploadData.subjectName && uploadData.subjectName.includes(sub.name);
+                                                                return (
+                                                                    <label key={sub.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded-lg text-sm text-slate-700 border border-transparent hover:border-slate-100 transition-colors">
+                                                                        <input 
+                                                                            type="checkbox" 
+                                                                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
+                                                                            checked={isChecked}
+                                                                            onChange={(e) => {
+                                                                                let current = uploadData.subjectName ? uploadData.subjectName.split(',').map(s=>s.trim()).filter(Boolean) : [];
+                                                                                if (e.target.checked) {
+                                                                                    if (!current.includes(sub.name)) current.push(sub.name);
+                                                                                } else {
+                                                                                    current = current.filter(s => s !== sub.name);
+                                                                                }
+                                                                                setUploadData(d => ({...d, subjectName: current.join(', ')}));
+                                                                            }}
+                                                                        />
+                                                                        <span className="font-medium truncate">{sub.name}</span>
+                                                                    </label>
+                                                                );
+                                                            })}
+                                                            {filteredSubjects.length === 0 && <span className="text-sm p-2 text-slate-400">No linked subjects found. Try selecting different class(es).</span>}
+                                                        </div>
+                                                        <div className="sticky bottom-0 bg-white pt-2 border-t mt-2">
+                                                            <button type="button" onClick={() => setShowSubjectDropdown(false)} className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded">Done</button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="pt-6 mt-2 border-t border-slate-100 flex justify-end gap-3">
+                                            <button onClick={() => setShowUpload(false)} className="px-6 py-3 text-slate-500 hover:bg-slate-100 rounded-xl font-bold transition-all shadow-sm border border-transparent hover:border-slate-200">Cancel</button>
+                                            <button 
+                                                disabled={!uploadData.educationLevel || !uploadData.tags || !uploadData.className || !uploadData.subjectName}
+                                                onClick={() => {
+                                                    setUploadStep('UPLOAD');
+                                                }}  
+                                                className="px-8 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-bold shadow-lg shadow-indigo-200 disabled:opacity-50 transition-all flex items-center gap-2 hover:-translate-y-0.5"
+                                            >
+                                                Next: Upload PDF <Sparkles size={18}/>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {uploadStep === 'UPLOAD' && (
+                            <div className="p-10 flex flex-col items-center justify-center">
+                                <div className="border-2 border-dashed border-indigo-200 rounded-3xl p-12 w-full hover:bg-indigo-50 hover:border-indigo-400 transition-all cursor-pointer group text-center"
+                                    onClick={() => document.getElementById('curriculum-file').click()}>
+                                    <input id="curriculum-file" type="file" accept=".pdf,.doc,.docx,.jpg,.png" className="hidden"
+                                        onChange={async e => {
+                                            const file = e.target.files[0];
+                                            if (file) {
+                                                setUploadFile(file);
+                                                setUploadStep('ANALYZING');
+                                                
+                                                try {
+                                                    const formData = new FormData();
+                                                    formData.append('file', file);
+                                                    const { data } = await axios.post(`${API}/analyze`, formData, {
+                                                        headers: { 'Content-Type': 'multipart/form-data' }
+                                                    });
+                                                    
+                                                    setUploadData(d => ({
+                                                        ...d,
+                                                        title: d.title || data.title || file.name.replace(/\.[^.]+$/, '').toUpperCase(),
+                                                        academicYear: d.academicYear || data.academicYear || new Date().getFullYear(),
+                                                        docType: d.docType || data.docType || 'SYLLABUS',
+                                                        className: d.className || data.className || '',
+                                                        subjectName: d.subjectName || data.subjectName || '',
+                                                        tags: d.tags ? `${d.tags}, AI-Extracted` : `AI-Extracted, ${data.docType || 'Syllabus'}`,
+                                                        description: (data.description || '') + (d.description ? `\n\n${d.description}` : '')
+                                                    }));
+                                                    setUploadStep('REVIEW');
+                                                } catch (err) {
+                                                    console.error('AI Analysis Failed:', err);
+                                                    alert('AI Analysis failed, falling back to manual entry.');
+                                                    setUploadStep('REVIEW'); // Fallback to manual form
+                                                }
+                                            }
+                                        }} />
+                                    <div className="bg-indigo-100/50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 group-hover:bg-indigo-100 transition-transform">
+                                        <Upload className="text-indigo-600" size={36} />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-slate-800 mb-2">Step 2: Upload Document File</h3>
+                                    <p className="text-slate-500 text-sm mb-6">Drag and drop or click to browse</p>
+                                    <div className="flex items-center justify-center gap-2 text-xs font-bold text-indigo-700 bg-indigo-50 inline-flex px-4 py-2 rounded-full border border-indigo-100">
+                                        <Bot size={14} /> AI will scan and only fill the missing details
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {uploadStep === 'ANALYZING' && (
+                            <div className="p-20 flex flex-col items-center justify-center text-center">
+                                <div className="relative mb-8">
+                                    <div className="w-28 h-28 border-4 border-indigo-50 border-t-indigo-600 rounded-full animate-spin"></div>
+                                    <Bot className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-600" size={36} />
+                                </div>
+                                <h3 className="text-2xl font-bold text-slate-800 mb-3 tracking-tight">AI is Reading the Document...</h3>
+                                <p className="text-slate-500 text-sm font-medium">Extracting rules, classes, and marks distribution pattern.</p>
+                                
+                                <div className="mt-8 flex gap-2 justify-center">
+                                    <div className="w-2 h-2 rounded-full bg-indigo-300 animate-bounce"></div>
+                                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce delay-100"></div>
+                                    <div className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce delay-200"></div>
+                                </div>
+                            </div>
+                        )}
+
+                        {uploadStep === 'REVIEW' && (
+                            <form onSubmit={handleUpload} className="p-6 space-y-5 relative">
+                                {uploading && (
+                                    <div className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center p-8 text-center border border-indigo-100">
+                                        <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+                                        <h3 className="text-xl font-bold text-indigo-900 mb-2">Uploading Document...</h3>
+                                        <p className="text-indigo-600 text-sm font-medium">Please wait while the PDF and AI rules are being saved to the Curriculum Engine.</p>
+                                    </div>
+                                )}
+                                <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-2xl flex items-start gap-4">
+                                    <div className="bg-emerald-100 p-2 rounded-full mt-0.5">
+                                        <Sparkles className="text-emerald-600 shrink-0" size={20} />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-emerald-800 text-base mb-1">AI Analysis Complete!</h4>
+                                        <p className="text-sm text-emerald-600 font-medium leading-relaxed">AI has read the PDF and pre-filled the configuration. Please review the extracted rules below. If everything looks good, save it.</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-5 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                                    <div className="col-span-2">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Document Title</label>
+                                        <input type="text" required value={uploadData.title}
+                                            onChange={e => setUploadData(d => ({...d, title: e.target.value}))}
+                                            className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm font-bold text-slate-800" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Applies to Year</label>
+                                        <input type="number" required value={uploadData.academicYear}
+                                            onChange={e => setUploadData(d => ({...d, academicYear: parseInt(e.target.value)}))}
+                                            className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm font-bold text-slate-800" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Applies to Class</label>
+                                        <input type="text" value={uploadData.className}
+                                            onChange={e => setUploadData(d => ({...d, className: e.target.value}))}
+                                            className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm font-bold text-slate-800" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1"><Sparkles size={12}/> AI Extracted Rules (System Prompt)</label>
+                                        <textarea value={uploadData.description} rows={4}
+                                            onChange={e => setUploadData(d => ({...d, description: e.target.value}))}
+                                            className="w-full border border-indigo-200 bg-indigo-50/30 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 resize-none shadow-sm font-medium text-indigo-900" />
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-3">
+                                    <button type="button" onClick={() => { setShowUpload(false); setUploadStep('METADATA'); }}
+                                        className="px-6 py-3 text-slate-600 hover:bg-slate-100 rounded-xl font-bold transition-colors">Discard</button>
+                                    <button type="submit" disabled={uploading}
+                                        className="px-8 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-bold shadow-md disabled:opacity-50 transition-all flex items-center gap-2">
+                                        {uploading ? '⏳ Saving to Engine...' : <> <Bot size={18}/> Confirm & Save Rules </> }
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Modal Implementation remains largely the same with updated styles */}
+            {editDoc && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-5 border-b border-slate-100">
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <Edit3 className="text-emerald-500" size={20}/> Edit Document
+                            </h2>
+                            <button onClick={() => setEditDoc(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                        </div>
+                        <form onSubmit={handleUpdate} className="p-5 space-y-4 bg-slate-50/50">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Title</label>
+                                <input type="text" value={editDoc.title || ''}
+                                    onChange={e => setEditDoc(d => ({...d, title: e.target.value}))}
+                                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-emerald-500 shadow-sm" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Academic Year</label>
+                                    <input type="number" value={editDoc.academicYear || ''}
+                                        onChange={e => setEditDoc(d => ({...d, academicYear: parseInt(e.target.value)}))}
+                                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-emerald-500 shadow-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Type</label>
+                                    <select value={editDoc.docType || ''}
+                                        onChange={e => setEditDoc(d => ({...d, docType: e.target.value}))}
+                                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-emerald-500 shadow-sm">
+                                        {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-2 border-t border-slate-100 pt-3">
+                                <div className="col-span-2"><h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><Sparkles size={12}/> Target Flow Allocation (Level ❯ Stream ❯ Class ❯ Subject)</h4></div>
+                                <div className="relative">
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Level(s)</label>
+                                    <div 
+                                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm bg-white cursor-pointer flex justify-between items-center shadow-sm"
+                                        onClick={() => {
+                                            setShowLevelDropdown(!showLevelDropdown);
+                                            setShowStreamDropdown(false);
+                                            setShowClassDropdown(false);
+                                            setShowSubjectDropdown(false);
+                                        }}
+                                    >
+                                        <span className="truncate text-slate-600 font-medium">
+                                            {editDoc.educationLevel ? editDoc.educationLevel.substring(0, 30) + (editDoc.educationLevel.length > 30 ? '...' : '') : '-- Select Levels --'}
+                                        </span>
+                                        <span className="text-slate-400 text-[10px] font-bold">MULTI</span>
+                                    </div>
+                                    {showLevelDropdown && (
+                                        <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2">
+                                            <div className="grid grid-cols-1 gap-1">
+                                                {academicLevels.map(lvl => {
+                                                    const isChecked = editDoc.educationLevel && editDoc.educationLevel.includes(lvl.name);
+                                                    return (
+                                                        <label key={lvl.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded-lg text-sm text-slate-700 border border-transparent hover:border-slate-100 transition-colors">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer" 
+                                                                checked={isChecked}
+                                                                onChange={(e) => {
+                                                                    let current = editDoc.educationLevel ? editDoc.educationLevel.split(',').map(s=>s.trim()).filter(Boolean) : [];
+                                                                    if (e.target.checked) {
+                                                                        if (!current.includes(lvl.name)) current.push(lvl.name);
+                                                                    } else {
+                                                                        current = current.filter(s => s !== lvl.name);
+                                                                    }
+                                                                    setEditDoc(d => ({...d, educationLevel: current.join(', ')}));
+                                                                }}
+                                                            />
+                                                            <span className="font-medium truncate">{lvl.name}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                            <div className="sticky bottom-0 bg-white pt-2 border-t mt-2">
+                                                <button type="button" onClick={() => setShowLevelDropdown(false)} className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded">Done</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="relative">
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Stream(s)</label>
+                                    <div 
+                                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm bg-white cursor-pointer flex justify-between items-center shadow-sm"
+                                        onClick={() => {
+                                            setShowStreamDropdown(!showStreamDropdown);
+                                            setShowLevelDropdown(false);
+                                            setShowClassDropdown(false);
+                                            setShowSubjectDropdown(false);
+                                        }}
+                                    >
+                                        <span className="truncate text-slate-600 font-medium">
+                                            {editDoc.tags && editDoc.tags.includes('Stream:') 
+                                                ? editDoc.tags.split(',').filter(t => t.includes('Stream:')).map(t => t.replace('Stream:', '').trim()).join(', ').substring(0, 30) 
+                                                : '-- Select Streams --'}
+                                        </span>
+                                        <span className="text-slate-400 text-[10px] font-bold">MULTI</span>
+                                    </div>
+                                    {showStreamDropdown && (
+                                        <div className="absolute z-20 w-[300px] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2">
+                                            <div className="grid grid-cols-1 gap-1">
+                                                {Array.from(new Map(filteredStreams.map(s => [s.name, s])).values()).map(str => {
+                                                    const tagMatch = `Stream:${str.name}`;
+                                                    const isChecked = editDoc.tags && editDoc.tags.includes(tagMatch);
+                                                    return (
+                                                        <label key={str.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded-lg text-sm text-slate-700 border border-transparent hover:border-slate-100 transition-colors">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer" 
+                                                                checked={isChecked}
+                                                                onChange={(e) => {
+                                                                    let current = editDoc.tags ? editDoc.tags.split(',').map(s=>s.trim()).filter(Boolean) : [];
+                                                                    if (e.target.checked) {
+                                                                        if (!current.includes(tagMatch)) current.push(tagMatch);
+                                                                    } else {
+                                                                        current = current.filter(s => s !== tagMatch);
+                                                                    }
+                                                                    setEditDoc(d => ({...d, tags: current.join(', ')}));
+                                                                }}
+                                                            />
+                                                            <span className="font-medium truncate">{str.name}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                                {filteredStreams.length === 0 && <span className="text-sm p-2 text-slate-400">No linked streams found. Try selecting different level(s).</span>}
+                                            </div>
+                                            <div className="sticky bottom-0 bg-white pt-2 border-t mt-2">
+                                                <button type="button" onClick={() => setShowStreamDropdown(false)} className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded">Done</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="relative">
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Class(es)</label>
+                                    <div 
+                                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm bg-white cursor-pointer flex justify-between items-center shadow-sm"
+                                        onClick={() => {
+                                            setShowClassDropdown(!showClassDropdown);
+                                            setShowSubjectDropdown(false);
+                                            setShowLevelDropdown(false);
+                                            setShowStreamDropdown(false);
+                                        }}
+                                    >
+                                        <span className="truncate text-slate-600 font-medium">
+                                            {editDoc.className ? editDoc.className.substring(0, 30) + (editDoc.className.length > 30 ? '...' : '') : '-- Select Classes --'}
+                                        </span>
+                                        <span className="text-slate-400 text-[10px] font-bold">MULTI</span>
+                                    </div>
+                                    {showClassDropdown && (
+                                        <div className="absolute z-20 w-[300px] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2">
+                                            <div className="grid grid-cols-1 gap-1">
+                                                {Array.from(new Map(filteredClasses.map(c => [c.name, c])).values()).map(cls => {
+                                                    const isChecked = editDoc.className && editDoc.className.includes(cls.name);
+                                                    return (
+                                                        <label key={cls.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded-lg text-sm text-slate-700 border border-transparent hover:border-slate-100 transition-colors">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer" 
+                                                                checked={isChecked}
+                                                                onChange={(e) => {
+                                                                    let current = editDoc.className ? editDoc.className.split(',').map(s=>s.trim()).filter(Boolean) : [];
+                                                                    if (e.target.checked) {
+                                                                        if (!current.includes(cls.name)) current.push(cls.name);
+                                                                    } else {
+                                                                        current = current.filter(s => s !== cls.name);
+                                                                    }
+                                                                    setEditDoc(d => ({...d, className: current.join(', ')}));
+                                                                }}
+                                                            />
+                                                            <span className="font-medium truncate">{cls.name}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                                {filteredClasses.length === 0 && <span className="text-sm p-2 text-slate-400">No linked classes found. Try selecting different stream(s).</span>}
+                                            </div>
+                                            <div className="sticky bottom-0 bg-white pt-2 border-t mt-2">
+                                                <button type="button" onClick={() => setShowClassDropdown(false)} className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded">Done</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="relative">
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Subject(s)</label>
+                                    <div 
+                                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm bg-white cursor-pointer flex justify-between items-center shadow-sm"
+                                        onClick={() => {
+                                            setShowSubjectDropdown(!showSubjectDropdown);
+                                            setShowLevelDropdown(false);
+                                            setShowStreamDropdown(false);
+                                            setShowClassDropdown(false);
+                                        }}
+                                    >
+                                        <span className="truncate text-slate-600 font-medium">
+                                            {editDoc.subjectName ? editDoc.subjectName.substring(0, 30) + (editDoc.subjectName.length > 30 ? '...' : '') : '-- Select Subjects --'}
+                                        </span>
+                                        <span className="text-slate-400 text-[10px] font-bold">MULTI</span>
+                                    </div>
+                                    {showSubjectDropdown && (
+                                        <div className="absolute z-20 w-[300px] mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto p-2">
+                                            <div className="grid grid-cols-1 gap-1">
+                                                {Array.from(new Map(filteredSubjects.map(s => [s.name, s])).values()).map(sub => {
+                                                    const isChecked = editDoc.subjectName && editDoc.subjectName.includes(sub.name);
+                                                    return (
+                                                        <label key={sub.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded-lg text-sm text-slate-700 border border-transparent hover:border-slate-100 transition-colors">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer" 
+                                                                checked={isChecked}
+                                                                onChange={(e) => {
+                                                                    let current = editDoc.subjectName ? editDoc.subjectName.split(',').map(s=>s.trim()).filter(Boolean) : [];
+                                                                    if (e.target.checked) {
+                                                                        if (!current.includes(sub.name)) current.push(sub.name);
+                                                                    } else {
+                                                                        current = current.filter(s => s !== sub.name);
+                                                                    }
+                                                                    setEditDoc(d => ({...d, subjectName: current.join(', ')}));
+                                                                }}
+                                                            />
+                                                            <span className="font-medium truncate">{sub.name}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                                {filteredSubjects.length === 0 && <span className="text-sm p-2 text-slate-400">No linked subjects found. Try selecting different class(es).</span>}
+                                            </div>
+                                            <div className="sticky bottom-0 bg-white pt-2 border-t mt-2">
+                                                <button type="button" onClick={() => setShowSubjectDropdown(false)} className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded">Done</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Description (Internal Rules)</label>
+                                <textarea value={editDoc.description || ''} rows={2}
+                                    onChange={e => setEditDoc(d => ({...d, description: e.target.value}))}
+                                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-emerald-500 resize-none shadow-sm" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Tags</label>
+                                <input type="text" value={editDoc.tags || ''}
+                                    onChange={e => setEditDoc(d => ({...d, tags: e.target.value}))}
+                                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-emerald-500 shadow-sm" />
+                            </div>
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                                <button type="button" onClick={() => setEditDoc(null)}
+                                    className="px-5 py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl font-bold transition-colors">Cancel</button>
+                                <button type="submit"
+                                    className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-bold shadow-md transition-colors">
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* View Chunks Modal */}
+            {viewChunksDoc && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50/50">
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                    <Bot className="text-indigo-600" size={22} /> AI Extracted Data & Images
+                                </h2>
+                                <p className="text-sm text-slate-500 mt-0.5">Showing what the AI has learned from {viewChunksDoc.title}</p>
+                            </div>
+                            <button onClick={() => setViewChunksDoc(null)} className="text-slate-400 hover:text-slate-600 bg-white shadow-sm p-1.5 rounded-full"><X size={18} /></button>
+                        </div>
+                        
+                        <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
+                            {isLoadingChunks ? (
+                                <div className="flex flex-col items-center justify-center py-20">
+                                    <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+                                    <p className="text-indigo-600 font-medium font-bold">Loading extracted chunks...</p>
+                                </div>
+                            ) : chunksData.length === 0 ? (
+                                <div className="text-center py-10 text-slate-500 font-medium">No chunks found or document not processed yet.</div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {chunksData.map((chunk, index) => (
+                                        <div key={chunk.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                            <div className="bg-slate-100/50 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-500 tracking-wider uppercase">Chunk #{chunk.chunkIndex} (Page {chunk.pageNumber || 'N/A'})</span>
+                                                <span className="text-xs font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{chunk.tokenCount} Tokens</span>
+                                            </div>
+                                            <div className="p-4">
+                                                <div className="prose prose-sm max-w-none text-slate-700">
+                                                    <ReactMarkdown>{chunk.chunkText}</ReactMarkdown>
+                                                </div>
+                                                
+                                                {/* Display Native Auto-Cropped Images for this chunk if any */}
+                                                {chunk.imageUrl && (
+                                                    <div className="mt-4 pt-4 border-t border-slate-100">
+                                                        <h5 className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-3 flex items-center gap-1"><Sparkles size={12}/> Automatically Extracted Reference Images</h5>
+                                                        <div className="flex flex-wrap gap-3">
+                                                            {chunk.imageUrl.split(',').map((url, i) => (
+                                                                <div key={i} className="border-2 border-emerald-100 rounded-lg overflow-hidden w-48 bg-white p-1 hover:border-emerald-300 transition-colors shadow-sm">
+                                                                    <img src={url} alt="Extracted reference" className="w-full h-auto object-contain" />
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default CurriculumLibrary;

@@ -1,0 +1,278 @@
+package com.testshaper.controller;
+
+import com.testshaper.dto.SourceBookMasterDto;
+import com.testshaper.service.KnowledgeHubService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import com.testshaper.service.DynamicStorageService;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/v1/knowledge-hub")
+@RequiredArgsConstructor
+public class KnowledgeHubController {
+
+    private final KnowledgeHubService knowledgeHubService;
+    private final DynamicStorageService storageService;
+
+    @PostMapping("/upload-image")
+    public ResponseEntity<Map<String, String>> uploadImage(@RequestParam("file") MultipartFile file) {
+        try {
+            String url = storageService.uploadFile(file, null, "knowledge_hub/covers");
+            return ResponseEntity.ok(Collections.singletonMap("url", url));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Collections.singletonMap("error", "Upload failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Proxies any CDN/R2 image through the backend so the browser (same-origin)
+     * can draw it onto a canvas without the SecurityError "Tainted canvas".
+     * The R2 bucket itself does not need CORS headers configured.
+     */
+    @GetMapping("/proxy-image")
+    public ResponseEntity<byte[]> proxyImage(@RequestParam("url") String imageUrl) {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(imageUrl))
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> resp = client.send(req, HttpResponse.BodyHandlers.ofByteArray());
+            if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+                return ResponseEntity.status(resp.statusCode()).build();
+            }
+            String contentType = resp.headers().firstValue("content-type")
+                    .orElse("image/jpeg");
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(contentType));
+            // Allow the same-origin frontend to use the response in canvas
+            headers.set("Access-Control-Allow-Origin", "*");
+            headers.set("Cache-Control", "public, max-age=86400");
+            return ResponseEntity.ok().headers(headers).body(resp.body());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(("Proxy error: " + e.getMessage()).getBytes());
+        }
+    }
+
+    @PutMapping("/source-books/{id}")
+    public ResponseEntity<SourceBookMasterDto> updateSourceBook(@PathVariable UUID id, @RequestBody SourceBookMasterDto dto) {
+        return ResponseEntity.ok(knowledgeHubService.updateSourceBook(id, dto));
+    }
+
+    @PostMapping(value = "/source-books/{id}/pages/bulk", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> uploadSourceBookPages(
+            @PathVariable UUID id,
+            @RequestParam(value = "files") java.util.List<MultipartFile> files,
+            @RequestParam(value = "startPage", defaultValue = "1") int startPage) {
+        
+        try {
+            int count = knowledgeHubService.uploadKnowledgePages(id, files, startPage);
+            return ResponseEntity.ok(Map.of("success", true, "count", count));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/source-books/{id}/pages")
+    public ResponseEntity<List<com.testshaper.dto.KnowledgePageDto>> getSourceBookPages(@PathVariable UUID id) {
+        return ResponseEntity.ok(knowledgeHubService.getSourceBookPages(id));
+    }
+
+    @PutMapping(value = "/source-books/{id}/pages/{pageId}/image", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> updateKnowledgePageImage(
+            @PathVariable UUID id,
+            @PathVariable UUID pageId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        try {
+            String newUrl = knowledgeHubService.updateKnowledgePageImage(id, pageId, file);
+            return ResponseEntity.ok(Map.of("success", true, "imageUrl", newUrl));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/source-books/{id}/pages/{pageId}")
+    public ResponseEntity<Void> deleteSourceBookPage(@PathVariable UUID id, @PathVariable UUID pageId) {
+        knowledgeHubService.deleteKnowledgePage(id, pageId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/source-books/{id}/pages/{pageId}/extract")
+    public ResponseEntity<Map<String, String>> extractKnowledgePageContent(@PathVariable UUID id, @PathVariable UUID pageId) {
+        try {
+            String markdown = knowledgeHubService.extractKnowledgePageContent(id, pageId);
+            return ResponseEntity.ok(Collections.singletonMap("markdown", markdown));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Collections.singletonMap("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/source-books/{id}/pages/{pageId}/extract-toc")
+    public ResponseEntity<Map<String, Object>> extractTableOfContents(@PathVariable UUID id, @PathVariable UUID pageId) {
+        try {
+            int count = knowledgeHubService.extractAndSaveTableOfContents(id, pageId);
+            return ResponseEntity.ok(Map.of("message", "Generated " + count + " indices", "count", count));
+        } catch (Exception e) {
+            System.err.println("Error extracting TOC:");
+            e.printStackTrace();
+            String msg = e.getMessage() != null ? e.getMessage() : "Unknown internal error";
+            return ResponseEntity.internalServerError().body(Map.of("error", msg));
+        }
+    }
+
+    @PostMapping("/source-books/{id}/pages/{pageId}/extract-pub-info")
+    public ResponseEntity<Object> extractPublicationInfo(@PathVariable UUID id, @PathVariable UUID pageId) {
+        try {
+            com.testshaper.dto.SourceBookMasterDto updatedBook = knowledgeHubService.extractAndSavePublicationInfo(id, pageId);
+            return ResponseEntity.ok(updatedBook);
+        } catch (Exception e) {
+            System.err.println("Error extracting Pub Info:");
+            e.printStackTrace();
+            String msg = e.getMessage() != null ? e.getMessage() : "Unknown internal error";
+            return ResponseEntity.internalServerError().body(Map.of("error", msg));
+        }
+    }
+
+    @PostMapping("/source-books/{id}/pages/{pageId}/preview-toc")
+    public ResponseEntity<Object> previewTableOfContents(@PathVariable UUID id, @PathVariable UUID pageId) {
+        try {
+            List<Map<String, Object>> chapters = knowledgeHubService.previewTableOfContents(id, pageId);
+            return ResponseEntity.ok(chapters);
+        } catch (Exception e) {
+            System.err.println("Error previewing TOC:");
+            e.printStackTrace();
+            String msg = e.getMessage() != null ? e.getMessage() : "Unknown internal error";
+            return ResponseEntity.internalServerError().body(Map.of("error", msg));
+        }
+    }
+
+    @PatchMapping("/source-books/{id}/pages/{pageId}/flags")
+    public ResponseEntity<Void> updatePageFlags(
+            @PathVariable UUID id, 
+            @PathVariable UUID pageId,
+            @RequestBody java.util.Map<String, Boolean> flags) {
+        knowledgeHubService.updatePageFlags(
+            id, 
+            pageId, 
+            flags.get("isPubInfo"), 
+            flags.get("isTocPage")
+        );
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/source-books/{id}/pages/bulk-reorder")
+    public ResponseEntity<Void> reorderPagesBulk(
+            @PathVariable UUID id,
+            @RequestBody java.util.Map<UUID, Integer> pageOrderMap) {
+        knowledgeHubService.reorderPagesBulk(id, pageOrderMap);
+        return ResponseEntity.ok().build();
+    }
+
+    // --- Phase 3A: Page-to-Chapter Assignment ---
+    @PutMapping("/source-books/{id}/pages/{pageId}/assign-index")
+    public ResponseEntity<com.testshaper.dto.KnowledgePageDto> assignPageToIndex(
+            @PathVariable UUID id, @PathVariable UUID pageId,
+            @RequestBody Map<String, String> body) {
+        try {
+            String indexIdStr = body.get("sourceBookIndexId");
+            if (indexIdStr == null || indexIdStr.isBlank()) {
+                return ResponseEntity.ok(knowledgeHubService.unassignPageFromIndex(id, pageId));
+            }
+            UUID indexId = UUID.fromString(indexIdStr);
+            return ResponseEntity.ok(knowledgeHubService.assignPageToIndex(id, pageId, indexId));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @PostMapping("/source-books/{id}/auto-assign-indices")
+    public ResponseEntity<Void> autoAssignPagesBulk(@PathVariable UUID id) {
+        knowledgeHubService.autoAssignPagesBulk(id);
+        return ResponseEntity.ok().build();
+    }
+
+    // --- Phase 3B: Golden Content Workflow ---
+    @PutMapping("/source-books/{id}/pages/{pageId}/golden")
+    public ResponseEntity<com.testshaper.dto.KnowledgePageDto> markAsGolden(
+            @PathVariable UUID id, @PathVariable UUID pageId,
+            @RequestBody Map<String, String> body) {
+        try {
+            String goldenMarkdown = body.get("goldenMarkdown"); // nullable — falls back to extractedMarkdown
+            return ResponseEntity.ok(knowledgeHubService.markAsGolden(id, pageId, goldenMarkdown));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body(null);
+        }
+    }
+
+    // --- Source Book Index API ---
+    @GetMapping("/source-books/{id}/indices")
+    public ResponseEntity<List<com.testshaper.dto.SourceBookIndexDto>> getSourceBookIndices(@PathVariable UUID id) {
+        return ResponseEntity.ok(knowledgeHubService.getSourceBookIndices(id));
+    }
+
+    @PostMapping("/source-books/{id}/indices")
+    public ResponseEntity<com.testshaper.dto.SourceBookIndexDto> createSourceBookIndex(@PathVariable UUID id, @RequestBody com.testshaper.dto.SourceBookIndexDto dto) {
+        return ResponseEntity.ok(knowledgeHubService.createSourceBookIndex(id, dto));
+    }
+
+    @PutMapping("/source-books/{id}/indices/{indexId}")
+    public ResponseEntity<com.testshaper.dto.SourceBookIndexDto> updateSourceBookIndex(
+            @PathVariable UUID id, @PathVariable UUID indexId, 
+            @RequestBody com.testshaper.dto.SourceBookIndexDto dto) {
+        return ResponseEntity.ok(knowledgeHubService.updateSourceBookIndex(id, indexId, dto));
+    }
+
+    @DeleteMapping("/source-books/{id}/indices/{indexId}")
+    public ResponseEntity<Void> deleteSourceBookIndex(@PathVariable UUID id, @PathVariable UUID indexId) {
+        knowledgeHubService.deleteSourceBookIndex(id, indexId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // --- Source Books Registry ---
+    @GetMapping("/source-books/{id}")
+    public ResponseEntity<SourceBookMasterDto> getSourceBook(@PathVariable UUID id) {
+        return ResponseEntity.ok(knowledgeHubService.getSourceBook(id));
+    }
+
+    @PostMapping("/source-books")
+    public ResponseEntity<SourceBookMasterDto> createSourceBook(@RequestBody SourceBookMasterDto dto) {
+        return ResponseEntity.ok(knowledgeHubService.createSourceBook(dto));
+    }
+
+    @GetMapping("/source-books")
+    public ResponseEntity<List<SourceBookMasterDto>> getAllSourceBooks() {
+        return ResponseEntity.ok(knowledgeHubService.getAllSourceBooks());
+    }
+
+    @GetMapping("/source-books/paginated")
+    public ResponseEntity<org.springframework.data.domain.Page<SourceBookMasterDto>> getPaginatedSourceBooks(
+            @RequestParam(required = false) String searchTerm,
+            @RequestParam(defaultValue = "ALL") String bookType,
+            @RequestParam(required = false) java.util.List<UUID> classSubjectIds,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(knowledgeHubService.getPaginatedSourceBooks(searchTerm, bookType, classSubjectIds, page, size));
+    }
+
+    @DeleteMapping("/source-books/{id}")
+    public ResponseEntity<Void> deleteSourceBook(@PathVariable UUID id) {
+        knowledgeHubService.deleteSourceBook(id);
+        return ResponseEntity.noContent().build();
+    }
+}
