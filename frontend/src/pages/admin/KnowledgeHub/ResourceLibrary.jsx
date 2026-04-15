@@ -61,6 +61,17 @@ const ResourceLibrary = () => {
         academicService.getHierarchy().then(setHierarchy).catch(console.error);
     }, []);
 
+    // Polling background processor status
+    useEffect(() => {
+        const hasProcessingBooks = books.some(b => b.isProcessing);
+        if (hasProcessingBooks) {
+            const interval = setInterval(() => {
+                fetchSourceBooks(true); // pass true to indicate silent background fetch
+            }, 3000);
+            return () => clearInterval(interval);
+        }
+    }, [books]);
+
     const [displayLimit, setDisplayLimit] = useState(12);
 
     // Auto-reset pagination limit when any filter changes
@@ -125,15 +136,15 @@ const ResourceLibrary = () => {
     }, [isLoading, filteredBooks.length, displayLimit]); // এই ভেরিয়েবলগুলো চেঞ্জ হলে অবজারভার রিসেট হবে
 
 
-    const fetchSourceBooks = async () => {
+    const fetchSourceBooks = async (isSilent = false) => {
         try {
-            setIsLoading(true);
+            if (!isSilent) setIsLoading(true);
             const res = await axios.get('/v1/knowledge-hub/source-books');
             setBooks(res.data);
         } catch (error) {
             console.error('Failed to fetch source books:', error);
         } finally {
-            setIsLoading(false);
+            if (!isSilent) setIsLoading(false);
         }
     };
 
@@ -516,7 +527,30 @@ const ResourceLibrary = () => {
                                         </div>
 
                                         {/* Digitization Progress */}
-                                        <div className="mt-8 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100 group/progress">
+                                        <div className="mt-8 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100 group/progress relative overflow-hidden">
+                                            {book.isProcessing ? (
+                                                <div className="absolute inset-0 bg-indigo-600 flex flex-col justify-center items-center z-10 px-4 text-center">
+                                                    <div className="w-full flex items-center justify-between mb-2">
+                                                        <span className="text-[10px] font-black text-white/80 uppercase tracking-widest flex items-center gap-1.5">
+                                                            <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                                                            Background Engine Active
+                                                        </span>
+                                                        <span className="text-xs font-black text-white">{book.processedPagesCount || 0}/{book.totalPagesToProcess || 0}</span>
+                                                    </div>
+                                                    <div className="h-1.5 w-full bg-indigo-900/50 rounded-full overflow-hidden flex">
+                                                        <motion.div 
+                                                            initial={{ width: 0 }}
+                                                            animate={{ width: `${book.totalPagesToProcess > 0 ? ((book.processedPagesCount || 0) / book.totalPagesToProcess) * 100 : 0}%` }}
+                                                            transition={{ duration: 0.5 }}
+                                                            className="h-full bg-white relative overflow-hidden"
+                                                        >
+                                                            <div className="absolute inset-0 bg-white/50 w-full animate-[shimmer_1.5s_infinite] -translate-x-full" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent)' }} />
+                                                        </motion.div>
+                                                    </div>
+                                                    <p className="text-[9px] text-indigo-200 uppercase font-black tracking-widest mt-2">Uploading & Extracting Base Data...</p>
+                                                </div>
+                                            ) : null}
+
                                             <div className="flex justify-between items-center mb-3">
                                                 <div className="flex items-center gap-2">
                                                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />

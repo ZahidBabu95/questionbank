@@ -12,7 +12,7 @@ public interface KnowledgeHubService {
     void deleteKnowledgePage(UUID sourceBookId, UUID pageId);
     SourceBookMasterDto updateSourceBook(UUID id, SourceBookMasterDto dto);
     SourceBookMasterDto getSourceBook(UUID id);
-    int uploadKnowledgePages(UUID sourceBookId, java.util.List<org.springframework.web.multipart.MultipartFile> files, int startPage);
+    void processUploadsBackground(UUID sourceBookId, java.util.List<java.io.File> localFiles, int startPage);
     String updateKnowledgePageImage(UUID sourceBookId, UUID pageId, org.springframework.web.multipart.MultipartFile file) throws Exception;
     void deleteSourceBook(UUID id);
     String extractKnowledgePageContent(UUID sourceBookId, UUID pageId) throws Exception;
@@ -35,4 +35,19 @@ public interface KnowledgeHubService {
 
     // --- Golden Content Workflow (Phase 3B) ---
     com.testshaper.dto.KnowledgePageDto markAsGolden(UUID sourceBookId, UUID pageId, String goldenMarkdown);
+
+    // --- Background Tasks (Ai Queue) ---
+    com.testshaper.entity.AiBulkExtractionJob startAiExtractionQueue(UUID sourceBookId);
+    com.testshaper.entity.AiBulkExtractionJob getAiExtractionQueueStatus(UUID sourceBookId);
+    com.testshaper.entity.AiBulkExtractionJob pauseAiExtractionQueue(UUID jobId);
+    com.testshaper.entity.AiBulkExtractionJob resumeAiExtractionQueue(UUID jobId);
+
+    // --- Background Question Generation Queue ---
+    com.testshaper.entity.AiQuestionGenerationJob startAiQuestionQueue(UUID sourceBookId);
+    com.testshaper.entity.AiQuestionGenerationJob getAiQuestionQueueStatus(UUID sourceBookId);
+    com.testshaper.entity.AiQuestionGenerationJob pauseAiQuestionQueue(UUID jobId);
+    com.testshaper.entity.AiQuestionGenerationJob resumeAiQuestionQueue(UUID jobId);
+
+    // Internal execution called by Scheduler
+    int generateQuestionsForPage(UUID sourceBookId, UUID pageId) throws Exception;
 }

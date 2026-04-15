@@ -12,4 +12,5 @@ public interface SourceBookIndexRepository extends JpaRepository<SourceBookIndex
     List<SourceBookIndex> findBySourceBookIdOrderByStartPageAsc(UUID sourceBookId);
     List<SourceBookIndex> findBySourceBookIdAndMappedChapterIsNotNull(UUID sourceBookId);
     List<SourceBookIndex> findBySourceBookId(UUID sourceBookId);
+    List<SourceBookIndex> findBySourceBookIdAndStartPageLessThanEqualAndEndPageGreaterThanEqual(UUID sourceBookId, Integer startPage, Integer endPage);
 }

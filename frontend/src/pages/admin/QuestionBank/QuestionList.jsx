@@ -268,6 +268,7 @@ const QuestionList = () => {
         if (location.pathname.includes('/approved')) permId = 'QUESTION_BANK_REPOSITORY_APPROVED';
         if (location.pathname.includes('/pending')) permId = 'QUESTION_BANK_REPOSITORY_PENDING';
         if (location.pathname.includes('/rejected')) permId = 'QUESTION_BANK_REPOSITORY_REJECTED';
+        // Note: drafts may not have a specific hardcoded permission, fallback to ALL or standard ones.
         return user?.permissions?.includes(`${permId}_${action}`);
     };
 
@@ -324,6 +325,7 @@ const QuestionList = () => {
         if (location.pathname.includes('/approved')) setFilterStatus('APPROVED');
         else if (location.pathname.includes('/pending')) setFilterStatus('PENDING');
         else if (location.pathname.includes('/rejected')) setFilterStatus('REJECTED');
+        else if (location.pathname.includes('/drafts')) setFilterStatus('DRAFT');
         else setFilterStatus('ALL');
 
         fetchInitialFilters();
@@ -544,6 +546,8 @@ const QuestionList = () => {
                 return <span className="px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><Clock size={14} /> Pending</span>;
             case 'REVISED':
                 return <span className="px-2.5 py-1.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><Edit size={14} /> Revised</span>;
+            case 'DRAFT':
+                return <span className="px-2.5 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><FileText size={14} /> Draft</span>;
             default:
                 return <span className="px-2.5 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center w-max">Draft</span>;
         }

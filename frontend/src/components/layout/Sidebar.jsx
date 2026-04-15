@@ -140,6 +140,7 @@ export const MENU_ITEMS = [
         submenu: [
             { title: 'Usage Summary', path: '/reports/usage', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
             { title: 'Performance Insights', path: '/reports/performance', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+            { title: 'Knowledge Hub Report', path: '/reports/knowledge-hub', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
         ]
     },
     {

@@ -37,7 +37,16 @@ public class SourceBookMaster extends BaseTenantEntity {
     private BookType bookType = BookType.TEXTBOOK;
 
     @Column(name = "pdf_page_offset", nullable = false)
-    private Integer pdfPageOffset = 0; // Number of pages to add to TOC page number to get exact PDF page. e.g. TOC says pg 1 is at PDF pg 6, so offset is 5.
+    private Integer pdfPageOffset = 0;
+
+    @Column(name = "is_processing", nullable = false)
+    private Boolean isProcessing = false;
+
+    @Column(name = "total_pages_to_process", nullable = false)
+    private Integer totalPagesToProcess = 0;
+
+    @Column(name = "processed_pages_count", nullable = false)
+    private Integer processedPagesCount = 0;
 
     // Bridge for entire book (e.g. Higher Math 1st paper for Class 11-12)
     @ManyToOne(fetch = FetchType.LAZY)

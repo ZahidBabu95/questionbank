@@ -81,8 +81,29 @@ public class KnowledgeHubController {
             @RequestParam(value = "startPage", defaultValue = "1") int startPage) {
         
         try {
-            int count = knowledgeHubService.uploadKnowledgePages(id, files, startPage);
-            return ResponseEntity.ok(Map.of("success", true, "count", count));
+            java.util.List<java.io.File> tempFiles = new java.util.ArrayList<>();
+            String tempDirPath = System.getProperty("java.io.tmpdir");
+            
+            for (MultipartFile file : files) {
+                if (file.isEmpty()) continue;
+                String originalFilename = file.getOriginalFilename();
+                if (originalFilename == null) originalFilename = "unknown.bin";
+                
+                // Remove spaces and special chars, append UUID to prevent conflict
+                String safeName = UUID.randomUUID().toString() + "_" + originalFilename.replaceAll("[^a-zA-Z0-9.-]", "_");
+                java.io.File tempFile = new java.io.File(tempDirPath, safeName);
+                
+                file.transferTo(tempFile);
+                tempFiles.add(tempFile);
+            }
+            
+            // Dispatch completely async
+            knowledgeHubService.processUploadsBackground(id, tempFiles, startPage);
+            
+            return ResponseEntity.ok(Map.of(
+                "success", true, 
+                "message", "Upload received. Files are processing in the background."
+            ));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
         }
@@ -274,5 +295,56 @@ public class KnowledgeHubController {
     public ResponseEntity<Void> deleteSourceBook(@PathVariable UUID id) {
         knowledgeHubService.deleteSourceBook(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // --- Background AI Extraction Jobs ---
+
+    @PostMapping("/jobs/bulk-extract/source-books/{id}")
+    public ResponseEntity<com.testshaper.entity.AiBulkExtractionJob> startAiExtractionQueue(@PathVariable UUID id) {
+        return ResponseEntity.ok(knowledgeHubService.startAiExtractionQueue(id));
+    }
+
+    @GetMapping("/jobs/bulk-extract/source-books/{id}/status")
+    public ResponseEntity<com.testshaper.entity.AiBulkExtractionJob> getAiExtractionQueueStatus(@PathVariable UUID id) {
+        com.testshaper.entity.AiBulkExtractionJob job = knowledgeHubService.getAiExtractionQueueStatus(id);
+        if (job == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(job);
+    }
+
+    @PostMapping("/jobs/bulk-extract/{jobId}/pause")
+    public ResponseEntity<com.testshaper.entity.AiBulkExtractionJob> pauseAiExtractionQueue(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(knowledgeHubService.pauseAiExtractionQueue(jobId));
+    }
+
+    @PostMapping("/jobs/bulk-extract/{jobId}/resume")
+    public ResponseEntity<com.testshaper.entity.AiBulkExtractionJob> resumeAiExtractionQueue(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(knowledgeHubService.resumeAiExtractionQueue(jobId));
+    }
+
+    // --- Background Tasks (Ai Question Generation Queue) ---
+    @PostMapping("/jobs/generate-questions/source-books/{id}/start")
+    public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> startAiQuestionQueue(@PathVariable UUID id) {
+        return ResponseEntity.ok(knowledgeHubService.startAiQuestionQueue(id));
+    }
+
+    @GetMapping("/jobs/generate-questions/source-books/{id}/status")
+    public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> getAiQuestionQueueStatus(@PathVariable UUID id) {
+        com.testshaper.entity.AiQuestionGenerationJob job = knowledgeHubService.getAiQuestionQueueStatus(id);
+        if (job == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(job);
+    }
+
+    @PostMapping("/jobs/generate-questions/{jobId}/pause")
+    public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> pauseAiQuestionQueue(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(knowledgeHubService.pauseAiQuestionQueue(jobId));
+    }
+
+    @PostMapping("/jobs/generate-questions/{jobId}/resume")
+    public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> resumeAiQuestionQueue(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(knowledgeHubService.resumeAiQuestionQueue(jobId));
     }
 }

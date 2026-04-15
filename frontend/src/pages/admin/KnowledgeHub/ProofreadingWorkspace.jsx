@@ -240,8 +240,8 @@ const ProofreadingWorkspace = () => {
     const [activeWorkspaceTool, setActiveWorkspaceTool] = useState('cursor');
 
     // Phase 3E: Background Bulk Extraction Queue
-    const [bulkExtractQueue, setBulkExtractQueue] = useState([]);
-    const [isBulkExtracting, setIsBulkExtracting] = useState(false);
+    const [aiQueueJob, setAiQueueJob] = useState(null);
+    const [aiQuestionJob, setAiQuestionJob] = useState(null); // PHASE 3E Auto Question Gen Queue
     
     // Page Reorder Modal State
     const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
@@ -285,70 +285,95 @@ const ProofreadingWorkspace = () => {
         }
     };
 
+    // --- Polling for Jobs Status ---
     useEffect(() => {
-        let isCancelled = false;
-        const processQueue = async () => {
-            if (bulkExtractQueue.length === 0 || !isBulkExtracting) {
-                if (isBulkExtracting && !isCancelled) setIsBulkExtracting(false);
-                return;
-            }
-            const nextId = bulkExtractQueue[0];
-            const targetPage = pages.find(p => p.id === nextId);
-
-            // Skip if already completed to prevent redundant calls
-            if (targetPage && !targetPage.isGolden && targetPage.extractionStatus !== 'EXTRACTED' && targetPage.extractionStatus !== 'PROOFREAD') {
-                try {
-                    const res = await axios.post(`/v1/knowledge-hub/source-books/${bookId}/pages/${nextId}/extract`);
-                    const { markdown } = res.data;
-                    
-                    if (!isCancelled) {
-                        setPages(prev => prev.map(p => p.id === nextId ? { ...p, extractedMarkdown: markdown, extractionStatus: 'EXTRACTED' } : p));
-                        
-                        // Live Update if the user happens to be staring at this specific blank page
-                        if (selectedPage?.id === nextId) {
-                            setSelectedPage(prev => ({ ...prev, extractedMarkdown: markdown, extractionStatus: 'EXTRACTED' }));
-                            // Only inject into GoldenDraft if they hadn't already manually started editing something else
-                            setGoldenDraft(prev => prev || markdown || '');
-                        }
-                    }
-                } catch (err) {
-                    console.error(`Failed background extraction for page ${nextId}:`, err);
+        let timer;
+        const fetchJobStatus = async () => {
+            // Bulk Extraction Status
+            try {
+                const res = await axios.get(`/v1/knowledge-hub/jobs/bulk-extract/source-books/${bookId}/status`);
+                const jobData = res.status === 204 ? null : res.data;
+                setAiQueueJob(jobData);
+                
+                // If it completed, refetch page statuses so they show up as EXTRACTED
+                if (jobData && jobData.status === 'COMPLETED' && (!aiQueueJob || aiQueueJob.status !== 'COMPLETED')) {
+                    fetchInitialData();
+                }
+            } catch (err) {
+                if (err.response && err.response.status === 404) {
+                    setAiQueueJob(null);
                 }
             }
-
-            // Remove processed page from queue, moving to next automatically
-            if (!isCancelled) {
-                setBulkExtractQueue(prev => prev.slice(1));
+            
+            // Auto Question Generation Status
+            try {
+                const res = await axios.get(`/v1/knowledge-hub/jobs/generate-questions/source-books/${bookId}/status`);
+                const jobData2 = res.status === 204 ? null : res.data;
+                setAiQuestionJob(jobData2);
+            } catch (err) {
+                if (err.response && err.response.status === 404) {
+                    setAiQuestionJob(null);
+                }
             }
         };
 
-        if (isBulkExtracting && bulkExtractQueue.length > 0) processQueue();
+        fetchJobStatus();
+        timer = setInterval(fetchJobStatus, 5000); // Poll every 5 seconds
         
-        return () => { isCancelled = true; };
-    }, [bulkExtractQueue, isBulkExtracting]);
+        return () => clearInterval(timer);
+    }, [bookId, aiQueueJob?.status, aiQuestionJob?.status]);
 
-    // Safety: Prevent accidental tab closing during bulk extraction
-    useEffect(() => {
-        const handleBeforeUnload = (e) => {
-            if (isBulkExtracting && bulkExtractQueue.length > 0) {
-                e.preventDefault();
-                e.returnValue = ''; // Triggers browser default warning prompt
-            }
-        };
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [isBulkExtracting, bulkExtractQueue.length]);
-
-    const handleStartBulkExtract = () => {
-        const pendingIds = pages
-            .filter(p => !p.isGolden && p.extractionStatus !== 'EXTRACTED' && p.extractionStatus !== 'PROOFREAD')
-            .map(p => p.id);
-        if (pendingIds.length === 0) {
-            alert('সব পেজের এক্সট্রাকশন সম্পন্ন হয়েছে!');
-            return;
+    // Bulk Extract Actions
+    const handleStartBulkExtract = async () => {
+        try {
+            const res = await axios.post(`/v1/knowledge-hub/jobs/bulk-extract/source-books/${bookId}`);
+            setAiQueueJob(res.data);
+        } catch (err) {
+            alert('Bulk Extract শুরু করতে সমস্যা হয়েছে: ' + (err.response?.data?.message || err.message));
         }
-        setBulkExtractQueue(pendingIds);
-        setIsBulkExtracting(true);
+    };
+    
+    const handlePauseJob = async () => {
+        if (!aiQueueJob) return;
+        try {
+            const res = await axios.post(`/v1/knowledge-hub/jobs/bulk-extract/${aiQueueJob.id}/pause`);
+            setAiQueueJob(res.data);
+        } catch (err) {}
+    };
+
+    const handleResumeJob = async () => {
+        if (!aiQueueJob) return;
+        try {
+            const res = await axios.post(`/v1/knowledge-hub/jobs/bulk-extract/${aiQueueJob.id}/resume`);
+            setAiQueueJob(res.data);
+        } catch (err) {}
+    };
+
+    // Question Gen Actions
+    const handleStartQuestionGen = async () => {
+        try {
+            const res = await axios.post(`/v1/knowledge-hub/jobs/generate-questions/source-books/${bookId}/start`);
+            setAiQuestionJob(res.data);
+            alert("AI Question Engine Started Background Execution!");
+        } catch (err) {
+            alert('AI Question Generation শুরু করতে সমস্যা হয়েছে: ' + (err.response?.data?.message || err.message));
+        }
+    };
+    
+    const handlePauseQuestionJob = async () => {
+        if (!aiQuestionJob) return;
+        try {
+            const res = await axios.post(`/v1/knowledge-hub/jobs/generate-questions/${aiQuestionJob.id}/pause`);
+            setAiQuestionJob(res.data);
+        } catch (err) {}
+    };
+
+    const handleResumeQuestionJob = async () => {
+        if (!aiQuestionJob) return;
+        try {
+            const res = await axios.post(`/v1/knowledge-hub/jobs/generate-questions/${aiQuestionJob.id}/resume`);
+            setAiQuestionJob(res.data);
+        } catch (err) {}
     };
 
 
@@ -767,20 +792,94 @@ const ProofreadingWorkspace = () => {
                             <ImageIcon className="w-3.5 h-3.5" /> Add Pages
                         </button>
                     </Link>
+                    <Link to={`/questions/drafts`}>
+                        <button className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 font-semibold rounded-lg flex items-center gap-1.5 hover:bg-rose-100 transition-all shadow-sm text-xs ml-1">
+                            <FileText className="w-3.5 h-3.5" /> Review Drafts
+                        </button>
+                    </Link>
+
+                    {/* AI Question Generation Job Viewer */}
+                    {aiQuestionJob && (aiQuestionJob.status === 'QUEUED' || aiQuestionJob.status === 'IN_PROGRESS' || aiQuestionJob.status === 'PAUSED') ? (
+                        <div className="flex items-center gap-2 bg-pink-50 border border-pink-200 text-pink-800 px-3 py-1.5 rounded-lg shadow-sm w-max ml-1 h-9">
+                            {aiQuestionJob.status === 'PAUSED' ? (
+                                <Zap size={14} className="text-amber-500" />
+                            ) : (
+                                <Loader2 size={14} className="animate-spin text-pink-500 shrink-0" />
+                            )}
+                            <div className="flex flex-col justify-center">
+                                <span className="text-[10px] font-bold leading-tight flex items-center gap-1.5">
+                                    AI Question Generation
+                                    {aiQuestionJob.status === 'PAUSED' && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded uppercase">Paused</span>}
+                                </span>
+                                <div className="w-24 bg-white border border-pink-100 h-1.5 rounded-full overflow-hidden shrink-0 mt-0.5">
+                                  <div 
+                                      className={`h-full ${aiQuestionJob.status === 'PAUSED' ? 'bg-amber-400' : 'bg-pink-500'} transition-all`} 
+                                      style={{ width: `${aiQuestionJob.totalPagesToProcess > 0 ? (aiQuestionJob.processedPagesCount / aiQuestionJob.totalPagesToProcess) * 100 : 0}%` }} 
+                                  />
+                                </div>
+                            </div>
+                            <span className="text-[10px] font-bold ml-1 text-pink-900 min-w-[24px]">
+                                {aiQuestionJob.processedPagesCount}/{aiQuestionJob.totalPagesToProcess}
+                            </span>
+                            
+                            {aiQuestionJob.status === 'PAUSED' ? (
+                                <button onClick={handleResumeQuestionJob} className="ml-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Resume Question Generation">
+                                    RESUME
+                                </button>
+                            ) : (
+                                <button onClick={handlePauseQuestionJob} className="ml-1 bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Pause Question Generation">
+                                    PAUSE
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        // Start Question Generation Button only if no background process is running
+                        // We check if pages have extractionStatus = EXTRACTED
+                        pages.some(p => p.extractionStatus === 'EXTRACTED') && (
+                            <button onClick={handleStartQuestionGen} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-pink-500 to-rose-600 border border-transparent text-white font-semibold rounded-lg hover:from-pink-600 hover:to-rose-700 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
+                                <Sparkles size={14} className="shrink-0" /> Automate Questions
+                            </button>
+                        )
+                    )}
 
                     {/* Bulk Extraction Tools */}
-                    {isBulkExtracting && bulkExtractQueue.length > 0 ? (
-                        <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg shadow-sm w-max ml-1">
-                            <Loader2 size={14} className="animate-spin text-indigo-500" />
-                            <span className="text-xs font-bold whitespace-nowrap">Extracting {bulkExtractQueue.length} pages...</span>
-                            <button onClick={() => { setIsBulkExtracting(false); setBulkExtractQueue([]); }} className="ml-1 bg-indigo-100 hover:bg-indigo-200 hover:text-red-600 p-0.5 rounded transition-colors" title="Cancel All">
-                                <X size={12} />
-                            </button>
+                    {aiQueueJob && (aiQueueJob.status === 'QUEUED' || aiQueueJob.status === 'IN_PROGRESS' || aiQueueJob.status === 'PAUSED') ? (
+                        <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg shadow-sm w-max ml-1 h-9">
+                            {aiQueueJob.status === 'PAUSED' ? (
+                                <Zap size={14} className="text-amber-500" />
+                            ) : (
+                                <Loader2 size={14} className="animate-spin text-indigo-500 shrink-0" />
+                            )}
+                            <div className="flex flex-col justify-center">
+                                <span className="text-[10px] font-bold leading-tight flex items-center gap-1.5">
+                                    Background Extractor
+                                    {aiQueueJob.status === 'PAUSED' && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded uppercase">Paused</span>}
+                                </span>
+                                <div className="w-24 bg-white border border-indigo-100 h-1.5 rounded-full overflow-hidden shrink-0 mt-0.5">
+                                  <div 
+                                      className={`h-full ${aiQueueJob.status === 'PAUSED' ? 'bg-amber-400' : 'bg-indigo-500'} transition-all`} 
+                                      style={{ width: `${aiQueueJob.totalPagesToProcess > 0 ? (aiQueueJob.processedPagesCount / aiQueueJob.totalPagesToProcess) * 100 : 0}%` }} 
+                                  />
+                                </div>
+                            </div>
+                            <span className="text-[10px] font-bold ml-1 text-indigo-900 min-w-[24px]">
+                                {aiQueueJob.processedPagesCount}/{aiQueueJob.totalPagesToProcess}
+                            </span>
+                            
+                            {aiQueueJob.status === 'PAUSED' ? (
+                                <button onClick={handleResumeJob} className="ml-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Resume Job">
+                                    RESUME
+                                </button>
+                            ) : (
+                                <button onClick={handlePauseJob} className="ml-1 bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Pause Background Job">
+                                    PAUSE
+                                </button>
+                            )}
                         </div>
                     ) : (
                         pages.some(p => !p.isGolden && p.extractionStatus !== 'EXTRACTED' && p.extractionStatus !== 'PROOFREAD') && (
-                            <button onClick={handleStartBulkExtract} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-lg hover:border-amber-300 hover:bg-amber-50 transition-all shadow-sm text-[11px] xl:text-xs ml-1">
-                                <Zap size={14} className="text-amber-500" /> Bulk Extract PDF Data
+                            <button onClick={handleStartBulkExtract} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-lg hover:border-amber-300 hover:bg-amber-50 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
+                                <Zap size={14} className="text-amber-500 shrink-0" /> Server Bulk Extract
                             </button>
                         )
                     )}

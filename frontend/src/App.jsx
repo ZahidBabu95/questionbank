@@ -50,6 +50,7 @@ import LectureBuilder from './pages/admin/Lectures/LectureBuilder';
 import LectureList from './pages/admin/Lectures/LectureList';
 import UsageAnalytics from './pages/admin/Reports/UsageAnalytics';
 import PerformanceAnalytics from './pages/admin/Reports/PerformanceAnalytics';
+import KnowledgeHubReport from './pages/admin/Reports/KnowledgeHubReport';
 import PackageManagement from './pages/admin/Billing/PackageManagement';
 import InvoiceManagement from './pages/admin/Billing/InvoiceManagement';
 import BillingOverview from './pages/admin/Billing/BillingOverview';
@@ -145,6 +146,7 @@ function App() {
                         {/* Reports */}
                         <Route path="/reports/usage" element={<UsageAnalytics />} />
                         <Route path="/reports/performance" element={<PerformanceAnalytics />} />
+                        <Route path="/reports/knowledge-hub" element={<KnowledgeHubReport />} />
                         <Route path="/reports/*" element={<UnderDevelopment featureName="Reports & Analytics" />} />
 
                         {/* Billing */}
@@ -188,6 +190,7 @@ function App() {
 
                         {/* Question Bank */}
                         <Route path="/questions" element={<QuestionList />} />
+                        <Route path="/questions/drafts" element={<QuestionList />} />
                         <Route path="/questions/pending" element={<QuestionList />} />
                         <Route path="/questions/approved" element={<QuestionList />} />
                         <Route path="/questions/rejected" element={<QuestionList />} />

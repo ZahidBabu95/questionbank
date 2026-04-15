@@ -22,6 +22,13 @@ import java.util.ArrayList;
 import java.util.Base64;
 import com.testshaper.service.AiBillingService;
 
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.rendering.ImageType;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import java.io.ByteArrayOutputStream;
+
 @Service
 @RequiredArgsConstructor
 @lombok.extern.slf4j.Slf4j
@@ -37,40 +44,104 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     private final com.testshaper.repository.TopicRepository topicRepository;
     private final com.testshaper.service.ApiKeyRotationService keyRotationService;
     private final AiBillingService aiBillingService;
+    private final com.testshaper.repository.AiBulkExtractionJobRepository aiBulkExtractionJobRepository;
+    private final com.testshaper.repository.AiQuestionGenerationJobRepository aiQuestionGenerationJobRepository;
+    private final com.testshaper.repository.AiKnowledgeBaseRepository aiKnowledgeBaseRepository;
+    private final com.testshaper.repository.QuestionRepository questionRepository;
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
-    @Transactional
-    public int uploadKnowledgePages(UUID sourceBookId, java.util.List<org.springframework.web.multipart.MultipartFile> files, int startPage) {
+    @org.springframework.scheduling.annotation.Async
+    public void processUploadsBackground(UUID sourceBookId, java.util.List<java.io.File> localFiles, int startPage) {
         SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
             .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Book not found"));
 
         int currentPage = startPage;
-        int count = 0;
         
-        for (org.springframework.web.multipart.MultipartFile file : files) {
-            if (file.isEmpty()) continue;
-            
+        // Ensure image bulk tracking is properly initialized if there are multiple images
+        if (!localFiles.isEmpty() && !localFiles.get(0).getName().toLowerCase().endsWith(".pdf")) {
+            book.setIsProcessing(true);
+            book.setTotalPagesToProcess(localFiles.size());
+            book.setProcessedPagesCount(0);
+            book = sourceBookMasterRepository.save(book);
+        }
+        
+        for (java.io.File file : localFiles) {
             try {
-                // Upload to R2 Bucket (e.g. knowledge_hub/pages/{bookId})
-                String path = "knowledge_hub/pages/" + sourceBookId.toString();
-                String url = storageService.uploadFile(file, null, path);
-                
-                com.testshaper.entity.KnowledgePage kp = new com.testshaper.entity.KnowledgePage();
-                kp.setSourceBook(book);
-                kp.setPageNumber(currentPage++);
-                kp.setR2FilePath(url);
-                kp.setExtractionStatus(com.testshaper.entity.KnowledgePage.ExtractionStatus.PENDING);
-                
-                knowledgePageRepository.save(kp);
-                count++;
+                if (file.getName().toLowerCase().endsWith(".pdf")) {
+                    log.info("Processing PDF file on background: {}", file.getName());
+                    try (PDDocument document = org.apache.pdfbox.Loader.loadPDF(file)) {
+                        int totalPages = document.getNumberOfPages();
+                        book.setIsProcessing(true);
+                        book.setTotalPagesToProcess(totalPages);
+                        book.setProcessedPagesCount(0);
+                        book = sourceBookMasterRepository.save(book);
+
+                        PDFRenderer pdfRenderer = new PDFRenderer(document);
+                        for (int page = 0; page < totalPages; ++page) {
+                            BufferedImage bim = pdfRenderer.renderImageWithDPI(page, 200, ImageType.RGB);
+                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                            ImageIO.write(bim, "jpg", baos);
+                            byte[] imageBytes = baos.toByteArray();
+                            
+                            String path = "knowledge_hub/pages/" + sourceBookId.toString();
+                            String url = storageService.uploadFileContent(imageBytes, "image/jpeg", "page_" + page + ".jpg", null, path);
+                            
+                            com.testshaper.entity.KnowledgePage kp = new com.testshaper.entity.KnowledgePage();
+                            kp.setSourceBook(book);
+                            kp.setPageNumber(currentPage++);
+                            kp.setR2FilePath(url);
+                            kp.setExtractionStatus(com.testshaper.entity.KnowledgePage.ExtractionStatus.PENDING);
+                            
+                            knowledgePageRepository.save(kp);
+                            
+                            // Update progress occasionally
+                            if (page % 5 == 0 || page == totalPages - 1) {
+                                book.setProcessedPagesCount(page + 1);
+                                book = sourceBookMasterRepository.save(book);
+                            }
+                        }
+                    }
+                } else {
+                    // Standard Image Upload handling via local bytes
+                    log.info("Processing generic image on background: {}", file.getName());
+                    
+                    byte[] imageBytes = java.nio.file.Files.readAllBytes(file.toPath());
+                    String contentType = java.nio.file.Files.probeContentType(file.toPath());
+                    if (contentType == null) contentType = "image/jpeg";
+
+                    String path = "knowledge_hub/pages/" + sourceBookId.toString();
+                    String url = storageService.uploadFileContent(imageBytes, contentType, file.getName(), null, path);
+                    
+                    com.testshaper.entity.KnowledgePage kp = new com.testshaper.entity.KnowledgePage();
+                    kp.setSourceBook(book);
+                    kp.setPageNumber(currentPage++);
+                    kp.setR2FilePath(url);
+                    kp.setExtractionStatus(com.testshaper.entity.KnowledgePage.ExtractionStatus.PENDING);
+                    
+                    knowledgePageRepository.save(kp);
+                    
+                    // Increment image progress
+                    book.setProcessedPagesCount(book.getProcessedPagesCount() + 1);
+                    if (book.getProcessedPagesCount() % 5 == 0 || book.getProcessedPagesCount().equals(book.getTotalPagesToProcess())) {
+                        book = sourceBookMasterRepository.save(book);
+                    }
+                }
             } catch (Exception e) {
-                // Log and continue uploading the rest
-                log.error("Failed to upload file for book " + sourceBookId, e);
+                log.error("Failed to upload/process background file for book " + sourceBookId, e);
+            } finally {
+                // Delete temporary file to free up disk space
+                if (file.exists()) file.delete();
             }
         }
-        return count;
+        
+        // Finalize processing status
+        try {
+            book.setIsProcessing(false);
+            book = sourceBookMasterRepository.save(book);
+        } catch (Exception ignored) {}
+        log.info("Finished Background processing for Book {}", sourceBookId);
     }
 
     @Override
@@ -846,6 +917,10 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             dto.setMappedClassName(entity.getClassSubject().getAcademicClass().getName());
         }
         
+        dto.setIsProcessing(entity.getIsProcessing() != null ? entity.getIsProcessing() : false);
+        dto.setTotalPagesToProcess(entity.getTotalPagesToProcess() != null ? entity.getTotalPagesToProcess() : 0);
+        dto.setProcessedPagesCount(entity.getProcessedPagesCount() != null ? entity.getProcessedPagesCount() : 0);
+        
         // Populate Page Progress Stats
         dto.setTotalPages((int) knowledgePageRepository.countBySourceBookId(entity.getId()));
         dto.setExtractedPages((int) knowledgePageRepository.countBySourceBookIdAndExtractionStatus(entity.getId(), com.testshaper.entity.KnowledgePage.ExtractionStatus.EXTRACTED));
@@ -1090,5 +1165,311 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             .createdAt(saved.getCreatedAt())
             .updatedAt(saved.getUpdatedAt())
             .build();
+    }
+
+    // --- Background Tasks (Ai Queue) ---
+
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiBulkExtractionJob startAiExtractionQueue(UUID sourceBookId) {
+        SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found"));
+
+        // Check if there is already a running or queued job for this book
+        java.util.Optional<com.testshaper.entity.AiBulkExtractionJob> existingOpt = aiBulkExtractionJobRepository.findBySourceBookId(sourceBookId);
+        
+        long pendingPages = knowledgePageRepository.countBySourceBookIdAndExtractionStatus(sourceBookId, com.testshaper.entity.KnowledgePage.ExtractionStatus.PENDING);
+        if (pendingPages == 0) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "No pending pages found to extract.");
+        }
+
+        com.testshaper.entity.AiBulkExtractionJob job;
+        if (existingOpt.isPresent()) {
+            job = existingOpt.get();
+            job.setStatus(com.testshaper.entity.AiBulkExtractionJob.JobStatus.QUEUED);
+            // Recalculate remaining
+            job.setTotalPagesToProcess(job.getProcessedPagesCount() + job.getFailedPagesCount() + (int) pendingPages);
+        } else {
+            job = new com.testshaper.entity.AiBulkExtractionJob();
+            job.setSourceBook(book);
+            job.setTenantId(book.getTenantId());
+            job.setStatus(com.testshaper.entity.AiBulkExtractionJob.JobStatus.QUEUED);
+            job.setTotalPagesToProcess((int) pendingPages);
+            job.setProcessedPagesCount(0);
+            job.setFailedPagesCount(0);
+        }
+
+        return aiBulkExtractionJobRepository.save(job);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.testshaper.entity.AiBulkExtractionJob getAiExtractionQueueStatus(UUID sourceBookId) {
+        return aiBulkExtractionJobRepository.findBySourceBookId(sourceBookId).orElse(null);
+    }
+
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiBulkExtractionJob pauseAiExtractionQueue(UUID jobId) {
+        com.testshaper.entity.AiBulkExtractionJob job = aiBulkExtractionJobRepository.findById(jobId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        job.setStatus(com.testshaper.entity.AiBulkExtractionJob.JobStatus.PAUSED);
+        return aiBulkExtractionJobRepository.save(job);
+    }
+
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiBulkExtractionJob resumeAiExtractionQueue(UUID jobId) {
+        com.testshaper.entity.AiBulkExtractionJob job = aiBulkExtractionJobRepository.findById(jobId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        job.setStatus(com.testshaper.entity.AiBulkExtractionJob.JobStatus.QUEUED);
+        return aiBulkExtractionJobRepository.save(job);
+    }
+
+    // --- Background Tasks (Ai Question Generation Queue) ---
+
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiQuestionGenerationJob startAiQuestionQueue(UUID sourceBookId) {
+        SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found"));
+
+        java.util.Optional<com.testshaper.entity.AiQuestionGenerationJob> existingOpt = aiQuestionGenerationJobRepository.findBySourceBookId(sourceBookId);
+        
+        long pendingPages = knowledgePageRepository.countBySourceBookIdAndExtractionStatus(sourceBookId, com.testshaper.entity.KnowledgePage.ExtractionStatus.EXTRACTED);
+        
+        if (pendingPages == 0) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "No extracted pages found. Please run Bulk Extraction first.");
+        }
+
+        com.testshaper.entity.AiQuestionGenerationJob job;
+        if (existingOpt.isPresent()) {
+            job = existingOpt.get();
+            job.setStatus(com.testshaper.entity.AiQuestionGenerationJob.JobStatus.QUEUED);
+            job.setTotalPagesToProcess(job.getProcessedPagesCount() + job.getFailedPagesCount() + (int) pendingPages);
+        } else {
+            job = new com.testshaper.entity.AiQuestionGenerationJob();
+            job.setSourceBook(book);
+            job.setTenantId(book.getTenantId());
+            job.setStatus(com.testshaper.entity.AiQuestionGenerationJob.JobStatus.QUEUED);
+            job.setTotalPagesToProcess((int) pendingPages);
+            job.setProcessedPagesCount(0);
+            job.setFailedPagesCount(0);
+        }
+
+        return aiQuestionGenerationJobRepository.save(job);
+    }
+
+    @Override
+    public com.testshaper.entity.AiQuestionGenerationJob getAiQuestionQueueStatus(UUID sourceBookId) {
+        return aiQuestionGenerationJobRepository.findBySourceBookId(sourceBookId).orElse(null);
+    }
+
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiQuestionGenerationJob pauseAiQuestionQueue(UUID jobId) {
+        com.testshaper.entity.AiQuestionGenerationJob job = aiQuestionGenerationJobRepository.findById(jobId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        job.setStatus(com.testshaper.entity.AiQuestionGenerationJob.JobStatus.PAUSED);
+        return aiQuestionGenerationJobRepository.save(job);
+    }
+
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiQuestionGenerationJob resumeAiQuestionQueue(UUID jobId) {
+        com.testshaper.entity.AiQuestionGenerationJob job = aiQuestionGenerationJobRepository.findById(jobId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        job.setStatus(com.testshaper.entity.AiQuestionGenerationJob.JobStatus.QUEUED);
+        return aiQuestionGenerationJobRepository.save(job);
+    }
+
+    @Override
+    @Transactional
+    public int generateQuestionsForPage(UUID sourceBookId, UUID pageId) throws Exception {
+        com.testshaper.entity.KnowledgePage page = knowledgePageRepository.findById(pageId)
+            .orElseThrow(() -> new RuntimeException("Page not found"));
+
+        if (!page.getSourceBook().getId().equals(sourceBookId)) {
+            throw new RuntimeException("Page does not belong to this book.");
+        }
+
+        String markdown = page.getExtractedMarkdown();
+        if (markdown == null || markdown.isBlank()) {
+            throw new RuntimeException("Page must be extracted first before generating questions.");
+        }
+
+        SourceBookMaster book = page.getSourceBook();
+        com.testshaper.entity.ClassSubject classSubject = book.getClassSubject();
+        
+        String ruleSchema = "[\n" +
+            "  {\n" +
+            "    \"questionType\": \"MULTIPLE_CHOICE\",\n" +
+            "    \"questionText\": \"Sample AI Question\",\n" +
+            "    \"options\": [\"Option 1\", \"Option 2\", \"Option 3\", \"Option 4\"],\n" +
+            "    \"answer\": \"Option 1\",\n" +
+            "    \"marks\": 1.0,\n" +
+            "    \"explanation\": \"Because context says so.\",\n" +
+            "    \"bloomLevel\": \"REMEMBERING\",\n" +
+            "    \"difficulty\": \"MEDIUM\"\n" +
+            "  }\n" +
+            "]";
+
+        if (classSubject != null && classSubject.getSubject() != null) {
+            String subjectName = classSubject.getSubject().getName();
+            String tagToSearch = "RULE_FOR_" + subjectName.replaceAll("\\s+", "");
+            java.util.List<com.testshaper.entity.AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(tagToSearch);
+            if (!rules.isEmpty()) {
+                ruleSchema = rules.get(0).getContent(); 
+            }
+        }
+
+        String prompt = "You are an expert curriculum question setter. Read the provided TEXT context below.\n" +
+                        "Based on the content, generate high-quality educational questions. " +
+                        "CRITICAL: You MUST strictly conform to the following JSON Schema array. Do not return any conversational text, ONLY a raw JSON array.\n\n" +
+                        "TARGET JSON SCHEMA:\n" +
+                        ruleSchema + "\n\n" +
+                        "CONTEXT TEXT:\n" + markdown;
+
+        Map<String, String> aiSettings = generalSettingService.getGlobalSettings(com.testshaper.entity.GeneralSetting.SettingCategory.AI);
+        String billingMode = aiSettings.getOrDefault("ai_billing_mode", "FREE_POOL");
+        int maxRetries = "FREE_POOL".equals(billingMode) ? 9 : 1;
+
+        Map<String, Object> requestBody = Map.of(
+            "contents", java.util.List.of(
+                Map.of("parts", java.util.List.of(Map.of("text", prompt)))
+            ),
+            "generationConfig", Map.of("responseMimeType", "application/json") // Gemini Force JSON
+        );
+
+        String requestJson = objectMapper.writeValueAsString(requestBody);
+
+        String currentApiKey = "";
+        com.testshaper.entity.AiApiKey currentPoolKey = null;
+
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            String model = aiSettings.getOrDefault("ai_model", "gemini-1.5-pro");
+            if ("FREE_POOL".equals(billingMode)) {
+                currentPoolKey = keyRotationService.getNextAvailableKey();
+                if (currentPoolKey != null) {
+                    currentApiKey = currentPoolKey.getApiKey();
+                    if (currentPoolKey.getModel() != null && !currentPoolKey.getModel().isBlank()) {
+                        model = currentPoolKey.getModel();
+                    }
+                }
+            } else {
+                currentApiKey = aiSettings.getOrDefault("ai_api_key", "");
+            }
+
+            if (currentApiKey.isBlank()) {
+                throw new RuntimeException("No available API keys.");
+            }
+
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + currentApiKey;
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            org.springframework.http.HttpEntity<String> entity = new org.springframework.http.HttpEntity<>(requestJson, headers);
+
+            long startTime = System.currentTimeMillis();
+            boolean isSuccess = false;
+            String errorMsg = null;
+            try {
+                log.info("Generating questions (attempt {}/{}) with key '{}'", attempt + 1, maxRetries + 1,
+                        currentPoolKey != null ? currentPoolKey.getKeyName() : "global");
+                org.springframework.http.ResponseEntity<String> response = restTemplate.exchange(url, org.springframework.http.HttpMethod.POST, entity, String.class);
+
+                com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(response.getBody());
+                com.fasterxml.jackson.databind.JsonNode candidates = root.path("candidates");
+                if (candidates.isArray() && candidates.size() > 0) {
+                    com.fasterxml.jackson.databind.JsonNode parts = candidates.get(0).path("content").path("parts");
+                    if (parts.isArray() && parts.size() > 0) {
+                        String rawJsonResponse = parts.get(0).path("text").asText();
+                        
+                        com.fasterxml.jackson.databind.JsonNode questionsArray = objectMapper.readTree(rawJsonResponse);
+                        if (!questionsArray.isArray()) {
+                            throw new RuntimeException("AI Response was not a JSON Array.");
+                        }
+
+                        int savedCount = 0;
+                        for (com.fasterxml.jackson.databind.JsonNode qNode : questionsArray) {
+                            com.testshaper.entity.Question q = new com.testshaper.entity.Question();
+                            q.setTenantId(book.getTenantId());
+                            q.setClassSubject(book.getClassSubject());
+                            
+                            java.util.Optional<com.testshaper.entity.SourceBookIndex> chapterIndexOpt = sourceBookIndexRepository.findBySourceBookIdAndStartPageLessThanEqualAndEndPageGreaterThanEqual(
+                                book.getId(), page.getPageNumber(), page.getPageNumber()
+                            ).stream().findFirst();
+
+                            if (chapterIndexOpt.isPresent() && chapterIndexOpt.get().getMappedChapter() != null) {
+                                q.setChapter(chapterIndexOpt.get().getMappedChapter());
+                            }
+
+                            q.setType(com.testshaper.entity.Question.QuestionType.MCQ);
+                            if (qNode.hasNonNull("questionType")) {
+                                try {
+                                    q.setType(com.testshaper.entity.Question.QuestionType.valueOf(qNode.get("questionType").asText().toUpperCase()));
+                                } catch (Exception ignored) {}
+                            }
+
+                            q.setQuestionText(qNode.path("questionText").asText("Generated Question"));
+                            q.setMarks(qNode.hasNonNull("marks") ? qNode.get("marks").asDouble() : 1.0);
+                            q.setNegativeMarks(0.0);
+                            q.setCorrectAnswer(qNode.path("answer").asText(null));
+                            q.setExplanation(qNode.path("explanation").asText(""));
+                            q.setLanguage("Bangla");
+                            q.setBloomLevel(qNode.path("bloomLevel").asText("UNDERSTANDING"));
+                            q.setDifficulty(com.testshaper.entity.Question.DifficultyLevel.MEDIUM);
+                            if (qNode.hasNonNull("difficulty")) {
+                                try { q.setDifficulty(com.testshaper.entity.Question.DifficultyLevel.valueOf(qNode.get("difficulty").asText().toUpperCase())); } catch (Exception ignored) {}
+                            }
+                            
+                            q.setStatus(com.testshaper.entity.Question.QuestionStatus.DRAFT);
+                            q.setAiGenerated(true);
+                            q.setAiModelName(model);
+
+                            if (qNode.hasNonNull("options") && qNode.get("options").isArray()) {
+                                int limit = Math.min(qNode.get("options").size(), 4);
+                                for (int i = 0; i < limit; i++) {
+                                    com.testshaper.entity.QuestionOption opt = new com.testshaper.entity.QuestionOption();
+                                    opt.setQuestion(q);
+                                    opt.setOptionLabel(String.valueOf((char)('A' + i)));
+                                    opt.setOptionText(qNode.get("options").get(i).asText());
+                                    // simple logic for isCorrect: if text exactly matches answer
+                                    opt.setCorrect(opt.getOptionText().equals(q.getCorrectAnswer()));
+                                    q.getOptions().add(opt);
+                                }
+                            }
+                            
+                            questionRepository.save(q);
+                            savedCount++;
+                        }
+
+                        if (currentPoolKey != null) keyRotationService.recordUsage(currentPoolKey.getId());
+                        
+                        return savedCount;
+                    }
+                }
+                errorMsg = "Empty response from AI Generative model.";
+                throw new RuntimeException("Empty response from AI Generative model.");
+
+            } catch (org.springframework.web.client.HttpStatusCodeException e) {
+                errorMsg = e.getResponseBodyAsString();
+                int statusCode = e.getStatusCode().value();
+                if ((statusCode == 429 || statusCode == 503) && attempt < maxRetries) {
+                    if (currentPoolKey != null) { keyRotationService.recordError(currentPoolKey.getId(), errorMsg); currentPoolKey = null; currentApiKey = ""; }
+                    int waitSec = 5;
+                    try { java.util.regex.Matcher m = java.util.regex.Pattern.compile("retry in (\\d+)").matcher(errorMsg); if (m.find()) waitSec = Math.min(Integer.parseInt(m.group(1)) + 2, 10); } catch (Exception ignored) {}
+                    Thread.sleep(waitSec * 1000L); continue;
+                }
+                if (currentPoolKey != null) keyRotationService.recordError(currentPoolKey.getId(), errorMsg);
+                throw new RuntimeException("Gemini API Error: " + errorMsg, e);
+            } catch (Exception e) {
+                errorMsg = e.getMessage();
+                if (currentPoolKey != null) keyRotationService.recordError(currentPoolKey.getId(), errorMsg);
+                throw new RuntimeException("AI Generation Error: " + errorMsg, e);
+            } finally {
+                aiBillingService.recordSystemAiUsage("Knowledge Hub", "Question Gen", prompt.length() / 4, 1500, System.currentTimeMillis() - startTime, isSuccess, errorMsg);
+            }
+        }
+        throw new RuntimeException("All generation API keys exhausted.");
     }
 }

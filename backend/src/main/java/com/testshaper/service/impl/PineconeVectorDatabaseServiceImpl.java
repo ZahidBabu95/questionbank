@@ -12,8 +12,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.web.client.HttpStatusCodeException;
 
 @Slf4j
 @Service
@@ -65,41 +68,58 @@ public class PineconeVectorDatabaseServiceImpl implements VectorDatabaseService 
             // 1. Generate text embeddings
             List<Float> embedding = embeddingService.generateEmbedding(rawText);
 
+            if (embedding == null || embedding.isEmpty()) {
+                log.error("Embedding generation returned null/empty for chunkId: {}", chunkId);
+                return;
+            }
+
             // 2. Add raw text to metadata and sanitize to avoid null values
-            Map<String, Object> safeMetadata = new java.util.HashMap<>();
+            Map<String, Object> safeMetadata = new HashMap<>();
+            String namespace = ""; // Extract namespace for mass delete later
+            
             if (metadata != null) {
                 for (Map.Entry<String, Object> entry : metadata.entrySet()) {
                     if (entry.getValue() != null) {
                         safeMetadata.put(entry.getKey(), entry.getValue());
                     }
                 }
+                if (metadata.containsKey("bookId")) {
+                    namespace = "book-" + metadata.get("bookId").toString();
+                } else if (metadata.containsKey("docId")) {
+                    namespace = "doc-" + metadata.get("docId").toString();
+                }
             }
-            safeMetadata.put("text", rawText);
+            safeMetadata.put("text", rawText != null ? rawText : "");
 
-            // 3. Prepare Vector payload
-            Map<String, Object> vector = Map.of(
-                "id", chunkId,
-                "values", embedding,
-                "metadata", safeMetadata
-            );
+            // 3. Prepare Vector payload (Using HashMap to prevent NullPointerException)
+            Map<String, Object> vector = new HashMap<>();
+            vector.put("id", chunkId);
+            vector.put("values", embedding);
+            vector.put("metadata", safeMetadata);
 
-            Map<String, Object> requestBody = Map.of(
-                "vectors", List.of(vector)
-            );
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("vectors", List.of(vector));
+            if (!namespace.isEmpty()) {
+                requestBody.put("namespace", namespace);
+            }
 
             // 4. Send request
-            String url = host + "/vectors/upsert";
+            String baseUrl = host.startsWith("http") ? host : "https://" + host;
+            String url = baseUrl + "/vectors/upsert";
+            
             HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), createHeaders());
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
             if (!response.getStatusCode().is2xxSuccessful()) {
-                throw new RuntimeException("Pinecone Rest API failed: " + response.getStatusCode());
+                 log.error("Pinecone Rest API failed with status: {}, body: {}", response.getStatusCode(), response.getBody());
+            } else {
+                 log.debug("Successfully upserted chunk {} to Pinecone Rest API namespace: {}", chunkId, namespace);
             }
 
-            log.debug("Successfully upserted chunk {} to Pinecone Rest API", chunkId);
-
+        } catch (HttpStatusCodeException e) {
+            log.error("Pinecone API Error during upsert: {} - Body: {}", e.getStatusCode(), e.getResponseBodyAsString());
         } catch (Exception e) {
-            log.error("Failed to upsert chunk {} to Pinecone: {}", chunkId, e.getMessage());
+            log.error("Failed to upsert chunk {} to Pinecone: {}", chunkId, e.getMessage(), e);
         }
     }
 
@@ -114,24 +134,41 @@ public class PineconeVectorDatabaseServiceImpl implements VectorDatabaseService 
             // 1. Generate query embedding
             List<Float> queryVector = embeddingService.generateEmbedding(query);
 
+            if (queryVector == null || queryVector.isEmpty()) {
+                log.error("Embedding generation failed for query");
+                return List.of();
+            }
+
             // 2. Prepare Match request
-            Map<String, Object> requestBody = new java.util.HashMap<>();
+            Map<String, Object> requestBody = new HashMap<>(); // Using imported HashMap
             requestBody.put("vector", queryVector);
             requestBody.put("topK", limit);
             requestBody.put("includeMetadata", true);
             requestBody.put("includeValues", false);
 
+            String namespace = "";
             if (filterMetadata != null && !filterMetadata.isEmpty()) {
                 requestBody.put("filter", filterMetadata);
+                if (filterMetadata.containsKey("bookId")) {
+                    namespace = "book-" + filterMetadata.get("bookId").toString();
+                } else if (filterMetadata.containsKey("docId")) {
+                    namespace = "doc-" + filterMetadata.get("docId").toString();
+                }
+            }
+            
+            if (!namespace.isEmpty()) {
+                requestBody.put("namespace", namespace);
             }
 
             // 3. Send request
-            String url = host + "/query";
+            String baseUrl = host.startsWith("http") ? host : "https://" + host;
+            String url = baseUrl + "/query";
+            
             HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), createHeaders());
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
 
             if (!response.getStatusCode().is2xxSuccessful()) {
-                throw new RuntimeException("Pinecone Query API failed: " + response.getStatusCode());
+                log.error("Pinecone Query API failed with status: {}, body: {}", response.getStatusCode(), response.getBody());
             }
 
             // 4. Parse response JSON
@@ -148,8 +185,11 @@ public class PineconeVectorDatabaseServiceImpl implements VectorDatabaseService 
                 }
             }
             return contextList;
+        } catch (HttpStatusCodeException e) {
+            log.error("Pinecone API Error during query: {} - Body: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            return List.of();
         } catch (Exception e) {
-            log.error("Similarity search failed: {}", e.getMessage());
+            log.error("Similarity search failed: {}", e.getMessage(), e);
             return List.of();
         }
     }
@@ -157,6 +197,29 @@ public class PineconeVectorDatabaseServiceImpl implements VectorDatabaseService 
     @Override
     public void deleteDocumentChunks(String docId) {
          if (!isConfigured()) return;
-         log.info("Pinecone REST API does not support mass delete uniformly on Starter tiers. Skipping Document clear for doc: {}", docId);
+         if (docId == null || docId.isBlank()) return;
+         
+         log.info("Deleting all vector chunks for Document ID: {}", docId);
+         try {
+             // Let's assume namespace could be doc- or book- prefix. For safety, try deleting both.
+             String[] namespacesToDelete = {"book-" + docId, "doc-" + docId};
+             String baseUrl = host.startsWith("http") ? host : "https://" + host;
+             String url = baseUrl + "/vectors/delete";
+             
+             for (String namespace : namespacesToDelete) {
+                 Map<String, Object> requestBody = new HashMap<>();
+                 requestBody.put("deleteAll", true);
+                 requestBody.put("namespace", namespace);
+                 
+                 HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), createHeaders());
+                 restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+             }
+             
+             log.debug("Successfully issued mass delete for namespaces related to docId: {}", docId);
+         } catch (HttpStatusCodeException e) {
+             log.error("Pinecone API Error during mass delete: {} - Body: {}", e.getStatusCode(), e.getResponseBodyAsString());
+         } catch (Exception e) {
+             log.error("Failed to delete document chunks for docId {}: {}", docId, e.getMessage(), e);
+         }
     }
 }

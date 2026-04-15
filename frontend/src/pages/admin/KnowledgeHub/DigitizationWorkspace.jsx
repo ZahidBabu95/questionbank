@@ -51,27 +51,8 @@ const DigitizationWorkspace = () => {
         const selectedFiles = Array.from(e.target.files);
         if (selectedFiles.length === 0) return;
 
-        const newFiles = [];
         setUploadStatus(null);
-        setIsExtractingPdf(true);
-        setProgress(0);
-
-        for (let file of selectedFiles) {
-            if (file.type === 'application/pdf') {
-                try {
-                    const extractedImages = await extractImagesFromPdf(file);
-                    newFiles.push(...extractedImages);
-                } catch (error) {
-                    console.error("Failed to extract PDF", error);
-                    alert("Failed to read PDF file.");
-                }
-            } else {
-                newFiles.push(file);
-            }
-        }
-        
-        setIsExtractingPdf(false);
-        setFiles(prev => [...prev, ...newFiles]);
+        setFiles(prev => [...prev, ...selectedFiles]);
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -88,42 +69,35 @@ const DigitizationWorkspace = () => {
         setProgress(0);
         setUploadStatus(null);
 
-        const batchSize = 5; // Upload 5 pages at a time to avoid timeout
-        let uploadedCount = 0;
-        let hasError = false;
+        // Upload everything in a single request!
+        // Browsers handle bulk background uploading out of the box. 
+        // This prevents tab switching from throttling JS and dropping the connection.
+        const formData = new FormData();
+        files.forEach(file => {
+            formData.append('files', file);
+        });
+        formData.append('startPage', 1); // Or appropriate start page
 
-        for (let i = 0; i < files.length; i += batchSize) {
-            const batch = files.slice(i, i + batchSize);
-            const formData = new FormData();
-            batch.forEach(file => {
-                formData.append('files', file);
-            });
-            formData.append('startPage', uploadedCount + 1);
-
-            try {
-                const res = await axios.post(`/v1/knowledge-hub/source-books/${bookId}/pages/bulk`, formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
-                
-                if (res.data.success) {
-                    uploadedCount += batch.length;
-                    // Update progress based on completed batches
-                    setProgress(Math.round((uploadedCount / files.length) * 100));
+        try {
+            const res = await axios.post(`/v1/knowledge-hub/source-books/${bookId}/pages/bulk`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: (progressEvent) => {
+                    if (progressEvent.total) {
+                        const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        setProgress(pct);
+                    }
                 }
-            } catch (error) {
-                console.error("Batch upload failed", error);
-                hasError = true;
-                break; // Stop on first error
+            });
+            
+            if (res.data.success) {
+                setUploadStatus('success');
             }
+        } catch (error) {
+            console.error("Upload failed", error);
+            setUploadStatus('error');
         }
         
         setIsUploading(false);
-        if (hasError) {
-            setUploadStatus('error');
-        } else {
-            setUploadStatus('success');
-            // Removed the setTimeout so the success UI stays visible with the redirect button!
-        }
     };
 
     const getFilePreview = (file) => {

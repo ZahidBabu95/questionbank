@@ -45,6 +45,26 @@ public class DynamicStorageService {
         }
     }
 
+    public String uploadFileContent(byte[] fileBytes, String contentType, String originalFileName, String tenantId, String subFolder) throws IOException {
+        Map<String, String> storageSettings;
+        if (tenantId != null) {
+            storageSettings = settingService.getInstituteSettings(tenantId, GeneralSetting.SettingCategory.STORAGE);
+            if (storageSettings.isEmpty()) {
+                storageSettings = settingService.getGlobalSettings(GeneralSetting.SettingCategory.STORAGE);
+            }
+        } else {
+            storageSettings = settingService.getGlobalSettings(GeneralSetting.SettingCategory.STORAGE);
+        }
+
+        String provider = storageSettings.getOrDefault("storage_provider", "LOCAL");
+
+        if ("CLOUDFLARE_R2".equalsIgnoreCase(provider)) {
+            return uploadBytesToCloudflareR2(fileBytes, contentType, originalFileName, storageSettings, subFolder);
+        } else {
+            throw new RuntimeException("Local storage fallback not supported for raw bytes in MVP. Please use Cloudflare R2.");
+        }
+    }
+
     private String uploadToCloudflareR2(MultipartFile file, Map<String, String> settings, String subFolder)
             throws IOException {
         String accountId = settings.get("cloudflare_account_id") != null ? settings.get("cloudflare_account_id").trim() : null;
@@ -82,7 +102,51 @@ public class DynamicStorageService {
 
         s3Client.putObject(putOb, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
 
-        // Return the public URL
+        if (publicUrlBase != null && !publicUrlBase.isEmpty()) {
+            if (publicUrlBase.endsWith("/")) {
+                publicUrlBase = publicUrlBase.substring(0, publicUrlBase.length() - 1);
+            }
+            return publicUrlBase + "/" + fileName;
+        }
+
+        return endpointUrl + "/" + bucketName + "/" + fileName;
+    }
+
+    private String uploadBytesToCloudflareR2(byte[] fileBytes, String contentType, String originalFileName, Map<String, String> settings, String subFolder) throws IOException {
+        String accountId = settings.get("cloudflare_account_id") != null ? settings.get("cloudflare_account_id").trim() : null;
+        String bucketName = settings.get("cloudflare_r2_bucket") != null ? settings.get("cloudflare_r2_bucket").trim() : null;
+        String accessKey = settings.get("storage_access_key") != null ? settings.get("storage_access_key").trim() : null;
+        String secretKey = settings.get("storage_secret_key") != null ? settings.get("storage_secret_key").trim() : null;
+        String publicUrlBase = settings.get("cloudflare_public_url") != null ? settings.get("cloudflare_public_url").trim() : null;
+
+        if (accountId == null || bucketName == null || accessKey == null || secretKey == null) {
+            log.error("Cloudflare R2 storage settings are incomplete.");
+            throw new RuntimeException("Cloudflare R2 storage settings are incomplete.");
+        }
+
+        String endpointUrl = String.format("https://%s.r2.cloudflarestorage.com", accountId);
+
+        S3Client s3Client = S3Client.builder()
+                .region(Region.of("auto"))
+                .endpointOverride(URI.create(endpointUrl))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
+                .forcePathStyle(true)
+                .build();
+
+        String extension = "";
+        if (originalFileName != null && originalFileName.contains(".")) {
+            extension = originalFileName.substring(originalFileName.lastIndexOf("."));
+        }
+        String fileName = subFolder + "/" + UUID.randomUUID().toString() + extension;
+
+        PutObjectRequest putOb = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(fileName)
+                .contentType(contentType)
+                .build();
+
+        s3Client.putObject(putOb, RequestBody.fromBytes(fileBytes));
+
         if (publicUrlBase != null && !publicUrlBase.isEmpty()) {
             if (publicUrlBase.endsWith("/")) {
                 publicUrlBase = publicUrlBase.substring(0, publicUrlBase.length() - 1);

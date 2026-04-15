@@ -23,6 +23,7 @@
 | Phase 3A: Page→Chapter Linking | ✅ Done |
 | Phase 3B: Golden Content Workflow | ✅ Done |
 | Phase 3C: Knowledge Map Bridge (Tree B ↔ Tree A) | ✅ Done |
+| Phase 3E: Automated Question Extraction | ✅ Done |
 | **Phase 3.5 — Professional WYSIWYG GoldenEditor** | ✅ Done |
 
 ### Phase 3.5 বিস্তারিত (এই সেশনে সম্পন্ন):
@@ -144,13 +145,13 @@ Golden Content → Semantic Chunks → Pinecone vectorization।
 
 ---
 
-## 🟡 Phase 3E — Question Extraction from Golden Content
-**Priority: MEDIUM | Estimated: 1 session**
+## ✅ Phase 3E — Question Extraction from Golden Content
+**Status: COMPLETELY DONE**
 
-- [ ] Backend: AI prompt — "Extract all practice questions from this content" → JSON array
-- [ ] Backend: Extracted questions → existing `QuestionBank` MCQ/CQ creation endpoint
-- [ ] Frontend: "Extract Questions" button in Proofreading workspace
-- [ ] Review UI: Extracted questions preview modal → approve all / select specific
+- [x] Backend: AI prompt — "Extract all practice questions from this content" → JSON array
+- [x] Backend: Extracted questions → existing `QuestionBank` MCQ/CQ creation endpoint
+- [x] Frontend: "Automate Questions" button in Proofreading workspace with Job Queue polling
+- [x] Review UI: Reuse existing QuestionList via `/questions/drafts` route with "DRAFT" badge integration
 
 ---
 
@@ -171,19 +172,15 @@ Golden Content → Semantic Chunks → Pinecone vectorization।
   ├─ [1] Phase 3A: Page→Chapter Linking           ✅
   ├─ [2] Phase 3B: Golden Content Workflow        ✅
   ├─ [3] Phase 3C: Knowledge Map Bridge           ✅
-  ├─ [3.5-A] Professional WYSIWYG Ribbon Editor   ✅
-  ├─ [3.5-B] Focus/Selection Bugs Fixed           ✅
-  ├─ [3.5-C] Image Crop CORS Fix (Backend Proxy)  ✅
-  ├─ [3.5-D] ResizableImage Extension             ✅
-  ├─ [3.5-E] Editor State Sync & Clipping Fix    ✅
-  └─ [3.5-F] LaTeX/KaTeX Math Extension + UI      ✅
+  ├─ [4] Phase 3E: Automated Question Extraction  ✅ (Full Integration completed)
+  ├─ [3.5-G] Knowledge Hub Analytical Reporting   ✅
+  └─ [3.5-H] Seamless Background Bulk Extraction  ✅ (New Queue system + Frontend Polling)
 
 IMMEDIATE NEXT:
-  ├─ [4] Phase 3D: Vector Sync (Pinecone)        ← Start here
-  └─ [5] Phase 3E: Question Extraction           
+  ├─ [5] Phase 3D: Vector Sync (Pinecone RAG)    ← Start here
 
 UPCOMING:
-  └─ [6] Phase 4: Chatbot UI
+  └─ [6] Phase 4: Persona-Based Chatbot UI
 ```
 
 ---
@@ -197,6 +194,9 @@ Frontend:
     └── components/
         └── GoldenEditor.jsx         ← WYSIWYG editor (ResizableImage, Ribbon, Focus fixes)
 
+  src/pages/admin/Reports/
+    └── KnowledgeHubReport.jsx       ← Analytics report (PDF, Excel, Hierarchy Mapping)
+
   src/pages/admin/QuestionBank/components/
     └── LiveImageCropperModal.jsx    ← Crop modal (backend proxy for R2 CORS)
 
@@ -205,8 +205,27 @@ Backend:
     ├── POST /upload-image           ← R2 upload
     └── GET  /proxy-image?url=...    ← R2 CORS proxy (NEW)
 
+  service/impl/AcademicServiceImpl.java
+    └── GET  /hierarchy              ← Used extensively for mapping reports
+    
   service/impl/KnowledgeHubServiceImpl.java
     └── Null type safety warnings (Low priority, non-blocking)
+
+  scheduler/
+    ├── AiExtractionScheduler.java      ← Background bulk PDF text extraction (2s polling)
+    └── AiQuestionGenScheduler.java     ← NEW: Background queue for Phase 3E (Drafting Questions)
+
+---
+
+## 🛠️ Deep Dive: Phase 3E Automated Question Extraction
+**Strategy: "Prompt as a Database (PaaD)" leveraging CurriculumRules**
+
+1. **Schema Definition**: Will NOT hardcode prompts. We will reuse the existing `/admin/academic/structure` (CurriculumRules.jsx) which saves subject-specific schemas into `AiKnowledgeBase` table (Tagged as `SCRAPING_JSON`, `RULE_FOR_{Subject}`).
+2. **Background Queue Engine**: `AiQuestionGenerationJob` entity keeps track of bulk operations (similar to extraction queue). (**✅ BACKEND COMPLETE**)
+3. **The Scheduler** (`AiQuestionGenScheduler`): Pings database every 2 seconds. Merges `KnowledgePage` Golden Content + Database Prompt + Subject Schema. (**✅ BACKEND COMPLETE**)
+4. **Data Persistence**: Parses Gemini's generated JSON Array. Inserts directly into `Question` entity with `type`, `marks`, `options`, `status=DRAFT`, `aiGenerated=true`. (**✅ BACKEND COMPLETE**)
+5. **API Endpoints**: `/v1/knowledge-hub/jobs/generate-questions/source-books/{id}/...` endpoints mapped for UI controls. (**✅ BACKEND COMPLETE**)
+6. **Frontend Review**: A dashboard where Super Admin reviews AI Drafts and publishes them to the mainstream Question Bank. *(Next Step!)*
 ```
 
 ---
@@ -219,13 +238,13 @@ Backend:
 
 ---
 
-## 🎯 Last Session Accomplishments (April 4, 2026)
-- **Advanced Dynamic Crop Editing (Edit BEFORE Insert)**: 
-  - Integrated `onAdvancedEdit` workflow inside `LiveImageCropperModal`
-  - Cropped snippets can now be sent directly to the Filerobot `Advanced Image Editor` by clicking "অ্যাডভান্স ক্রপ এডিট" (Settings icon).
-  - Saved snippets from Filerobot are dynamically inserted into the `GoldenEditor` instead of overriding the entire source page image.
-- **Dynamic AI MIME Type Detection**: 
-  - Fixed an issue where Gemini Extraction crashed on Filerobot's generated `image/png` files due to hardcoded `image/jpeg` MIME values in the backend. 
-  - Added smart extension parsing (`.png`, `.webp`) in `extractKnowledgePageContent`.
-- **Filerobot Source Proxy Integration**: 
-  - Verified and ensured smooth image bypassing using the `PublicLandingController.proxyImage` endpoint for Cloudflare R2 CORS policies.
+## 🎯 Last Session Accomplishments (April 2026 - Background Jobs & Frontend UI)
+- **Phase 3E Background Queues:** 
+  - Completed `AiQuestionGenerationJob` persistence and asynchronous `AiQuestionGenScheduler` backend logic.
+  - Successfully mapped AI structured responses to dynamic curriculum rules (`AiKnowledgeBase`) directly.
+- **Frontend Job Polling and Control:** 
+  - Created live background polling on `ProofreadingWorkspace.jsx` reflecting Job status (QUEUED, IN_PROGRESS, PAUSED) with animated progress bars.
+  - Added seamless Resume/Pause functionality to bypass Google Gemini API exhaustion restrictions dynamically.
+  - Resolved `ObjectOptimisticLockingFailureException` during rate-limited database saves.
+- **DRAFT Approval Route:** 
+  - Augmented existing `QuestionList.jsx` to render AI-generated drafts over `App.jsx` under a new `/questions/drafts` route seamlessly without structural bloat.
