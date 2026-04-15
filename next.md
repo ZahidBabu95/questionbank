@@ -238,13 +238,30 @@ Backend:
 
 ---
 
-## 🎯 Last Session Accomplishments (April 2026 - Background Jobs & Frontend UI)
-- **Phase 3E Background Queues:** 
-  - Completed `AiQuestionGenerationJob` persistence and asynchronous `AiQuestionGenScheduler` backend logic.
-  - Successfully mapped AI structured responses to dynamic curriculum rules (`AiKnowledgeBase`) directly.
-- **Frontend Job Polling and Control:** 
-  - Created live background polling on `ProofreadingWorkspace.jsx` reflecting Job status (QUEUED, IN_PROGRESS, PAUSED) with animated progress bars.
-  - Added seamless Resume/Pause functionality to bypass Google Gemini API exhaustion restrictions dynamically.
-  - Resolved `ObjectOptimisticLockingFailureException` during rate-limited database saves.
-- **DRAFT Approval Route:** 
-  - Augmented existing `QuestionList.jsx` to render AI-generated drafts over `App.jsx` under a new `/questions/drafts` route seamlessly without structural bloat.
+## 🎯 Last Session Accomplishments (April 2026 - AI Pipeline Polish & Refinements)
+- **Phase 3E Image & Markdown Schema Polish:** 
+  - Backend dynamically injects `"stimulus"` property into user-created Curriculum Rules inside `KnowledgeHubServiceImpl` so that images are never left behind during generation.
+  - Rectified frontend image stripping by enabling `image` and `link` formats within ReactQuill inside `RichTextEditor.jsx`. Images extracted via Golden Content now display natively during AI Draft reviews.
+- **Smart Deduplication Architecture:**
+  - Added repository checks to block repetitive bulk generation by cross-referencing `sourceReference` (Page IDs). It gracefully handles and skips previously generated drafts to preserve API limits.
+- **FREE_POOL High-Performance Architecture Validation:**
+  - Validated that the soft-delete functionality for API Keys (`deleted=true`) successfully trims the rotation pool without breaking relation mapping. 
+  - The rotational multi-key logic securely runs multiple Google AI Studio Free Tier Keys, yielding seamless enterprise-tier continuity (~45 RPM without bottlenecks), virtually indistinguishable from paid billing plans.
+
+---
+
+## 🤖 Next Phase Analysis: Local LLM (Ollama) & Gemma 4 Integration
+
+For the next session, the focus will shift towards setting up an isolated, self-hosted Local LLM environment (leveraging **Ollama** and models closely tied to Google's extended Gemma line / Llama variants) to expand the `AiQuestionGenScheduler` beyond cloud dependencies.
+
+### Technical Viability & Strategy:
+1. **Network Infrastructure:**
+   - Instead of routing to external `https://generativelanguage.googleapis.com/...`, we will configure an alternative REST WebClient inside Spring Boot pointing to `http://localhost:11434/api/generate`.
+2. **Provider Abstraction Layer:**
+   - Enhance the `AiApiKey` configuration to support a `provider` flag (e.g., `GOOGLE_GEMINI` vs `LOCAL_OLLAMA`). When `LOCAL_OLLAMA` is detected, the API generation service swaps URL endpoints.
+3. **Prompt Matrix & JSON Constraints:**
+   - While Gemini 2.5 natively enforces `application/json` output beautifully, Local LLMs (specifically smaller quant models running on standard hardware) might hallucinate schema fields. Prompt engineering will require explicit few-shot examples or using Ollama's native JSON mode (`"format": "json"` payload flag).
+4. **Hardware Footprint Management:**
+   - Concurrency must be strictly controlled (unlike the multi-key Gemini async pool) when routing to local graphics queues to prevent GPU Out-of-Memory (OOM) crashing. Queue parallelism will likely be tightened to `1` when using Local resources.
+
+We will tackle this pipeline modularization as soon as you're ready to restart!

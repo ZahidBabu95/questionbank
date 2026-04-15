@@ -75,7 +75,7 @@ const RichTextEditor = ({
 
     const formats = useMemo(() => [
         'header', 'bold', 'italic', 'underline', 'strike', 'script',
-        'list', 'bullet', 'direction', 'clean',
+        'list', 'bullet', 'direction', 'clean', 'image', 'link'
     ], []);
 
     return (

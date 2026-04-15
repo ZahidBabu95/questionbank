@@ -1236,7 +1236,10 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
 
         java.util.Optional<com.testshaper.entity.AiQuestionGenerationJob> existingOpt = aiQuestionGenerationJobRepository.findBySourceBookId(sourceBookId);
         
-        long pendingPages = knowledgePageRepository.countBySourceBookIdAndExtractionStatus(sourceBookId, com.testshaper.entity.KnowledgePage.ExtractionStatus.EXTRACTED);
+        long pendingPages = knowledgePageRepository.countBySourceBookIdAndExtractionStatusIn(
+            sourceBookId, 
+            java.util.List.of(com.testshaper.entity.KnowledgePage.ExtractionStatus.PROOFREAD)
+        );
         
         if (pendingPages == 0) {
             throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "No extracted pages found. Please run Bulk Extraction first.");
@@ -1246,7 +1249,9 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         if (existingOpt.isPresent()) {
             job = existingOpt.get();
             job.setStatus(com.testshaper.entity.AiQuestionGenerationJob.JobStatus.QUEUED);
-            job.setTotalPagesToProcess(job.getProcessedPagesCount() + job.getFailedPagesCount() + (int) pendingPages);
+            job.setProcessedPagesCount(0);
+            job.setFailedPagesCount(0);
+            job.setTotalPagesToProcess((int) pendingPages);
         } else {
             job = new com.testshaper.entity.AiQuestionGenerationJob();
             job.setSourceBook(book);
@@ -1293,7 +1298,18 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             throw new RuntimeException("Page does not belong to this book.");
         }
 
-        String markdown = page.getExtractedMarkdown();
+        String pageSourceRef = "knowledge_page_" + pageId.toString();
+        boolean alreadyHasDrafts = questionRepository.existsBySourceReferenceAndStatus(pageSourceRef, com.testshaper.entity.Question.QuestionStatus.DRAFT);
+        if (alreadyHasDrafts) {
+            log.info("Page {} already has DRAFT questions. Skipping generation to prevent duplicates.", pageId);
+            return 0; // successfully skipped
+        }
+
+        String markdown = page.getGoldenMarkdown();
+        if (markdown == null || markdown.isBlank()) {
+            markdown = page.getExtractedMarkdown();
+        }
+
         if (markdown == null || markdown.isBlank()) {
             throw new RuntimeException("Page must be extracted first before generating questions.");
         }
@@ -1304,7 +1320,8 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         String ruleSchema = "[\n" +
             "  {\n" +
             "    \"questionType\": \"MULTIPLE_CHOICE\",\n" +
-            "    \"questionText\": \"Sample AI Question\",\n" +
+            "    \"questionText\": \"Sample AI Question WITHOUT serial number\",\n" +
+            "    \"stimulus\": \"![alt](url) or contextual text. VERY IMPORTANT for images!\",\n" +
             "    \"options\": [\"Option 1\", \"Option 2\", \"Option 3\", \"Option 4\"],\n" +
             "    \"answer\": \"Option 1\",\n" +
             "    \"marks\": 1.0,\n" +
@@ -1320,29 +1337,46 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             java.util.List<com.testshaper.entity.AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(tagToSearch);
             if (!rules.isEmpty()) {
                 ruleSchema = rules.get(0).getContent(); 
+                // Always force inject the stimulus property if user forgot it in their DB rule
+                if (ruleSchema != null && !ruleSchema.contains("\"stimulus\"")) {
+                    ruleSchema = ruleSchema.replaceFirst("\\{", "\\{\n    \"stimulus\": \"![alt](url) or contextual text. VERY IMPORTANT for images!\",");
+                }
             }
         }
 
-        String prompt = "You are an expert curriculum question setter. Read the provided TEXT context below.\n" +
-                        "Based on the content, generate high-quality educational questions. " +
+        String prompt = "You are an expert curriculum question setter and data parser. Read the provided TEXT context below.\n" +
+                        "INSTRUCTIONS:\n" +
+                        "1. If the text contains existing examination questions or exercises, your primary task is to **EXTRACT EXACT EXISTING QUESTIONS**. Do NOT make up variations.\n" +
+                        "2. If the text is an educational chapter with NO existing questions, your task is to **GENERATE high-quality questions** based on the theories inside.\n" +
+                        "3. If the text is just a Table of Contents (সূচিপত্র/Index), Title Page, Copyright Page, or noise, do **NOT** generate questions. Simply return an empty JSON array [].\n" +
+                        "4. **PRESERVE IMAGES (CRITICAL):** If the markdown text contains images `![alt](url)`, you MUST pair them with the appropriate question! Put the image markdown in the `stimulus` field or `questionText` field. Do NOT lose the image link!\n" +
+                        "5. **STRIP NUMBERS:** Remove any serial numbers (e.g. '1. ', '১। ', 'Q:') from the beginning of `questionText`.\n" +
                         "CRITICAL: You MUST strictly conform to the following JSON Schema array. Do not return any conversational text, ONLY a raw JSON array.\n\n" +
                         "TARGET JSON SCHEMA:\n" +
                         ruleSchema + "\n\n" +
                         "CONTEXT TEXT:\n" + markdown;
 
-        Map<String, String> aiSettings = generalSettingService.getGlobalSettings(com.testshaper.entity.GeneralSetting.SettingCategory.AI);
-        String billingMode = aiSettings.getOrDefault("ai_billing_mode", "FREE_POOL");
+        java.util.Map<String, String> aiSettings = generalSettingService.getGlobalSettings(com.testshaper.entity.GeneralSetting.SettingCategory.AI);
+        String billingMode = aiSettings.getOrDefault("ai_billing_mode", aiSettings.getOrDefault("ai_google_mode", "FREE_POOL"));
+        if ("FREE_POOL".equalsIgnoreCase(aiSettings.get("ai_google_mode"))) {
+            billingMode = "FREE_POOL";
+        }
         int maxRetries = "FREE_POOL".equals(billingMode) ? 9 : 1;
 
-        Map<String, Object> requestBody = Map.of(
+        java.util.Map<String, Object> requestBody = java.util.Map.of(
             "contents", java.util.List.of(
-                Map.of("parts", java.util.List.of(Map.of("text", prompt)))
+                java.util.Map.of("parts", java.util.List.of(
+                    java.util.Map.of("text", prompt)
+                ))
             ),
-            "generationConfig", Map.of("responseMimeType", "application/json") // Gemini Force JSON
+            "generationConfig", java.util.Map.of(
+                "temperature", 0.3,
+                "topP", 0.95,
+                "responseMimeType", "application/json"
+            )
         );
 
         String requestJson = objectMapper.writeValueAsString(requestBody);
-
         String currentApiKey = "";
         com.testshaper.entity.AiApiKey currentPoolKey = null;
 
@@ -1410,7 +1444,14 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                                 } catch (Exception ignored) {}
                             }
 
-                            q.setQuestionText(qNode.path("questionText").asText("Generated Question"));
+                            String qText = qNode.path("questionText").asText("Generated Question");
+                            qText = qText.replaceFirst("^\\s*(?:[\\d০-৯]+|[a-zA-Zক-ষ])\\s*[\\.\\)\\-:]\\s*", "");
+                            q.setQuestionText(qText);
+                            
+                            if (qNode.hasNonNull("stimulus")) {
+                                q.setStimulus(qNode.get("stimulus").asText());
+                            }
+
                             q.setMarks(qNode.hasNonNull("marks") ? qNode.get("marks").asDouble() : 1.0);
                             q.setNegativeMarks(0.0);
                             q.setCorrectAnswer(qNode.path("answer").asText(null));
@@ -1425,6 +1466,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                             q.setStatus(com.testshaper.entity.Question.QuestionStatus.DRAFT);
                             q.setAiGenerated(true);
                             q.setAiModelName(model);
+                            q.setSourceReference("knowledge_page_" + pageId.toString());
 
                             if (qNode.hasNonNull("options") && qNode.get("options").isArray()) {
                                 int limit = Math.min(qNode.get("options").size(), 4);
@@ -1456,8 +1498,9 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                 int statusCode = e.getStatusCode().value();
                 if ((statusCode == 429 || statusCode == 503) && attempt < maxRetries) {
                     if (currentPoolKey != null) { keyRotationService.recordError(currentPoolKey.getId(), errorMsg); currentPoolKey = null; currentApiKey = ""; }
-                    int waitSec = 5;
-                    try { java.util.regex.Matcher m = java.util.regex.Pattern.compile("retry in (\\d+)").matcher(errorMsg); if (m.find()) waitSec = Math.min(Integer.parseInt(m.group(1)) + 2, 10); } catch (Exception ignored) {}
+                    int waitSec = 10;
+                    try { java.util.regex.Matcher m = java.util.regex.Pattern.compile("retry in (\\d+)").matcher(errorMsg); if (m.find()) waitSec = Math.min(Integer.parseInt(m.group(1)) + 5, 75); } catch (Exception ignored) {}
+                    log.warn("Rate limit caught from Gemini API. Sleeping for {} seconds before retry...", waitSec);
                     Thread.sleep(waitSec * 1000L); continue;
                 }
                 if (currentPoolKey != null) keyRotationService.recordError(currentPoolKey.getId(), errorMsg);

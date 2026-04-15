@@ -58,10 +58,10 @@ public class AiQuestionGenScheduler {
             
             org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(offset, 1, org.springframework.data.domain.Sort.by("pageNumber").ascending());
             
-            // Get the next EXTRACTED page
-            org.springframework.data.domain.Page<KnowledgePage> pageResult = pageRepository.findBySourceBookIdAndExtractionStatus(
+            // Get the next PROOFREAD page
+            org.springframework.data.domain.Page<KnowledgePage> pageResult = pageRepository.findBySourceBookIdAndExtractionStatusIn(
                     jobToProcess.getSourceBook().getId(),
-                    KnowledgePage.ExtractionStatus.EXTRACTED,
+                    java.util.List.of(KnowledgePage.ExtractionStatus.PROOFREAD),
                     pageable
             );
 
@@ -93,13 +93,13 @@ public class AiQuestionGenScheduler {
             // Refetch to prevent ObjectOptimisticLockingFailureException if modified by another thread
             jobToProcess = jobRepository.findById(jobToProcess.getId()).orElse(jobToProcess);
 
-            jobToProcess.setFailedPagesCount(jobToProcess.getFailedPagesCount() + 1);
-            // Even if it failed, we must increment processed count so it moves to next page next time!
-            jobToProcess.setProcessedPagesCount(jobToProcess.getProcessedPagesCount() + 1);
-            
             if (e.getMessage() != null && e.getMessage().contains("429")) {
-                log.warn("Rate limit detected! Pausing Question Gen job temporarily.");
+                log.warn("Rate limit detected! Pausing Question Gen job temporarily. Offset preserved for retry.");
                 jobToProcess.setStatus(AiQuestionGenerationJob.JobStatus.PAUSED);
+            } else {
+                jobToProcess.setFailedPagesCount(jobToProcess.getFailedPagesCount() + 1);
+                // Move to next page only if it's a non-rate-limit error
+                jobToProcess.setProcessedPagesCount(jobToProcess.getProcessedPagesCount() + 1);
             }
             
             jobRepository.save(jobToProcess);

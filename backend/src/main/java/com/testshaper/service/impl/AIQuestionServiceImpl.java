@@ -77,7 +77,10 @@ public class AIQuestionServiceImpl implements AIQuestionService {
 
     private String getApiKey() {
         Map<String, String> settings = getAiSettings();
-        String billingMode = settings.getOrDefault("ai_billing_mode", "FREE_POOL");
+        String billingMode = settings.getOrDefault("ai_billing_mode", settings.getOrDefault("ai_google_mode", "FREE_POOL"));
+        if ("FREE_POOL".equalsIgnoreCase(settings.get("ai_google_mode"))) {
+            billingMode = "FREE_POOL";
+        }
 
         // Try multi-key rotation pool first if in FREE_POOL mode
         if ("FREE_POOL".equals(billingMode)) {

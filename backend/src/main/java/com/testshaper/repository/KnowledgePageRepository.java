@@ -24,4 +24,8 @@ public interface KnowledgePageRepository extends JpaRepository<KnowledgePage, UU
     Optional<KnowledgePage> findFirstBySourceBookIdAndExtractionStatusOrderByPageNumberAsc(UUID sourceBookId, KnowledgePage.ExtractionStatus status);
     
     org.springframework.data.domain.Page<KnowledgePage> findBySourceBookIdAndExtractionStatus(UUID sourceBookId, KnowledgePage.ExtractionStatus status, org.springframework.data.domain.Pageable pageable);
+    
+    long countBySourceBookIdAndExtractionStatusIn(UUID sourceBookId, java.util.Collection<KnowledgePage.ExtractionStatus> statuses);
+    
+    org.springframework.data.domain.Page<KnowledgePage> findBySourceBookIdAndExtractionStatusIn(UUID sourceBookId, java.util.Collection<KnowledgePage.ExtractionStatus> statuses, org.springframework.data.domain.Pageable pageable);
 }

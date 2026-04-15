@@ -834,8 +834,8 @@ const ProofreadingWorkspace = () => {
                         </div>
                     ) : (
                         // Start Question Generation Button only if no background process is running
-                        // We check if pages have extractionStatus = EXTRACTED
-                        pages.some(p => p.extractionStatus === 'EXTRACTED') && (
+                        // We check if pages have extractionStatus = PROOFREAD (Golden Data)
+                        pages.some(p => p.extractionStatus === 'PROOFREAD') && (
                             <button onClick={handleStartQuestionGen} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-pink-500 to-rose-600 border border-transparent text-white font-semibold rounded-lg hover:from-pink-600 hover:to-rose-700 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
                                 <Sparkles size={14} className="shrink-0" /> Automate Questions
                             </button>

@@ -26,6 +26,8 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                "WHERE q.status = :status")
         List<Question> findByStatus(@Param("status") Question.QuestionStatus status);
 
+        boolean existsBySourceReferenceAndStatus(String sourceReference, Question.QuestionStatus status);
+
         /**
          * Full-featured paginated question search for the manual exam builder.
          * All filters are optional (null = ignore that filter).

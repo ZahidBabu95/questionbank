@@ -241,24 +241,26 @@ const ResizableImage = BaseImage.extend({
 
     parseHTML() {
         return [
-            // Direct <img> tags 
-            {
-                tag: 'img',
-                getAttrs: (dom) => ({
-                    src:   dom.getAttribute('src') || '',
-                    alt:   dom.getAttribute('alt') || 'চিত্র',
-                    width: dom.getAttribute('data-width') || dom.style.width || '50%',
-                    align: dom.getAttribute('data-align') || 'center',
-                }),
-            },
-            // Wrapper <div> containing <img>
+            // Wrapper <div> containing <img> (High Priority)
             {
                 tag: 'div[data-image-wrapper] img',
+                priority: 100,
                 getAttrs: (dom) => ({
                     src:   dom.getAttribute('src') || '',
                     alt:   dom.getAttribute('alt') || 'চিত্র',
                     width: dom.getAttribute('data-width') || dom.style.width || '50%',
                     align: dom.closest('[data-image-wrapper]')?.getAttribute('data-align') || 'center',
+                }),
+            },
+            // Direct <img> tags (Fallback)
+            {
+                tag: 'img',
+                priority: 50,
+                getAttrs: (dom) => ({
+                    src:   dom.getAttribute('src') || '',
+                    alt:   dom.getAttribute('alt') || 'চিত্র',
+                    width: dom.getAttribute('data-width') || dom.style.width || '50%',
+                    align: dom.getAttribute('data-align') || 'center',
                 }),
             },
         ];
@@ -291,10 +293,12 @@ const ResizableImage = BaseImage.extend({
     addCommands() {
         return {
             // Override setImage so it uses our block-insert approach
-            setImage: (attrs) => ({ chain }) =>
-                chain()
-                    .insertContent({ type: this.name, attrs })
-                    .run(),
+            setImage: (options) => ({ commands }) => {
+                return commands.insertContent({
+                    type: this.name,
+                    attrs: options,
+                });
+            },
         };
     },
 });

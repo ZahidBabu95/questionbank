@@ -271,6 +271,7 @@ const GeneralSettings = () => {
             const next = { ...prev, [key]: value };
             if (key === 'ai_google_model') next['ai_model'] = value;
             if (key === 'ai_google_dedicated_key') next['ai_api_key'] = value;
+            if (key.endsWith('_mode')) next['ai_billing_mode'] = value;
             return next;
         });
     };
