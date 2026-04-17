@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, Award, Clock } from 'lucide-react';
+import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, Award, Clock, X } from 'lucide-react';
 import notificationService from '../../services/notificationService';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const NotificationDropdown = () => {
     const navigate = useNavigate();
@@ -10,6 +11,13 @@ const NotificationDropdown = () => {
     const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const dropdownRef = useRef(null);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 640);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Fetch unread count periodically
     const fetchUnreadCount = async () => {
@@ -106,32 +114,64 @@ const NotificationDropdown = () => {
                 )}
             </button>
 
-            {/* Dropdown Panel */}
-            {isOpen && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden origin-top-right animate-in fade-in slide-in-from-top-2 duration-200">
-                    
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-                        <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-slate-800 text-sm">Notifications</h3>
-                            {unreadCount > 0 && (
-                                <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full">
-                                    {unreadCount} new
-                                </span>
+            {/* Panel (Bottom Sheet on Mobile, Dropdown on Desktop) */}
+            <AnimatePresence>
+                {isOpen && (
+                    <>
+                        {/* Mobile Backdrop overlay */}
+                        {isMobile && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm sm:hidden"
+                                onClick={() => setIsOpen(false)}
+                            />
+                        )}
+
+                        <motion.div
+                            initial={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.95, y: -10 }}
+                            animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+                            exit={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.95, y: -10 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
+                            className={`
+                                z-[60] flex flex-col bg-white overflow-hidden shadow-2xl
+                                ${isMobile 
+                                    ? 'fixed bottom-0 left-0 right-0 rounded-t-3xl max-h-[85vh] border-t border-slate-200' 
+                                    : 'absolute right-0 mt-2 w-96 rounded-2xl border border-slate-200 origin-top-right'
+                                }
+                            `}
+                        >
+                            
+                            {/* Mobile Drag Handle */}
+                            {isMobile && (
+                                <div className="flex justify-center pt-3 pb-1 w-full bg-white shrink-0">
+                                    <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
+                                </div>
                             )}
-                        </div>
+
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-white shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <h3 className="font-bold text-slate-900 md:text-sm text-lg tracking-tight">Notifications</h3>
+                                    {unreadCount > 0 && (
+                                        <span className="bg-rose-100 text-rose-700 text-[10px] md:text-[11px] font-black px-2.5 py-0.5 rounded-full">
+                                            {unreadCount} new
+                                        </span>
+                                    )}
+                                </div>
                         {unreadCount > 0 && (
                             <button
                                 onClick={handleMarkAllAsRead}
-                                className="text-[11px] font-bold text-slate-500 hover:text-primary flex items-center gap-1 transition-colors"
+                                className="text-xs md:text-[11px] font-bold text-slate-500 hover:text-primary flex items-center gap-1 transition-colors bg-slate-50 px-3 py-1.5 rounded-lg active:scale-95"
                             >
-                                <Check size={12} /> Mark all read
+                                <Check size={14} /> Mark all read
                             </button>
                         )}
                     </div>
 
                     {/* Body */}
-                    <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
+                    <div className="overflow-y-auto custom-scrollbar flex-1 overscroll-contain" style={{ maxHeight: isMobile ? 'calc(85vh - 130px)' : '350px'}}>
                         {loading ? (
                             <div className="py-10 flex justify-center">
                                 <span className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
@@ -186,15 +226,17 @@ const NotificationDropdown = () => {
                     </div>
                     
                     {/* Footer */}
-                    <div className="p-2 bg-slate-50 border-t border-slate-100 text-center">
+                    <div className="p-3 md:p-2 bg-slate-50 border-t border-slate-100 text-center shrink-0 safe-area-bottom">
                         <button 
                             onClick={() => { setIsOpen(false); window.location.href = '/notifications'; }}
-                            className="text-[12px] font-bold text-primary hover:text-blue-700 transition-colors w-full py-1.5 rounded-lg hover:bg-blue-50">
+                            className="text-[13px] md:text-[12px] font-bold text-primary transition-colors w-full py-2.5 md:py-1.5 rounded-xl hover:bg-blue-100 active:scale-95 bg-blue-50/50 md:bg-transparent">
                             View all notifications
                         </button>
                     </div>
-                </div>
+                </motion.div>
+                </>
             )}
+            </AnimatePresence>
         </div>
     );
 };

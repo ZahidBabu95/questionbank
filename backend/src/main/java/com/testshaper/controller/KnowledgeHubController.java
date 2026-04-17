@@ -28,6 +28,9 @@ public class KnowledgeHubController {
     private final KnowledgeHubService knowledgeHubService;
     private final DynamicStorageService storageService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.testshaper.scheduler.AiExtractionScheduler aiExtractionScheduler;
+
     @PostMapping("/upload-image")
     public ResponseEntity<Map<String, String>> uploadImage(@RequestParam("file") MultipartFile file) {
         try {
@@ -346,5 +349,17 @@ public class KnowledgeHubController {
     @PostMapping("/jobs/generate-questions/{jobId}/resume")
     public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> resumeAiQuestionQueue(@PathVariable UUID jobId) {
         return ResponseEntity.ok(knowledgeHubService.resumeAiQuestionQueue(jobId));
+    }
+
+    // --- System Health and Active Jobs ---
+    @GetMapping("/system-health-jobs")
+    public ResponseEntity<Map<String, Object>> getSystemHealthAndJobs() {
+        return ResponseEntity.ok(knowledgeHubService.getSystemHealthAndJobs());
+    }
+
+    @PostMapping("/system-health-jobs/workers")
+    public ResponseEntity<Map<String, Object>> updateWorkerSize(@RequestParam("size") int size) {
+        aiExtractionScheduler.setMaxWorkers(size);
+        return ResponseEntity.ok(Map.of("success", true, "newSize", size));
     }
 }

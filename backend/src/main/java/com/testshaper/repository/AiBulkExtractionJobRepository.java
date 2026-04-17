@@ -11,7 +11,7 @@ import java.util.UUID;
 @Repository
 public interface AiBulkExtractionJobRepository extends JpaRepository<AiBulkExtractionJob, UUID> {
     
-    Optional<AiBulkExtractionJob> findBySourceBookId(UUID sourceBookId);
+    Optional<AiBulkExtractionJob> findFirstBySourceBookIdOrderByCreatedAtDesc(UUID sourceBookId);
 
     List<AiBulkExtractionJob> findByStatus(AiBulkExtractionJob.JobStatus status);
 }

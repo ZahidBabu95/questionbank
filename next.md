@@ -160,6 +160,16 @@ Golden Content → Semantic Chunks → Pinecone vectorization।
 
 - [ ] Backend: RAG query endpoint — Pinecone similarity search → context → Gemini prompt
 - [ ] Backend: `SystemPrompt` management (Teacher vs Student persona)
+- [ ] Ensure any newly uploaded Source Books are accurately indexed and visible in Knowledge Hub.
+
+### Enterprise Readiness & Scaling (Phase 4)
+- **Microservice Worker Decoupling:** Detach `AiBulkExtractionWorker` and `AiQuestionGenerationWorker` to a standalone Microservice (Serverless/Docker Worker Cluster) to process huge bulk files without impacting main SaaS REST queries.
+- **Vector RAG Pipeline & Pinecone Sync:** Sync the structured AI Extractions (`extractedMarkdown` / `goldenMarkdown`) into vector dimensions on Pinecone, creating a scalable chatbot that allows realtime QA directly referencing the exact book location.
+- **Audit Logging and Grafana Monitoring:** Add comprehensive Table/Entity mutation tracking and integrate monitoring solutions like Sentry and Grafana to track SLA and rate-limit drops globally.
+- **Dynamic Thread Pool Configuration:** Implement `ThreadPoolTaskExecutor` to scale concurrent API requests based on server CPU and available Gemini API key pool.
+- **Smart Load Balancing:** Deploy Greedy/Fair distribution logic to manage concurrent user workloads across the API key rotation pool.
+- **Resilience & Auto-Recovery:** Integrate Token Bucket rate-limiting and automatic retry logic to handle 429 errors by switching to healthy proxy keys in real-time.
+
 - [ ] Frontend: Chat widget or dedicated `/admin/knowledge-hub/chatbot` page
 - [ ] Frontend: Context selector (Book, Chapter, Topic) before asking question
 
@@ -247,21 +257,33 @@ Backend:
 - **FREE_POOL High-Performance Architecture Validation:**
   - Validated that the soft-delete functionality for API Keys (`deleted=true`) successfully trims the rotation pool without breaking relation mapping. 
   - The rotational multi-key logic securely runs multiple Google AI Studio Free Tier Keys, yielding seamless enterprise-tier continuity (~45 RPM without bottlenecks), virtually indistinguishable from paid billing plans.
+- **Critical Edge Case Bugs Resolved (API Key Overwrites & Truncation):**
+  - **Masking Collision Bug:** Fixed a highly evasive bug where the frontend `AIza••••••••••••` bullet points bypassed the backend `****` masking check, causing the literal masked string to permanently overwrite original API keys in the DB.
+  - **Data Truncation Error Bypass:** Fixed a hidden loop flaw where Google's massive JSON response pushed the `API_KEY_INVALID` reason beyond the database's 250-char `last_error` limit. The truncation occurred *before* the keyword validation, blinding the system from marking the key as exhausted. This has been reversed by evaluating the raw response strings pre-truncation.
+  - **Hibernate L1 Cache Staleness Fix:** Added `clearAutomatically=true` on `@Modifying` queries in `AiApiKeyRepository` to prevent the Entity Manager from continuously feeding dirty, stale `requestsToday = 0` instances to the rotation logic in long-running job threads.
 
 ---
 
-## 🤖 Next Phase Analysis: Local LLM (Ollama) & Gemma 4 Integration
+## 🤖 Next Phase Architecture: Dynamic UI-Controlled API Dispatcher (Distributed Worker Pool)
 
-For the next session, the focus will shift towards setting up an isolated, self-hosted Local LLM environment (leveraging **Ollama** and models closely tied to Google's extended Gemma line / Llama variants) to expand the `AiQuestionGenScheduler` beyond cloud dependencies.
+For the next session, we are upgrading the basic sequential `@Scheduled` queues into a highly concurrent, "Distributed Network" scaling model that can be controlled dynamically from the frontend by the Super Admin. Because we now possess **Pay-as-you-go** API keys, the system can leverage hundreds of threads without rate limits.
 
-### Technical Viability & Strategy:
-1. **Network Infrastructure:**
-   - Instead of routing to external `https://generativelanguage.googleapis.com/...`, we will configure an alternative REST WebClient inside Spring Boot pointing to `http://localhost:11434/api/generate`.
-2. **Provider Abstraction Layer:**
-   - Enhance the `AiApiKey` configuration to support a `provider` flag (e.g., `GOOGLE_GEMINI` vs `LOCAL_OLLAMA`). When `LOCAL_OLLAMA` is detected, the API generation service swaps URL endpoints.
-3. **Prompt Matrix & JSON Constraints:**
-   - While Gemini 2.5 natively enforces `application/json` output beautifully, Local LLMs (specifically smaller quant models running on standard hardware) might hallucinate schema fields. Prompt engineering will require explicit few-shot examples or using Ollama's native JSON mode (`"format": "json"` payload flag).
-4. **Hardware Footprint Management:**
-   - Concurrency must be strictly controlled (unlike the multi-key Gemini async pool) when routing to local graphics queues to prevent GPU Out-of-Memory (OOM) crashing. Queue parallelism will likely be tightened to `1` when using Local resources.
+### 🌟 Technical Viability & Strategy (✅ COMPLETED in Recent Session):
 
-We will tackle this pipeline modularization as soon as you're ready to restart!
+1. **Dynamic UI-Controlled Thread Pool (`ThreadPoolTaskExecutor`):**
+   - **Status:** ✅ Done. Replaced primitive executors with Spring `ThreadPoolTaskExecutor`.
+   - **Persistence:** ✅ Done. Added `GeneralSetting` persistence so `maxWorkers` size survives server reboots.
+   - Admin can dynamically set the active loop parallel workers via the React GUI.
+
+2. **Server & Jobs Analytics Enhancements:**
+   - **Worker Configurator UI:** ✅ Done. Integrated into Knowledge Hub Report.
+   - **Extraction Progress Sync:** ✅ Done. Adjusted frontend tracking so that `b.extractedPages >= b.totalPages` correctly flags files as 'Extraction Completed', bypassing temporary backend worker states.
+   - **WebSocket Sync Fix:** ✅ Done. Removed legacy `ForwardingController.java` to prevent `HttpRequestMethodNotSupportedException` on `POST` fallback mappings affecting the SockJS STOMP client in production servers without HTTPS.
+
+3. **Smart Load Balancing (Greedy + Fair Distribution):**
+   - **Status:** ✅ Done. Handled dynamically inside `AiExtractionScheduler`.
+
+---
+
+## 🟡 NEXT FOCUS: Phase 3D — Vector Sync Pipeline (Pinecone RAG)
+We will now fully shift focus to building **GoldenContentVectorizationService** and preparing Pinecone index mappings for Chatbot queries!

@@ -405,11 +405,12 @@ const UserList = () => {
                 </button>
             </div>
 
-            {/* ── Table ── */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                <table className="w-full">
-                    <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
+            {/* ── Table & Mobile Cards ── */}
+            <div className="bg-white md:rounded-2xl border-y md:border border-slate-200 overflow-hidden shadow-sm -mx-4 md:mx-0">
+                <div className="overflow-x-auto hidden md:block">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
                             <th className="p-4 w-10">
                                 <button onClick={toggleAll} className="text-slate-400 hover:text-indigo-600 transition-colors">
                                     {allSelected ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />}
@@ -500,6 +501,83 @@ const UserList = () => {
                         })}
                     </tbody>
                 </table>
+                </div>
+
+                {/* ── Mobile Card View (Visible only on < md) ── */}
+                <div className="md:hidden flex flex-col divide-y divide-slate-100">
+                    {/* Select All Bar Mobile */}
+                    {users.length > 0 && (
+                        <div className="flex items-center justify-between px-4 py-3 bg-slate-50 text-sm border-b border-slate-100">
+                            <button onClick={toggleAll} className="flex items-center gap-2 font-bold text-slate-600 transition-colors">
+                                {allSelected ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} className="text-slate-400" />}
+                                {allSelected ? 'Unselect All' : 'Select All'}
+                            </button>
+                        </div>
+                    )}
+
+                    {loading ? (
+                        [...Array(5)].map((_, i) => (
+                            <div key={i} className="p-4 flex gap-3 animate-pulse">
+                                <div className="w-4 h-4 bg-slate-200 rounded shrink-0"></div>
+                                <div className="w-10 h-10 bg-slate-200 rounded-xl shrink-0"></div>
+                                <div className="flex-1 space-y-2 py-1">
+                                    <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                                    <div className="h-3 bg-slate-200 rounded w-1/3"></div>
+                                </div>
+                            </div>
+                        ))
+                    ) : users.length === 0 ? (
+                        <div className="py-12 flex flex-col items-center gap-3 text-slate-400 text-center px-4">
+                            <Users size={32} className="opacity-30" />
+                            <p className="font-medium text-sm">কোনো ব্যবহারকারী পাওয়া যায়নি</p>
+                        </div>
+                    ) : users.map(user => {
+                        const isChecked = selected.has(user.id);
+                        return (
+                            <div key={user.id} 
+                                onClick={() => handleView(user)}
+                                className={`relative flex flex-col gap-3 p-4 transition-colors cursor-pointer active:bg-slate-50 ${isChecked ? 'bg-indigo-50/40' : 'bg-white'}`}>
+                                
+                                <div className="flex items-start gap-3">
+                                    <button onClick={e => { e.stopPropagation(); toggleSelect(user.id); }} className="mt-1 shrink-0">
+                                        {isChecked ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} className="text-slate-300" />}
+                                    </button>
+                                    
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-100 to-violet-100 border border-indigo-100 flex items-center justify-center text-indigo-700 font-black text-sm shrink-0">
+                                        {(user.name || '?').charAt(0).toUpperCase()}
+                                    </div>
+                                    
+                                    <div className="flex-1 min-w-0 pr-8">
+                                        <h4 className="font-bold text-slate-800 text-sm truncate">{user.name}</h4>
+                                        <p className="text-[11px] text-slate-400 truncate mt-0.5">{user.email}</p>
+                                        <div className="flex flex-wrap gap-1 mt-1.5">
+                                            {(user.roles || []).map(r => <RoleBadge key={r} role={r} />)}
+                                        </div>
+                                    </div>
+                                    
+                                    <button onClick={e => { e.stopPropagation(); handleView(user); }} 
+                                        className="absolute top-4 right-4 text-slate-400 p-1 bg-slate-50 hover:bg-slate-100 rounded-lg">
+                                        <ChevronRight size={16} />
+                                    </button>
+                                </div>
+                                
+                                <div className="ml-7 pl-6 mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-50 pt-3">
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${user.active ? 'bg-emerald-500' : 'bg-rose-400'}`} />
+                                        <span className={`text-[10px] font-bold ${user.active ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                            {user.active ? 'Active' : 'Inactive'}
+                                        </span>
+                                        {user.accountLocked && <Lock size={10} className="text-rose-500 ml-0.5" />}
+                                    </div>
+                                    <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium shrink-0">
+                                        <Building size={10} />
+                                        {user.instituteName ? <span className="truncate max-w-[100px]">{user.instituteName}</span> : <i>Global</i>}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
 
                 {/* ── Pagination ── */}
                 <div className="px-5 py-3.5 border-t border-slate-100 flex items-center justify-between">

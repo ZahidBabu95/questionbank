@@ -20,7 +20,8 @@ import {
     List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify,
     FileText, Save, Type, Grid3x3, Undo2, Redo2,
     Strikethrough, Code, Quote, Minus, Trash2,
-    Image as ImageIcon, MoveHorizontal
+    Image as ImageIcon, MoveHorizontal,
+    PanelLeft, PanelRight
 } from 'lucide-react';
 
 // ─── Resizable Image Node View ───────────────────────────────────────────────
@@ -44,6 +45,7 @@ const ResizableImageView = ({ node, updateAttributes, selected, deleteNode, edit
 
     const onResizeStart = (e) => {
         e.preventDefault();
+        e.stopPropagation();
         startX.current = e.clientX;
         startW.current = imgRef.current?.offsetWidth || 300;
         const onMove = (me) => {
@@ -62,15 +64,16 @@ const ResizableImageView = ({ node, updateAttributes, selected, deleteNode, edit
         window.addEventListener('mouseup', onUp);
     };
 
-    // Help ProseMirror safely select this block node when clicked and maintain focus
-    const handleImageClick = (e) => {
-        // Prevent default to STOP ProseMirror from defaulting the native cursor to an adjacent table cell!
-        e.preventDefault();
-        e.stopPropagation();
+    // Force NodeSelection when clicking image — ProseMirror's native coordinate
+    // mapping fails for complex React NodeViews and places a gap cursor instead.
+    const handleWrapperMouseDown = (e) => {
+        e.preventDefault();   // Stop ProseMirror from computing a wrong cursor position
+        e.stopPropagation();  // Don't bubble to parent editors/containers
         
         if (editor && typeof getPos === 'function') {
-            // Strictly set the Node Selection ONLY. Do NOT call focus() here, 
-            // as focus() forces the DOM cursor to the last known text position!
+            // Raw DOM focus first — ensures the contenteditable container is active
+            editor.view.dom.focus();
+            // Then explicitly set NodeSelection on this exact node
             editor.commands.setNodeSelection(getPos());
         }
     };
@@ -83,8 +86,6 @@ const ResizableImageView = ({ node, updateAttributes, selected, deleteNode, edit
             const pos = getPos();
             deleteNode();
             
-            // Re-establish a strict text cursor EXACTLY where the image used to be,
-            // so the editor doesn't lose its mind or blur unexpectedly!
             requestAnimationFrame(() => {
                 if (!editor.isDestroyed) {
                     editor.chain().setTextSelection(pos).focus().run();
@@ -95,14 +96,22 @@ const ResizableImageView = ({ node, updateAttributes, selected, deleteNode, edit
         }
     };
 
-    const justifyMap = { left: 'flex-start', center: 'center', right: 'flex-end' };
-    const justification = justifyMap[align] || 'flex-start';
+    const justifyMap = { 
+        'left': { display: 'flex', justifyContent: 'flex-start', margin: '1em 0', width: '100%' }, 
+        'center': { display: 'flex', justifyContent: 'center', margin: '1em 0', width: '100%' }, 
+        'right': { display: 'flex', justifyContent: 'flex-end', margin: '1em 0', width: '100%' },
+        'wrap-left': { float: 'left', marginRight: '1.5em', marginBottom: '0.5em' },
+        'wrap-right': { float: 'right', marginLeft: '1.5em', marginBottom: '0.5em' },
+        'inline': { display: 'inline-block', margin: '0 0.5em' }
+    };
+    const nodeWrapperStyle = justifyMap[align] || justifyMap['center'];
 
     return (
         <NodeViewWrapper 
-            style={{ display: 'flex', width: '100%', justifyContent: justification, margin: '1em 0' }}
+            as="div"
+            style={nodeWrapperStyle}
             contentEditable={false}
-            onMouseDown={handleImageClick}
+            onMouseDown={handleWrapperMouseDown}
         >
             <div style={{ position: 'relative', display: 'inline-block', width: imgError ? '120px' : 'auto', maxWidth: '100%' }}>
                 
@@ -117,7 +126,7 @@ const ResizableImageView = ({ node, updateAttributes, selected, deleteNode, edit
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mx-1">Image</span>
                         
                         <div className="flex bg-[#0f172a] rounded overflow-hidden border border-slate-700">
-                            {[['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight]].map(([a, Icon]) => (
+                            {[['wrap-left', PanelLeft], ['center', AlignCenter], ['wrap-right', PanelRight], ['left', AlignLeft], ['right', AlignRight]].map(([a, Icon]) => (
                                 <button
                                     key={a}
                                     onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); updateAttributes({ align: a }); }}
@@ -217,7 +226,6 @@ const ResizableImageView = ({ node, updateAttributes, selected, deleteNode, edit
 
 // ─── Custom ResizableImage — extends @tiptap/extension-image (safest approach)
 const ResizableImage = BaseImage.extend({
-    // Make it block-level so it gets its own line (like MS Word images)
     inline: false,
     group: 'block',
     draggable: true,
@@ -241,9 +249,9 @@ const ResizableImage = BaseImage.extend({
 
     parseHTML() {
         return [
-            // Wrapper <div> containing <img> (High Priority)
+            // Wrapper <div> or <span> containing <img> (High Priority)
             {
-                tag: 'div[data-image-wrapper] img',
+                tag: 'div[data-image-wrapper] img, span[data-image-wrapper] img',
                 priority: 100,
                 getAttrs: (dom) => ({
                     src:   dom.getAttribute('src') || '',
@@ -268,15 +276,27 @@ const ResizableImage = BaseImage.extend({
 
     renderHTML({ HTMLAttributes }) {
         const { align, width, 'data-width': dw, 'data-align': da, ...rest } = HTMLAttributes;
-        const resolvedAlign = align || da || 'left';
+        const resolvedAlign = align || da || 'center';
         const resolvedWidth = width || dw || '50%';
-        const flex = resolvedAlign === 'center' ? 'center' : resolvedAlign === 'right' ? 'flex-end' : 'flex-start';
+        
+        let style = '';
+        if (resolvedAlign === 'wrap-left') {
+            style = `float:left;margin-right:1.5em;margin-bottom:0.5em;`;
+        } else if (resolvedAlign === 'wrap-right') {
+            style = `float:right;margin-left:1.5em;margin-bottom:0.5em;`;
+        } else if (resolvedAlign === 'inline') {
+            style = `display:inline-block;margin:0 0.5em;`;
+        } else {
+            const flex = resolvedAlign === 'center' ? 'center' : resolvedAlign === 'right' ? 'flex-end' : 'flex-start';
+            style = `display:flex;width:100%;justify-content:${flex};margin:0.75em 0`;
+        }
+
         return [
             'div',
             {
                 'data-image-wrapper': '',
                 'data-align': resolvedAlign,
-                style: `display:flex;width:100%;justify-content:${flex};margin:0.75em 0`,
+                style: style,
             },
             ['img', mergeAttributes(rest, {
                 'data-width':  resolvedWidth,
@@ -292,12 +312,11 @@ const ResizableImage = BaseImage.extend({
 
     addCommands() {
         return {
-            // Override setImage so it uses our block-insert approach
-            setImage: (options) => ({ commands }) => {
-                return commands.insertContent({
+            setImage: (options) => ({ chain }) => {
+                return chain().insertContent({
                     type: this.name,
                     attrs: options,
-                });
+                }).run();
             },
         };
     },
@@ -745,21 +764,16 @@ const GoldenEditor = ({ value, onChange, onSave, onClose, isSaving, setTiptapEdi
             </div>
 
             {/* ═══ Page Canvas ══════════════════════════════════════════════ */}
-            <div className="flex-1 overflow-auto bg-[#525659] relative flex flex-col items-center py-8 px-4 pb-[200px]">
+            <div className="flex-1 overflow-auto bg-[#525659] relative flex flex-col items-center py-4 md:py-8 px-2 md:px-4 pb-[200px] custom-scrollbar">
                 <div
+                    className="bg-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] w-full max-w-[794px] min-h-[max(800px,80vh)] md:min-h-[1123px] px-5 py-8 md:px-[80px] md:py-[72px] shrink-0"
                     style={{
                         zoom: zoom,
                         transition: 'all 0.15s ease',
-                        width: '794px',    /* A4 width in px at 96dpi */
-                        minHeight: '1123px', /* A4 height */
-                        background: 'white',
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-                        padding: '72px 80px',
                         fontSize: `${fontSize}px`,
                         lineHeight: '1.85',
                         color: '#1a1a2e',
                         fontFamily: "'Noto Serif Bengali', 'Kalpurush', 'SutonnyMJ', Georgia, serif",
-                        flexShrink: 0,
                     }}
                 >
                     <style>{`

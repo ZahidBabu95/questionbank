@@ -35,6 +35,7 @@ public class AppNotification extends BaseEntity {
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public enum NotificationType {
-        SYSTEM, REVISION_APPROVED, REVISION_REJECTED, WARNING, ACHIEVEMENT
+        SYSTEM, REVISION_APPROVED, REVISION_REJECTED, WARNING, ACHIEVEMENT,
+        SYSTEM_ALERT, API_LIMIT_ALERT
     }
 }

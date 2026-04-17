@@ -85,4 +85,23 @@ public class NotificationServiceImpl implements NotificationService {
         }
         notificationRepository.saveAll(unread);
     }
+
+    @Override
+    @Transactional
+    public void sendSystemAlertToSuperAdmins(String title, String message, String alertType) {
+        List<User> superAdmins = userRepository.findAllSuperAdmins();
+        List<AppNotification> notifications = superAdmins.stream().map(admin -> {
+            AppNotification n = new AppNotification();
+            n.setUser(admin);
+            n.setTitle(title);
+            n.setMessage(message);
+            n.setType(AppNotification.NotificationType.valueOf(alertType != null ? alertType : "SYSTEM_ALERT"));
+            n.setRead(false);
+            return n;
+        }).toList();
+
+        if (!notifications.isEmpty()) {
+            notificationRepository.saveAll(notifications);
+        }
+    }
 }

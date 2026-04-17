@@ -182,7 +182,7 @@ const ReorderPagesModal = ({ pages, bookId, onClose, onApplied }) => {
                 </div>
 
                 <div className="p-4 overflow-y-auto flex-1 bg-slate-50/50">
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-8 gap-4">
                         {orderedPages.map((p, idx) => (
                             <div key={p.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col group relative">
                                 <div className="aspect-[3/4] bg-slate-100 w-full relative">
@@ -433,7 +433,7 @@ const ProofreadingWorkspace = () => {
     const [portalTarget, setPortalTarget] = useState(null);
 
     // Panel collapse state
-    const [treeBCollapsed, setTreeBCollapsed] = useState(false);
+    const [treeBCollapsed, setTreeBCollapsed] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
 
     // Page tags (Cover, TOC, Publication Info)
     const [pageFlags, setPageFlags] = useState({});
@@ -783,18 +783,18 @@ const ProofreadingWorkspace = () => {
                         <span className="hidden sm:inline">B</span>
                     </button>
                     <Link to={`/knowledge-hub/mapping/${bookId}`}>
-                        <button className="px-3 py-1.5 bg-white border border-teal-600 text-teal-700 hover:bg-teal-50 font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-xs">
-                            <Layers className="w-3.5 h-3.5" /> Map Curriculum
+                        <button className="px-2 lg:px-3 py-1.5 bg-white border border-teal-600 text-teal-700 hover:bg-teal-50 font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-xs">
+                            <Layers className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Map Curriculum</span>
                         </button>
                     </Link>
                     <Link to={`/knowledge-hub/digitization/${bookId}`}>
-                        <button className="px-3 py-1.5 bg-indigo-600 border border-indigo-700 text-white font-semibold rounded-lg flex items-center gap-1.5 hover:bg-indigo-700 transition-all shadow-sm text-xs">
-                            <ImageIcon className="w-3.5 h-3.5" /> Add Pages
+                        <button className="px-2 lg:px-3 py-1.5 bg-indigo-600 border border-indigo-700 text-white font-semibold rounded-lg flex items-center gap-1.5 hover:bg-indigo-700 transition-all shadow-sm text-xs">
+                            <ImageIcon className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Add Pages</span>
                         </button>
                     </Link>
                     <Link to={`/questions/drafts`}>
-                        <button className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 font-semibold rounded-lg flex items-center gap-1.5 hover:bg-rose-100 transition-all shadow-sm text-xs ml-1">
-                            <FileText className="w-3.5 h-3.5" /> Review Drafts
+                        <button className="px-2 lg:px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 font-semibold rounded-lg flex items-center gap-1.5 hover:bg-rose-100 transition-all shadow-sm text-xs ml-1">
+                            <FileText className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Review Drafts</span>
                         </button>
                     </Link>
 
@@ -807,11 +807,11 @@ const ProofreadingWorkspace = () => {
                                 <Loader2 size={14} className="animate-spin text-pink-500 shrink-0" />
                             )}
                             <div className="flex flex-col justify-center">
-                                <span className="text-[10px] font-bold leading-tight flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold leading-tight hidden lg:flex items-center gap-1.5">
                                     AI Question Generation
                                     {aiQuestionJob.status === 'PAUSED' && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded uppercase">Paused</span>}
                                 </span>
-                                <div className="w-24 bg-white border border-pink-100 h-1.5 rounded-full overflow-hidden shrink-0 mt-0.5">
+                                <div className="hidden lg:block w-24 bg-white border border-pink-100 h-1.5 rounded-full overflow-hidden shrink-0 mt-0.5">
                                   <div 
                                       className={`h-full ${aiQuestionJob.status === 'PAUSED' ? 'bg-amber-400' : 'bg-pink-500'} transition-all`} 
                                       style={{ width: `${aiQuestionJob.totalPagesToProcess > 0 ? (aiQuestionJob.processedPagesCount / aiQuestionJob.totalPagesToProcess) * 100 : 0}%` }} 
@@ -824,11 +824,11 @@ const ProofreadingWorkspace = () => {
                             
                             {aiQuestionJob.status === 'PAUSED' ? (
                                 <button onClick={handleResumeQuestionJob} className="ml-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Resume Question Generation">
-                                    RESUME
+                                    <span className="hidden xl:inline">RESUME</span><span className="xl:hidden">▶</span>
                                 </button>
                             ) : (
                                 <button onClick={handlePauseQuestionJob} className="ml-1 bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Pause Question Generation">
-                                    PAUSE
+                                    <span className="hidden xl:inline">PAUSE</span><span className="xl:hidden">⏸</span>
                                 </button>
                             )}
                         </div>
@@ -836,8 +836,8 @@ const ProofreadingWorkspace = () => {
                         // Start Question Generation Button only if no background process is running
                         // We check if pages have extractionStatus = PROOFREAD (Golden Data)
                         pages.some(p => p.extractionStatus === 'PROOFREAD') && (
-                            <button onClick={handleStartQuestionGen} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-pink-500 to-rose-600 border border-transparent text-white font-semibold rounded-lg hover:from-pink-600 hover:to-rose-700 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
-                                <Sparkles size={14} className="shrink-0" /> Automate Questions
+                            <button onClick={handleStartQuestionGen} className="flex items-center gap-1.5 px-2 lg:px-3 py-1.5 bg-gradient-to-r from-pink-500 to-rose-600 border border-transparent text-white font-semibold rounded-lg hover:from-pink-600 hover:to-rose-700 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
+                                <Sparkles size={14} className="shrink-0" /> <span className="hidden xl:inline">Automate Questions</span>
                             </button>
                         )
                     )}
@@ -851,11 +851,11 @@ const ProofreadingWorkspace = () => {
                                 <Loader2 size={14} className="animate-spin text-indigo-500 shrink-0" />
                             )}
                             <div className="flex flex-col justify-center">
-                                <span className="text-[10px] font-bold leading-tight flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold leading-tight hidden lg:flex items-center gap-1.5">
                                     Background Extractor
                                     {aiQueueJob.status === 'PAUSED' && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded uppercase">Paused</span>}
                                 </span>
-                                <div className="w-24 bg-white border border-indigo-100 h-1.5 rounded-full overflow-hidden shrink-0 mt-0.5">
+                                <div className="hidden lg:block w-24 bg-white border border-indigo-100 h-1.5 rounded-full overflow-hidden shrink-0 mt-0.5">
                                   <div 
                                       className={`h-full ${aiQueueJob.status === 'PAUSED' ? 'bg-amber-400' : 'bg-indigo-500'} transition-all`} 
                                       style={{ width: `${aiQueueJob.totalPagesToProcess > 0 ? (aiQueueJob.processedPagesCount / aiQueueJob.totalPagesToProcess) * 100 : 0}%` }} 
@@ -868,18 +868,18 @@ const ProofreadingWorkspace = () => {
                             
                             {aiQueueJob.status === 'PAUSED' ? (
                                 <button onClick={handleResumeJob} className="ml-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Resume Job">
-                                    RESUME
+                                    <span className="hidden xl:inline">RESUME</span><span className="xl:hidden">▶</span>
                                 </button>
                             ) : (
                                 <button onClick={handlePauseJob} className="ml-1 bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Pause Background Job">
-                                    PAUSE
+                                    <span className="hidden xl:inline">PAUSE</span><span className="xl:hidden">⏸</span>
                                 </button>
                             )}
                         </div>
                     ) : (
                         pages.some(p => !p.isGolden && p.extractionStatus !== 'EXTRACTED' && p.extractionStatus !== 'PROOFREAD') && (
-                            <button onClick={handleStartBulkExtract} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-lg hover:border-amber-300 hover:bg-amber-50 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
-                                <Zap size={14} className="text-amber-500 shrink-0" /> Server Bulk Extract
+                            <button onClick={handleStartBulkExtract} className="flex items-center gap-1.5 px-2 lg:px-3 py-1.5 bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-lg hover:border-amber-300 hover:bg-amber-50 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
+                                <Zap size={14} className="text-amber-500 shrink-0" /> <span className="hidden xl:inline">Server Bulk Extract</span>
                             </button>
                         )
                     )}
@@ -1199,7 +1199,7 @@ const ProofreadingWorkspace = () => {
                         </div>
 
                         {/* ═══ RIGHT PANEL — Sidebar (Tabbed) ═══ */}
-                        <div className={`h-full bg-white border-l border-slate-200 flex flex-col shrink-0 transition-all duration-300 ease-in-out ${treeBCollapsed ? 'w-[44px]' : 'w-[270px]'}`}>
+                        <div className={`h-full bg-white border-l border-slate-200 flex flex-col shrink-0 transition-all duration-300 ease-in-out absolute right-0 z-[100] lg:relative lg:z-auto ${treeBCollapsed ? 'w-[44px] translate-x-0' : 'w-[270px] translate-x-0 shadow-2xl lg:shadow-none'}`}>
 
                             {/* Header Tabs */}
                             <div className={`border-b border-slate-200 bg-slate-50 shrink-0 flex items-center ${treeBCollapsed ? 'p-2 flex-col py-3 gap-2' : ''}`}>

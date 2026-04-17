@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Save, RefreshCw, Globe, Image, Mail, Cpu, FileText, Database, Shield, Check,
     AlertTriangle, Settings, ChevronRight, Loader2, RotateCcw, UploadCloud, Zap, Wifi,
-    Key, Plus, Trash2, ToggleLeft, ToggleRight
+    Key, Plus, Trash2, ToggleLeft, ToggleRight, Eye, EyeOff
 } from 'lucide-react';
 import settingsService from '../../../services/settingsService';
 import { useBranding } from '../../../context/BrandingContext';
@@ -71,9 +71,12 @@ const GeneralSettings = () => {
 
     // API Key Pool state
     const [apiKeys, setApiKeys] = useState([]);
+    const [deletedApiKeys, setDeletedApiKeys] = useState([]);
     const [showAddKey, setShowAddKey] = useState(false);
-    const [newApiKey, setNewApiKey] = useState({ keyName: '', apiKey: '', provider: 'Google', baseUrl: '', model: 'gemini-2.0-flash', dailyLimit: 50000 });
+    const [newApiKey, setNewApiKey] = useState({ keyName: '', apiKey: '', provider: 'Google', baseUrl: '', model: 'gemini-2.5-flash', dailyLimit: 50000, isPaid: false });
     const [activeProviderTab, setActiveProviderTab] = useState('Google');
+    const [activePoolTab, setActivePoolTab] = useState('active');
+    const [revealModal, setRevealModal] = useState({ show: false, keyId: null, password: '', revealedKey: null, error: null });
 
     // Provider tab definitions
     const PROVIDER_TABS = [
@@ -87,8 +90,12 @@ const GeneralSettings = () => {
 
     const fetchApiKeys = async () => {
         try {
-            const res = await axios.get('/v1/ai/keys');
-            setApiKeys(res.data?.data || []);
+            const [keysRes, deletedRes] = await Promise.all([
+                axios.get('/v1/ai/keys'),
+                axios.get('/v1/ai/keys/deleted')
+            ]);
+            setApiKeys(keysRes.data?.data || []);
+            setDeletedApiKeys(deletedRes.data?.data || []);
         } catch (e) { /* not super admin or no keys */ }
     };
 
@@ -102,9 +109,10 @@ const GeneralSettings = () => {
                 baseUrl:    newApiKey.baseUrl   || '',
                 model:      newApiKey.model     || '',
                 dailyLimit: newApiKey.dailyLimit || 50000,
+                isPaid:     newApiKey.isPaid || false
             });
             const cur = PROVIDER_TABS.find(t => t.key === activeProviderTab);
-            setNewApiKey({ keyName: '', apiKey: '', provider: activeProviderTab, baseUrl: cur?.baseUrl || '', model: cur?.defaultModel || '', dailyLimit: 50000 });
+            setNewApiKey({ keyName: '', apiKey: '', provider: activeProviderTab, baseUrl: cur?.baseUrl || '', model: cur?.defaultModel || '', dailyLimit: 50000, isPaid: false });
             setShowAddKey(false);
             fetchApiKeys();
         } catch (e) { console.error(e); }
@@ -123,8 +131,30 @@ const GeneralSettings = () => {
     };
 
     const deleteApiKey = async (id) => {
-        if (!confirm('Delete this key?')) return;
+        if (!confirm('Soft delete this key?')) return;
         try { await axios.delete(`/v1/ai/keys/${id}`); fetchApiKeys(); } catch (e) { console.error(e); }
+    };
+
+    const restoreApiKey = async (id) => {
+        try { await axios.put(`/v1/ai/keys/${id}/restore`); fetchApiKeys(); } catch (e) { console.error(e); }
+    };
+
+    const hardDeleteApiKey = async (id) => {
+        if (!confirm('PERMANENTLY delete this API key?')) return;
+        try { await axios.delete(`/v1/ai/keys/hard/${id}`); fetchApiKeys(); } catch (e) { console.error(e); }
+    };
+
+    const handleRevealKey = async () => {
+        if (!revealModal.password) {
+            setRevealModal(p => ({ ...p, error: 'Password is required' }));
+            return;
+        }
+        try {
+            const res = await axios.post(`/v1/ai/keys/${revealModal.keyId}/reveal`, { password: revealModal.password });
+            setRevealModal(p => ({ ...p, revealedKey: res.data.data.apiKey, error: null }));
+        } catch (e) {
+            setRevealModal(p => ({ ...p, error: e.response?.data?.message || 'Incorrect password' }));
+        }
     };
 
     const [testingKeyId, setTestingKeyId] = useState(null);
@@ -438,9 +468,8 @@ const GeneralSettings = () => {
     /* ─── Provider Tabs AI UI ─── */
     const renderAiProviderTabs = () => {
         const curTab = PROVIDER_TABS.find(t => t.key === activeProviderTab) || PROVIDER_TABS[0];
-        const tabModeKey = `ai_${activeProviderTab.toLowerCase()}_mode`;
-        const tabMode = settings[tabModeKey] || settings.ai_billing_mode || 'FREE_POOL';
         const tabKeys = apiKeys.filter(k => (k.provider || 'Google') === activeProviderTab);
+        const tabDeletedKeys = deletedApiKeys.filter(k => (k.provider || 'Google') === activeProviderTab);
         const isActiveProvider = (settings.ai_active_provider || 'Google') === activeProviderTab;
 
         return (
@@ -503,67 +532,7 @@ const GeneralSettings = () => {
                         </button>
                     </div>
 
-                    {/* Per-Tab Mode Toggle */}
-                    <div className="flex gap-2">
-                        <button type="button"
-                            onClick={() => handleChange(tabModeKey, 'FREE_POOL')}
-                            className={`flex-1 flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all
-                                ${tabMode === 'FREE_POOL'
-                                    ? 'bg-blue-50 border-blue-400 text-blue-700'
-                                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'}`}>
-                            <div className={`w-3 h-3 rounded-full border-[3px] shrink-0 ${tabMode === 'FREE_POOL' ? 'border-blue-600 bg-white' : 'border-slate-300'}`}></div>
-                            Free Pool (Keys Rotate)
-                        </button>
-                        <button type="button"
-                            onClick={() => handleChange(tabModeKey, 'PAID_DEDICATED')}
-                            className={`flex-1 flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all
-                                ${tabMode === 'PAID_DEDICATED'
-                                    ? 'bg-emerald-50 border-emerald-400 text-emerald-700'
-                                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'}`}>
-                            <div className={`w-3 h-3 rounded-full border-[3px] shrink-0 ${tabMode === 'PAID_DEDICATED' ? 'border-emerald-600 bg-white' : 'border-slate-300'}`}></div>
-                            Dedicated (Single Key)
-                        </button>
-                    </div>
-
-                    {/* ── DEDICATED MODE ── */}
-                    {tabMode === 'PAID_DEDICATED' && (
-                    <div className="space-y-3 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-                        <p className="text-xs font-bold text-emerald-700">Dedicated Key Configuration</p>
-                        {!curTab.isGoogle && (
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">API Base URL</label>
-                                <input type="url"
-                                    value={settings[`ai_${activeProviderTab.toLowerCase()}_base_url`] || curTab.baseUrl}
-                                    onChange={e => handleChange(`ai_${activeProviderTab.toLowerCase()}_base_url`, e.target.value)}
-                                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-emerald-400 font-mono bg-white"
-                                    placeholder={curTab.baseUrl || 'https://your-api.com/v1'} />
-                            </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">API Key</label>
-                                <input type="password"
-                                    value={settings[`ai_${activeProviderTab.toLowerCase()}_dedicated_key`] || ''}
-                                    onChange={e => handleChange(`ai_${activeProviderTab.toLowerCase()}_dedicated_key`, e.target.value)}
-                                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-emerald-400 font-mono bg-white"
-                                    placeholder={curTab.isGoogle ? 'AIzaSy...' : 'sk-...'} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">Model</label>
-                                <ModelSelector
-                                    isGoogle={curTab.isGoogle}
-                                    value={settings[`ai_${activeProviderTab.toLowerCase()}_model`] || curTab.defaultModel}
-                                    onChange={val => handleChange(`ai_${activeProviderTab.toLowerCase()}_model`, val)}
-                                    placeholder={curTab.defaultModel}
-                                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-emerald-400 bg-white"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                    )}
-
-                    {/* ── POOL MODE ── */}
-                    {tabMode === 'FREE_POOL' && (
+                    {/* ── SMART POOL MODE ── */}
                     <div className="space-y-2.5">
                         <div className="flex items-center justify-between">
                             <div className="text-xs text-slate-500">
@@ -622,23 +591,41 @@ const GeneralSettings = () => {
                                     Save Key
                                 </button>
                             </div>
+                            <div className="flex items-center gap-2 mt-2 px-1">
+                                <input type="checkbox" id="add-paid-tier" checked={newApiKey.isPaid}
+                                    onChange={e => setNewApiKey(p => ({ ...p, isPaid: e.target.checked, dailyLimit: e.target.checked ? 0 : 50000 }))}
+                                    className="rounded text-violet-600 focus:ring-violet-500" />
+                                <label htmlFor="add-paid-tier" className="text-[10px] font-bold text-violet-700">Mark as PAID Key (Unlimited Tier)</label>
+                            </div>
                         </div>
                         )}
 
+                        {/* Active vs Trash Tabs */}
+                        <div className="flex border-b border-slate-200">
+                            <button type="button" onClick={() => setActivePoolTab('active')}
+                                className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors ${activePoolTab === 'active' ? 'border-violet-500 text-violet-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                                Active Keys ({tabKeys.length})
+                            </button>
+                            <button type="button" onClick={() => setActivePoolTab('trash')}
+                                className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors cursor-pointer ${activePoolTab === 'trash' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                                Trash ({tabDeletedKeys.length})
+                            </button>
+                        </div>
+
                         {/* Key List */}
-                        {tabKeys.length === 0 ? (
+                        {(activePoolTab === 'active' ? tabKeys : tabDeletedKeys).length === 0 ? (
                             <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                                 <p className="text-3xl mb-2">{curTab.icon}</p>
-                                <p className="text-xs font-medium text-slate-400">No {curTab.label} keys in pool</p>
-                                <p className="text-[10px] text-slate-300 mt-0.5">Click "+ Add Key" to add one</p>
+                                <p className="text-xs font-medium text-slate-400">No {curTab.label} keys found</p>
+                                {activePoolTab === 'active' && <p className="text-[10px] text-slate-300 mt-0.5">Click "+ Add Key" to add one</p>}
                             </div>
                         ) : (
                             <div className="space-y-1.5">
-                                {tabKeys.map(k => {
+                                {(activePoolTab === 'active' ? tabKeys : tabDeletedKeys).map(k => {
                                     const pct = k.dailyLimit > 0 ? Math.round((k.requestsToday || 0) / k.dailyLimit * 100) : 0;
                                     return (
                                         <div key={k.id} className={`rounded-xl border transition-all overflow-hidden
-                                            ${k.active ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
+                                            ${activePoolTab === 'trash' ? 'bg-rose-50/50 border-rose-100' : k.active ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
                                             <div className="flex items-center justify-between px-3 py-2.5">
                                             <div className="flex items-stretch px-3 py-2.5">
                                                 {editingKeyId === k.id ? (
@@ -670,23 +657,43 @@ const GeneralSettings = () => {
                                                                 value={editingKeyData.dailyLimit || ''}
                                                                 onChange={e => setEditingKeyData({...editingKeyData, dailyLimit: parseInt(e.target.value) || 0})}
                                                                 placeholder="Daily Limit" />
-                                                            <button onClick={() => saveEditedKey(k.id)} className="px-3 py-1 bg-violet-600 text-white rounded text-xs font-bold hover:bg-violet-700 cursor-pointer transition-all">Save</button>
-                                                            <button onClick={() => setEditingKeyId(null)} className="px-3 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded text-xs cursor-pointer transition-all">Cancel</button>
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2 px-1">
+                                                                <input type="checkbox" id={`edit-paid-${k.id}`} checked={editingKeyData.isPaid || false}
+                                                                    onChange={e => setEditingKeyData(p => ({ ...p, isPaid: e.target.checked }))}
+                                                                    className="rounded text-violet-600 focus:ring-violet-500" />
+                                                                <label htmlFor={`edit-paid-${k.id}`} className="text-[10px] font-bold text-violet-700 cursor-pointer">PAID Tier</label>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => saveEditedKey(k.id)} className="px-3 py-1 bg-violet-600 text-white rounded text-xs font-bold hover:bg-violet-700 cursor-pointer transition-all">Save</button>
+                                                                <button onClick={() => setEditingKeyId(null)} className="px-3 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded text-xs cursor-pointer transition-all">Cancel</button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 ) : (
                                                     <>
                                                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                                             <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0
-                                                                ${k.active ? 'bg-gradient-to-br from-emerald-400 to-green-500' : 'bg-slate-200'}`}>
-                                                                <Key size={12} className="text-white" />
+                                                                ${activePoolTab === 'trash' ? 'bg-rose-100' : k.active ? 'bg-gradient-to-br from-emerald-400 to-green-500' : 'bg-slate-200'}`}>
+                                                                <Key size={12} className={activePoolTab === 'trash' ? 'text-rose-400' : 'text-white'} />
                                                             </div>
                                                             <div className="min-w-0">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <p className="text-xs font-bold text-slate-700 truncate">{k.keyName || 'Unnamed'}</p>
+                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                    <p className={`text-xs font-bold truncate ${activePoolTab === 'trash' ? 'text-slate-500 line-through decoration-slate-300' : 'text-slate-700'}`}>{k.keyName || 'Unnamed'}</p>
                                                                     {k.model && <span className="text-[9px] text-slate-400 font-mono shrink-0">{k.model}</span>}
+                                                                    {(k.paidTier || k.isPaid) ? (
+                                                                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-purple-100 text-purple-700 border border-purple-200">PAID</span>
+                                                                    ) : (
+                                                                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-slate-100 text-slate-600 border border-slate-200">FREE</span>
+                                                                    )}
                                                                 </div>
-                                                                <p className="text-[10px] text-slate-400 font-mono truncate max-w-[160px]">{k.apiKey}</p>
+                                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                                    <p className="text-[10px] text-slate-400 font-mono truncate max-w-[160px] tracking-widest">{k.apiKey}</p>
+                                                                    <button type="button" onClick={() => setRevealModal({ show: true, keyId: k.id, password: '', revealedKey: null, error: null })} title="Reveal Full Key" className="text-slate-300 hover:text-violet-500 transition-colors">
+                                                                        <Eye size={12} />
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-1.5 shrink-0 ml-2">
@@ -694,19 +701,34 @@ const GeneralSettings = () => {
                                                                 <p className="text-[10px] font-bold text-slate-600">{k.requestsToday || 0}<span className="text-slate-400 font-normal text-[9px]">/{k.dailyLimit || '?'}</span></p>
                                                                 <p className="text-[9px] text-slate-400">today</p>
                                                             </div>
-                                                            <button type="button" onClick={() => testApiKeyById(k.id)} disabled={testingKeyId === k.id}
-                                                                className="p-1.5 rounded-lg bg-indigo-50 text-indigo-500 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer transition-colors" title="Test Key">
-                                                                {testingKeyId === k.id ? <Loader2 size={11} className="animate-spin" /> : <Wifi size={11} />}
-                                                            </button>
-                                                            <button type="button" onClick={() => { setEditingKeyId(k.id); setEditingKeyData(k); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors" title="Edit Key">
-                                                                <svg xmlns="http://www.-w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                                                            </button>
-                                                            <button type="button" onClick={() => toggleApiKey(k.id)} className="p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors" title="Toggle Active">
-                                                                {k.active ? <ToggleRight size={18} className="text-emerald-500" /> : <ToggleLeft size={18} className="text-slate-400" />}
-                                                            </button>
-                                                            <button type="button" onClick={() => deleteApiKey(k.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-300 hover:text-rose-500 cursor-pointer transition-colors" title="Delete Key">
-                                                                <Trash2 size={13} />
-                                                            </button>
+                                                            {activePoolTab === 'active' ? (
+                                                                <>
+                                                                    <button type="button" onClick={() => testApiKeyById(k.id)} disabled={testingKeyId === k.id}
+                                                                        className="p-1.5 rounded-lg bg-indigo-50 text-indigo-500 hover:bg-indigo-100 disabled:opacity-50 cursor-pointer transition-colors" title="Test Key">
+                                                                        {testingKeyId === k.id ? <Loader2 size={11} className="animate-spin" /> : <Wifi size={11} />}
+                                                                    </button>
+                                                                    <button type="button" onClick={() => { setEditingKeyId(k.id); setEditingKeyData(k); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors" title="Edit Key">
+                                                                        <svg xmlns="http://www.-w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                                                                    </button>
+                                                                    <button type="button" onClick={() => toggleApiKey(k.id)} className="p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors" title="Toggle Active">
+                                                                        {k.active ? <ToggleRight size={18} className="text-emerald-500" /> : <ToggleLeft size={18} className="text-slate-400" />}
+                                                                    </button>
+                                                                    <button type="button" onClick={() => deleteApiKey(k.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-300 hover:text-rose-500 cursor-pointer transition-colors" title="Move to Trash">
+                                                                        <Trash2 size={13} />
+                                                                    </button>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <button type="button" onClick={() => restoreApiKey(k.id)}
+                                                                        className="px-2 py-1.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 flex items-center gap-1 transition-colors cursor-pointer" title="Restore Key">
+                                                                        <RotateCcw size={10} /> Restore
+                                                                    </button>
+                                                                    <button type="button" onClick={() => hardDeleteApiKey(k.id)}
+                                                                        className="px-2 py-1.5 rounded text-[10px] font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center gap-1 transition-colors cursor-pointer" title="Hard Delete Key">
+                                                                        <Trash2 size={10} /> Delete
+                                                                    </button>
+                                                                </>
+                                                            )}
                                                         </div>
                                                     </>
                                                 )}
@@ -723,7 +745,6 @@ const GeneralSettings = () => {
                             </div>
                         )}
                     </div>
-                    )}
 
                     {/* Key Test Result */}
                     {keyTestResult && (
@@ -759,6 +780,67 @@ const GeneralSettings = () => {
                         )}
                     </div>
                 </div>
+
+                {/* Reveal Modal */}
+                {revealModal.show && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                    <Shield size={20} className="text-violet-600" /> API Key Security
+                                </h3>
+                                <button onClick={() => setRevealModal({ show: false, keyId: null, password: '', revealedKey: null, error: null })} className="text-slate-400 hover:text-slate-600 outline-none cursor-pointer">
+                                    ✖
+                                </button>
+                            </div>
+                            
+                            {!revealModal.revealedKey ? (
+                                <div className="space-y-4">
+                                    <p className="text-sm text-slate-600">Please enter the super admin password to reveal this API key.</p>
+                                    {revealModal.error && (
+                                        <p className="text-xs font-bold text-rose-600 bg-rose-50 p-2 rounded-lg border border-rose-100">{revealModal.error}</p>
+                                    )}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">Password</label>
+                                        <input 
+                                            type="password" 
+                                            autoFocus
+                                            value={revealModal.password} 
+                                            onChange={e => setRevealModal(p => ({ ...p, password: e.target.value }))}
+                                            onKeyDown={e => e.key === 'Enter' && handleRevealKey()}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-violet-500/30 outline-none"
+                                            placeholder="Enter password..."
+                                        />
+                                    </div>
+                                    <div className="flex justify-end gap-2 mt-4">
+                                        <button onClick={() => setRevealModal({ show: false, keyId: null, password: '', revealedKey: null, error: null })} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-200 cursor-pointer">
+                                            Cancel
+                                        </button>
+                                        <button onClick={handleRevealKey} className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-bold hover:bg-violet-700 cursor-pointer">
+                                            Reveal Key
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 p-3 rounded-lg text-sm font-bold flex items-center gap-2">
+                                        <Check size={18} /> Access Granted
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">Full API Key</label>
+                                        <textarea 
+                                            readOnly 
+                                            value={revealModal.revealedKey} 
+                                            className="w-full p-3 font-mono text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 break-all resize-none h-24 focus:outline-none"
+                                            onFocus={e => e.target.select()}
+                                        />
+                                        <p className="text-xs text-slate-400 mt-2">Click inside the box and press Ctrl+C to copy.</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };
@@ -837,7 +919,7 @@ const GeneralSettings = () => {
                         <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
                             <p className="text-xs text-slate-500">
                                 <span className="font-bold text-slate-700">Global Mode:</span>{' '}
-                                Select <strong>Free Pool</strong> or <strong>Dedicated</strong> per provider tab below.
+                                Added keys automatically load balance. 
                                 The <strong>Active Provider</strong> tab is used for all AI calls.
                             </p>
                         </div>

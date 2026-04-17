@@ -284,7 +284,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                 errorMsg = e.getResponseBodyAsString();
                 int statusCode = e.getStatusCode().value();
 
-                if ((statusCode == 429 || statusCode == 503) && attempt < maxRetries) {
+                if ((statusCode == 429 || statusCode == 503 || (statusCode == 400 && errorMsg != null && errorMsg.contains("API_KEY_INVALID"))) && attempt < maxRetries) {
                     // Mark this key as exhausted
                     if (currentPoolKey != null) {
                         keyRotationService.recordError(currentPoolKey.getId(), errorMsg);
@@ -469,7 +469,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                 errorMsg = e.getResponseBodyAsString();
                 int statusCode = e.getStatusCode().value();
 
-                if ((statusCode == 429 || statusCode == 503) && attempt < maxRetries) {
+                if ((statusCode == 429 || statusCode == 503 || (statusCode == 400 && errorMsg != null && errorMsg.contains("API_KEY_INVALID"))) && attempt < maxRetries) {
                     if (currentPoolKey != null) {
                         keyRotationService.recordError(currentPoolKey.getId(), errorMsg);
                         log.warn("Key '{}' returned {}. Marked exhausted. Rotating to next key...",
@@ -917,9 +917,19 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             dto.setMappedClassName(entity.getClassSubject().getAcademicClass().getName());
         }
         
-        dto.setIsProcessing(entity.getIsProcessing() != null ? entity.getIsProcessing() : false);
-        dto.setTotalPagesToProcess(entity.getTotalPagesToProcess() != null ? entity.getTotalPagesToProcess() : 0);
-        dto.setProcessedPagesCount(entity.getProcessedPagesCount() != null ? entity.getProcessedPagesCount() : 0);
+        // Fetch real-time job status instead of stale entity fields
+        java.util.Optional<com.testshaper.entity.AiBulkExtractionJob> jobOpt = aiBulkExtractionJobRepository.findFirstBySourceBookIdOrderByCreatedAtDesc(entity.getId());
+        if (jobOpt.isPresent()) {
+            com.testshaper.entity.AiBulkExtractionJob job = jobOpt.get();
+            boolean isProc = job.getStatus() == com.testshaper.entity.AiBulkExtractionJob.JobStatus.QUEUED || job.getStatus() == com.testshaper.entity.AiBulkExtractionJob.JobStatus.IN_PROGRESS;
+            dto.setIsProcessing(isProc);
+            dto.setTotalPagesToProcess(job.getTotalPagesToProcess());
+            dto.setProcessedPagesCount(job.getProcessedPagesCount());
+        } else {
+            dto.setIsProcessing(false);
+            dto.setTotalPagesToProcess(0);
+            dto.setProcessedPagesCount(0);
+        }
         
         // Populate Page Progress Stats
         dto.setTotalPages((int) knowledgePageRepository.countBySourceBookId(entity.getId()));
@@ -1176,11 +1186,17 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found"));
 
         // Check if there is already a running or queued job for this book
-        java.util.Optional<com.testshaper.entity.AiBulkExtractionJob> existingOpt = aiBulkExtractionJobRepository.findBySourceBookId(sourceBookId);
+        java.util.Optional<com.testshaper.entity.AiBulkExtractionJob> existingOpt = aiBulkExtractionJobRepository.findFirstBySourceBookIdOrderByCreatedAtDesc(sourceBookId);
         
-        long pendingPages = knowledgePageRepository.countBySourceBookIdAndExtractionStatus(sourceBookId, com.testshaper.entity.KnowledgePage.ExtractionStatus.PENDING);
+        long pendingPages = knowledgePageRepository.countBySourceBookIdAndExtractionStatusIn(
+            sourceBookId, 
+            java.util.List.of(
+                com.testshaper.entity.KnowledgePage.ExtractionStatus.PENDING,
+                com.testshaper.entity.KnowledgePage.ExtractionStatus.FAILED
+            )
+        );
         if (pendingPages == 0) {
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "No pending pages found to extract.");
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "No pending or failed pages found to extract.");
         }
 
         com.testshaper.entity.AiBulkExtractionJob job;
@@ -1205,7 +1221,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     @Override
     @Transactional(readOnly = true)
     public com.testshaper.entity.AiBulkExtractionJob getAiExtractionQueueStatus(UUID sourceBookId) {
-        return aiBulkExtractionJobRepository.findBySourceBookId(sourceBookId).orElse(null);
+        return aiBulkExtractionJobRepository.findFirstBySourceBookIdOrderByCreatedAtDesc(sourceBookId).orElse(null);
     }
 
     @Override
@@ -1234,7 +1250,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
             .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found"));
 
-        java.util.Optional<com.testshaper.entity.AiQuestionGenerationJob> existingOpt = aiQuestionGenerationJobRepository.findBySourceBookId(sourceBookId);
+        java.util.Optional<com.testshaper.entity.AiQuestionGenerationJob> existingOpt = aiQuestionGenerationJobRepository.findFirstBySourceBookIdOrderByCreatedAtDesc(sourceBookId);
         
         long pendingPages = knowledgePageRepository.countBySourceBookIdAndExtractionStatusIn(
             sourceBookId, 
@@ -1267,7 +1283,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
 
     @Override
     public com.testshaper.entity.AiQuestionGenerationJob getAiQuestionQueueStatus(UUID sourceBookId) {
-        return aiQuestionGenerationJobRepository.findBySourceBookId(sourceBookId).orElse(null);
+        return aiQuestionGenerationJobRepository.findFirstBySourceBookIdOrderByCreatedAtDesc(sourceBookId).orElse(null);
     }
 
     @Override
@@ -1514,5 +1530,84 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             }
         }
         throw new RuntimeException("All generation API keys exhausted.");
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Object> getSystemHealthAndJobs() {
+        Map<String, Object> result = new java.util.HashMap<>();
+        
+        // System Health Approximation
+        Runtime runtime = Runtime.getRuntime();
+        long maxMemory = runtime.maxMemory();
+        long allocatedMemory = runtime.totalMemory();
+        long freeMemory = runtime.freeMemory();
+        
+        Map<String, Object> memoryStats = new java.util.HashMap<>();
+        memoryStats.put("free", freeMemory / (1024 * 1024));
+        memoryStats.put("allocated", allocatedMemory / (1024 * 1024));
+        memoryStats.put("max", maxMemory / (1024 * 1024));
+        memoryStats.put("usagePct", ((allocatedMemory - freeMemory) * 100) / maxMemory);
+        result.put("memory", memoryStats);
+        
+        // 1. Bulk Extraction Jobs
+        List<com.testshaper.entity.AiBulkExtractionJob> activeExtractionJobs = aiBulkExtractionJobRepository.findAll().stream()
+            .filter(j -> j.getStatus() == com.testshaper.entity.AiBulkExtractionJob.JobStatus.QUEUED 
+                      || j.getStatus() == com.testshaper.entity.AiBulkExtractionJob.JobStatus.IN_PROGRESS 
+                      || j.getStatus() == com.testshaper.entity.AiBulkExtractionJob.JobStatus.PAUSED)
+            .toList();
+            
+        List<Map<String, Object>> extractionList = new ArrayList<>();
+        for (com.testshaper.entity.AiBulkExtractionJob job : activeExtractionJobs) {
+            Map<String, Object> m = new java.util.HashMap<>();
+            m.put("id", job.getId());
+            m.put("type", "AI_VISION_EXTRACTION");
+            m.put("status", job.getStatus().name());
+            m.put("totalPages", job.getTotalPagesToProcess());
+            m.put("processedPages", job.getProcessedPagesCount());
+            m.put("failedPages", job.getFailedPagesCount());
+            int percent = job.getTotalPagesToProcess() > 0 ? (job.getProcessedPagesCount() * 100) / job.getTotalPagesToProcess() : 0;
+            m.put("progress", Math.min(percent, 100));
+            
+            // Get book details via repository logic since relationship is LAZY
+            sourceBookMasterRepository.findById(job.getSourceBook().getId()).ifPresent(b -> {
+                m.put("sourceBookId", b.getId());
+                m.put("bookTitle", b.getTitle());
+            });
+            extractionList.add(m);
+        }
+        
+        // 2. Question Generation Jobs
+        List<com.testshaper.entity.AiQuestionGenerationJob> activeQuestionJobs = aiQuestionGenerationJobRepository.findAll().stream()
+            .filter(j -> j.getStatus() == com.testshaper.entity.AiQuestionGenerationJob.JobStatus.QUEUED 
+                      || j.getStatus() == com.testshaper.entity.AiQuestionGenerationJob.JobStatus.IN_PROGRESS 
+                      || j.getStatus() == com.testshaper.entity.AiQuestionGenerationJob.JobStatus.PAUSED)
+            .toList();
+            
+        List<Map<String, Object>> questionList = new ArrayList<>();
+        for (com.testshaper.entity.AiQuestionGenerationJob job : activeQuestionJobs) {
+            Map<String, Object> m = new java.util.HashMap<>();
+            m.put("id", job.getId());
+            m.put("type", "AI_QUESTION_GENERATION");
+            m.put("status", job.getStatus().name());
+            m.put("totalPages", job.getTotalPagesToProcess());
+            m.put("processedPages", job.getProcessedPagesCount());
+            m.put("failedPages", job.getFailedPagesCount());
+            int qPercent = job.getTotalPagesToProcess() > 0 ? (job.getProcessedPagesCount() * 100) / job.getTotalPagesToProcess() : 0;
+            m.put("progress", Math.min(qPercent, 100));
+            
+            // Get book details
+            sourceBookMasterRepository.findById(job.getSourceBook().getId()).ifPresent(b -> {
+                m.put("sourceBookId", b.getId());
+                m.put("bookTitle", b.getTitle());
+            });
+            questionList.add(m);
+        }
+        
+        result.put("extractionJobs", extractionList);
+        result.put("questionJobs", questionList);
+        result.put("activeWorkerNodes", com.testshaper.scheduler.AiExtractionScheduler.currentWorkerSize);
+        
+        return result;
     }
 }

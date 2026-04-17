@@ -817,14 +817,38 @@ public class AIQuestionController {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> getAllKeys() {
         List<AiApiKey> keys = keyRotationService.getAllKeys();
-        // Mask keys for security
+        maskApiKeys(keys);
+        return ResponseEntity.ok(ApiResponse.success(keys, "API Keys"));
+    }
+
+    @GetMapping("/keys/deleted")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> getDeletedKeys() {
+        List<AiApiKey> keys = aiApiKeyRepo.findByDeletedTrueOrderByPriorityAsc();
+        maskApiKeys(keys);
+        return ResponseEntity.ok(ApiResponse.success(keys, "Deleted API Keys"));
+    }
+
+    private void maskApiKeys(List<AiApiKey> keys) {
         keys.forEach(k -> {
             String key = k.getApiKey();
             if (key != null && key.length() > 8) {
-                k.setApiKey(key.substring(0, 4) + "****" + key.substring(key.length() - 4));
+                // Keep first 4 and last 4 chars
+                k.setApiKey(key.substring(0, 4) + "********************" + key.substring(key.length() - 4));
             }
         });
-        return ResponseEntity.ok(ApiResponse.success(keys, "API Keys"));
+    }
+
+    @PostMapping("/keys/{id}/reveal")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> revealApiKey(@PathVariable UUID id, @RequestBody Map<String, String> payload) {
+        String password = payload.get("password");
+        if (!"Z@hid95".equals(password)) {
+            return ResponseEntity.status(403).body(ApiResponse.error("Incorrect password", 403));
+        }
+        return aiApiKeyRepo.findById(id).map(key ->
+                ResponseEntity.ok(ApiResponse.success(Map.of("apiKey", key.getApiKey()), "API Key revealed"))
+        ).orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping("/keys")
@@ -837,6 +861,7 @@ public class AIQuestionController {
         String model     = (String) body.getOrDefault("model", "");
         int dailyLimit   = body.containsKey("dailyLimit") ? ((Number) body.get("dailyLimit")).intValue() : 50000;
         int priority     = body.containsKey("priority")   ? ((Number) body.get("priority")).intValue()   : 10;
+        boolean isPaid   = body.containsKey("isPaid")     ? (Boolean) body.get("isPaid")                 : false;
 
         if (apiKey == null || apiKey.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("API Key is required", 400));
@@ -854,7 +879,8 @@ public class AIQuestionController {
                 .active(true)
                 .dailyLimit(dailyLimit)
                 .rpmLimit(defaultRpm)
-                .priority(priority)
+                .priority(isPaid ? 1 : priority) // Paid keys have higher priority (1 usually)
+                .isPaid(isPaid)
                 .requestsToday(0)
                 .totalRequests(0)
                 .build();
@@ -894,6 +920,11 @@ public class AIQuestionController {
             if (body.containsKey("keyName")) key.setKeyName((String) body.get("keyName"));
             if (body.containsKey("baseUrl")) key.setBaseUrl((String) body.get("baseUrl"));
             if (body.containsKey("dailyLimit")) key.setDailyLimit(((Number) body.get("dailyLimit")).intValue());
+            if (body.containsKey("isPaid")) {
+                boolean paid = (Boolean) body.get("isPaid");
+                key.setIsPaid(paid);
+                key.setPriority(paid ? 1 : 10);
+            }
             if (body.containsKey("apiKey")) {
                 String newVal = (String) body.get("apiKey");
                 // Avoid saving masked keys back to db if user didn't change it
@@ -911,9 +942,32 @@ public class AIQuestionController {
     public ResponseEntity<?> deleteKey(@PathVariable UUID id) {
         return aiApiKeyRepo.findById(id).map(key -> {
             key.setDeleted(true);
+            key.setActive(false);
             aiApiKeyRepo.save(key);
-            return ResponseEntity.ok(ApiResponse.success("deleted", "Key deleted"));
+            keyRotationService.evictKeyCache();
+            return ResponseEntity.ok(ApiResponse.success("deleted", "Key soft deleted"));
         }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/keys/{id}/restore")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> restoreKey(@PathVariable UUID id) {
+        return aiApiKeyRepo.findById(id).map(key -> {
+            key.setDeleted(false);
+            aiApiKeyRepo.save(key);
+            keyRotationService.evictKeyCache();
+            return ResponseEntity.ok(ApiResponse.success("restored", "Key restored successfully"));
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/keys/hard/{id}")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> hardDeleteKey(@PathVariable UUID id) {
+        if (aiApiKeyRepo.existsById(id)) {
+            aiApiKeyRepo.deleteById(id);
+            return ResponseEntity.ok(ApiResponse.success("hard_deleted", "Key permanently deleted"));
+        }
+        return ResponseEntity.notFound().build();
     }
 
     @PostMapping("/copilot/ask")

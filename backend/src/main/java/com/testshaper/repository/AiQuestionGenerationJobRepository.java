@@ -10,6 +10,6 @@ import java.util.UUID;
 
 @Repository
 public interface AiQuestionGenerationJobRepository extends JpaRepository<AiQuestionGenerationJob, UUID> {
-    Optional<AiQuestionGenerationJob> findBySourceBookId(UUID sourceBookId);
+    Optional<AiQuestionGenerationJob> findFirstBySourceBookIdOrderByCreatedAtDesc(UUID sourceBookId);
     List<AiQuestionGenerationJob> findByStatus(AiQuestionGenerationJob.JobStatus status);
 }

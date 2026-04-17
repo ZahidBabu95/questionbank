@@ -50,4 +50,7 @@ public interface KnowledgeHubService {
 
     // Internal execution called by Scheduler
     int generateQuestionsForPage(UUID sourceBookId, UUID pageId) throws Exception;
+
+    // --- System Health and Dashboards ---
+    java.util.Map<String, Object> getSystemHealthAndJobs();
 }

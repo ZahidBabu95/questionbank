@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ApiKeyRotationService {
 
     private final AiApiKeyRepository keyRepo;
+    private final NotificationService notificationService;
     private final AtomicInteger roundRobinIndex = new AtomicInteger(0);
     // Track last reset date to avoid per-request DB write
     private final AtomicReference<String> lastResetDate = new AtomicReference<>("");
@@ -41,15 +42,28 @@ public class ApiKeyRotationService {
         List<AiApiKey> keys = getCachedActiveKeys();
         if (keys.isEmpty()) return null;
 
-        int startIdx = roundRobinIndex.getAndIncrement() % keys.size();
-        for (int i = 0; i < keys.size(); i++) {
-            AiApiKey key = keys.get((startIdx + i) % keys.size());
-            if (key.isAvailable()) {
-                return key;
+        List<AiApiKey> paidKeys = keys.stream().filter(AiApiKey::isPaidTier).toList();
+        List<AiApiKey> freeKeys = keys.stream().filter(k -> !k.isPaidTier()).toList();
+
+        int startIdx = roundRobinIndex.getAndIncrement();
+
+        // 1. Paid Tier Priority
+        if (!paidKeys.isEmpty()) {
+            for (int i = 0; i < paidKeys.size(); i++) {
+                AiApiKey key = paidKeys.get((startIdx + i) % paidKeys.size());
+                if (key.isAvailable()) return key;
             }
         }
 
-        log.warn("All API keys exhausted for today!");
+        // 2. Free Tier Fallback (Load Balancing)
+        if (!freeKeys.isEmpty()) {
+            for (int i = 0; i < freeKeys.size(); i++) {
+                AiApiKey key = freeKeys.get((startIdx + i) % freeKeys.size());
+                if (key.isAvailable()) return key;
+            }
+        }
+
+        log.warn("All API keys (Paid + Free) exhausted for today!");
         return null;
     }
 
@@ -97,13 +111,28 @@ public class ApiKeyRotationService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordError(UUID keyId, String errorMsg) {
         try {
-            if (errorMsg != null && (errorMsg.contains("429") || errorMsg.contains("RESOURCE_EXHAUSTED") || errorMsg.contains("quota") || errorMsg.contains("Too Many"))) {
-                keyRepo.markExhausted(keyId, errorMsg);
-                log.warn("Key {} marked as exhausted (429/quota)", keyId);
+            boolean isExhaustedOrInvalid = errorMsg != null && (errorMsg.contains("429") || errorMsg.contains("RESOURCE_EXHAUSTED") || errorMsg.contains("quota") || errorMsg.contains("Too Many") || errorMsg.contains("API_KEY_INVALID"));
+
+            String tempErrorMsg = errorMsg;
+            if (tempErrorMsg != null && tempErrorMsg.length() > 250) {
+                tempErrorMsg = tempErrorMsg.substring(0, 247) + "...";
+            }
+            final String safeErrorMsg = tempErrorMsg;
+
+            if (isExhaustedOrInvalid) {
+                keyRepo.markExhausted(keyId, safeErrorMsg);
+                log.warn("Key {} marked as exhausted (429/quota/invalid)", keyId);
+                // Send alert to Admins
+                keyRepo.findById(keyId).ifPresent(key -> {
+                     String msg = String.format("API Key '%s' (%s tier) has hit its quota limits and was automatically disabled. The Smart Pool has shifted the load. Error: %s",
+                             key.getKeyName(), key.isPaidTier() ? "PAID" : "FREE", safeErrorMsg);
+                     notificationService.sendSystemAlertToSuperAdmins("API Key Exhausted: " + key.getKeyName(), msg, "API_LIMIT_ALERT");
+                });
             } else {
-                keyRepo.updateError(keyId, errorMsg);
+                keyRepo.updateError(keyId, safeErrorMsg);
             }
         } catch (Exception e) {
+
             log.warn("Failed to record error for key {}: {}", keyId, e.getMessage());
         }
         evictKeyCache(); // Always evict cache after any key state change

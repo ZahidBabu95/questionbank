@@ -85,9 +85,9 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 )}
             </div>
 
-            {/* ── MCQ Options 2x2 — highlights correct only after Show Answer click ── */}
+            {/* ── MCQ Options 2x2 on desktop, stacked on mobile — highlights correct only after Show Answer click ── */}
             {q.type === 'MCQ' && q.options && q.options.length > 0 && (
-                <div className="mx-4 mb-2 grid grid-cols-2 gap-1.5">
+                <div className="mx-4 mb-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                     {q.options.map(opt => (
                         <div key={opt.id} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-all duration-300 ${
                             showAnswer && opt.isCorrect

@@ -125,18 +125,18 @@ const DigitizationWorkspace = () => {
                     </p>
                 </div>
                 
-                <div className="flex bg-slate-100 p-1 rounded-xl w-fit shrink-0">
+                <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-fit shrink-0">
                     <button 
                         onClick={() => { setUploadMode('IMAGES'); setFiles([]); }}
-                        className={`px-4 py-2 text-sm font-bold flex items-center gap-2 rounded-lg transition-all ${uploadMode === 'IMAGES' ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex-1 sm:flex-none justify-center px-2 sm:px-4 py-2 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 rounded-lg transition-all ${uploadMode === 'IMAGES' ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        <ImageIcon size={16}/> Raw Images
+                        <ImageIcon size={16}/> <span className="whitespace-nowrap">Raw Images</span>
                     </button>
                     <button 
                         onClick={() => { setUploadMode('PDF'); setFiles([]); }}
-                        className={`px-4 py-2 text-sm font-bold flex items-center gap-2 rounded-lg transition-all ${uploadMode === 'PDF' ? 'bg-white shadow-sm text-red-500' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex-1 sm:flex-none justify-center px-2 sm:px-4 py-2 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 rounded-lg transition-all ${uploadMode === 'PDF' ? 'bg-white shadow-sm text-red-500' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        <FileText size={16}/> PDF Document
+                        <FileText size={16}/> <span className="whitespace-nowrap">PDF Document</span>
                     </button>
                 </div>
             </div>
@@ -236,9 +236,9 @@ const DigitizationWorkspace = () => {
                                         </Link>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
                                         <p className="text-xs text-slate-500 font-medium">Pages will be numerically ordered based on file sequence.</p>
-                                        <button onClick={handleUpload} className="bg-primary text-white font-bold px-6 py-2.5 rounded-xl shadow-md shadow-primary/20 hover:bg-primary-dark transition-colors flex items-center gap-2">
+                                        <button onClick={handleUpload} className="w-full sm:w-auto bg-primary text-white font-bold px-6 py-2.5 rounded-xl shadow-md shadow-primary/20 hover:bg-primary-dark transition-colors flex items-center justify-center gap-2">
                                             <UploadCloud size={16}/> Start Upload Pipeline
                                         </button>
                                     </div>

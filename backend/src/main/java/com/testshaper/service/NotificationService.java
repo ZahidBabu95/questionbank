@@ -10,4 +10,5 @@ public interface NotificationService {
     long getUnreadCount(String email);
     void markAsRead(UUID notificationId, String email);
     void markAllAsRead(String email);
+    void sendSystemAlertToSuperAdmins(String title, String message, String alertType);
 }

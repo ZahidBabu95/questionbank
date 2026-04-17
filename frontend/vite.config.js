@@ -24,6 +24,12 @@ export default defineConfig({
                 target: 'http://localhost:8080',
                 changeOrigin: true,
                 secure: false,
+            },
+            '/ws-live-updates': {
+                target: 'http://localhost:8080',
+                changeOrigin: true,
+                ws: true,
+                secure: false,
             }
         }
     }

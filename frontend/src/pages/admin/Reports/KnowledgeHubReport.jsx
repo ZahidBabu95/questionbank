@@ -6,8 +6,12 @@ import {
 } from 'recharts';
 import {
     BookOpen, Layers, CheckCircle, Clock, AlertCircle, FileText,
-    TrendingUp, Filter, Download, Database, Boxes, LayoutList, ChevronRight, Check, BarChart, Printer
+    TrendingUp, Filter, Download, Database, Boxes, LayoutList, ChevronRight, Check, BarChart, Printer,
+    PlayCircle, PauseCircle, Server, HardDrive, Cpu, Activity, CheckCircle2
 } from 'lucide-react';
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client/dist/sockjs';
+
 import axios from '../../../utils/axios';
 import academicService from '../../../services/academicService';
 
@@ -36,27 +40,70 @@ const KnowledgeHubReport = () => {
     const [hierarchy, setHierarchy] = useState({});
     const [books, setBooks] = useState([]);
     
-    const [activeTab, setActiveTab] = useState('SUMMARY'); // 'SUMMARY' or 'DETAILS'
+    const [activeTab, setActiveTab] = useState('SUMMARY'); // 'SUMMARY' or 'DETAILS' or 'ACTIVE_JOBS'
     const [filterLevel, setFilterLevel] = useState('');
     const [filterStream, setFilterStream] = useState('');
     const [filterClass, setFilterClass] = useState('');
+    const [filterStatus, setFilterStatus] = useState(''); // New status filter
+    const [systemStats, setSystemStats] = useState(null);
+
+    const loadData = async () => {
+        try {
+            const [hierData, res, sysRes] = await Promise.all([
+                academicService.getHierarchy(),
+                axios.get('/v1/knowledge-hub/source-books'),
+                axios.get('/v1/knowledge-hub/system-health-jobs')
+            ]);
+            setHierarchy(hierData);
+            setBooks(res.data);
+            setSystemStats(sysRes.data);
+        } catch (error) {
+            console.error("Failed to load report data", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchSystemStats = async () => {
+        try {
+            const sysRes = await axios.get('/v1/knowledge-hub/system-health-jobs');
+            setSystemStats(sysRes.data);
+        } catch (error) {
+            console.error("Failed to load system stats", error);
+        }
+    };
 
     useEffect(() => {
-        const loadData = async () => {
-            try {
-                const [hierData, res] = await Promise.all([
-                    academicService.getHierarchy(),
-                    axios.get('/v1/knowledge-hub/source-books')
-                ]);
-                setHierarchy(hierData);
-                setBooks(res.data);
-            } catch (error) {
-                console.error("Failed to load report data", error);
-            } finally {
-                setLoading(false);
-            }
-        };
         loadData();
+        
+        // Setup STOMP WebSockets for Real-time push updates
+        const baseUrl = axios.defaults.baseURL || 'http://localhost:8080/api';
+        const socketUrl = baseUrl.replace('/api', '/ws-live-updates');
+        
+        const stompClient = new Client({
+            webSocketFactory: () => new SockJS(socketUrl),
+            reconnectDelay: 5000,
+            heartbeatIncoming: 4000,
+            heartbeatOutgoing: 4000,
+            onConnect: () => {
+                console.log("Connected to Real-time Enterprise WS");
+                stompClient.subscribe('/topic/system-health-jobs', (message) => {
+                    if (message.body) {
+                        const parsedData = JSON.parse(message.body);
+                        setSystemStats(parsedData);
+                    }
+                });
+            },
+            onStompError: (frame) => {
+                console.error('Broker reported error: ' + frame.headers['message']);
+            }
+        });
+        
+        stompClient.activate();
+
+        return () => {
+            stompClient.deactivate();
+        };
     }, []);
 
     // Derived Summary Metrics
@@ -71,7 +118,7 @@ const KnowledgeHubReport = () => {
         const processingBooks = books.filter(b => b.isProcessing).length;
         const readyBooks = totalBooks - processingBooks;
 
-        const totalPagesProcessed = books.reduce((sum, b) => sum + (b.processedPagesCount || 0), 0);
+        const totalPagesProcessed = books.reduce((sum, b) => sum + (b.extractedPages || 0), 0);
 
         // Calculate Type Distribution
         const typesCount = books.reduce((acc, b) => {
@@ -113,9 +160,15 @@ const KnowledgeHubReport = () => {
                 if (relatedBooks.some(b => b.isProcessing)) {
                     status = 'PROCESSING BACKGROUND';
                     statusColor = 'bg-amber-50 text-amber-600 border-amber-200';
+                } else if (relatedBooks.some(b => (b.extractedPages > 0 && b.extractedPages >= b.totalPages) || (b.processedPagesCount > 0 && b.processedPagesCount >= b.totalPagesToProcess))) {
+                    status = 'EXTRACTION COMPLETED';
+                    statusColor = 'bg-emerald-50 text-emerald-600 border-emerald-200';
+                } else if (relatedBooks.some(b => b.extractedPages > 0 || b.processedPagesCount > 0)) {
+                    status = 'PARTIALLY EXTRACTED';
+                    statusColor = 'bg-blue-50 text-blue-600 border-blue-200';
                 } else {
                     status = 'UPLOADED & READY';
-                    statusColor = 'bg-emerald-50 text-emerald-600 border-emerald-200';
+                    statusColor = 'bg-slate-100 text-slate-600 border-slate-300';
                 }
             }
 
@@ -141,9 +194,16 @@ const KnowledgeHubReport = () => {
             if (filterLevel && row.levelId !== filterLevel) return false;
             if (filterStream && row.streamId !== filterStream) return false;
             if (filterClass && row.classId !== filterClass) return false;
+            if (filterStatus) {
+                if (filterStatus === 'PROCESSING BACKGROUND' && row.status !== 'PROCESSING BACKGROUND') return false;
+                if (filterStatus === 'UPLOADED & READY' && row.status !== 'UPLOADED & READY') return false;
+                if (filterStatus === 'EXTRACTION COMPLETED' && row.status !== 'EXTRACTION COMPLETED') return false;
+                if (filterStatus === 'PARTIALLY EXTRACTED' && row.status !== 'PARTIALLY EXTRACTED') return false;
+                if (filterStatus === 'PENDING UPLOAD' && row.status !== 'PENDING UPLOAD') return false;
+            }
             return true;
         });
-    }, [detailedData, filterLevel, filterStream, filterClass]);
+    }, [detailedData, filterLevel, filterStream, filterClass, filterStatus]);
 
     const filteredStreams = hierarchy.streams?.filter(s => !filterLevel || s._levelId === filterLevel) || [];
     const filteredClasses = hierarchy.classes?.filter(c => !filterStream || c._streamId === filterStream) || [];
@@ -277,10 +337,55 @@ const KnowledgeHubReport = () => {
             // Automatically close window after print dialog is closed/canceled
             // Note: browser behavior varies, but this is best effort
             if (window.navigator.userAgent.indexOf('Chrome') > -1) {
-               // Chrome handles print blocking thread
                printWindow.close();
             }
         }, 1500);
+    };
+
+    const handleJobAction = async (jobId, jobType, action) => {
+        try {
+            const endpointType = jobType === "AI_VISION_EXTRACTION" ? "bulk-extract" : "generate-questions";
+            await axios.post(`/v1/knowledge-hub/jobs/${endpointType}/${jobId}/${action}`);
+            fetchSystemStats(); // Refresh stats immediately
+        } catch (error) {
+            console.error(`Failed to ${action} job`, error);
+        }
+    };
+
+    const handleWorkerSizeChange = async () => {
+        const current = systemStats?.activeWorkerNodes || 6;
+        const inputSize = prompt("ENTER DYNAMIC WORKER POOL SIZE (Max 200 Threads):", current);
+        if (inputSize && !isNaN(inputSize)) {
+            const size = parseInt(inputSize);
+            try {
+                await axios.post(`/v1/knowledge-hub/system-health-jobs/workers?size=${size}`);
+                alert(`Successfully allocated ${size} CPU worker threads to AI Jobs!`);
+                fetchSystemStats();
+            } catch (err) {
+                alert("Failed to update AI worker pool scale");
+            }
+        }
+    };
+
+    const handleStartExtraction = async (bookId) => {
+        try {
+            await axios.post(`/v1/knowledge-hub/jobs/bulk-extract/source-books/${bookId}`);
+            // Show alert or let the user know, then fetch updated books to sync status
+            alert("Book sent to background vector extraction queue successfully.");
+            
+            const [res, sysRes] = await Promise.all([
+                axios.get('/v1/knowledge-hub/source-books'),
+                axios.get('/v1/knowledge-hub/system-health-jobs')
+            ]);
+            setBooks(res.data);
+            setSystemStats(sysRes.data);
+            
+            // Switch tab to show it running
+            setActiveTab('ACTIVE_JOBS');
+        } catch (error) {
+            console.error("Failed to start vector extraction", error);
+            alert("Failed to start vector extraction: " + (error.response?.data || error.message));
+        }
     };
 
     if (loading) {
@@ -318,6 +423,12 @@ const KnowledgeHubReport = () => {
                     >
                         <LayoutList size={16}/> Detailed Mapping
                     </button>
+                    <button 
+                        onClick={() => setActiveTab('ACTIVE_JOBS')}
+                        className={`px-6 py-2 text-sm font-bold flex items-center gap-2 rounded-lg transition-all ${activeTab === 'ACTIVE_JOBS' ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                        <TrendingUp size={16}/> Server & Jobs
+                    </button>
                 </div>
             </div>
 
@@ -349,7 +460,7 @@ const KnowledgeHubReport = () => {
                         <MetricCard
                             title="Total Pages Extracted"
                             value={metrics.totalPagesProcessed.toLocaleString()}
-                            subtitle="Total physical pages converted to AI vectors"
+                            subtitle="Total physical pages digitized to Markdown"
                             icon={Layers}
                             color="bg-amber-500"
                         />
@@ -362,7 +473,7 @@ const KnowledgeHubReport = () => {
                                 <Boxes className="text-emerald-500"/> Syllabus Mapping Status
                             </h3>
                             <div className="h-72 w-full">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                                     <PieChart>
                                         <Pie
                                             data={[
@@ -389,7 +500,7 @@ const KnowledgeHubReport = () => {
                                 <FileText className="text-indigo-500"/> Document Type Distribution
                             </h3>
                             <div className="h-72 w-full">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
                                     <ReBarChart data={metrics.typeData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                         <XAxis type="number" axisLine={false} tickLine={false} />
@@ -440,6 +551,18 @@ const KnowledgeHubReport = () => {
                         >
                             <option value="">All Classes</option>
                             {filteredClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                        <select 
+                            className="bg-white border border-slate-200 text-sm rounded-xl px-4 py-2 font-medium focus:ring-2 focus:ring-primary outline-none min-w-[200px]"
+                            value={filterStatus} 
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                        >
+                            <option value="">All Statuses</option>
+                            <option value="UPLOADED & READY">Uploaded & Ready</option>
+                            <option value="PARTIALLY EXTRACTED">Partially Extracted</option>
+                            <option value="EXTRACTION COMPLETED">Extraction Completed</option>
+                            <option value="PROCESSING BACKGROUND">Processing Background</option>
+                            <option value="PENDING UPLOAD">Pending Upload</option>
                         </select>
                         
                         <div className="ml-auto flex items-center gap-2 print:hidden">
@@ -494,11 +617,31 @@ const KnowledgeHubReport = () => {
                                                 <div className="flex flex-col gap-2">
                                                     {row.books.map(b => (
                                                         <div key={b.id} className="bg-slate-50 border border-slate-100 p-3 rounded-xl flex flex-col gap-1">
-                                                            <div className="font-bold text-sm text-slate-800">{b.title}</div>
+                                                            <div className="font-bold text-sm text-slate-800 flex items-center justify-between">
+                                                                <span>{b.title}</span>
+                                                                {!b.isProcessing && b.extractedPages < b.totalPages && (
+                                                                    <button 
+                                                                        onClick={() => handleStartExtraction(b.id)}
+                                                                        className="flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition-colors rounded-lg text-xs font-bold shadow-sm"
+                                                                    >
+                                                                        <PlayCircle size={14}/> Auto-Extract
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                             <div className="flex items-center gap-3 text-xs font-medium text-slate-500">
                                                                 <span className="bg-slate-200 px-2 py-0.5 rounded">{b.bookType}</span>
-                                                                <span>{b.processedPagesCount} of {b.totalPagesToProcess} pages tracking</span>
-                                                                {b.isProcessing && <span className="text-amber-500 flex items-center gap-1"><Clock size={12}/> Processing...</span>}
+                                                                {b.isProcessing ? (
+                                                                    <>
+                                                                        <span>{b.processedPagesCount} of {b.totalPagesToProcess} pages tracking</span>
+                                                                        <span className="text-amber-500 flex items-center gap-1"><Clock size={12}/> Processing via Background Queue...</span>
+                                                                    </>
+                                                                ) : (b.extractedPages > 0 && b.extractedPages >= b.totalPages) ? (
+                                                                     <span className="text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12}/> Extraction Completed ({b.extractedPages} pages)</span>
+                                                                ) : (b.processedPagesCount > 0 && b.processedPagesCount >= b.totalPagesToProcess) ? (
+                                                                     <span className="text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12}/> Extraction Completed ({b.processedPagesCount} pages)</span>
+                                                                ) : (
+                                                                    <span>{b.extractedPages} of {b.totalPages} indexed pages</span>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     ))}
@@ -521,6 +664,123 @@ const KnowledgeHubReport = () => {
                                 )}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'ACTIVE_JOBS' && systemStats && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    {/* Server Health Overview */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+                            <div className="absolute -right-6 -bottom-6 text-slate-800/50">
+                                <Server size={120} strokeWidth={1} />
+                            </div>
+                            <div className="relative z-10">
+                                <h3 className="text-slate-400 font-bold uppercase tracking-widest text-xs flex items-center gap-2 mb-2"><HardDrive size={14}/> System Memory Usage</h3>
+                                <div className="text-4xl text-white font-black tracking-tight">{systemStats.memory?.usagePct || 0} <span className="text-xl text-slate-500 font-bold">%</span></div>
+                                <div className="mt-4 flex items-center gap-2">
+                                    <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${systemStats.memory?.usagePct || 0}%` }}></div>
+                                    </div>
+                                </div>
+                                <div className="mt-3 flex justify-between text-xs font-semibold text-slate-400">
+                                    <span>{systemStats.memory?.allocated} MB Allocated</span>
+                                    <span>{systemStats.memory?.max} MB Max</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                            <h3 className="text-slate-500 font-bold uppercase tracking-widest text-xs flex items-center gap-2 mb-2"><Boxes size={14}/> Background Queues</h3>
+                            <div className="text-4xl text-slate-900 font-black tracking-tight">{(systemStats?.extractionJobs?.length || 0) + (systemStats?.questionJobs?.length || 0)} <span className="text-xl text-slate-400 font-bold">Active</span></div>
+                            <p className="text-sm font-medium text-slate-500 mt-2">Combined vector extraction and question generation tasks currently in the worker queue.</p>
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                            <h3 className="text-slate-500 font-bold uppercase tracking-widest text-xs flex items-center gap-2 mb-2"><CheckCircle size={14}/> Server AI Threads</h3>
+                            <div className="flex items-center gap-3">
+                                <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+                                <div className="text-3xl text-slate-900 font-black tracking-tight">{systemStats?.activeWorkerNodes || 6} <span className="text-base font-bold text-slate-400">Workers</span></div>
+                            </div>
+                            <p className="text-xs font-medium text-slate-500 mt-2 mb-3">Dynamically adjust the API dispatcher capacity.</p>
+                            <button onClick={handleWorkerSizeChange} className="w-full py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white rounded-lg transition-colors shadow-sm">
+                                Reallocate Worker Nodes
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Active Jobs List */}
+                    <div className="bg-white border border-slate-200 shadow-sm rounded-3xl overflow-hidden">
+                        <div className="bg-slate-50 border-b border-slate-100 p-6 flex justify-between items-center">
+                            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                                <Activity size={20} className="text-indigo-600"/> Background Processing Jobs
+                            </h3>
+                            <div className="flex items-center gap-2 text-sm font-bold text-slate-500 bg-white px-4 py-1.5 rounded-full border border-slate-200 shadow-sm">
+                                <span className="relative flex h-2.5 w-2.5 mr-1">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                </span>
+                                Auto-Refreshing
+                            </div>
+                        </div>
+                        <div className="p-0">
+                            {(!systemStats.extractionJobs?.length && !systemStats.questionJobs?.length) ? (
+                                <div className="p-12 text-center flex flex-col items-center justify-center">
+                                    <CheckCircle size={48} className="text-slate-300 mb-4"/>
+                                    <h4 className="text-xl font-bold text-slate-800 mb-2">No Active Jobs</h4>
+                                    <p className="text-slate-500 font-medium">The Knowledge Hub queue is empty. System is fully synced.</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-100">
+                                    {[...(systemStats.extractionJobs || []), ...(systemStats.questionJobs || [])].map((job) => (
+                                        <div key={job.id} className="p-6 hover:bg-slate-50 flex items-center justify-between gap-6 transition-colors">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <span className={`px-2.5 py-0.5 rounded text-[10px] uppercase font-black tracking-widest ${
+                                                        job.type === 'AI_VISION_EXTRACTION' ? 'bg-indigo-100 text-indigo-700' : 'bg-fuchsia-100 text-fuchsia-700'
+                                                    }`}>
+                                                        {job.type.replace(/_/g, ' ')}
+                                                    </span>
+                                                    <span className={`px-2.5 py-0.5 rounded text-[10px] uppercase font-black tracking-widest ${
+                                                        job.status === 'IN_PROGRESS' || job.status === 'QUEUED' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+                                                    }`}>
+                                                        {job.status}
+                                                    </span>
+                                                </div>
+                                                <h4 className="text-lg font-bold text-slate-900 leading-tight">
+                                                    {job.bookTitle || 'Unknown Book Document'}
+                                                </h4>
+                                                <div className="flex items-center gap-4 mt-2">
+                                                    <div className="flex-1 h-2 bg-slate-100 border border-slate-200 rounded-full overflow-hidden max-w-md">
+                                                        <div className={`h-full rounded-full transition-all duration-1000 ${job.status === 'PAUSED' ? 'bg-slate-400' : 'bg-emerald-500'}`} style={{ width: `${job.progress}%` }}></div>
+                                                    </div>
+                                                    <span className="text-xs font-bold text-slate-600">{job.progress}% ({job.processedPages} / {job.totalPages})</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-2">
+                                                {job.status === 'PAUSED' ? (
+                                                    <button 
+                                                        onClick={() => handleJobAction(job.id, job.type, 'resume')}
+                                                        className="h-10 w-10 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                                                        title="Resume Job"
+                                                    >
+                                                        <PlayCircle size={20} className={job.status !== 'PAUSED' ? 'fill-current' : ''} />
+                                                    </button>
+                                                ) : (
+                                                    <button 
+                                                        onClick={() => handleJobAction(job.id, job.type, 'pause')}
+                                                        className="h-10 w-10 flex items-center justify-center rounded-xl bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+                                                        title="Pause Job"
+                                                    >
+                                                        <PauseCircle size={20} className={job.status === 'IN_PROGRESS' ? 'fill-current' : ''} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

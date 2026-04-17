@@ -290,10 +290,10 @@ const ResourceLibrary = () => {
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={openCreateModal}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all active:scale-95 text-sm"
+                        className="flex items-center gap-2 px-3 md:px-5 py-2 md:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md md:shadow-lg shadow-indigo-200 transition-all active:scale-95 text-xs md:text-sm"
                     >
                         <Plus size={18} strokeWidth={3} />
-                        <span>Register New Source</span>
+                        <span className="hidden md:inline">Register New Source</span>
                     </button>
                 </div>,
                 portalTarget
@@ -596,6 +596,7 @@ const ResourceLibrary = () => {
                                     <div className="mt-auto grid grid-cols-2 p-4 pt-0 gap-3">
                                         <Link 
                                             to={`/knowledge-hub/digitization/${book.id}`} 
+                                            target="_blank" rel="noopener noreferrer"
                                             className="group/scan bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-700 px-4 py-3 rounded-2xl flex items-center justify-center gap-2 transition-all duration-300"
                                         >
                                             <ScanLine size={16} className="group-hover/scan:rotate-12 transition-transform" />
@@ -603,6 +604,7 @@ const ResourceLibrary = () => {
                                         </Link>
                                         <Link 
                                             to={`/knowledge-hub/proofreading/${book.id}`} 
+                                            target="_blank" rel="noopener noreferrer"
                                             className="bg-indigo-600 hover:bg-slate-900 text-white px-4 py-3 rounded-2xl flex items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-indigo-100 hover:shadow-none"
                                         >
                                             <Map size={16} />

@@ -61,7 +61,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         // ── Public API endpoints ──────────────────────────────────
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**").permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/ws-live-updates/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
                         // ── All other /api/** must be authenticated ───────────────

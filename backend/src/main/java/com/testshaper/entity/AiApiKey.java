@@ -57,10 +57,19 @@ public class AiApiKey extends BaseTenantEntity {
     @Column(name = "model", length = 100)
     private String model; // Optional per-key model override (e.g. gpt-4o-mini)
 
+    @Column(name = "is_paid", columnDefinition = "boolean default false")
+    private Boolean isPaid = false; // Indicates if this is a paid API key
+
+    public boolean isPaidTier() {
+        return isPaid != null ? isPaid : false;
+    }
+
     public boolean isAvailable() {
         if (!active) return false;
-        if (requestsToday >= 999000) return false; // Hard exhausted due to 429 errors
-        if (dailyLimit > 0 && requestsToday >= dailyLimit) return false;
+        if (lastError != null && lastError.contains("API_KEY_INVALID")) return false;
+        boolean paid = isPaid != null ? isPaid : false;
+        if (requestsToday >= 999000 && !paid) return false; // Hard exhausted due to 429 errors (only for free)
+        if (dailyLimit > 0 && requestsToday >= dailyLimit && !paid) return false;
         return true;
     }
 }
