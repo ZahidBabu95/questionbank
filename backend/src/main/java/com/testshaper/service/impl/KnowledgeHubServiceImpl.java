@@ -145,6 +145,90 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     }
 
     @Override
+    public void finalizeUploads(UUID sourceBookId, java.util.List<java.util.Map<String, Object>> uploadedFiles) {
+        com.testshaper.entity.SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Book not found"));
+
+        int currentPage = 1;
+        com.testshaper.entity.KnowledgePage lastPage = knowledgePageRepository.findFirstBySourceBookIdOrderByPageNumberDesc(sourceBookId).orElse(null);
+        if (lastPage != null) {
+            currentPage = lastPage.getPageNumber() + 1;
+        }
+
+        try {
+            book.setIsProcessing(true);
+            
+            // If totalPagesToProcess is null or 0, initialize it (fallback)
+            if (book.getTotalPagesToProcess() == null || book.getTotalPagesToProcess() == 0) {
+                book.setTotalPagesToProcess(uploadedFiles.size());
+            }
+
+            for (java.util.Map<String, Object> fileInfo : uploadedFiles) {
+                String publicUrl = (String) fileInfo.get("publicUrl");
+
+                com.testshaper.entity.KnowledgePage kp = new com.testshaper.entity.KnowledgePage();
+                kp.setSourceBook(book);
+                kp.setPageNumber(currentPage++);
+                kp.setR2FilePath(publicUrl);
+                kp.setExtractionStatus(com.testshaper.entity.KnowledgePage.ExtractionStatus.PENDING);
+
+                knowledgePageRepository.save(kp);
+
+                book.setProcessedPagesCount(book.getProcessedPagesCount() + 1);
+            }
+            
+            // If we processed everything expected, stop processing state
+            if (book.getProcessedPagesCount() >= book.getTotalPagesToProcess()) {
+                book.setIsProcessing(false);
+            }
+            
+        } catch (Exception e) {
+            log.error("Failed to finalize uploads for book " + sourceBookId, e);
+        } finally {
+            sourceBookMasterRepository.save(book);
+        }
+        log.info("Finished Finalizing {} pages for Book {}", uploadedFiles.size(), sourceBookId);
+    }
+    
+    @Override
+    public Map<String, Object> registerUploadSession(UUID sourceBookId, int totalPages) {
+        com.testshaper.entity.SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Book not found"));
+            
+        // Setup initial counts for UI tracking
+        book.setTotalPagesToProcess(totalPages);
+        if (book.getProcessedPagesCount() == null) {
+            book.setProcessedPagesCount(0);
+        }
+        sourceBookMasterRepository.save(book);
+        
+        int uploadedCount = book.getProcessedPagesCount();
+        return Map.of(
+            "sourceBookId", book.getId(),
+            "totalPages", totalPages,
+            "uploadedCount", uploadedCount,
+            "nextPageToUpload", uploadedCount + 1
+        );
+    }
+    
+    @Override
+    public Map<String, Object> getUploadStatus(UUID sourceBookId) {
+        com.testshaper.entity.SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Book not found"));
+            
+        int total = book.getTotalPagesToProcess() != null ? book.getTotalPagesToProcess() : 0;
+        int uploaded = book.getProcessedPagesCount() != null ? book.getProcessedPagesCount() : 0;
+        
+        return Map.of(
+            "sourceBookId", book.getId(),
+            "totalPages", total,
+            "uploadedCount", uploaded,
+            "nextPageToUpload", uploaded + 1,
+            "isComplete", total > 0 && uploaded >= total
+        );
+    }
+
+    @Override
     @Transactional
     public String updateKnowledgePageImage(UUID sourceBookId, UUID pageId, org.springframework.web.multipart.MultipartFile file) throws Exception {
         com.testshaper.entity.KnowledgePage page = knowledgePageRepository.findById(pageId)
@@ -1242,6 +1326,18 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         return aiBulkExtractionJobRepository.save(job);
     }
 
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiBulkExtractionJob cancelAiExtractionQueue(UUID jobId) {
+        com.testshaper.entity.AiBulkExtractionJob job = aiBulkExtractionJobRepository.findById(jobId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        if (job.getStatus() != com.testshaper.entity.AiBulkExtractionJob.JobStatus.COMPLETED) {
+            job.setStatus(com.testshaper.entity.AiBulkExtractionJob.JobStatus.CANCELLED);
+            return aiBulkExtractionJobRepository.save(job);
+        }
+        return job;
+    }
+
     // --- Background Tasks (Ai Question Generation Queue) ---
 
     @Override
@@ -1302,6 +1398,18 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
         job.setStatus(com.testshaper.entity.AiQuestionGenerationJob.JobStatus.QUEUED);
         return aiQuestionGenerationJobRepository.save(job);
+    }
+
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiQuestionGenerationJob cancelAiQuestionQueue(UUID jobId) {
+        com.testshaper.entity.AiQuestionGenerationJob job = aiQuestionGenerationJobRepository.findById(jobId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        if (job.getStatus() != com.testshaper.entity.AiQuestionGenerationJob.JobStatus.COMPLETED) {
+            job.setStatus(com.testshaper.entity.AiQuestionGenerationJob.JobStatus.CANCELLED);
+            return aiQuestionGenerationJobRepository.save(job);
+        }
+        return job;
     }
 
     @Override

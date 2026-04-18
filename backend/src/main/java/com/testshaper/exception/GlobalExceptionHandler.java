@@ -77,9 +77,14 @@ public class GlobalExceptionHandler {
 
         return new ResponseEntity<>(errorDetails, HttpStatus.UNAUTHORIZED);
     }
-
+    
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGlobalException(Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleGlobalException(Exception ex) throws Exception {
+        // If it's a 404 NoResourceFoundException/NoHandlerFoundException, throw it to let ErrorController handle SPA routing
+        if (ex.getClass().getName().contains("NoResourceFoundException") || ex.getClass().getName().contains("NoHandlerFoundException")) {
+            throw ex;
+        }
+
         Map<String, Object> errorDetails = new HashMap<>();
         errorDetails.put("timestamp", LocalDateTime.now());
         errorDetails.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());

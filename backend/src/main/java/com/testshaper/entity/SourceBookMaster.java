@@ -59,6 +59,12 @@ public class SourceBookMaster extends BaseTenantEntity {
     @OneToMany(mappedBy = "sourceBook", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SourceBookIndex> indices = new ArrayList<>();
 
+    @OneToMany(mappedBy = "sourceBook", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<AiBulkExtractionJob> extractionJobs = new ArrayList<>();
+
+    @OneToMany(mappedBy = "sourceBook", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<AiQuestionGenerationJob> questionGenerationJobs = new ArrayList<>();
+
     public enum BookType {
         TEXTBOOK, GUIDE, QUESTION_BANK, LECTURE_SHEET, SUPPLEMENTARY
     }

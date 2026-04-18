@@ -12,7 +12,11 @@ public interface KnowledgeHubService {
     void deleteKnowledgePage(UUID sourceBookId, UUID pageId);
     SourceBookMasterDto updateSourceBook(UUID id, SourceBookMasterDto dto);
     SourceBookMasterDto getSourceBook(UUID id);
-    void processUploadsBackground(UUID sourceBookId, java.util.List<java.io.File> localFiles, int startPage);
+    void processUploadsBackground(java.util.UUID sourceBookId, java.util.List<java.io.File> tempFiles, int startPage);
+    void finalizeUploads(java.util.UUID sourceBookId, java.util.List<java.util.Map<String, Object>> uploadedFiles);
+    
+    java.util.Map<String, Object> registerUploadSession(java.util.UUID sourceBookId, int totalPages);
+    java.util.Map<String, Object> getUploadStatus(java.util.UUID sourceBookId);
     String updateKnowledgePageImage(UUID sourceBookId, UUID pageId, org.springframework.web.multipart.MultipartFile file) throws Exception;
     void deleteSourceBook(UUID id);
     String extractKnowledgePageContent(UUID sourceBookId, UUID pageId) throws Exception;
@@ -41,12 +45,14 @@ public interface KnowledgeHubService {
     com.testshaper.entity.AiBulkExtractionJob getAiExtractionQueueStatus(UUID sourceBookId);
     com.testshaper.entity.AiBulkExtractionJob pauseAiExtractionQueue(UUID jobId);
     com.testshaper.entity.AiBulkExtractionJob resumeAiExtractionQueue(UUID jobId);
+    com.testshaper.entity.AiBulkExtractionJob cancelAiExtractionQueue(UUID jobId);
 
     // --- Background Question Generation Queue ---
     com.testshaper.entity.AiQuestionGenerationJob startAiQuestionQueue(UUID sourceBookId);
     com.testshaper.entity.AiQuestionGenerationJob getAiQuestionQueueStatus(UUID sourceBookId);
     com.testshaper.entity.AiQuestionGenerationJob pauseAiQuestionQueue(UUID jobId);
     com.testshaper.entity.AiQuestionGenerationJob resumeAiQuestionQueue(UUID jobId);
+    com.testshaper.entity.AiQuestionGenerationJob cancelAiQuestionQueue(UUID jobId);
 
     // Internal execution called by Scheduler
     int generateQuestionsForPage(UUID sourceBookId, UUID pageId) throws Exception;

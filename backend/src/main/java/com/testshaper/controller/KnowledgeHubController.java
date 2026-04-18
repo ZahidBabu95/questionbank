@@ -112,6 +112,45 @@ public class KnowledgeHubController {
         }
     }
 
+    @PostMapping("/source-books/{id}/pages/bulk/prepare-upload")
+    public ResponseEntity<Map<String, Object>> prepareUploads(@PathVariable UUID id, @RequestBody java.util.List<Map<String, String>> filesData) {
+        try {
+            Map<String, Object> result = storageService.generatePresignedUploadUrls(filesData, null, "knowledge_hub/pages/" + id);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/source-books/{id}/pages/bulk/finalize-upload")
+    public ResponseEntity<Map<String, Object>> finalizeUploads(@PathVariable UUID id, @RequestBody java.util.List<Map<String, Object>> uploadedFiles) {
+        try {
+            knowledgeHubService.finalizeUploads(id, uploadedFiles);
+            return ResponseEntity.ok(Map.of("success", true, "message", "Pages successfully queued"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("success", false, "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/source-books/{id}/pages/bulk/register-session")
+    public ResponseEntity<Map<String, Object>> registerUploadSession(@PathVariable UUID id, @RequestBody Map<String, Integer> payload) {
+        try {
+            int totalPages = payload.getOrDefault("totalPages", 0);
+            return ResponseEntity.ok(knowledgeHubService.registerUploadSession(id, totalPages));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/source-books/{id}/pages/bulk/upload-status")
+    public ResponseEntity<Map<String, Object>> getUploadStatus(@PathVariable UUID id) {
+        try {
+            return ResponseEntity.ok(knowledgeHubService.getUploadStatus(id));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/source-books/{id}/pages")
     public ResponseEntity<List<com.testshaper.dto.KnowledgePageDto>> getSourceBookPages(@PathVariable UUID id) {
         return ResponseEntity.ok(knowledgeHubService.getSourceBookPages(id));
@@ -326,6 +365,11 @@ public class KnowledgeHubController {
         return ResponseEntity.ok(knowledgeHubService.resumeAiExtractionQueue(jobId));
     }
 
+    @PostMapping("/jobs/bulk-extract/{jobId}/cancel")
+    public ResponseEntity<com.testshaper.entity.AiBulkExtractionJob> cancelAiExtractionQueue(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(knowledgeHubService.cancelAiExtractionQueue(jobId));
+    }
+
     // --- Background Tasks (Ai Question Generation Queue) ---
     @PostMapping("/jobs/generate-questions/source-books/{id}/start")
     public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> startAiQuestionQueue(@PathVariable UUID id) {
@@ -349,6 +393,11 @@ public class KnowledgeHubController {
     @PostMapping("/jobs/generate-questions/{jobId}/resume")
     public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> resumeAiQuestionQueue(@PathVariable UUID jobId) {
         return ResponseEntity.ok(knowledgeHubService.resumeAiQuestionQueue(jobId));
+    }
+
+    @PostMapping("/jobs/generate-questions/{jobId}/cancel")
+    public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> cancelAiQuestionQueue(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(knowledgeHubService.cancelAiQuestionQueue(jobId));
     }
 
     // --- System Health and Active Jobs ---

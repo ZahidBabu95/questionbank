@@ -71,6 +71,8 @@ import CurriculumMappingList from './pages/admin/KnowledgeHub/CurriculumMappingL
 import { useParams } from 'react-router-dom';
 
 
+import { UploadProvider } from './context/UploadContext';
+
 const ProtectedRoute = ({ children }) => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -96,6 +98,7 @@ const RedirectToEditor = () => {
 function App() {
     return (
         <BrandingProvider>
+            <UploadProvider>
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                 <Routes>
                     {/* Public Routes */}
@@ -228,6 +231,7 @@ function App() {
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
             </BrowserRouter>
+            </UploadProvider>
         </BrandingProvider>
     );
 }

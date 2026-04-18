@@ -14,8 +14,11 @@ import com.testshaper.entity.GeneralSetting;
 
 import java.io.IOException;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -229,6 +232,87 @@ public class DynamicStorageService {
                 "provider", "Cloudflare R2",
                 "error", e.getMessage() != null ? e.getMessage() : "Connection failed"
             );
+        }
+    }
+
+    public Map<String, Object> generatePresignedUploadUrls(java.util.List<Map<String, String>> filesData, String tenantId, String subFolder) {
+        Map<String, String> storageSettings;
+        if (tenantId != null) {
+            storageSettings = settingService.getInstituteSettings(tenantId, GeneralSetting.SettingCategory.STORAGE);
+            if (storageSettings.isEmpty()) {
+                storageSettings = settingService.getGlobalSettings(GeneralSetting.SettingCategory.STORAGE);
+            }
+        } else {
+            storageSettings = settingService.getGlobalSettings(GeneralSetting.SettingCategory.STORAGE);
+        }
+
+        String provider = storageSettings.getOrDefault("storage_provider", "LOCAL");
+        if (!"CLOUDFLARE_R2".equalsIgnoreCase(provider)) {
+            throw new RuntimeException("Pre-signed URLs are only supported for Cloudflare R2.");
+        }
+
+        String accountId = storageSettings.get("cloudflare_account_id") != null ? storageSettings.get("cloudflare_account_id").trim() : null;
+        String bucketName = storageSettings.get("cloudflare_r2_bucket") != null ? storageSettings.get("cloudflare_r2_bucket").trim() : null;
+        String accessKey = storageSettings.get("storage_access_key") != null ? storageSettings.get("storage_access_key").trim() : null;
+        String secretKey = storageSettings.get("storage_secret_key") != null ? storageSettings.get("storage_secret_key").trim() : null;
+        String publicUrlBase = storageSettings.get("cloudflare_public_url") != null ? storageSettings.get("cloudflare_public_url").trim() : null;
+
+        if (accountId == null || bucketName == null || accessKey == null || secretKey == null) {
+            log.error("Cloudflare R2 storage settings are incomplete.");
+            throw new RuntimeException("Cloudflare R2 storage settings are incomplete.");
+        }
+
+        String endpointUrl = String.format("https://%s.r2.cloudflarestorage.com", accountId);
+
+        try (S3Presigner presigner = S3Presigner.builder()
+                .region(Region.of("auto"))
+                .endpointOverride(URI.create(endpointUrl))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
+                .build()) {
+
+            java.util.List<Map<String, String>> urls = new java.util.ArrayList<>();
+            
+            for (Map<String, String> fData : filesData) {
+                String originalName = fData.get("name");
+                String contentType = fData.get("type");
+
+                String extension = "";
+                if (originalName != null && originalName.contains(".")) {
+                    extension = originalName.substring(originalName.lastIndexOf("."));
+                }
+                String fileKey = subFolder + "/" + UUID.randomUUID().toString() + extension;
+
+                PutObjectRequest putOb = PutObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(fileKey)
+                        .contentType(contentType)
+                        .build();
+
+                software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest preReq = 
+                    software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest.builder()
+                        .signatureDuration(Duration.ofMinutes(15))
+                        .putObjectRequest(putOb)
+                        .build();
+
+                PresignedPutObjectRequest presignedRequest = presigner.presignPutObject(preReq);
+
+                String publicUrl;
+                if (publicUrlBase != null && !publicUrlBase.isEmpty()) {
+                    if (publicUrlBase.endsWith("/")) {
+                        publicUrlBase = publicUrlBase.substring(0, publicUrlBase.length() - 1);
+                    }
+                    publicUrl = publicUrlBase + "/" + fileKey;
+                } else {
+                    publicUrl = endpointUrl + "/" + bucketName + "/" + fileKey;
+                }
+
+                urls.add(Map.of(
+                    "originalFileName", originalName,
+                    "uploadUrl", presignedRequest.url().toString(),
+                    "publicUrl", publicUrl
+                ));
+            }
+            return Map.of("success", true, "urls", urls);
         }
     }
 }

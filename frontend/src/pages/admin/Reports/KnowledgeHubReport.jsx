@@ -7,7 +7,7 @@ import {
 import {
     BookOpen, Layers, CheckCircle, Clock, AlertCircle, FileText,
     TrendingUp, Filter, Download, Database, Boxes, LayoutList, ChevronRight, Check, BarChart, Printer,
-    PlayCircle, PauseCircle, Server, HardDrive, Cpu, Activity, CheckCircle2
+    PlayCircle, PauseCircle, Server, HardDrive, Cpu, Activity, CheckCircle2, XCircle
 } from 'lucide-react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client/dist/sockjs';
@@ -775,6 +775,17 @@ const KnowledgeHubReport = () => {
                                                         <PauseCircle size={20} className={job.status === 'IN_PROGRESS' ? 'fill-current' : ''} />
                                                     </button>
                                                 )}
+                                                <button 
+                                                    onClick={() => {
+                                                        if (window.confirm('Are you sure you want to cancel this job? It cannot be resumed later.')) {
+                                                            handleJobAction(job.id, job.type, 'cancel');
+                                                        }
+                                                    }}
+                                                    className="h-10 w-10 flex items-center justify-center rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-sm"
+                                                    title="Cancel Job"
+                                                >
+                                                    <XCircle size={20} />
+                                                </button>
                                             </div>
                                         </div>
                                     ))}

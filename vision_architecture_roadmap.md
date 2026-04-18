@@ -14,6 +14,7 @@
 2. **Complete Phase 3D (Pinecone Vectorization):** Vectorize the "Golden Data" and push to Pinecone. This is the foundation of your future "Brain".
 3. **Advanced Reporting UI:** Include a Live Terminal Error Log console and API request tracker in the Server & Jobs React Dashboard.
 4. **Database Guardrails:** Optimize your JVM and HikariCP connection pools to ensure massive dynamic threading (100+ parallel extractions) does not cause connection exhaustion to MySQL.
+5. **Resumable Batch Upload Pipeline:** Implement Client-side batch streaming for enormous PDFs and Image bulks. The UI will extract one canvas at a time, upload it direct-to-R2, notify the backend, and dispose of the Memory Blob. This ensures ZERO server overload, bypasses Client RAM limits, and ensures completely pause-able/resumable Giant File uploads (even handling power outages).
 
 ---
 
@@ -56,8 +57,20 @@
 
 ---
 
+## 🚀 Engineering Strategy: Enterprise Queue & Message Brokers
+To prevent API limits, ensure fault tolerance, and manage massive scale, QuestionShaper will evolve its background task management:
+
+1. **Mid-Term (Phase 2): RabbitMQ for Task Queuing**
+   - Replace the current `@Scheduled` in-memory threading with **RabbitMQ**.
+   - **Why:** To safely queue thousands of PDF processing and AI question generation tasks. Features robust **Dead-Letter Queues (DLQ)** for failed tasks, ensuring zero data loss and automated exponential backoff retries when Google Gemini limits are hit.
+2. **Long-Term (Phase 4): Apache Kafka for Event Streaming**
+   - Integrate **Apache Kafka** once the platform handles millions of users and requires real-time OMR syncing.
+   - **Why:** Kafka acts as the ultimate immutable data log. It will handle high-velocity events (e.g., student clicks, OMR bubble evaluations) decoupled from the primary database, enabling advanced Big Data analytics and instant RAG embeddings without crushing the core system.
+
+---
+
 ## 🎯 Summary Blueprint
 You are building an **AI-First Ecosystem**. 
 - **Right now:** Secure the data and build the Vector Brain. (VPS stays as is).
-- **In 6 Months:** Split the workers from the UI to protect stability.
-- **In 1 Year+ (Mass Scale):** Introduce Load Balancers, Redis message queues, Read-Replicas, and Data Lakes to construct an immortal, lag-free EdTech empire.
+- **In 6 Months:** Split the workers from the UI and introduce **RabbitMQ** to protect stability.
+- **In 1 Year+ (Mass Scale):** Introduce Load Balancers, **Apache Kafka** event streams, Read-Replicas, and Data Lakes to construct an immortal, lag-free EdTech empire.
