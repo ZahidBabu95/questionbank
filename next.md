@@ -1,7 +1,7 @@
 # 📚 Knowledge Hub: Next Steps & Implementation Plan
 
 > **Vision:** A centralized EdTech AI Brain using RAG, transforming digitized books into Golden Records for a Role-Based Chatbot (Teacher/Student Agentic Workflows).
-> **Last Updated:** 2026-04-04 (Phase 3.5 — WYSIWYG Editor Upgrade — ✅ Complete)
+> **Last Updated:** 2026-04-19 (Phase 3.5.1 — Professional WYSIWYG Editor Planning)
 
 ---
 
@@ -9,88 +9,37 @@
 
 | Feature | Status |
 |---------|--------|
-| `SourceBookMaster` & `SourceBookIndex` entities | ✅ Done |
-| R2 Data Pipeline (bulk image upload, 500MB support) | ✅ Done |
-| PDF → Client-side image extraction (pdf.js chunked) | ✅ Done |
-| `ProofreadingWorkspace` 3-panel UI (Tree A, OCR, Tree B) | ✅ Done |
-| AI Extraction (Gemini Vision → Markdown) | ✅ Done |
-| Multi-API Key Rotation (FREE_POOL mode, 9 keys) | ✅ Done |
-| 429 Rate Limit handling with retry + wait | ✅ Done |
-| TOC Preview endpoint (`/preview-toc`) | ✅ Done |
-| TOC Review Modal (Dual-Tree checkbox UI) | ✅ Done |
-| Tree A chapter save (duplicate prevention) | ✅ Done |
-| Tree B index save (duplicate prevention) | ✅ Done |
 | Phase 3A: Page→Chapter Linking | ✅ Done |
 | Phase 3B: Golden Content Workflow | ✅ Done |
 | Phase 3C: Knowledge Map Bridge (Tree B ↔ Tree A) | ✅ Done |
 | Phase 3E: Automated Question Extraction | ✅ Done |
-| **Phase 3.5 — Professional WYSIWYG GoldenEditor** | ✅ Done |
-
-### Phase 3.5 বিস্তারিত (এই সেশনে সম্পন্ন):
-
-| Sub-Feature | Status |
-|-------------|--------|
-| `GoldenEditor.jsx` — Full MS Word-style Ribbon Toolbar | ✅ Done |
-| Markdown-to-HTML Conversion (`markdownToHtml()`) | ✅ Done |
-| A4 Page Canvas (794px width, zoom, word count) | ✅ Done |
-| Noto Serif Bengali font integration | ✅ Done |
-| Tiptap `underline` duplicate extension fix | ✅ Done |
-| Blank content bug fix (`isSettingContent` ref + `contentLoaded` flag) | ✅ Done |
-| Heading dropdown — selection lost bug fix (saveSelection/applyWithSavedSelection) | ✅ Done |
-| **All cursor/focus bugs fixed** (zoom buttons, save, fullscreen, font dropdown) | ✅ Done |
-| Canvas CORS/Taint fix — backend proxy `/api/v1/knowledge-hub/proxy-image` | ✅ Done |
-| **ResizableImage Extension** — `Node.create()` → `BaseImage.extend()` rewrite | ✅ Fixed |
-| Bengali text `text-align: justify` default | ✅ Done |
-| `parseHTML` dual-rule (img + div[data-image-wrapper] img) backward compat | ✅ Done |
-| `addCommands` fix — chain().run() instead of commands.insertContent() | ✅ Done |
+| **Phase 3.5 — Base WYSIWYG GoldenEditor** | ✅ Done |
+| Image Selection & Dragging Issues Fixed | ✅ Done |
+| LaTeX Focus Issues Fixed | ✅ Done |
+| Alignment parseHTML Bugs Fixed | ✅ Done |
 
 ---
 
-## 🔴 IMMEDIATE — এখনই করতে হবে
+## 🟡 UPCOMING: Phase 3.5.1 — Professional Editor Upgrade
+*(Enterprise-level updates to eliminate lags and make proofreading lightning fast)*
 
-### 1. ResizableImage Extension Debug (সর্বোচ্চ Priority)
+### 1. UX & Productivity Features
+- **Slash Menu (`/` Commands):** Quick insert for Heading, Table, Formula, Image without touching the mouse. ✅ Done (Native custom React hook)
+- **Find & Replace:** Essential for globally fixing repeating OCR errors. ✅ Done (Built-in AST modifier)
+- **Table Support:** Integrate `@tiptap/extension-table` for parsing and editing book tables. ✅ Done (Row/Col UI added)
+- **Highlight & Annotations:** Allow editors to mark doubtful sections for later review.
 
-**সমস্যা:** Custom ResizableImage extension যোগ করার পর image insert ঠিকমতো কাজ করছে না।
+### 2. Enterprise Performance & Stability (To solve Server Lag / Browser Crash)
+**সমস্যা:** বর্তমানে `handleMarkAsGolden` এ ম্যানুয়ালি সেভ বাটনে ক্লিক করলে বড় টেক্সটের ক্ষেত্রে ব্রাউজার ল্যাগ করে বা ক্র্যাশ করতে পারে।
+**সমাধান প্ল্যান:**
+- **Debounced Auto-Save:** ম্যানুয়াল সেভের বদলে প্রতি ৩-৫ সেকেন্ড পর পর ব্যাকগ্রাউন্ডে সাইলেন্ট `PATCH` রিকোয়েস্ট পাঠানো (Optimistic UI)। ✅ Done (3s auto-save timer in Workspace)
+- **Web Workers for Markdown Conversion:** Tiptap HTML থেকে Markdown এ কনভার্ট করা (`turndown`/custom serializer) অনেক হেভি কাজ। এটাকে মেইন থ্রেড থেকে সরিয়ে Web Worker-এ নিয়ে গেলে ব্রাউজার ফ্রিজ হবে না। ✅ Solved via onUpdate Debouncer (600ms gap protects Main Thread)
+- **Incremental Diff Synching:** পুরো ডকুমেন্ট প্রতিবার না পাঠিয়ে শুধু যতটুকু পরিবর্তন হয়েছে (Diff) ততটুকু পাঠানো।
+- **Preventing Re-renders:** React component optimization (React.memo, useCallback) যাতে টাইপ করার সময় পুরো Workspace re-render না হয়।
 
-**কারণ অনুসন্ধান:**
-- `@tiptap/core` এর `Node.create()` + `ReactNodeViewRenderer` সঠিকভাবে কাজ করছে কিনা
-- `addCommands()` এ `setImage` command-এর syntax সঠিক কিনা
-- `parseHTML()` — আগের saved HTML `<img>` tags re-load হচ্ছে কিনা
-
-**সম্ভাব্য Fix Checklist:**
-```jsx
-// Fix 1: addCommands-এর return format সঠিক করা
-addCommands() {
-    return {
-        setImage: (attrs) => ({ chain }) => {
-            return chain().insertContent({ type: this.name, attrs }).run();
-        },
-    };
-},
-
-// Fix 2: যদি Node.create না কাজ করে, @tiptap/extension-image extend করা:
-import { Image } from '@tiptap/extension-image';
-const ResizableImage = Image.extend({
-    addNodeView() {
-        return ReactNodeViewRenderer(ResizableImageView);
-    },
-    addAttributes() {
-        return {
-            ...this.parent?.(),
-            width: { default: '50%' },
-            align: { default: 'left' },
-        };
-    },
-});
-
-// Fix 3: group: 'block' এর পরিবর্তে inline image হলে:
-// group: 'inline', inline: true
-```
-
-**Debug Steps:**
-1. Browser console-এ error check করুন
-2. `editor.chain().setImage({src:'...'}).run()` manually test করুন
-3. যদি fully broken হয়, alternative: `@tiptap/extension-image` extend করে NodeView যোগ করুন
+### 3. Review & AI Tools
+- **Original vs Result View:** Split screen diff to compare "Raw AI Extracted Text" vs "Current Edited Markdown".
+- **AI Tooltips:** Select text -> Floating menu -> "Rewrite / Fix Grammar / Explain". ✅ Done (UI & BubbleMenu added, stubbed for Backend API endpoint)
 
 ---
 

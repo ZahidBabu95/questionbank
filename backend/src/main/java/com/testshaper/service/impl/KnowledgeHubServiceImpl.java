@@ -1718,4 +1718,69 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         
         return result;
     }
+
+    // ── GoldenEditor AI Text Editing ──────────────────────────────────────────
+    @Override
+    public String callAiTextEdit(String prompt) throws Exception {
+        java.util.Map<String, String> aiSettings = generalSettingService.getGlobalSettings(
+            com.testshaper.entity.GeneralSetting.SettingCategory.AI
+        );
+
+        String billingMode = aiSettings.getOrDefault("ai_billing_mode",
+            aiSettings.getOrDefault("ai_google_mode", "FREE_POOL"));
+
+        String apiKey;
+        String model;
+        com.testshaper.entity.AiApiKey poolKey = null;
+
+        if ("FREE_POOL".equalsIgnoreCase(billingMode) || "FREE_POOL".equals(aiSettings.get("ai_google_mode"))) {
+            poolKey = keyRotationService.getNextAvailableKey();
+            if (poolKey == null) throw new RuntimeException("No available API keys in pool.");
+            apiKey = poolKey.getApiKey();
+            model  = (poolKey.getModel() != null && !poolKey.getModel().isBlank())
+                      ? poolKey.getModel() : aiSettings.getOrDefault("ai_model", "gemini-1.5-flash");
+        } else {
+            apiKey = aiSettings.getOrDefault("ai_api_key", "");
+            model  = aiSettings.getOrDefault("ai_model", "gemini-1.5-flash");
+            if (apiKey.isBlank()) throw new RuntimeException("Global AI API key is not configured.");
+        }
+
+        java.util.Map<String, Object> requestBody = java.util.Map.of(
+            "contents", java.util.List.of(
+                java.util.Map.of("parts", java.util.List.of(
+                    java.util.Map.of("text", prompt)
+                ))
+            ),
+            "generationConfig", java.util.Map.of(
+                "temperature", 0.2,
+                "topP", 0.9,
+                "maxOutputTokens", 2048
+            )
+        );
+
+        String requestJson = objectMapper.writeValueAsString(requestBody);
+        String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model
+                     + ":generateContent?key=" + apiKey;
+
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+        org.springframework.http.HttpEntity<String> entity = new org.springframework.http.HttpEntity<>(requestJson, headers);
+
+        try {
+            org.springframework.http.ResponseEntity<String> response =
+                restTemplate.exchange(url, org.springframework.http.HttpMethod.POST, entity, String.class);
+
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(response.getBody());
+            String result2 = root.path("candidates").get(0)
+                .path("content").path("parts").get(0)
+                .path("text").asText("").trim();
+
+            if (poolKey != null) keyRotationService.recordUsage(poolKey.getId());
+            return result2;
+
+        } catch (Exception e) {
+            if (poolKey != null) keyRotationService.recordError(poolKey.getId(), e.getMessage());
+            throw new RuntimeException("AI text edit failed: " + e.getMessage(), e);
+        }
+    }
 }

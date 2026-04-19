@@ -584,7 +584,6 @@ const ProofreadingWorkspace = () => {
         }
     };
 
-    // Phase 3B handlers
     const handleOpenGoldenEditor = () => {
         // Prefer already-proofed HTML, fall back to raw markdown from extraction
         const content = selectedPage?.goldenMarkdown || selectedPage?.extractedMarkdown || '';
@@ -592,11 +591,56 @@ const ProofreadingWorkspace = () => {
         setIsEditingGolden(true);
     };
 
+    // Auto-save logic references
+    const autoSaveTimer = useRef(null);
+    const lastSavedDraft = useRef('');
+
+    // Update tracking reference when page changes
+    useEffect(() => {
+        if (selectedPage) {
+            lastSavedDraft.current = selectedPage.goldenMarkdown || selectedPage.extractedMarkdown || '';
+        }
+    }, [selectedPage?.id]);
+
+    // Optimistic UI Background Auto-Save (3 seconds)
+    useEffect(() => {
+        if (!selectedPage || !goldenDraft || goldenDraft === lastSavedDraft.current) return;
+        
+        if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+        
+        autoSaveTimer.current = setTimeout(async () => {
+            try {
+                // Silent server update
+                const res = await axios.put(
+                    `/v1/knowledge-hub/source-books/${bookId}/pages/${selectedPage.id}/golden`,
+                    { goldenMarkdown: goldenDraft }
+                );
+                lastSavedDraft.current = goldenDraft;
+                
+                // Update silently without prompting loader
+                setPages(prev => prev.map(p => 
+                    p.id === selectedPage.id ? { 
+                        ...p, 
+                        goldenMarkdown: res.data.goldenMarkdown,
+                        isGolden: true,
+                        extractionStatus: res.data.extractionStatus
+                    } : p
+                ));
+            } catch (err) {
+                console.warn('Silent auto-save failed', err);
+            }
+        }, 3000);
+        
+        return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+    }, [goldenDraft, selectedPage, bookId]);
+
     const handleMarkAsGolden = async () => {
         if (!selectedPage) return;
         setIsMarkingGolden(true);
+        if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); // Prevent double save
+        
         try {
-            // goldenDraft is now updated by GoldenEditor's onChange with the HTML from Tiptap
+            // Force save explicitly (Ctrl+S or Save Button)
             const res = await axios.put(
                 `/v1/knowledge-hub/source-books/${bookId}/pages/${selectedPage.id}/golden`,
                 { goldenMarkdown: goldenDraft }
@@ -607,9 +651,9 @@ const ProofreadingWorkspace = () => {
                 isGolden: true,
                 extractionStatus: res.data.extractionStatus,
             };
+            lastSavedDraft.current = goldenDraft;
             setSelectedPage(updatedPage);
             setPages(prev => prev.map(p => p.id === selectedPage.id ? updatedPage : p));
-            setIsEditingGolden(false);
         } catch (err) {
             alert('সংরক্ষণে ব্যর্থ: ' + (err.response?.data?.message || err.message));
         } finally {
@@ -944,11 +988,11 @@ const ProofreadingWorkspace = () => {
                                         <div className="absolute inset-x-0 bottom-0 bg-black/60 text-white text-[9px] font-bold text-center py-0.5">P {p.sourcePageNo}</div>
 
                                         {/* Status badge — priority: golden > extracted > pending */}
-                                        {p.isGolden ? (
+                                        {p.isGolden || p.extractionStatus === 'PROOFREAD' ? (
                                             <div className="absolute top-1 right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center text-white shadow-sm ring-1 ring-white z-10" title="Golden">
                                                 <Star className="w-2.5 h-2.5" fill="white" />
                                             </div>
-                                        ) : p.extractionStatus === 'EXTRACTED' || p.extractionStatus === 'PROOFREAD' ? (
+                                        ) : p.extractionStatus === 'EXTRACTED' ? (
                                             <div className="absolute top-1 right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-sm ring-1 ring-white z-10">
                                                 <CheckCircle className="w-3 h-3" />
                                             </div>

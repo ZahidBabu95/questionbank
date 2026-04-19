@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { marked } from 'marked';
 import { Node } from '@tiptap/core';
+import { Plugin, NodeSelection } from '@tiptap/pm/state';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { useEditor, EditorContent, NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
@@ -21,42 +23,74 @@ import {
     FileText, Save, Type, Grid3x3, Undo2, Redo2,
     Strikethrough, Code, Quote, Minus, Trash2,
     Image as ImageIcon, MoveHorizontal,
-    PanelLeft, PanelRight
+    PanelLeft, PanelRight, Search, Sparkles, MessageSquareDiff, Languages
 } from 'lucide-react';
 
 // ─── Resizable Image Node View ───────────────────────────────────────────────
+// RULES:
+//  1. NodeViewWrapper has contentEditable={false} → ProseMirror auto-creates
+//     NodeSelection when user clicks on the wrapper. DO NOT override this.
+//  2. NO pointerEvents manipulation — that blocks ProseMirror's own click detection.
+//  3. NO manual setNodeSelection calls — they cause the cursor-jump bug.
+//  4. All image controls (align/size/delete) live in the main toolbar context bar.
 const ResizableImageView = ({ node, updateAttributes, selected, deleteNode, editor, getPos }) => {
     const { src, alt, width, align } = node.attrs;
     const [localWidth, setLocalWidth] = useState(width || '50%');
-    
-    // Explicitly catch AI-generated dummy URLs like "null" or "undefined"
+
     const isBadSrc = !src || src.trim() === '' || src === 'null' || src === 'undefined' || src === '#';
     const [imgError, setImgError] = useState(isBadSrc);
 
-    const imgRef = useRef(null);
-    const startX = useRef(null);
-    const startW = useRef(null);
+    const imgRef   = useRef(null);
+    const innerWrapperRef = useRef(null);
+    const startX   = useRef(null);
+    const startW   = useRef(null);
+    const resizing = useRef(false);
 
-    // Sync width from external updates
     useEffect(() => { setLocalWidth(width || '50%'); }, [width]);
+    useEffect(() => { setImgError(isBadSrc); }, [isBadSrc]);
 
-    // Reset error boundary if src magically changes behind the scenes
-    useEffect(() => { setImgError(isBadSrc); }, [src, isBadSrc]);
+    // ── NATIVE CAPTURE EVENT LISTENER ─────────────────────────────────────────
+    // This is the ONLY reliable way to select Tiptap image node views without
+    // the browser shifting the text cursor. It fires before ProseMirror and React.
+    useEffect(() => {
+        const el = innerWrapperRef.current;
+        if (!el || !editor || typeof getPos !== 'function') return;
 
+        const handleMouseDown = (e) => {
+            if (resizing.current) return;
+            
+            e.preventDefault();   // Stops browser from planting text cursor
+            e.stopPropagation();  // Stops ProseMirror's default text selection
+
+            // Force NodeSelection directly using the exact position
+            const pos = getPos();
+            if (typeof pos === 'number') {
+                editor.commands.setNodeSelection(pos);
+            }
+        };
+
+        // Use capture: true so we intercept the click BEFORE it bubbles anywhere
+        el.addEventListener('mousedown', handleMouseDown, { capture: true });
+        return () => {
+            el.removeEventListener('mousedown', handleMouseDown, { capture: true });
+        };
+    }, [editor, getPos, selected, imgError]); // re-bind when state changes to avoid stale closures
+
+    // ── Resize drag ───────────────────────────────────────────────────────────
     const onResizeStart = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        resizing.current = true;
         startX.current = e.clientX;
         startW.current = imgRef.current?.offsetWidth || 300;
-        const onMove = (me) => {
-            const dx = me.clientX - startX.current;
-            const newPx = Math.max(80, startW.current + dx);
-            setLocalWidth(`${newPx}px`);
+
+        const onMove = (mv) => {
+            if (!resizing.current) return;
+            setLocalWidth(`${Math.max(60, startW.current + mv.clientX - startX.current)}px`);
         };
-        const onUp = (me) => {
-            const dx = me.clientX - startX.current;
-            const newPx = Math.max(80, startW.current + dx);
-            updateAttributes({ width: `${newPx}px` });
+        const onUp = (mu) => {
+            resizing.current = false;
+            updateAttributes({ width: `${Math.max(60, startW.current + mu.clientX - startX.current)}px` });
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('mouseup', onUp);
         };
@@ -64,159 +98,88 @@ const ResizableImageView = ({ node, updateAttributes, selected, deleteNode, edit
         window.addEventListener('mouseup', onUp);
     };
 
-    // Force NodeSelection when clicking image — ProseMirror's native coordinate
-    // mapping fails for complex React NodeViews and places a gap cursor instead.
-    const handleWrapperMouseDown = (e) => {
-        e.preventDefault();   // Stop ProseMirror from computing a wrong cursor position
-        e.stopPropagation();  // Don't bubble to parent editors/containers
-        
-        if (editor && typeof getPos === 'function') {
-            // Raw DOM focus first — ensures the contenteditable container is active
-            editor.view.dom.focus();
-            // Then explicitly set NodeSelection on this exact node
-            editor.commands.setNodeSelection(getPos());
-        }
-    };
+    // ── Alignment → outer wrapper style ──────────────────────────────────────
+    const outerStyle = {
+        left:         { display: 'flex', justifyContent: 'flex-start', margin: '0.75em 0', width: '100%' },
+        center:       { display: 'flex', justifyContent: 'center',      margin: '0.75em 0', width: '100%' },
+        right:        { display: 'flex', justifyContent: 'flex-end',    margin: '0.75em 0', width: '100%' },
+        'wrap-left':  { float: 'left',  marginRight: '1em', marginBottom: '0.5em' },
+        'wrap-right': { float: 'right', marginLeft:  '1em', marginBottom: '0.5em' },
+    }[align] ?? { display: 'flex', justifyContent: 'center', margin: '0.75em 0', width: '100%' };
 
-    const handleDelete = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        if (editor && typeof getPos === 'function') {
-            const pos = getPos();
-            deleteNode();
-            
-            requestAnimationFrame(() => {
-                if (!editor.isDestroyed) {
-                    editor.chain().setTextSelection(pos).focus().run();
-                }
-            });
-        } else {
-            deleteNode();
-        }
-    };
-
-    const justifyMap = { 
-        'left': { display: 'flex', justifyContent: 'flex-start', margin: '1em 0', width: '100%' }, 
-        'center': { display: 'flex', justifyContent: 'center', margin: '1em 0', width: '100%' }, 
-        'right': { display: 'flex', justifyContent: 'flex-end', margin: '1em 0', width: '100%' },
-        'wrap-left': { float: 'left', marginRight: '1.5em', marginBottom: '0.5em' },
-        'wrap-right': { float: 'right', marginLeft: '1.5em', marginBottom: '0.5em' },
-        'inline': { display: 'inline-block', margin: '0 0.5em' }
-    };
-    const nodeWrapperStyle = justifyMap[align] || justifyMap['center'];
+    // ── Selection ring style ──────────────────────────────────────────────────
+    const ring = selected
+        ? { outline: '2.5px solid #3b82f6', outlineOffset: '2px' }
+        : { outline: '2px solid transparent', outlineOffset: '2px' };
 
     return (
-        <NodeViewWrapper 
-            as="div"
-            style={nodeWrapperStyle}
-            contentEditable={false}
-            onMouseDown={handleWrapperMouseDown}
-        >
-            <div style={{ position: 'relative', display: 'inline-block', width: imgError ? '120px' : 'auto', maxWidth: '100%' }}>
-                
-                {/* Professional UI Toolbar strictly tied to the `selected` prop */}
-                {/* Anchored to the right edge so it safely expands left inside the table column without overflowing the screen */}
-                {selected && (
-                    <div 
-                        className="flex items-center gap-2 px-2 py-1.5 bg-[#1e293b] text-white shadow-xl rounded-lg border border-slate-700"
-                        style={{ position: 'absolute', top: '-44px', right: 0, zIndex: 50, whiteSpace: 'nowrap' }}
-                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
-                    >
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mx-1">Image</span>
-                        
-                        <div className="flex bg-[#0f172a] rounded overflow-hidden border border-slate-700">
-                            {[['wrap-left', PanelLeft], ['center', AlignCenter], ['wrap-right', PanelRight], ['left', AlignLeft], ['right', AlignRight]].map(([a, Icon]) => (
-                                <button
-                                    key={a}
-                                    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); updateAttributes({ align: a }); }}
-                                    className={`p-1 transition-colors ${align === a ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-700'}`}
-                                    title={`Align ${a}`}
-                                >
-                                    <Icon size={14} />
-                                </button>
-                            ))}
-                        </div>
-                        
-                        <div className="w-px h-5 bg-slate-600 mx-1" />
-
-                        <div className="flex items-center gap-1 text-xs">
-                            <MoveHorizontal size={14} className="text-slate-400" />
-                            {['25%', '50%', '75%', '100%'].map((w) => (
-                                <button
-                                    key={w}
-                                    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); updateAttributes({ width: w }); }}
-                                    className={`px-1.5 py-0.5 rounded transition-colors font-medium border border-transparent ${width === w ? 'bg-blue-600/30 text-blue-300 border-blue-500/50' : 'text-slate-300 bg-slate-800 hover:bg-slate-700'}`}
-                                >
-                                    {w}
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="w-px h-5 bg-slate-600 mx-1" />
-
-                        <button
-                            onMouseDown={handleDelete}
-                            className="p-1 text-red-400 hover:bg-red-500/20 hover:text-red-300 rounded transition-colors"
-                            title="Delete"
-                        >
-                            <Trash2 size={14} />
-                        </button>
-                    </div>
-                )}
-
+        <NodeViewWrapper as="div" style={outerStyle} contentEditable={false}>
+            <div
+                ref={innerWrapperRef}
+                title={selected ? "Selected" : "Click to select"}
+                style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', cursor: 'pointer' }}
+            >
                 {!imgError ? (
                     <img
                         ref={imgRef}
                         src={src}
                         alt={alt || 'চিত্র'}
-                        data-drag-handle=""
-                        className="select-none"
+                        draggable={false}
                         onError={() => setImgError(true)}
                         style={{
+                            display: 'block',
                             width: localWidth,
                             minWidth: '60px',
                             maxWidth: '100%',
-                            display: 'block',
-                            borderRadius: '6px',
-                            outline: selected ? '3px solid #3b82f6' : 'none',
-                            outlineOffset: '2px',
-                            cursor: 'pointer',
-                            transition: 'outline 0.15s ease-in-out',
+                            borderRadius: '4px',
+                            userSelect: 'none',
+                            ...ring,
+                            transition: 'outline 0.12s',
                         }}
                     />
                 ) : (
                     <div
                         ref={imgRef}
-                        data-drag-handle=""
-                        className="select-none flex flex-col items-center justify-center bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg text-slate-400"
                         style={{
-                            width: '120px',
-                            minHeight: '100px',
-                            outline: selected ? '3px solid #3b82f6' : 'none',
-                            outlineOffset: '2px',
-                            cursor: 'pointer',
+
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: localWidth || '120px',
+                            minHeight: '90px',
+                            background: '#f8fafc',
+                            border: '2px dashed #cbd5e1',
+                            borderRadius: '8px',
+                            color: '#94a3b8',
+                            userSelect: 'none',
+                            // removed pointerEvents: none
+                            ...ring,
                         }}
                     >
-                        <ImageIcon size={20} className="mb-2 opacity-50" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center px-1 overflow-hidden" style={{textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%'}}>
+                        <ImageIcon size={20} style={{ marginBottom: 4, opacity: 0.5 }} />
+                        <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, textAlign: 'center', padding: '0 6px' }}>
                             {alt || 'Image'}
                         </span>
-                        <span className="text-[9px] opacity-70 mt-1 px-2 text-center leading-tight">Click to select<br/>& Crop ref</span>
+                        <span style={{ fontSize: 9, opacity: 0.6, marginTop: 2 }}>click to select</span>
                     </div>
                 )}
 
+                {/* Resize handle — SE corner, stopPropagation so PM plugin ignores it */}
                 {selected && !imgError && (
                     <div
-                        onMouseDown={onResizeStart}
+                        onMouseDown={(e) => { e.stopPropagation(); onResizeStart(e); }}
+                        title="Drag to resize"
                         style={{
-                            position: 'absolute', bottom: -4, right: -4,
-                            width: 14, height: 14, background: '#3b82f6',
-                            borderRadius: '50%', cursor: 'nwse-resize',
-                            border: '2px solid white', boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+                            position: 'absolute', bottom: -5, right: -5,
+                            width: 13, height: 13,
+                            background: '#3b82f6',
+                            borderRadius: '50%',
+                            border: '2.5px solid #fff',
+                            boxShadow: '0 1px 4px rgba(0,0,0,.4)',
+                            cursor: 'nwse-resize',
                             zIndex: 10,
                         }}
-                        title="Drag to resize"
                     />
                 )}
             </div>
@@ -224,8 +187,9 @@ const ResizableImageView = ({ node, updateAttributes, selected, deleteNode, edit
     );
 };
 
-// ─── Custom ResizableImage — extends @tiptap/extension-image (safest approach)
+// ─── Custom ResizableImage — extends @tiptap/extension-image
 const ResizableImage = BaseImage.extend({
+    name: 'image',          // explicit — BaseImage.extend inherits 'image' anyway
     inline: false,
     group: 'block',
     draggable: true,
@@ -253,12 +217,15 @@ const ResizableImage = BaseImage.extend({
             {
                 tag: 'div[data-image-wrapper] img, span[data-image-wrapper] img',
                 priority: 100,
-                getAttrs: (dom) => ({
-                    src:   dom.getAttribute('src') || '',
-                    alt:   dom.getAttribute('alt') || 'চিত্র',
-                    width: dom.getAttribute('data-width') || dom.style.width || '50%',
-                    align: dom.closest('[data-image-wrapper]')?.getAttribute('data-align') || 'center',
-                }),
+                getAttrs: (dom) => {
+                    const wrapperAlign = dom.parentElement ? dom.parentElement.getAttribute('data-align') : null;
+                    return {
+                        src:   dom.getAttribute('src') || '',
+                        alt:   dom.getAttribute('alt') || 'চিত্র',
+                        width: dom.getAttribute('data-width') || dom.style.width || '50%',
+                        align: dom.getAttribute('data-align') || wrapperAlign || 'center',
+                    };
+                },
             },
             // Direct <img> tags (Fallback)
             {
@@ -340,20 +307,21 @@ const MathInlineView = ({ node, updateAttributes, editor }) => {
     const handleSave = () => {
         setIsEditing(false);
         updateAttributes({ latex: inputValue });
+        requestAnimationFrame(() => {
+            if (editor && !editor.isDestroyed) {
+                editor.commands.focus();
+            }
+        });
     };
 
     return (
         <NodeViewWrapper 
             as="span" 
             style={{ display: 'inline-block', position: 'relative', cursor: 'pointer', margin: '0 4px' }}
-            onMouseDown={(e) => {
-                e.preventDefault(); 
-                e.stopPropagation();
-            }}
             onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
                 if (!isEditing) {
+                    e.preventDefault();
+                    e.stopPropagation();
                     setInputValue(latex);
                     setIsEditing(true);
                 }
@@ -474,9 +442,79 @@ const GoldenEditor = ({ value, onChange, onSave, onClose, isSaving, setTiptapEdi
     const [zoom, setZoom] = useState(1.0);
     const [wordCount, setWordCount] = useState(0);
     const [fontSize, setFontSize] = useState(16);
+    const [lineHeight, setLineHeight] = useState(1.85);
+    // Tick counter — incremented on every selection/update so toolbar always reflects current state
+    const [editorTick, setEditorTick] = useState(0);
+
+    // AI Tooltip State
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiResult, setAiResult] = useState(null); // { text, action, from, to }
+    
+    // Find & Replace State
+    const [showFindReplace, setShowFindReplace] = useState(false);
+    const [findText, setFindText] = useState('');
+    const [replaceText, setReplaceText] = useState('');
+
+    // Slash Menu State
+    const [slashMenuData, setSlashMenuData] = useState({ open: false, query: '', pos: 0, len: 0, rect: null });
+    const [slashIndex, setSlashIndex] = useState(0);
+
+    // AI Custom Menu State
+    const [aiMenuData, setAiMenuData] = useState({ open: false, rect: null, text: '' });
+
     const isSettingContent = useRef(false); // prevents onChange loop when programmatically setting content
     const valueRef = useRef(value);          // always holds latest value for the once-only load effect
     useEffect(() => { valueRef.current = value; }, [value]);
+
+    const handleReplace = (replaceAll = false) => {
+        if (!editor || !findText) return;
+
+        const { doc, tr } = editor.state;
+        const matches = [];
+
+        doc.descendants((node, pos) => {
+            if (node.isText && node.text) {
+                let match;
+                // Safe regex escape
+                const regex = new RegExp(findText.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
+                while ((match = regex.exec(node.text)) !== null) {
+                    matches.push({
+                        from: pos + match.index,
+                        to: pos + match.index + match[0].length
+                    });
+                }
+            }
+        });
+
+        if (matches.length === 0) {
+            alert('No matches found.');
+            return;
+        }
+
+        // Apply backwards so positions don't shift!
+        matches.reverse();
+        
+        let replacedCount = 0;
+        if (!replaceAll) {
+            const match = matches.pop(); // The first match visually
+            tr.insertText(replaceText, match.from, match.to);
+            replacedCount = 1;
+        } else {
+            matches.forEach(match => {
+                tr.insertText(replaceText, match.from, match.to);
+            });
+            replacedCount = matches.length;
+        }
+
+        editor.view.dispatch(tr);
+        // Force the debouncer to fire so changes instantly reflect in the UI & saves
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        onChange(editor.getHTML());
+        
+        // Notify user
+        // We can just set a toast, but an alert is simple. Or just silently handle single replace.
+        if (replaceAll) alert(`${replacedCount} replacement(s) made.`);
+    };
 
     const editor = useEditor({
         extensions: [
@@ -498,18 +536,77 @@ const GoldenEditor = ({ value, onChange, onSave, onClose, isSaving, setTiptapEdi
         content: '<p></p>',
         onUpdate: ({ editor }) => {
             if (isSettingContent.current) return; // skip onChange during programmatic setContent
-            const html = editor.getHTML();
-            onChange(html);
-            const text = editor.getText();
-            setWordCount(text.split(/\s+/).filter(w => w.length > 0).length);
+            
+            // Check for Slash Menu
+            const { $head } = editor.state.selection;
+            if ($head && $head.parent.isTextblock) {
+                const textBeforeCount = $head.parent.textContent.slice(0, $head.parentOffset);
+                // Matches " /something" or starting the line with "/something"
+                const match = /(?:^|\s)\/([a-zA-Z0-9]*)$/.exec(textBeforeCount);
+                if (match) {
+                    try {
+                        const coords = editor.view.coordsAtPos($head.pos); // gets screen coords of cursor
+                        setSlashMenuData({ open: true, query: match[1], pos: $head.pos - match[1].length - 1, len: match[1].length + 1, rect: coords });
+                        setSlashIndex(0); // reset selection
+                    } catch(e) {}
+                } else {
+                    setSlashMenuData(prev => prev.open ? { ...prev, open: false } : prev);
+                }
+            } else {
+                setSlashMenuData(prev => prev.open ? { ...prev, open: false } : prev);
+            }
+
+            if (debounceTimer.current) clearTimeout(debounceTimer.current);
+            debounceTimer.current = setTimeout(() => {
+                const html = editor.getHTML();
+                onChange(html);
+                const text = editor.getText();
+                setWordCount(text.split(/\s+/).filter(w => w.length > 0).length);
+            }, 600); // 600ms debounce prevents lag on every keystroke
+        },
+        onSelectionUpdate: ({ editor }) => {
+            // Force toolbar re-render on every selection change (needed for image context bar)
+            setEditorTick(t => t + 1);
+
+            const { from, to, empty } = editor.state.selection;
+            if (!empty && from !== to && !editor.isActive('image') && !editor.isActive('table')) {
+                try {
+                    const coords = editor.view.coordsAtPos(from);
+                    setAiMenuData({
+                        open: true,
+                        rect: coords,
+                        text: editor.state.doc.textBetween(from, to, ' ')
+                    });
+                } catch(e) {
+                    setAiMenuData({ open: false, rect: null, text: '' });
+                }
+            } else {
+                setAiMenuData({ open: false, rect: null, text: '' });
+            }
         },
         editorProps: {
             attributes: {
                 class: 'outline-none w-full',
                 spellcheck: 'true',
             },
+            // Backup: if mousedown plugin missed the image (e.g. posAtCoords edge case),
+            // handleClickOn catches it on the click event (fires after mouseup).
+            handleClickOn(view, pos, node, nodePos, event, direct) {
+                if (direct && node && node.type && node.type.name === 'image') {
+                    try {
+                        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos)));
+                    } catch (_) {}
+                    return true;
+                }
+                return false;
+            },
         },
     });
+
+    const debounceTimer = useRef(null);
+    useEffect(() => {
+        return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+    }, []);
 
     // Track editor instance with a ref to expose to image injector
     useEffect(() => {
@@ -551,7 +648,59 @@ const GoldenEditor = ({ value, onChange, onSave, onClose, isSaving, setTiptapEdi
     }, [editor]);
 
     // Save handler (also called via Ctrl+S)
-    const handleSave = () => { if (!isSaving) onSave(); };
+    const handleSave = () => { 
+        if (!isSaving) {
+            // Forcefully flush any pending keystrokes before executing save action
+            if (debounceTimer.current) {
+                clearTimeout(debounceTimer.current);
+                debounceTimer.current = null;
+                const html = editor.getHTML();
+                onChange(html);
+                const text = editor.getText();
+                setWordCount(text.split(/\s+/).filter(w => w.length > 0).length);
+            }
+            onSave(); 
+        } 
+    };
+
+    // ── AI Edit Helper ─────────────────────────────────────────────────────
+    const callAiEdit = async (action) => {
+        if (!editor || !aiMenuData.text) return;
+        const { from, to } = editor.state.selection;
+        setAiLoading(true);
+        setAiResult(null);
+        try {
+            const token = localStorage.getItem('token');
+            const resp = await fetch('/api/v1/knowledge-hub/ai/edit-text', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ action, text: aiMenuData.text })
+            });
+            if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+            const data = await resp.json();
+            if (data.result) {
+                setAiResult({ text: data.result, action, from, to });
+            }
+        } catch (e) {
+            alert('AI Error: ' + e.message);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const acceptAiResult = () => {
+        if (!editor || !aiResult) return;
+        editor.chain().focus().setTextSelection({ from: aiResult.from, to: aiResult.to })
+            .insertContent(aiResult.text).run();
+        // Flush so the change is saved
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        onChange(editor.getHTML());
+        setAiResult(null);
+        setAiMenuData({ open: false, rect: null, text: '' });
+    };
 
     // Save selection so dropdowns (which steal focus) don't lose it
     const savedSelection = useRef(null);
@@ -581,27 +730,79 @@ const GoldenEditor = ({ value, onChange, onSave, onClose, isSaving, setTiptapEdi
         savedSelection.current = null;
     };
 
+    // ── Slash Commands Defs ──────────────────────────────────────────────
+    const SLASH_COMMANDS = [
+        { id: 'h1', title: 'Heading 1', icon: <Type size={14}/>, run: (ed, pos, len) => ed.chain().deleteRange({from: pos, to: pos+len}).setHeading({ level: 1 }).run() },
+        { id: 'h2', title: 'Heading 2', icon: <Type size={14}/>, run: (ed, pos, len) => ed.chain().deleteRange({from: pos, to: pos+len}).setHeading({ level: 2 }).run() },
+        { id: 'h3', title: 'Heading 3', icon: <Type size={14}/>, run: (ed, pos, len) => ed.chain().deleteRange({from: pos, to: pos+len}).setHeading({ level: 3 }).run() },
+        { id: 'bullet', title: 'Bullet List', icon: <List size={14}/>, run: (ed, pos, len) => ed.chain().deleteRange({from: pos, to: pos+len}).toggleBulletList().run() },
+        { id: 'number', title: 'Numbered List', icon: <ListOrdered size={14}/>, run: (ed, pos, len) => ed.chain().deleteRange({from: pos, to: pos+len}).toggleOrderedList().run() },
+        { id: 'table', title: 'Insert Table', icon: <Grid3x3 size={14}/>, run: (ed, pos, len) => ed.chain().deleteRange({from: pos, to: pos+len}).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+        { id: 'math', title: 'Math (Formula)', icon: <Quote size={14}/>, run: (ed, pos, len) => ed.chain().deleteRange({from: pos, to: pos+len}).insertContent('<span data-type="math"></span>').run() },
+        { id: 'hr', title: 'Divider (HR)', icon: <Minus size={14}/>, run: (ed, pos, len) => ed.chain().deleteRange({from: pos, to: pos+len}).setHorizontalRule().run() }
+    ];
+
+    const filteredSlashCommands = SLASH_COMMANDS.filter(c => c.title.toLowerCase().includes((slashMenuData.query || '').toLowerCase()));
+
+    const runSlashCommand = (cmd) => {
+        cmd.run(editor, slashMenuData.pos, slashMenuData.len);
+        setSlashMenuData({ open: false, query: '', pos: 0, len: 0, rect: null });
+        editor.commands.focus();
+    };
+
     return (
         <div
             className={`flex flex-col transition-all duration-200 ${isFullscreen
                 ? 'fixed inset-0 z-[200] rounded-none'
-                : 'h-full rounded-b-xl overflow-hidden'
+                : 'h-full rounded-b-xl overflow-hidden relative'
             }`}
             style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", background: '#e8eaed' }}
             onKeyDown={e => {
+                if (slashMenuData.open && filteredSlashCommands.length > 0) {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIndex(i => (i + 1) % filteredSlashCommands.length); return; }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); setSlashIndex(i => (i - 1 + filteredSlashCommands.length) % filteredSlashCommands.length); return; }
+                    if (e.key === 'Enter') { 
+                        e.preventDefault(); 
+                        const cmd = filteredSlashCommands[slashIndex];
+                        if (cmd) runSlashCommand(cmd);
+                        return; 
+                    }
+                    if (e.key === 'Escape') { e.preventDefault(); setSlashMenuData(p => ({...p, open: false})); return; }
+                }
+
                 if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                     e.preventDefault();
                     handleSave();
                 }
             }}
         >
+            {/* Slash Menu Floating Overlay */}
+            {slashMenuData.open && filteredSlashCommands.length > 0 && slashMenuData.rect && (
+                <div 
+                    className="fixed z-[300] bg-white border border-slate-200 shadow-2xl rounded-lg py-1 w-56 max-h-[250px] overflow-y-auto"
+                    style={{ top: slashMenuData.rect.bottom + 5, left: slashMenuData.rect.left }}
+                >
+                    <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">Slash Commands</div>
+                    {filteredSlashCommands.map((cmd, i) => (
+                        <button
+                            key={cmd.id}
+                            className={`w-full flex items-center gap-3 px-3 py-2 text-xs text-left transition-colors ${slashIndex === i ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700 hover:bg-slate-50'}`}
+                            onMouseEnter={() => setSlashIndex(i)}
+                            onMouseDown={e => { e.preventDefault(); runSlashCommand(cmd); }}
+                        >
+                            <span className={slashIndex === i ? 'text-blue-600' : 'text-slate-400'}>{cmd.icon}</span>
+                            {cmd.title}
+                        </button>
+                    ))}
+                </div>
+            )}
             {/* ═══ Title Bar ═══════════════════════════════════════════════ */}
             <div className="flex items-center justify-between px-3 py-1.5 bg-[#1e3a5f] shrink-0">
                 <div className="flex items-center gap-2">
                     <div className="w-5 h-5 bg-blue-400 rounded flex items-center justify-center">
                         <FileText size={12} className="text-white" />
                     </div>
-                    <span className="text-xs font-semibold text-blue-100 tracking-wide">Knowledge Document — WYSIWYG Editor</span>
+                    <span className="text-xs font-semibold text-blue-100 tracking-wide">Knowledge Document — GoldenEditor <span className="text-blue-400 font-normal">(Tiptap)</span></span>
                 </div>
                 <div className="flex items-center gap-1">
                     {/* Fullscreen: onMouseDown so editor keeps selection; focus restored after */}
@@ -624,7 +825,8 @@ const GoldenEditor = ({ value, onChange, onSave, onClose, isSaving, setTiptapEdi
             </div>
 
             {/* ═══ Ribbon Toolbar ══════════════════════════════════════════ */}
-            <div className="flex items-center flex-wrap gap-1 px-3 py-2 bg-[#f3f6fb] border-b-2 border-blue-200 shrink-0 shadow-sm">
+            {/* data-tick forces re-render when selection changes so isActive() calls refresh */}
+            <div data-tick={editorTick} className="flex items-center flex-wrap gap-1 px-3 py-2 bg-[#f3f6fb] border-b-2 border-blue-200 shrink-0 shadow-sm">
 
                 {/* Undo / Redo */}
                 <TB onClick={() => editor.chain().focus().undo().run()} title="Undo (Ctrl+Z)"
@@ -672,6 +874,20 @@ const GoldenEditor = ({ value, onChange, onSave, onClose, isSaving, setTiptapEdi
                 >
                     {[10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64].map(s => (
                         <option key={s} value={s}>{s}</option>
+                    ))}
+                </select>
+
+                {/* Line Height */}
+                <select
+                    value={lineHeight}
+                    onMouseDown={saveSelection}
+                    onFocus={saveSelection}
+                    onChange={e => setLineHeight(parseFloat(e.target.value))}
+                    title="Line Height / Line Spacing"
+                    className="h-8 px-2 text-xs font-medium rounded border border-slate-200 bg-white text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-300 w-20"
+                >
+                    {[1.0, 1.15, 1.3, 1.5, 1.75, 1.85, 2.0, 2.25, 2.5, 3.0].map(lh => (
+                        <option key={lh} value={lh}>↕ {lh}</option>
                     ))}
                 </select>
 
@@ -741,14 +957,161 @@ const GoldenEditor = ({ value, onChange, onSave, onClose, isSaving, setTiptapEdi
 
                 <Divider />
 
-                {/* Table */}
-                <TB onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-                    active={false} title="Insert Table">
-                    <Grid3x3 size={15} />
-                </TB>
+                {/* ─── Image Context Bar ─────────────────────────────────────────── */}
+                {editor.isActive('image') && (() => {
+                    const attrs = editor.getAttributes('image');
+                    const curAlign = attrs.align || 'center';
+                    const curWidth = attrs.width || '50%';
+                    return (
+                        <div className="flex items-center gap-0.5 bg-gradient-to-r from-blue-900 to-cyan-900 p-1 rounded-lg border border-blue-700 shadow-lg">
+                            <ImageIcon size={12} className="text-blue-300 ml-1" />
+                            <span className="text-[9px] font-black text-blue-300 uppercase tracking-widest mx-1">Image</span>
+                            <div className="w-px h-5 bg-blue-600 mx-0.5" />
 
-                {/* Spacer + Save — onMouseDown keeps selection in editor */}
-                <div className="ml-auto">
+                            {/* Alignment */}
+                            {[
+                                ['left',       '↤', 'Float Left'],
+                                ['wrap-left',  '◧', 'Wrap Left'],
+                                ['center',     '⊕', 'Center'],
+                                ['wrap-right', '◨', 'Wrap Right'],
+                                ['right',      '↦', 'Float Right'],
+                            ].map(([a, icon, label]) => (
+                                <button key={a}
+                                    onMouseDown={e => { e.preventDefault(); editor.commands.updateAttributes('image', { align: a }); }}
+                                    className={`px-2 py-1 text-[11px] font-bold rounded transition-colors ${curAlign === a ? 'bg-blue-500 text-white' : 'text-blue-200 hover:bg-blue-700'}`}
+                                    title={label}
+                                >{icon}</button>
+                            ))}
+
+                            <div className="w-px h-5 bg-blue-600 mx-0.5" />
+
+                            {/* Width presets */}
+                            {['25%', '50%', '75%', '100%'].map(w => (
+                                <button key={w}
+                                    onMouseDown={e => { e.preventDefault(); editor.commands.updateAttributes('image', { width: w }); }}
+                                    className={`px-2 py-1 text-[10px] font-bold rounded transition-colors ${curWidth === w ? 'bg-cyan-500 text-white' : 'text-blue-200 hover:bg-blue-800'}`}
+                                    title={`Width ${w}`}
+                                >{w}</button>
+                            ))}
+
+                            <div className="w-px h-5 bg-blue-600 mx-0.5" />
+
+                            {/* Delete */}
+                            <button
+                                onMouseDown={e => { e.preventDefault(); editor.chain().focus().deleteSelection().run(); }}
+                                className="flex items-center gap-1 px-2 py-1 text-[10px] bg-red-600 hover:bg-red-700 text-white rounded font-bold transition-colors"
+                                title="Delete Image"
+                            >
+                                <Trash2 size={11}/> Delete
+                            </button>
+                        </div>
+                    );
+                })()}
+
+                {/* ─── Table Insert / Controls ─────────────────────────────────────── */}
+                {/* Table */}
+                {!editor.isActive('table') && (
+                    <TB onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+                        active={false} title="Insert Table">
+                        <Grid3x3 size={15} />
+                    </TB>
+                )}
+                {editor.isActive('table') && (
+                    <div className="flex items-center gap-0.5 bg-gradient-to-r from-indigo-900 to-blue-900 p-1 rounded-lg border border-indigo-700 shadow-lg">
+                        <span className="text-[9px] font-black text-indigo-300 uppercase tracking-widest ml-2 mr-1.5">⊞ Table</span>
+                        <div className="w-px h-5 bg-indigo-600 mx-0.5" />
+
+                        {/* Column controls */}
+                        <button onMouseDown={e => { e.preventDefault(); editor.chain().focus().addColumnBefore().run(); }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] text-indigo-200 hover:bg-indigo-700 rounded font-medium transition-colors" title="Add Column Before">
+                            ← Col
+                        </button>
+                        <button onMouseDown={e => { e.preventDefault(); editor.chain().focus().addColumnAfter().run(); }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] text-indigo-200 hover:bg-indigo-700 rounded font-medium transition-colors" title="Add Column After">
+                            Col →
+                        </button>
+                        <button onMouseDown={e => { e.preventDefault(); editor.chain().focus().deleteColumn().run(); }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] text-red-300 hover:bg-red-900/50 rounded font-medium transition-colors" title="Delete Column">
+                            ✕ Col
+                        </button>
+
+                        <div className="w-px h-5 bg-indigo-600 mx-0.5" />
+
+                        {/* Row controls */}
+                        <button onMouseDown={e => { e.preventDefault(); editor.chain().focus().addRowBefore().run(); }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] text-indigo-200 hover:bg-indigo-700 rounded font-medium transition-colors" title="Add Row Before">
+                            ↑ Row
+                        </button>
+                        <button onMouseDown={e => { e.preventDefault(); editor.chain().focus().addRowAfter().run(); }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] text-indigo-200 hover:bg-indigo-700 rounded font-medium transition-colors" title="Add Row After">
+                            Row ↓
+                        </button>
+                        <button onMouseDown={e => { e.preventDefault(); editor.chain().focus().deleteRow().run(); }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] text-red-300 hover:bg-red-900/50 rounded font-medium transition-colors" title="Delete Row">
+                            ✕ Row
+                        </button>
+
+                        <div className="w-px h-5 bg-indigo-600 mx-0.5" />
+
+                        {/* Merge / Split */}
+                        <button onMouseDown={e => { e.preventDefault(); editor.chain().focus().mergeCells().run(); }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] text-yellow-300 hover:bg-yellow-900/40 rounded font-medium transition-colors" title="Merge Cells">
+                            ⊔ Merge
+                        </button>
+                        <button onMouseDown={e => { e.preventDefault(); editor.chain().focus().splitCell().run(); }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] text-yellow-300 hover:bg-yellow-900/40 rounded font-medium transition-colors" title="Split Cell">
+                            ⊓ Split
+                        </button>
+                        <button onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleHeaderRow().run(); }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] text-blue-300 hover:bg-blue-900/50 rounded font-medium transition-colors" title="Toggle Header Row">
+                            H Row
+                        </button>
+
+                        <div className="w-px h-5 bg-indigo-600 mx-0.5" />
+
+                        {/* Delete table */}
+                        <button onMouseDown={e => { e.preventDefault(); editor.chain().focus().deleteTable().run(); }}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] bg-red-600 hover:bg-red-700 text-white rounded font-bold transition-colors" title="Delete Entire Table">
+                            <Trash2 size={11}/> Table
+                        </button>
+                    </div>
+                )}
+
+                {/* Spacer + Save / Extras */}
+                <div className="ml-auto flex items-center gap-3 relative">
+                    
+                    <div className="flex items-center gap-1">
+                        <TB onClick={() => setShowFindReplace(p => !p)} active={showFindReplace} title="Find & Replace (Ctrl+F workaround)">
+                            <Search size={15} />
+                        </TB>
+                    </div>
+
+                    {/* Floating Find & Replace Dialog */}
+                    {showFindReplace && (
+                        <div className="absolute top-10 right-0 z-50 bg-white p-3 rounded-lg shadow-xl border border-slate-200 w-64 flex flex-col gap-2 text-sm">
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="text-xs font-bold text-slate-600 tracking-wide uppercase">Find & Replace</span>
+                                <button onClick={() => setShowFindReplace(false)} className="text-slate-400 hover:text-red-500"><X size={14}/></button>
+                            </div>
+                            <input 
+                                type="text" placeholder="Find text..." 
+                                value={findText} onChange={e => setFindText(e.target.value)}
+                                className="w-full text-xs px-2 py-1.5 border rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                            />
+                            <input 
+                                type="text" placeholder="Replace with..." 
+                                value={replaceText} onChange={e => setReplaceText(e.target.value)}
+                                className="w-full text-xs px-2 py-1.5 border rounded focus:ring-1 focus:ring-blue-500 outline-none"
+                            />
+                            <div className="flex gap-2 justify-end mt-1">
+                                <button onMouseDown={e => { e.preventDefault(); handleReplace(false); }} className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] uppercase font-bold rounded transition-colors">Replace First</button>
+                                <button onMouseDown={e => { e.preventDefault(); handleReplace(true); }} className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] uppercase font-bold rounded transition-colors">Replace All</button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="w-px h-6 bg-slate-300" />
+
                     <button
                         onMouseDown={e => { e.preventDefault(); handleSave(); }}
                         disabled={isSaving}
@@ -765,13 +1128,82 @@ const GoldenEditor = ({ value, onChange, onSave, onClose, isSaving, setTiptapEdi
 
             {/* ═══ Page Canvas ══════════════════════════════════════════════ */}
             <div className="flex-1 overflow-auto bg-[#525659] relative flex flex-col items-center py-4 md:py-8 px-2 md:px-4 pb-[200px] custom-scrollbar">
+                
+                {/* AI Tooltip — rendered in document.body via portal to avoid all z-index/clip issues */}
+                {aiMenuData.open && aiMenuData.rect && !aiLoading && ReactDOM.createPortal(
+                    <div 
+                        style={{ 
+                            position: 'fixed',
+                            zIndex: 999999,
+                            top:  Math.max(8, aiMenuData.rect.top - 8),
+                            left: Math.max(8, aiMenuData.rect.left + (aiMenuData.rect.width || 0) / 2),
+                            transform: 'translateX(-50%) translateY(-100%)',
+                            pointerEvents: 'auto',
+                        }}
+                        className="flex items-center bg-white rounded-lg shadow-2xl border border-blue-300 divide-x divide-slate-100"
+                    >
+                        <button 
+                            onMouseDown={e => { e.preventDefault(); callAiEdit('fix_grammar'); }}
+                            className="flex items-center gap-1.5 px-3 py-2 hover:bg-violet-50 text-violet-700 text-[11px] font-bold uppercase rounded-l-lg transition-colors whitespace-nowrap"
+                        >
+                            <Sparkles size={13}/> Fix Grammar
+                        </button>
+                        <button 
+                            onMouseDown={e => { e.preventDefault(); callAiEdit('rewrite'); }}
+                            className="flex items-center gap-1.5 px-3 py-2 hover:bg-blue-50 text-blue-700 text-[11px] font-bold uppercase transition-colors whitespace-nowrap"
+                        >
+                            <MessageSquareDiff size={13}/> Rewrite
+                        </button>
+                        <button 
+                            onMouseDown={e => { e.preventDefault(); callAiEdit('translate_en'); }}
+                            className="flex items-center gap-1.5 px-3 py-2 hover:bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase rounded-r-lg transition-colors whitespace-nowrap"
+                        >
+                            <Languages size={13}/> Translate
+                        </button>
+                    </div>,
+                    document.body
+                )}
+
+                {/* AI Result Preview Panel */}
+                {aiResult && (
+                    <div className="fixed z-[400] bottom-8 left-1/2 -translate-x-1/2 w-[560px] max-w-[90vw] bg-white rounded-xl shadow-2xl border border-blue-200 overflow-hidden">
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-blue-600">
+                            <Sparkles size={14} className="text-white"/>
+                            <span className="text-xs font-bold text-white uppercase tracking-wide">
+                                AI Result — {aiResult.action === 'fix_grammar' ? 'Grammar Fixed' : aiResult.action === 'rewrite' ? 'Rewritten' : 'Translated'}
+                            </span>
+                        </div>
+                        <div className="p-4 text-sm text-slate-700 max-h-40 overflow-y-auto border-b border-slate-100" style={{fontFamily: "'Noto Serif Bengali', serif", lineHeight: 1.7}}>
+                            {aiResult.text}
+                        </div>
+                        <div className="flex items-center justify-end gap-2 px-4 py-2.5 bg-slate-50">
+                            <button
+                                onClick={() => { setAiResult(null); setAiMenuData({ open: false, rect: null, text: '' }); }}
+                                className="px-4 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors"
+                            >✕ Discard</button>
+                            <button
+                                onClick={acceptAiResult}
+                                className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                            >✓ Accept &amp; Replace</button>
+                        </div>
+                    </div>
+                )}
+
+                {/* AI Loading Indicator */}
+                {aiLoading && (
+                    <div className="fixed z-[400] bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white px-6 py-3 rounded-xl shadow-xl border border-blue-200">
+                        <div className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-600 rounded-full animate-spin"/>
+                        <span className="text-sm font-semibold text-blue-700">AI is processing...</span>
+                    </div>
+                )}
+
                 <div
                     className="bg-white shadow-[0_4px_20px_rgba(0,0,0,0.4)] w-full max-w-[794px] min-h-[max(800px,80vh)] md:min-h-[1123px] px-5 py-8 md:px-[80px] md:py-[72px] shrink-0"
                     style={{
                         zoom: zoom,
                         transition: 'all 0.15s ease',
                         fontSize: `${fontSize}px`,
-                        lineHeight: '1.85',
+                        lineHeight: lineHeight,
                         color: '#1a1a2e',
                         fontFamily: "'Noto Serif Bengali', 'Kalpurush', 'SutonnyMJ', Georgia, serif",
                     }}

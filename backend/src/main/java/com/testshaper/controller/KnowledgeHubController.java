@@ -411,4 +411,47 @@ public class KnowledgeHubController {
         aiExtractionScheduler.setMaxWorkers(size);
         return ResponseEntity.ok(Map.of("success", true, "newSize", size));
     }
+
+    // ── AI Text Editing — GoldenEditor AI Tooltips ──────────────────────────
+    /**
+     * AI-powered inline text editing for GoldenEditor.
+     * Actions: fix_grammar | rewrite | translate_en | translate_bn
+     */
+    @PostMapping("/ai/edit-text")
+    public ResponseEntity<Map<String, Object>> aiEditText(@RequestBody Map<String, String> body) {
+        String action = body.getOrDefault("action", "fix_grammar");
+        String selectedText = body.getOrDefault("text", "");
+
+        if (selectedText == null || selectedText.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No text provided"));
+        }
+
+        String prompt;
+        switch (action) {
+            case "rewrite" ->
+                prompt = "You are a professional Bengali text editor. Rewrite the following text to make it clearer, " +
+                         "more natural and well-structured. Preserve the original meaning and language (Bengali/English as-is). " +
+                         "Do NOT add explanations. Return ONLY the rewritten text.\n\nText:\n" + selectedText;
+            case "translate_en" ->
+                prompt = "Translate the following Bengali text to English accurately. " +
+                         "Use natural, professional language. Return ONLY the translated text.\n\nText:\n" + selectedText;
+            case "translate_bn" ->
+                prompt = "Translate the following English text to Bengali accurately. " +
+                         "Use natural, standard Bengali. Return ONLY the translated text.\n\nText:\n" + selectedText;
+            default -> // fix_grammar
+                prompt = "You are a professional Bengali/English grammar corrector. " +
+                         "Fix all spelling mistakes, grammatical errors, and OCR artifacts in the following text. " +
+                         "Preserve the original language and meaning exactly. " +
+                         "If the text is in Bengali, correct it in Bengali. If English, correct in English. " +
+                         "Do NOT add explanations. Return ONLY the corrected text.\n\nText:\n" + selectedText;
+        }
+
+        try {
+            String result = knowledgeHubService.callAiTextEdit(prompt);
+            return ResponseEntity.ok(Map.of("result", result, "action", action));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "AI edit failed: " + e.getMessage()));
+        }
+    }
 }

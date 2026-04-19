@@ -59,4 +59,7 @@ public interface KnowledgeHubService {
 
     // --- System Health and Dashboards ---
     java.util.Map<String, Object> getSystemHealthAndJobs();
+
+    // --- GoldenEditor AI Text Editing ---
+    String callAiTextEdit(String prompt) throws Exception;
 }
