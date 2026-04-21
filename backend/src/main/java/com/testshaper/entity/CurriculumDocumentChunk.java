@@ -16,8 +16,20 @@ import lombok.Setter;
 public class CurriculumDocumentChunk extends BaseTenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "document_id", nullable = false)
-    private CurriculumDocument document;
+    @JoinColumn(name = "document_id")
+    private CurriculumDocument document; // Optional: If chunk comes from raw Document
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_book_id")
+    private SourceBookMaster sourceBook; // Optional: If chunk comes from Textbook/Guidebook
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_book_index_id")
+    private SourceBookIndex sourceBookIndex; // Maps back to the book's specific TOC element
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "topic_id")
+    private Topic mappedTopic; // The curriculum topic this chunk belongs to
 
     @Column(name = "chunk_text", columnDefinition = "LONGTEXT", nullable = false)
     private String chunkText;

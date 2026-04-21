@@ -7,6 +7,87 @@ import RevisePanel from './components/RevisePanel';
 import RevisionReviewPanel from './components/RevisionReviewPanel';
 import MarkdownRenderer from '../../../components/MarkdownRenderer';
 
+const CQCombinedRenderer = ({ q, showAnswer, showExplanation }) => {
+    const parts = useMemo(() => {
+        const questionText = q.questionText || '';
+        const correctAnswer = q.correctAnswer || '';
+        const explanation = q.explanation || '';
+        
+        if (!questionText.includes('<div class="cq-questions">')) return null;
+
+        const strippedQText = '<div class="cq-questions">' + questionText.split('<div class="cq-questions">')[1];
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(strippedQText, 'text/html');
+        const ansDoc = parser.parseFromString(correctAnswer, 'text/html');
+        const expDoc = parser.parseFromString(explanation, 'text/html');
+
+        const qList = doc.querySelectorAll('.cq-questions ol li');
+        const parsedParts = [];
+        
+        qList.forEach((li, idx) => {
+            const marks = parseFloat(li.getAttribute('data-marks')) || parseFloat(li.querySelector('.cq-marks')?.textContent?.replace(/[^\d.]/g, '')) || 1;
+            const textSpan = li.querySelector('.cq-text');
+            const label = ['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(97 + idx);
+
+            let partAns = '';
+            let partExp = '';
+
+            const ansNode = ansDoc.querySelector(`.cq-ans-part[data-label="${label}"] .cq-ans-content`) || ansDoc.querySelector(`.cq-ans-part[data-label="${label}"]`);
+            if (ansNode) partAns = ansNode.innerHTML;
+
+            const expNode = expDoc.querySelector(`.cq-exp-part[data-label="${label}"] .cq-exp-content`) || expDoc.querySelector(`.cq-exp-part[data-label="${label}"]`);
+            if (expNode) partExp = expNode.innerHTML;
+
+            parsedParts.push({
+                label,
+                text: textSpan ? textSpan.innerHTML : li.innerHTML,
+                marks,
+                answer: partAns,
+                explanation: partExp
+            });
+        });
+        
+        return parsedParts;
+    }, [q, showAnswer, showExplanation]);
+
+    if (!parts || parts.length === 0) {
+        return <MarkdownRenderer content={q.type === 'CQ' && q.questionText && q.questionText.includes('<div class="cq-questions">') ? '<div class="cq-questions">' + q.questionText.split('<div class="cq-questions">')[1] : q.questionText} />;
+    }
+
+    return (
+        <div className="cq-questions">
+            <ol>
+            {parts.map((p, idx) => (
+                <div key={idx} className="flex flex-col gap-1.5 w-full relative mb-1.5">
+                    <li className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-2.5 px-3 shadow-sm min-h-[44px]">
+                        <div className="flex items-start gap-2 flex-1 min-w-0 pr-4 z-10 font-[500]">
+                            <span className="shrink-0 font-bold text-slate-700 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-[11px] leading-none mt-0.5">{p.label}.</span>
+                            <div className="flex-1 min-w-0">
+                                <MarkdownRenderer content={p.text} className="!max-w-full prose-p:!m-0 prose-p:!p-0" />
+                            </div>
+                        </div>
+                        <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded shrink-0 z-10 w-8 text-center border border-slate-200/50">({p.marks.toFixed(1)})</span>
+                    </li>
+                    {showAnswer && p.answer && (
+                        <div className="ml-[1.5rem] p-3 pb-2 pt-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[12px] text-emerald-900 border-l-[3px] border-l-emerald-400 mt-0.5 shadow-sm">
+                            <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 mb-1.5 uppercase tracking-wider"><CheckCircle size={12}/> উত্তর ({p.label}):</span>
+                            <MarkdownRenderer content={p.answer} className="-mt-1 !max-w-full" />
+                        </div>
+                    )}
+                    {showExplanation && p.explanation && (
+                        <div className="ml-[1.5rem] p-3 pb-2 pt-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[12px] text-amber-900 border-l-[3px] border-l-amber-400 mt-0.5 shadow-sm">
+                            <span className="flex items-center gap-1.5 text-[10px] font-bold text-amber-600 mb-1.5"><Layers size={12}/> ব্যাখ্যা ({p.label}):</span>
+                            <MarkdownRenderer content={p.explanation} className="-mt-1 !max-w-full" />
+                        </div>
+                    )}
+                </div>
+            ))}
+            </ol>
+        </div>
+    );
+};
+
 const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, isSaved, onView, onDelete, onRevise, onReview, isSuperAdmin, hasPerm }) => {
     const navigate = useNavigate();
     const [showAnswer, setShowAnswer] = useState(false);
@@ -71,7 +152,11 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             {/* ── Question Text ── */}
             <div className="mx-4 mb-2 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
                 <div className="text-[13px] font-semibold text-slate-800 leading-snug">
-                    <MarkdownRenderer content={q.questionText} />
+                    {q.type === 'CQ' ? (
+                        <CQCombinedRenderer q={q} showAnswer={showAnswer} showExplanation={showExplanation} />
+                    ) : (
+                        <MarkdownRenderer content={q.questionText} />
+                    )}
                 </div>
                 
                 {q.mcqType === 'MULTIPLE_COMPLETION' && q.statements && q.statements.length > 0 && (
@@ -109,7 +194,7 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             )}
 
             {/* Non-MCQ: show correct answer block after Show Answer click */}
-            {showAnswer && q.type !== 'MCQ' && q.correctAnswer && (
+            {showAnswer && q.type !== 'MCQ' && q.type !== 'CQ' && q.correctAnswer && (
                 <div className="mx-4 mb-2 px-3 py-2.5 bg-emerald-50 border border-emerald-300 rounded-lg text-[12px] text-emerald-900 font-semibold leading-snug flex items-start gap-2">
                     <CheckCircle size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                     <span><MarkdownRenderer content={q.correctAnswer} /></span>
@@ -145,13 +230,13 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             </div>
 
 
-            {/* ── Explanation Panel ── */}
-            {showExplanation && q.explanation && (
+            {/* ── Explanation Block ── */}
+            {showExplanation && q.type !== 'CQ' && q.explanation && (
                 <div className="mx-4 mb-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-[12px] text-blue-900 leading-snug">
                     <MarkdownRenderer content={q.explanation} />
                 </div>
             )}
-            {showExplanation && !q.explanation && (
+            {showExplanation && q.type !== 'CQ' && !q.explanation && (
                 <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No explanation available.</div>
             )}
 
@@ -897,7 +982,11 @@ const QuestionList = () => {
                                 <div>
                                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Question</h3>
                                     <div className="text-lg font-medium text-slate-900 leading-relaxed">
-                                        <MarkdownRenderer content={selectedQuestion.questionText} />
+                                        {selectedQuestion.type === 'CQ' ? (
+                                            <CQCombinedRenderer q={selectedQuestion} showAnswer={true} showExplanation={true} />
+                                        ) : (
+                                            <MarkdownRenderer content={selectedQuestion.questionText} />
+                                        )}
                                     </div>
                                     {selectedQuestion.mcqType === 'MULTIPLE_COMPLETION' && selectedQuestion.statements && selectedQuestion.statements.length > 0 && (
                                         <div className="mt-3 pl-4 border-l-2 border-indigo-200 space-y-2">
@@ -927,7 +1016,7 @@ const QuestionList = () => {
                                     </div>
                                 )}
 
-                                {selectedQuestion.correctAnswer && selectedQuestion.type !== 'MCQ' && (
+                                {selectedQuestion.correctAnswer && selectedQuestion.type !== 'MCQ' && selectedQuestion.type !== 'CQ' && (
                                     <div>
                                         <h3 className="text-sm font-bold text-emerald-600 uppercase tracking-wider mb-2 flex items-center gap-2"><CheckCircle size={16} /> Correct Answer</h3>
                                         <div className="p-4 bg-emerald-50 text-emerald-900 font-medium leading-relaxed rounded-xl border border-emerald-200">
@@ -936,7 +1025,7 @@ const QuestionList = () => {
                                     </div>
                                 )}
 
-                                {selectedQuestion.explanation && (
+                                {selectedQuestion.explanation && selectedQuestion.type !== 'CQ' && (
                                     <div>
                                         <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider mb-2">Explanation (ব্যাখ্যা)</h3>
                                         <div className="p-4 bg-blue-50 text-blue-900 font-medium leading-relaxed rounded-xl border border-blue-200">

@@ -3,7 +3,7 @@ package com.testshaper.scheduler;
 import com.testshaper.entity.AiQuestionGenerationJob;
 import com.testshaper.entity.KnowledgePage;
 import com.testshaper.repository.AiQuestionGenerationJobRepository;
-import com.testshaper.repository.KnowledgePageRepository;
+import com.testshaper.repository.CurriculumDocumentChunkRepository;
 import com.testshaper.service.KnowledgeHubService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +24,8 @@ import java.util.concurrent.Executors;
 public class AiQuestionGenScheduler {
 
     private final AiQuestionGenerationJobRepository jobRepository;
-    private final KnowledgePageRepository pageRepository;
+    private final CurriculumDocumentChunkRepository chunkRepository;
+    private final com.testshaper.repository.SourceBookIndexRepository sourceBookIndexRepository;
     private final KnowledgeHubService knowledgeHubService;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
@@ -68,38 +69,75 @@ public class AiQuestionGenScheduler {
         int threadsPerJob = Math.max(1, MAX_WORKERS / activeJobs.size());
         
         List<Callable<Void>> concurrentTasks = new ArrayList<>();
+        java.util.Set<java.util.UUID> completedJobIds = new java.util.HashSet<>();
         
         for (AiQuestionGenerationJob job : activeJobs) {
             int currentOffset = job.getProcessedPagesCount();
             boolean hasReachedEnd = false;
 
-            // Fetch exactly 'threadsPerJob' distinct pages using strict offset queries
-            // Since ExtractionStatus.PROOFREAD remains static after Gen, we must use precise offsets
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.testshaper.dto.AiQuestionGenConfigDto config = null;
+            if (job.getJobConfiguration() != null) {
+                try { config = mapper.readValue(job.getJobConfiguration(), com.testshaper.dto.AiQuestionGenConfigDto.class); } catch (Exception ignored) {}
+            }
+
+            // Fetch exactly 'threadsPerJob' distinct chunks using strict offset queries
             for (int i = 0; i < threadsPerJob; i++) {
                 int targetOffset = currentOffset + i;
-                org.springframework.data.domain.Page<KnowledgePage> pageResult = pageRepository.findBySourceBookIdAndExtractionStatusIn(
-                        job.getSourceBook().getId(),
-                        java.util.List.of(KnowledgePage.ExtractionStatus.PROOFREAD),
-                        PageRequest.of(targetOffset, 1, Sort.by("pageNumber").ascending())
-                );
+                com.testshaper.entity.CurriculumDocumentChunk chunk = null;
 
-                if (pageResult.isEmpty()) {
+                if (config != null && config.getTargetIndexIds() != null && !config.getTargetIndexIds().isEmpty()) {
+                    org.springframework.data.domain.Page<com.testshaper.entity.CurriculumDocumentChunk> chunkResult = chunkRepository.findBySourceBookIndexIdIn(
+                            config.getTargetIndexIds(),
+                            PageRequest.of(targetOffset, 1, Sort.by("chunkIndex").ascending())
+                    );
+                    if (!chunkResult.isEmpty()) {
+                        chunk = chunkResult.getContent().get(0);
+                    } else {
+                        // Fallback for legacy extracted chunks without sourceBookIndexId
+                        java.util.List<java.util.UUID> targetChapterIds = new java.util.ArrayList<>();
+                        for (java.util.UUID idxId : config.getTargetIndexIds()) {
+                            com.testshaper.entity.SourceBookIndex idx = sourceBookIndexRepository.findById(idxId).orElse(null);
+                            if (idx != null && idx.getMappedChapter() != null) {
+                                targetChapterIds.add(idx.getMappedChapter().getId());
+                            }
+                        }
+                        if (!targetChapterIds.isEmpty()) {
+                            chunkResult = chunkRepository.findBySourceBookIdAndMappedTopic_Chapter_IdIn(
+                                    job.getSourceBook().getId(),
+                                    targetChapterIds,
+                                    org.springframework.data.domain.PageRequest.of(targetOffset, 1, org.springframework.data.domain.Sort.by("chunkIndex").ascending())
+                            );
+                            if (!chunkResult.isEmpty()) {
+                                chunk = chunkResult.getContent().get(0);
+                            }
+                        }
+                    }
+                } else {
+                    org.springframework.data.domain.Page<com.testshaper.entity.CurriculumDocumentChunk> chunkResult = chunkRepository.findBySourceBookId(
+                            job.getSourceBook().getId(),
+                            PageRequest.of(targetOffset, 1, Sort.by("chunkIndex").ascending())
+                    );
+                    if (!chunkResult.isEmpty()) {
+                        chunk = chunkResult.getContent().get(0);
+                    }
+                }
+
+                if (chunk == null) {
                     hasReachedEnd = true;
                     break;
                 }
 
-                KnowledgePage page = pageResult.getContent().get(0);
-                
+                final com.testshaper.entity.CurriculumDocumentChunk finalChunk = chunk;
                 concurrentTasks.add(() -> {
-                    processSinglePageForQuestions(job, page);
+                    processSingleChunkForQuestions(job, finalChunk);
                     return null;
                 });
             }
 
             if (hasReachedEnd) {
-                job.setStatus(AiQuestionGenerationJob.JobStatus.COMPLETED);
-                jobRepository.save(job);
-                log.info("Completed full question generation job for SourceBook: {}", job.getSourceBook().getId());
+                completedJobIds.add(job.getId());
+                log.info("Queue finished constructing, recording completion wait for Question Job: {}", job.getSourceBook().getId());
             }
         }
 
@@ -112,16 +150,25 @@ public class AiQuestionGenScheduler {
             }
         }
 
+        for (java.util.UUID cjId : completedJobIds) {
+            AiQuestionGenerationJob cj = jobRepository.findById(cjId).orElse(null);
+            if (cj != null) {
+                cj.setStatus(AiQuestionGenerationJob.JobStatus.COMPLETED);
+                jobRepository.save(cj);
+                log.info("Completed full question generation job for SourceBook: {}", cj.getSourceBook().getId());
+            }
+        }
+
         try {
             messagingTemplate.convertAndSend("/topic/system-health-jobs", knowledgeHubService.getSystemHealthAndJobs());
         } catch (Exception ignored) { }
     }
 
-    private void processSinglePageForQuestions(AiQuestionGenerationJob job, KnowledgePage page) {
-        log.info("Thread [{}] generating questions for Page: {} of Book: {}", Thread.currentThread().getName(), page.getPageNumber(), job.getSourceBook().getId());
+    private void processSingleChunkForQuestions(AiQuestionGenerationJob job, com.testshaper.entity.CurriculumDocumentChunk chunk) {
+        log.info("Thread [{}] generating questions for Chunk: {} of Book: {}", Thread.currentThread().getName(), chunk.getId(), job.getSourceBook().getId());
 
         try {
-            int generatedCount = knowledgeHubService.generateQuestionsForPage(job.getSourceBook().getId(), page.getId());
+            int generatedCount = knowledgeHubService.generateQuestionsForChunk(job.getSourceBook().getId(), chunk.getId(), job.getJobConfiguration());
 
             synchronized (job.getId().toString().intern()) {
                 AiQuestionGenerationJob freshJob = jobRepository.findById(job.getId()).orElse(job);
@@ -131,7 +178,7 @@ public class AiQuestionGenScheduler {
             }
 
         } catch (Exception e) {
-            log.error("Question Gen Thread failed for Page: {}. Error: {}", page.getId(), e.getMessage());
+            log.error("Question Gen Thread failed for Chunk: {}. Error: {}", chunk.getId(), e.getMessage());
 
             synchronized (job.getId().toString().intern()) {
                 AiQuestionGenerationJob freshJob = jobRepository.findById(job.getId()).orElse(job);

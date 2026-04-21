@@ -47,15 +47,22 @@ public interface KnowledgeHubService {
     com.testshaper.entity.AiBulkExtractionJob resumeAiExtractionQueue(UUID jobId);
     com.testshaper.entity.AiBulkExtractionJob cancelAiExtractionQueue(UUID jobId);
 
+    // --- Ai Topic Extraction Jobs ---
+    com.testshaper.entity.AiTopicExtractionJob startAiTopicExtractionQueue(java.util.UUID sourceBookId, java.util.List<java.util.UUID> targetIndexIds);
+    com.testshaper.entity.AiTopicExtractionJob getAiTopicExtractionQueueStatus(java.util.UUID sourceBookId);
+    com.testshaper.entity.AiTopicExtractionJob pauseAiTopicExtractionQueue(java.util.UUID jobId);
+    com.testshaper.entity.AiTopicExtractionJob resumeAiTopicExtractionQueue(java.util.UUID jobId);
+    com.testshaper.entity.AiTopicExtractionJob cancelAiTopicExtractionQueue(java.util.UUID jobId);
+
     // --- Background Question Generation Queue ---
-    com.testshaper.entity.AiQuestionGenerationJob startAiQuestionQueue(UUID sourceBookId);
+    com.testshaper.entity.AiQuestionGenerationJob startAiQuestionQueue(UUID sourceBookId, com.testshaper.dto.AiQuestionGenConfigDto config);
     com.testshaper.entity.AiQuestionGenerationJob getAiQuestionQueueStatus(UUID sourceBookId);
     com.testshaper.entity.AiQuestionGenerationJob pauseAiQuestionQueue(UUID jobId);
     com.testshaper.entity.AiQuestionGenerationJob resumeAiQuestionQueue(UUID jobId);
     com.testshaper.entity.AiQuestionGenerationJob cancelAiQuestionQueue(UUID jobId);
 
     // Internal execution called by Scheduler
-    int generateQuestionsForPage(UUID sourceBookId, UUID pageId) throws Exception;
+    int generateQuestionsForChunk(UUID sourceBookId, UUID chunkId, String jobConfigurationJson) throws Exception;
 
     // --- System Health and Dashboards ---
     java.util.Map<String, Object> getSystemHealthAndJobs();

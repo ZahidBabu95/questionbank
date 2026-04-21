@@ -3,8 +3,8 @@
 
 ---
 
-## 📅 সর্বশেষ সেশন: 2026-04-18
-**অবস্থান:** Resumable Batch Upload + Knowledge Hub Server & Jobs Update + Architecture Roadmap Update ✅ সম্পন্ন
+## 📅 সর্বশেষ সেশন: 2026-04-22
+**অবস্থান:** Phase 3E: Automated Question Extraction UI/UX Update & Dynamic Engine Configuration ✅ সম্পন্ন
 
 ---
 
@@ -12,73 +12,40 @@
 
 ---
 
-### 🚀 Resumable Batch Upload Pipeline (Phase 1)
+### 🚀 Phase 3E: Dynamic Question Generation/Extraction Pipeline
 
-| কাজ | ফাইল |
+| কাজ | ফাইল / সিস্টেম |
 |-----|------|
-| মেমরি-সেইফ (Memory Safe) PDF Extraction | `UploadContext.jsx` |
-| ৫টি করে পেজের Chunking এবং R2 তে ব্যাকগ্রাউন্ড আপলোড | `UploadContext.jsx` |
-| Upload Session Registration | `KnowledgeHubServiceImpl.java`, `KnowledgeHubService.java` |
-| Resume Tracking ও Upload Status Fetching | `KnowledgeHubController.java` |
-| `DigitizationWorkspace`-এ "Incomplete Upload" Banner ও Resume Logic | `DigitizationWorkspace.jsx` |
-| `finalizeUploads`-এ পুরনো ডেটা Overwrite না করে নতুন পেজ Append করা | `KnowledgeHubServiceImpl.java` |
-| Compilation error fix: `findFirstBySourceBookIdOrderByPageNumberDesc` | `KnowledgePageRepository.java` |
+| **Dynamic Configuration UI:** Proofreading Workspace-এ RAG Pipeline মডালে ৩-টি অত্যাধুনিক অপশন যুক্ত করা হয়েছে (Generate New, Extract Only, Hybrid) | `ProofreadingWorkspace.jsx` |
+| **Backend AI Prompt Instruction Adaptation:** User-কর্তৃক নির্বাচিত মোডের (Textbook, Guidebook, Hybrid/Both) উপর ভিত্তি করে Vertex AI/Gemini-এর Prompting behavior dynamically change করা, যাতে এআই কখনো ভুল করে থিওরি থেকে শুধু শুধু এক্সট্রাক্ট না করে বা গাইড থেকে নিজে নিজে প্রশ্ন না বানায়। | `KnowledgeHubServiceImpl.java` |
+| **Java Compilation Error Fix:** আগের সেশনে `cq-answers` HTML template-এর literal string-এ ভুলে কিছু broken Escape character (`\"`) যুক্ত হয়ে Spring Boot failure সৃষ্টি করেছিলো— সেটি ফিক্স করে Backend চালু করা হয়েছে। | `KnowledgeHubServiceImpl.java` |
 
 **মূল অর্জন:**
-ব্রাউজার হ্যাং হওয়া ছাড়াই লোকাল মেমোরি থেকে বিশাল পিডিএফ আপলোড করা যাবে। ক্লায়েন্ট-সাইড পার্সিং করে R2 তে আপলোড করায় ব্যাকএন্ড সার্ভারের লোড 100% কমেছে। কারেন্ট চলে গেলে বা ট্যাব কেটে গেলে পরবর্তীতে আবার ঠিক আগের জায়গা থেকে (Resume) আপলোড শুরু হবে।
-
----
-
-### ⚙️ Server & Jobs Dashboard Enhancement
-
-| কাজ | ফাইল |
-|-----|------|
-| `Cancel` / `Close` জব বাটন যুক্ত করা | `KnowledgeHubReport.jsx` |
-| `POST /jobs/bulk-extract/{jobId}/cancel` এন্ডপয়েন্ট তৈরি | `KnowledgeHubController.java` |
-| `POST /jobs/generate-questions/{jobId}/cancel` এন্ডপয়েন্ট তৈরি | `KnowledgeHubController.java` |
-| ডাটাবেসে `CANCELLED` স্ট্যাটাস ম্যাপ করা | `KnowledgeHubServiceImpl.java` |
-
----
-
-### 🏗️ Vision Architecture Roadmap Updated
-
-| কাজ | ফাইল |
-|-----|------|
-| Phase 1-এ "Resumable Batch Upload Pipeline" পয়েন্ট যুক্ত | `vision_architecture_roadmap.md` |
-| Phase 2-এর জন্য **RabbitMQ** (Task Queuing) এর স্ট্র্যাটেজি যুক্ত | `vision_architecture_roadmap.md` |
-| Phase 4-এর জন্য **Apache Kafka** (Event Streaming) এর স্ট্র্যাটেজি যুক্ত | `vision_architecture_roadmap.md` |
+Knowledge Hub-এর RAG Pipeline এখন সম্পূর্ণ ডায়নামিক। সিস্টেম নিজে থেকেই `bookType` বুঝে নেবে যে এটি কি TextBook নাকি Guide/Question Bank। আপনি চাইলে UI থেকে Force করে Hybrid বা Mixed Mode সিলেক্ট করতে পারবেন যাতে AI একই সাথে পূর্বের প্রশ্ন স্ক্যান করে এবং থিওরি পড়ে নতুন প্রশ্ন বানায়।
 
 ---
 
 ## 🔧 সমস্ত পরিবর্তিত ফাইল (এই সেশন)
 
 ```
-backend/
-  src/main/java/com/testshaper/
-    controller/KnowledgeHubController.java
-    repository/KnowledgePageRepository.java
-    service/KnowledgeHubService.java
-    service/impl/KnowledgeHubServiceImpl.java
-
 frontend/
-  src/context/UploadContext.jsx
-  src/pages/admin/KnowledgeHub/DigitizationWorkspace.jsx
-  src/pages/admin/Reports/KnowledgeHubReport.jsx
+  src/pages/admin/KnowledgeHub/ProofreadingWorkspace.jsx
 
-vision_architecture_roadmap.md
+backend/
+  src/main/java/com/testshaper/service/impl/KnowledgeHubServiceImpl.java
 ```
 
 ---
 
-## 🎯 পরবর্তী কাজ — Phase 3D: Pinecone Vectorization
+## 🎯 পরবর্তী কাজ
 
 ### কী করতে হবে:
-1. **Background Service তৈরি:** "Golden Data" কে AI মডেল দিয়ে text-embedding-এ কনভার্ট করে Pinecone ভেক্টর ডাটাবেসে পুশ করা।
-2. **Metadata ম্যাপিং:** Chunked vector গুলোর সাথে `bookId`, `chapterId` ইত্যাদি যুক্ত করা।
-3. **UI Integration:** Knowledge Hub প্যানেল থেকে Vector Sync স্ট্যাটাস দেখা।
+1. **Frontend UI Integration:** Knowledge Hub প্যানেলে Theme Analysis / Vector Sync progress indicator এবং AI জেনারেটেড Topic-গুলো এবং Chunk-গুলোর প্রিভিউ দেখার ব্যবস্থা করা।
+2. **Review Panel:** AI Review Drafts (Generated & Extracted Questions) প্যানেলটিকে আরও Advanced করা।
+3. **Phase 4 Preparation:** Teacher vs Student Agentic Workflows.
 
 ---
 
 ## 📞 পরের সেশনে প্রথম বার্তা
 
-> "Resumable Upload এবং Server Queue ম্যানেজমেন্ট সম্পন্ন হয়েছে। এখন আমরা Phase 3D — Pinecone Vectorization-এর কাজ শুরু করতে পারি।"
+> "সিস্টেমের RAG Pipeline-এর Dynamic Engine Configuration ও Backend Compilation Issue সফলভাবে ফিক্স করা হয়েছে। এখন এআই সম্পূর্ণ নিজে থেকে বইয়ের টাইপ বুঝে Hybrid, Textbook বা Guidebook অনুযায়ী কাজ করবে। আমরা এখন Frontend-এ Vector Sync Status বা Chatbot RAG Testing শুরু করতে পারি।"

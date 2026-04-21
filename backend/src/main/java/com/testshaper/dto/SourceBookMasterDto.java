@@ -25,6 +25,7 @@ public class SourceBookMasterDto {
     private Integer totalPages;
     private Integer extractedPages;
     private Integer goldenPages;
+    private Integer vectorizedChunks;
 
     // Background Processing Tracking
     private Boolean isProcessing;

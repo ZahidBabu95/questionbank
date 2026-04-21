@@ -85,11 +85,11 @@ const wrapStyleMap = {
 Golden Content → Semantic Chunks → Pinecone vectorization।
 
 **কাজসমূহ:**
-- [ ] Backend: `GoldenContentVectorizationService` — golden HTML কে chunks-এ ভাগ করে (HTML strip → plain text)
-- [ ] Chunking Strategy: Sliding window (512 tokens, 128 overlap)
-- [ ] Metadata per chunk: `{ bookId, treeBchapterId, treeAchapterId, treeAtopicId, chunkIndex }`
-- [ ] Backend: Pinecone upsert endpoint reuse (existing `PineconeVectorDatabaseServiceImpl`)
-- [ ] Frontend: "Sync to Vector DB" button per chapter
+- [x] Backend: `TopicExtractorService` — golden markdown কে chunks-এ ভাগ করে (Gemini AI দিয়ে Topic Extract করা)
+- [x] Chunking Strategy: Semantic Topic Grouping via Gemini 2.5 Flash
+- [x] Metadata per chunk: `{ bookId, chapterId, topicId, topicName, hasImage }`
+- [x] Backend: Pinecone upsert endpoint reuse
+- [ ] Frontend: "Sync to Vector DB" button / Queue status in UI
 - [ ] Frontend: Knowledge Hub dashboard sync status indicator
 
 ---
@@ -201,6 +201,10 @@ Backend:
 - **Phase 3E Image & Markdown Schema Polish:** 
   - Backend dynamically injects `"stimulus"` property into user-created Curriculum Rules inside `KnowledgeHubServiceImpl` so that images are never left behind during generation.
   - Rectified frontend image stripping by enabling `image` and `link` formats within ReactQuill inside `RichTextEditor.jsx`. Images extracted via Golden Content now display natively during AI Draft reviews.
+- **Dynamic Question Engine Configuration (Textbook, Guidebook, Hybrid):**
+  - **Frontend:** Added a 3-way toggle in `ProofreadingWorkspace.jsx` allowing the user to explicitly select between "Generate New", "Extract Only", and "Hybrid/Both". The UI automatically pre-selects the appropriate mode based on the `bookType` dynamically passed from the DB.
+  - **Backend:** Updated `KnowledgeHubServiceImpl.java` prompt builder to inject specific instructions handling `TEXTBOOK`, `GUIDEBOOK`, and `HYBRID` directives to Gemini, ensuring the AI model applies the correct extraction vs. synthesis logic based on the source material.
+  - **Bug Fix:** Removed broken string escapes (`\"`) injected during CQ HTML template processing which previously caused `Unresolved compilation problems: Syntax error` across the codebase.
 - **Smart Deduplication Architecture:**
   - Added repository checks to block repetitive bulk generation by cross-referencing `sourceReference` (Page IDs). It gracefully handles and skips previously generated drafts to preserve API limits.
 - **FREE_POOL High-Performance Architecture Validation:**
@@ -234,5 +238,38 @@ For the next session, we are upgrading the basic sequential `@Scheduled` queues 
 
 ---
 
-## 🟡 NEXT FOCUS: Phase 3D — Vector Sync Pipeline (Pinecone RAG)
-We will now fully shift focus to building **GoldenContentVectorizationService** and preparing Pinecone index mappings for Chatbot queries!
+## 🟡 ENTERPRISE ARCHITECTURE PIVOT: Enterprise Curriculum Pipeline (Phase 3D -> 3E)
+*Based on architectural review, generating questions directly from "Pages" produces orphaned data that lacks syllabus hierarchy.*
+
+### The Enterprise Content Pipeline (New Blueprint)
+1. **Digitization (Done):** Raw PDF -> KnowledgePage -> Golden Markdown.
+2. **Semantic Chunking (Phase 3D):** Golden Markdown + AI -> `CurriculumDocumentChunk` & `Topic` entities inside Pinecone RAG.
+3. **Context-Aware Question Gen (Phase 3E Shift):** Generate questions mapped directly to `Topic` Vectors instead of random pages.
+
+---
+
+### 1. Phase 3D: Semantic Indexing & Topic Extraction Pipeline
+- **Status:** Backend Implementation DONE. UI Integration pending.
+- **Objective:** Read Golden Data from a chapter/book and split it into logical sub-topics or "Chunks" using AI.
+- **Backend Components:**
+  - ✅ `TopicExtractorService` (NEW): Reads a sequence of `KnowledgePage`s for a `Chapter` or `SourceBookIndex`.
+  - ✅ Prompts AI to divide text boundaries into `Topic` entities (e.g., "Velocity", "Newton's First Law").
+  - ✅ Saves the structured topics into the `topics` table linked to `chapter_id`.
+  - ✅ Saves the corresponding split text into `CurriculumDocumentChunk` table. (Fixed `document_id` NOT NULL DB Constraint).
+- **RAG/Vector DB (Pinecone):**
+  - ✅ Integrate a fast embedding service to convert `CurriculumDocumentChunk` text into vectors via existing Pinecone Service.
+
+### 2. Phase 3E.2: RAG-Powered Context-Aware Question Engine
+- **Status:** Paused until Phase 3D is active.
+- **Objective:** Modify the current `AiQuestionGenScheduler` so it no longer loops over `targetPageIds`. Instead, it will:
+  - Take `targetTopicIds` (or all Topics in a Chapter) from the UI.
+  - Query Pinecone/Database for the text payload specific to that `Topic`.
+  - Prompt AI: *"Generate 5 MCQs and 2 CQs specifically for the Topic: 'XYZ'. Context: [Chunk Data]"*.
+  - Map the newly generated questions natively to the `topic_id`.
+- **UI Update:**
+  - The Question Engine Setup Modal will allow users to select "Generate by Exact Page" (Legacy Guidebook mode) OR "Generate by RAG/Curriculum Topic" (Enterprise Textbook Mode).
+
+### 3. Smart Deduplication (Post-Generation)
+- **Status:** Planning Phase
+- **Details:** If matching old questions exist in the topic, append new tags (e.g. "Dhaka Board 2026") instead of duplicating arrays.
+

@@ -5,30 +5,24 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Table(name = "ai_question_generation_jobs")
+@Table(name = "ai_topic_extraction_jobs")
 @Getter
 @Setter
-public class AiQuestionGenerationJob extends BaseTenantEntity {
+public class AiTopicExtractionJob extends BaseTenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_book_id", nullable = false)
     @com.fasterxml.jackson.annotation.JsonIgnore
     private SourceBookMaster sourceBook;
 
-    @Column(name = "total_pages_to_process")
-    private int totalPagesToProcess = 0;
+    @Column(name = "total_chapters_to_process")
+    private int totalChaptersToProcess = 0;
 
-    @Column(name = "processed_pages_count")
-    private int processedPagesCount = 0;
+    @Column(name = "processed_chapters_count")
+    private int processedChaptersCount = 0;
 
-    @Column(name = "failed_pages_count")
-    private int failedPagesCount = 0;
-
-    @Column(name = "total_questions_generated")
-    private int totalQuestionsGenerated = 0;
-
-    @Column(name = "job_configuration", columnDefinition = "JSON")
-    private String jobConfiguration;
+    @Column(name = "failed_chapters_count")
+    private int failedChaptersCount = 0;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

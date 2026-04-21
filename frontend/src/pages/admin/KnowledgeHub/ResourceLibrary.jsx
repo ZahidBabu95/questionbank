@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { 
     Book, Plus, Search, Library, UploadCloud, User, Building, 
     Calendar, CheckCircle, Edit2, Trash2, Image as ImageIcon, 
-    ScanLine, Map, Clock, AlertCircle, X, ChevronRight, Share2, Globe, GraduationCap, Folder, Layers
+    ScanLine, Map, Clock, AlertCircle, X, ChevronRight, Share2, Globe, GraduationCap, Folder, Layers, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from '../../../utils/axios';
@@ -477,11 +477,21 @@ const ResourceLibrary = () => {
                                         </button>
                                     </div>
 
-                                    {/* Type Badge */}
-                                    <div className="absolute top-4 left-4 z-20">
+                                    {/* Type & Sync Badges */}
+                                    <div className="absolute top-4 left-4 z-20 flex flex-col items-start gap-1.5 pointer-events-none">
                                         <span className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-lg border shadow-sm ${getBadgeStyle(book.bookType)}`}>
                                             {book.bookType.replace('_', ' ')}
                                         </span>
+                                        {book.vectorizedChunks > 0 && (
+                                            <motion.span 
+                                                initial={{ scale: 0.8, opacity: 0 }}
+                                                animate={{ scale: 1, opacity: 1 }}
+                                                className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[9px] font-black uppercase tracking-widest rounded-lg shadow-md shadow-indigo-500/30 border border-indigo-400/50"
+                                            >
+                                                <Sparkles size={10} strokeWidth={3} className="text-indigo-100" />
+                                                <span>AI Synced</span>
+                                            </motion.span>
+                                        )}
                                     </div>
 
                                     <div className="p-6">

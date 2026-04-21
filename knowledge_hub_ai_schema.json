@@ -1,0 +1,190 @@
+{
+  "_comment": "QuestionShaper Universal AI Generation & Scraper Schema — NCTB Curriculum Aligned v3.0",
+  "_version": "3.0",
+  "_last_updated": "2026-04-22",
+
+  "generation_rules": {
+    "language": "Bangla",
+    "guidelines": "বাংলাদেশের জাতীয় শিক্ষাক্রম ও পাঠ্যপুস্তক বোর্ড (NCTB) এর নিয়ম মেনে প্রশ্ন তৈরি করতে হবে। উদ্দীপক হতে হবে মৌলিক এবং বাস্তবসম্মত।",
+    "marks_distribution": {
+      "mcq": 1,
+      "short_question": 2,
+      "cq_total": 10,
+      "cq_parts": { "ক": 1, "খ": 2, "গ": 3, "ঘ": 4 }
+    },
+    "bloom_distribution": {
+      "KNOWLEDGE": "জ্ঞানমূলক (Knowledge)",
+      "COMPREHENSION": "অনুধাবনমূলক (Comprehension)",
+      "APPLICATION": "প্রয়োগমূলক (Application)",
+      "HIGHER_ORDER": "উচ্চতর দক্ষতামূলক (Higher Order Thinking)"
+    }
+  },
+
+  "question_formats": [
+    {
+      "_type": "CREATIVE_QUESTION",
+      "_description": "সৃজনশীল প্রশ্ন — মৌলিক উদ্দীপক + ৪ অংশ (ক, খ, গ, ঘ) = মোট ১০ নম্বর",
+      "_bloom_mapping": {
+        "ক": "KNOWLEDGE (জ্ঞানমূলক) - সরাসরি বই থেকে এক কথায় উত্তর। মান: ১",
+        "খ": "COMPREHENSION (অনুধাবনমূলক) - কোনো বিষয়ের ব্যাখ্যা। মান: ২",
+        "গ": "APPLICATION (প্রয়োগমূলক) - উদ্দীপকের আলোকে অর্জিত জ্ঞানের প্রয়োগ। মান: ৩",
+        "ঘ": "HIGHER_ORDER (উচ্চতর দক্ষতামূলক) - উদ্দীপক ও পাঠ্যবইয়ের আলোকে বিশ্লেষণ/মূল্যায়ন। মান: ৪"
+      },
+
+      "question": {
+        "type": "CQ",
+        "mcqType": null,
+        "stimulus": "রহিম সাহেব তার অফিসের হিসাব রাখতে কম্পিউটারে স্প্রেডশিট সফটওয়্যার ব্যবহার করেন। কিছুদিন পর বিদ্যুৎ বিভ্রাটে তার লোকাল কম্পিউটারের হার্ডডিস্ক নষ্ট হয়ে যায় এবং সব ডেটা হারিয়ে যায়।",
+        "bloomLevel": "HIGHER_ORDER",
+        "difficulty": "HARD",
+        "marks": 10,
+        "language": "Bangla",
+        "explanation": null
+      },
+      "sub_parts": [
+        {
+          "part": "ক",
+          "type": "KNOWLEDGE",
+          "questionText": "স্প্রেডশিট কী?",
+          "marks": 1,
+          "bloomLevel": "KNOWLEDGE",
+          "answer": "স্প্রেডশিট হলো এক ধরনের কম্পিউটার অ্যাপ্লিকেশন সফটওয়্যার যা দিয়ে ছককাটা পৃষ্ঠায় গাণিতিক হিসাবনিকাশ করা যায়।",
+          "explanation": "এটি জ্ঞানমূলক প্রশ্ন। পাঠ্যবইয়ে স্প্রেডশিটের সংজ্ঞায় এভাবেই উল্লেখ করা আছে।"
+        },
+        {
+          "part": "খ",
+          "type": "COMPREHENSION",
+          "questionText": "সেল অ্যাড্রেস বলতে কী বোঝায়? ব্যাখ্যা করো।",
+          "marks": 2,
+          "bloomLevel": "COMPREHENSION",
+          "answer": "স্প্রেডশিট প্রোগ্রামে ওয়ার্কশিটের কলাম ও সারির সংযোগস্থলকে সেল বা ঘর বলা হয়। আর এই ঘরের অবস্থান নির্দেশ করার মাধ্যমই হলো সেল অ্যাড্রেস।",
+          "explanation": "কলামকে ইংরেজি বর্ণ (A, B, C) এবং সারিকে সংখ্যা (1, 2, 3) দ্বারা চিহ্নিত করা হয়। যেমন: B কলাম এবং 3 নম্বর সারির ছেদবিন্দুর সেল অ্যাড্রেস হলো B3।"
+        },
+        {
+          "part": "গ",
+          "type": "APPLICATION",
+          "questionText": "উদ্দীপকে রহিম সাহেবের ব্যবহৃত সফটওয়্যারটির কাজ কী? উদ্দীপকের আলোকে ব্যাখ্যা করো।",
+          "marks": 3,
+          "bloomLevel": "APPLICATION",
+          "answer": "উদ্দীপকে রহিম সাহেবের ব্যবহৃত সফটওয়্যারটি হলো স্প্রেডশিট সফটওয়্যার। এর প্রধান কাজ হলো দ্রুত ও নির্ভুলভাবে দৈনন্দিন হিসাবনিকাশ করা এবং ডেটা সংরক্ষণ করা।",
+          "explanation": "প্রয়োগমূলক প্রশ্নে উদ্দীপকের সাথে পাঠ্যবইয়ের সম্পর্ক দেখাতে হয়। উদ্দীপকে রহিম সাহেব অফিসের হিসাব রাখার জন্য যে সফটওয়্যার ব্যবহার করছেন, তা মূলত মাইক্রোসফট এক্সেলের মতো স্প্রেডশিট সফটওয়্যার।"
+        },
+        {
+          "part": "ঘ",
+          "type": "HIGHER_ORDER",
+          "questionText": "\"ক্লাউড কম্পিউটিং রহিম সাহেবের ডেটা সুরক্ষা নিশ্চিত করতে পারত\" — উক্তিটি বিশ্লেষণ করো।",
+          "marks": 4,
+          "bloomLevel": "HIGHER_ORDER",
+          "answer": "রহিম সাহেবের ডেটা হারানোর মূল কারণ হলো লোকাল স্টোরেজের উপর নির্ভরশীলতা। যদি তিনি ডেটাগুলো ক্লাউড কম্পিউটিং সার্ভিসে (যেমন: গুগল ড্রাইভ) সংরক্ষণ করতেন, তবে হার্ডডিস্ক নষ্ট হলেও ইন্টারনেট ব্যবহার করে যেকোনো স্থান থেকে ডেটা পুনরায় উদ্ধার করতে পারতেন। তাই উক্তিটি সম্পূর্ণ যৌক্তিক।",
+          "explanation": "বিশ্লেষণমূলক প্রশ্নে একটি সিদ্ধান্ত বা মূল্যায়ন দিতে হয়। ক্লাউড কম্পিউটিংয়ের সুবিধাগুলোর মধ্যে নির্ভরযোগ্য ডেটা ব্যাকআপ ও রিমোট অ্যাক্সেস অন্যতম, যা রহিম সাহেবের এই বড় ক্ষতি এড়াতে সাহায্য করতে পারত।"
+        }
+      ],
+      "sources": []
+    },
+
+    {
+      "_type": "SIMPLE_MCQ",
+      "_description": "সাধারণ বহুনির্বাচনি — একটি প্রশ্ন + ৪টি অপশন",
+      "question": {
+        "type": "MCQ",
+        "mcqType": "SIMPLE",
+        "questionText": "স্প্রেডশিট সফটওয়্যারে প্রতিটি কলামের নাম কীভাবে চিহ্নিত করা হয়?",
+        "stimulus": null,
+        "bloomLevel": "KNOWLEDGE",
+        "difficulty": "EASY",
+        "marks": 1,
+        "language": "Bangla",
+        "explanation": "স্প্রেডশিটে কলামগুলো ইংরেজি বর্ণমালা (A, B, C...) এবং সারিগুলো সংখ্যা (1, 2, 3...) দিয়ে চিহ্নিত থাকে।"
+      },
+      "options": [
+        { "optionLabel": "ক", "optionText": "A, B, C...", "isCorrect": true },
+        { "optionLabel": "খ", "optionText": "1, 2, 3...", "isCorrect": false },
+        { "optionLabel": "গ", "optionText": "i, ii, iii...", "isCorrect": false },
+        { "optionLabel": "ঘ", "optionText": "a1, b1, c1...", "isCorrect": false }
+      ],
+      "sources": []
+    },
+
+    {
+      "_type": "MULTIPLE_COMPLETION_MCQ",
+      "_description": "বহুপদী সমাপ্তিসূচক — ৩টি বিবৃতি (i, ii, iii) এবং ৪টি ফিক্সড অপশন",
+      "question": {
+        "type": "MCQ",
+        "mcqType": "MULTIPLE_COMPLETION",
+        "questionText": "ইন্টারনেট ব্যবহারের মাধ্যমে একজন শিক্ষার্থী—",
+        "stimulus": null,
+        "statements": [
+          "i. দেশি-বিদেশি লাইব্রেরির বই পড়তে পারে",
+          "ii. ঘরে বসে পরীক্ষার ফলাফল জানতে পারে",
+          "iii. অনলাইন ক্লাসে অংশগ্রহণ করতে পারে"
+        ],
+        "bloomLevel": "COMPREHENSION",
+        "difficulty": "MEDIUM",
+        "marks": 1,
+        "language": "Bangla",
+        "explanation": "বর্তমানে ই-লার্নিং এবং ই-সার্ভিসের মাধ্যমে ইন্টারনেটের সাহায্যে উপরের তিনটি সুবিধাই সহজে পাওয়া সম্ভব।"
+      },
+      "options": [
+        { "optionLabel": "ক", "optionText": "i ও ii", "isCorrect": false },
+        { "optionLabel": "খ", "optionText": "i ও iii", "isCorrect": false },
+        { "optionLabel": "গ", "optionText": "ii ও iii", "isCorrect": false },
+        { "optionLabel": "ঘ", "optionText": "i, ii ও iii", "isCorrect": true }
+      ],
+      "sources": []
+    },
+
+    {
+      "_type": "SITUATION_SET_MCQ",
+      "_description": "অভিন্ন তথ্যভিত্তিক — একটি উদ্দীপক এবং তার ওপর ভিত্তি করে সাধারণত ২টি MCQ",
+      "stimulus": "নিচের চিত্রটি লক্ষ্য করো: [MS Excel-এর C5 সেল ৬০০ দেখাচ্ছে]",
+      "bloomLevel": "APPLICATION",
+      "difficulty": "MEDIUM",
+      "marks": 1,
+      "language": "Bangla",
+      "question_sets": [
+        {
+          "questionText": "চিত্রে প্রদর্শিত 'C5' সেলটির মান কত?",
+          "explanation": "C5 সেলের মান সরাসরি চিত্র থেকে ৬০০ দেখা যাচ্ছে।",
+          "options": [
+            { "optionLabel": "ক", "optionText": "৫০০", "isCorrect": false },
+            { "optionLabel": "খ", "optionText": "৬০০", "isCorrect": true },
+            { "optionLabel": "গ", "optionText": "৭০০", "isCorrect": false },
+            { "optionLabel": "ঘ", "optionText": "৮০০", "isCorrect": false }
+          ]
+        },
+        {
+          "questionText": "উক্ত সেলের মান অন্য সেলের সাথে যোগ করতে কোন ফাংশনটি ব্যবহার হয়?",
+          "explanation": "MS Excel এ একাধিক সেলের মান যোগ করতে SUM() ফাংশন ব্যবহার করা হয়।",
+          "options": [
+            { "optionLabel": "ক", "optionText": "=SUM()", "isCorrect": true },
+            { "optionLabel": "খ", "optionText": "=AVERAGE()", "isCorrect": false },
+            { "optionLabel": "গ", "optionText": "=IF()", "isCorrect": false },
+            { "optionLabel": "ঘ", "optionText": "=COUNT()", "isCorrect": false }
+          ]
+        }
+      ],
+      "sources": []
+    },
+
+    {
+      "_type": "SHORT_QUESTION",
+      "_description": "সংক্ষিপ্ত প্রশ্ন — ২ বা ৩ বাক্যে উত্তর",
+      "question": {
+        "type": "SHORT",
+        "mcqType": null,
+        "questionText": "ওয়ার্ড প্রসেসর কী কাজে ব্যবহার করা হয়?",
+        "stimulus": null,
+        "correctAnswer": "ডকুমেন্ট তৈরি, সম্পাদনা, সংরক্ষণ ও ফরমেট করার জন্য ওয়ার্ড প্রসেসর ব্যবহার করা হয়।",
+        "bloomLevel": "KNOWLEDGE",
+        "difficulty": "EASY",
+        "marks": 2,
+        "language": "Bangla",
+        "explanation": "মাইক্রোসফট ওয়ার্ড এর মতো সফটওয়্যারগুলো দিয়ে বই, চিঠি বা অ্যাসাইনমেন্ট লিখা হয়।"
+      },
+      "options": [],
+      "sources": []
+    }
+  ],
+
+  "ai_scraping_prompt": "তুমি একজন বিশেষজ্ঞ শিক্ষা বিশ্লেষক এবং বাংলাদেশের NCTB কারিকুলাম অনুযায়ী প্রশ্ন প্রণেতা। নিচে দেওয়া নিয়মের ভিত্তিতে নির্ভুল JSON ফরম্যাটে প্রশ্ন তৈরি বা extract করো:\n\n1. CQ (সৃজনশীল প্রশ্ন): প্রতিটি সৃজনশীল প্রশ্নের একটি মৌলিক উদ্দীপক (stimulus) থাকতে হবে। উদ্দীপকের আলোকে ৪টি অংশ থাকবে: 'ক' (জ্ঞানমূলক: ১ নম্বর), 'খ' (অনুধাবনমূলক: ২ নম্বর), 'গ' (প্রয়োগমূলক: ৩ নম্বর), 'ঘ' (উচ্চতর দক্ষতামূলক: ৪ নম্বর)।\n2. Answer & Explanation: CQ এর প্রতিটি sub_part এর জন্য 'answer' (যথাযথ উত্তর) এবং 'explanation' (উত্তরের স্বপক্ষে যুক্তি বা ব্যাখ্যা) অবশ্যই আলাদাভাবে জেনারেট করবে।\n3. MCQ: সাধারণ (SIMPLE), বহুপদী (MULTIPLE_COMPLETION), এবং অভিন্ন তথ্যভিত্তিক (SITUATION_SET) প্রশ্ন সঠিকভাবে সনাক্ত বা তৈরি করবে।\n4. বহুপদী MCQ: options সবসময় ফিক্সড রাখতে হবে (যেমন: ক='i ও ii', খ='i ও iii', গ='ii ও iii', ঘ='i, ii ও iii')।\n5. Bloom Level (জ্ঞানীয় স্তর): প্রশ্নের ধরন বুঝে সঠিক Bloom Level (KNOWLEDGE, COMPREHENSION, APPLICATION, HIGHER_ORDER) দিবে।\n6. Language: সকল বাংলা প্রশ্নের জন্য language 'Bangla' এবং ইংরেজির জন্য 'English' ব্যবহার করবে।"
+}

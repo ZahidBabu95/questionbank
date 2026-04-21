@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -7,7 +7,7 @@ import {
     ChevronDown, ChevronRight, FileText, Bot, Sparkles, X, BookOpen, GraduationCap,
     Tag, XCircle, Star, RotateCcw, PanelLeftClose, PanelLeftOpen,
     PanelRightClose, PanelRightOpen, MoreVertical, Info, Bookmark, Crop, RefreshCcw, Settings, Zap, Loader2,
-    Bold, Italic, Underline, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Table as TableIcon, Code
+    Bold, Italic, Underline, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, Table as TableIcon, Code, FileWarning, Lock, FileJson, Check, Save
 } from 'lucide-react';
 import axios from '../../../utils/axios';
 import academicService from '../../../services/academicService';
@@ -216,6 +216,499 @@ const ReorderPagesModal = ({ pages, bookId, onClose, onApplied }) => {
     );
 };
 
+/* ═══════════════════ Topic Extract Config Modal ═══════════════════ */
+const TopicExtractConfigModal = ({ indices, pages, onClose, onStartAll, onStartSingle }) => {
+    const [mode, setMode] = useState('ALL'); // 'ALL' or 'SINGLE'
+    const [selectedIndexIds, setSelectedIndexIds] = useState([]);
+
+    const goldenPages = useMemo(() => pages.filter(p => p.extractionStatus === 'PROOFREAD'), [pages]);
+
+    const chapterPagesMap = useMemo(() => {
+        const cmap = {};
+        goldenPages.forEach(p => {
+            if (p.sourceBookIndexId) {
+                if (!cmap[p.sourceBookIndexId]) cmap[p.sourceBookIndexId] = [];
+                cmap[p.sourceBookIndexId].push(p);
+            }
+        });
+        return cmap;
+    }, [goldenPages]);
+
+    const handleStart = () => {
+        if (mode === 'ALL') {
+            const targetIndexIds = Object.keys(chapterPagesMap);
+            if(targetIndexIds.length === 0) return alert('কোনো প্রোসেস করার মতো গোল্ডেন ডেটা নেই!');
+            onStartAll(targetIndexIds);
+        } else {
+            if (selectedIndexIds.length === 0) return alert('দয়া করে অন্তত একটি অধ্যায় নির্বাচন করুন।');
+            onStartAll(selectedIndexIds);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+                <div className="p-4 bg-teal-50 border-b border-teal-100 flex items-center justify-between shrink-0">
+                    <div>
+                        <h2 className="text-lg font-bold text-teal-800 flex items-center gap-2">
+                            <Bot className="w-5 h-5" /> টপিক এক্সট্রাকশন ও ভেক্টর সিংক (Golden Data)
+                        </h2>
+                        <p className="text-xs text-teal-600 mt-1">
+                            আপনার বইয়ের পাতাগুলোকে লজিক্যালি টপিকে ভাগ করে AI Vector Database-এ যুক্ত করুন। এখানে শুধু PROOFREAD করা ডেটা দেখানো হচ্ছে।
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="p-2 text-teal-400 hover:bg-teal-100 rounded-lg transition-colors">
+                        <X className="w-5 h-5"/>
+                    </button>
+                </div>
+                
+                <div className="p-5 flex flex-col gap-4 overflow-hidden min-h-[300px]">
+                    <div className="flex gap-4 p-1 bg-slate-100 rounded-xl shrink-0">
+                        <button 
+                            className={`flex-1 py-2.5 text-sm font-bold capitalize rounded-lg transition-all ${mode === 'ALL' ? 'bg-white text-teal-700 shadow border border-teal-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                            onClick={() => setMode('ALL')}
+                        >
+                            পুরো বই (Bulk Sync)
+                        </button>
+                        <button 
+                            className={`flex-1 py-2.5 text-sm font-bold capitalize rounded-lg transition-all ${mode === 'SINGLE' ? 'bg-white text-teal-700 shadow border border-teal-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                            onClick={() => setMode('SINGLE')}
+                        >
+                            নির্দিষ্ট অধ্যায় সমূহ
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3 relative">
+                        {indices.map((idx, i) => {
+                            const indexPages = chapterPagesMap[idx.id] || [];
+                            if (indexPages.length === 0) return null; // Hide empty chapters for both modes
+                            
+                            return (
+                                <div key={idx.id} className={`p-3 rounded-lg border transition-colors ${mode === 'SINGLE' ? 'cursor-pointer hover:border-teal-400' : ''} ${selectedIndexIds.includes(idx.id) ? 'bg-teal-50 border-teal-300' : 'bg-white border-slate-200'}`} onClick={() => { if(mode==='SINGLE') setSelectedIndexIds(prev => prev.includes(idx.id) ? prev.filter(x => x !== idx.id) : [...prev, idx.id]); }}>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            {mode === 'SINGLE' && (
+                                              <div className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all ${selectedIndexIds.includes(idx.id) ? 'border-teal-500 bg-teal-500' : 'border-slate-300 bg-white'}`}>
+                                                  {selectedIndexIds.includes(idx.id) && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                              </div>
+                                            )}
+                                            <span className={`font-bold text-sm ${selectedIndexIds.includes(idx.id) ? 'text-teal-800' : 'text-slate-700'}`}>{i+1}. {idx.indexName}</span>
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{indexPages.length} Golden Pages</span>
+                                    </div>
+                                    
+                                    {indexPages.length > 0 ? (
+                                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+                                            {indexPages.map(page => (
+                                                <div key={page.id} className="group relative flex flex-col items-center bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-teal-400 hover:shadow-md transition-all cursor-pointer" title={`Source Page ${page.sourcePageNo}`}>
+                                                    <div className="w-full aspect-[2/3] bg-slate-100 overflow-hidden relative">
+                                                        {page.imageUrl && !page.imageUrl.endsWith('.pdf') ? (
+                                                            <img src={page.imageUrl} alt={`Page ${page.sourcePageNo}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                                                <Bot size={20} className="opacity-50" />
+                                                            </div>
+                                                        )}
+                                                        {/* Golden Badge Overlay */}
+                                                        <div className="absolute top-0 right-0 bg-gradient-to-l from-yellow-500 to-amber-400 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-bl">
+                                                            <Sparkles size={8} className="inline mr-0.5" /> GOLD
+                                                        </div>
+                                                    </div>
+                                                    <div className="w-full bg-slate-50 border-t border-slate-100 text-center py-1 group-hover:bg-teal-50 transition-colors">
+                                                        <span className="text-[10px] font-bold text-slate-600 group-hover:text-teal-700">P-{page.sourcePageNo}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-[10px] text-slate-400 italic">No golden data available in this chapter.</p>
+                                    )}
+                                </div>
+                            );
+                        })}
+                        {goldenPages.length === 0 && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-slate-50/80">
+                                <p className="text-sm font-bold text-slate-400">এই বইতে কোনো PROOFREAD (Golden) ডেটা নেই!</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-100 bg-white flex justify-end gap-3 shrink-0">
+                    <button onClick={onClose} className="px-4 py-2 text-slate-500 font-medium hover:bg-slate-100 rounded-lg text-sm transition-colors">
+                         বাতিল
+                    </button>
+                    <button 
+                        onClick={handleStart} 
+                        disabled={goldenPages.length === 0}
+                        className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-lg shadow transition-colors flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Bot size={16} /> শুরু করুন
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+/* ═══════════════════ Question Engine Config Modal ═══════════════════ */
+const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookType, pages, indices, onClose, onStart }) => {
+    const [activeTab, setActiveTab] = useState('config'); // 'config' | 'schema'
+    
+    // Auto-select type based on DB BookType mapping
+    const getInitialSourceType = () => {
+        if (bookType === 'GUIDE' || bookType === 'QUESTION_BANK') return 'GUIDEBOOK';
+        return 'TEXTBOOK';
+    };
+    
+    const [sourceType, setSourceType] = useState(getInitialSourceType());
+
+    
+    // Target Question Types
+    const [selectedQuestionTypes, setSelectedQuestionTypes] = useState(['MULTIPLE_CHOICE', 'CREATIVE', 'SHORT_ANSWER']);
+    const toggleQuestionType = (type) => {
+        setSelectedQuestionTypes(prev => 
+            prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+        );
+    };
+
+    // Schema Management
+    const [selectedSchema, setSelectedSchema] = useState('');
+    const [schemaContent, setSchemaContent] = useState('');
+    const [isSavingSchema, setIsSavingSchema] = useState(false);
+    const [loadingSchemas, setLoadingSchemas] = useState(false);
+    const [schemas, setSchemas] = useState([]);
+
+    useEffect(() => {
+        const fetchSchemas = async () => {
+            setLoadingSchemas(true);
+            try {
+                const { data: kbData } = await axios.get('/v1/support/knowledge');
+                // Auto-detect the rule for THIS subject if it exists, otherwise fall back to any scraping JSON
+                const targetTag = subjectName ? `RULE_FOR_${subjectName.replace(/\s/g, '')}` : null;
+                const scrapingSchemas = kbData.filter(kb => kb.tags && kb.tags.includes('SCRAPING_JSON'));
+                
+                setSchemas(scrapingSchemas);
+
+                if (targetTag) {
+                    const exactMatch = scrapingSchemas.find(kb => kb.tags && kb.tags.includes(targetTag));
+                    if (exactMatch) {
+                        setSelectedSchema(exactMatch.id);
+                        setSchemaContent(exactMatch.content);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to fetch schemas", err);
+            } finally {
+                setLoadingSchemas(false);
+            }
+        };
+        fetchSchemas();
+    }, [subjectName]);
+
+    const handleSaveSchema = async (silent = false) => {
+        if (!selectedSchema) return;
+        setIsSavingSchema(true);
+        try {
+            const s = schemas.find(x => x.id === selectedSchema);
+            if (s) {
+                await axios.put(`/v1/support/knowledge/${selectedSchema}`, {
+                    ...s,
+                    content: schemaContent
+                });
+                setSchemas(prev => prev.map(x => x.id === selectedSchema ? { ...x, content: schemaContent } : x));
+                if (!silent) alert("Curriculum Rule Updated Successfully! It will now apply to all future extractions for this subject.");
+            }
+        } catch (err) {
+            if (!silent) alert("Failed to update Rule: " + (err.response?.data?.message || err.message));
+        } finally {
+            setIsSavingSchema(false);
+        }
+    };
+
+    // Chapter (Index) Selection for RAG Chunks
+    const [selectedIndexIds, setSelectedIndexIds] = useState([]);
+    
+    // Auto-select chapters that have chunks/pages explicitly marked as generated Vectors
+    const validChapters = useMemo(() => {
+        // Find indices that actually have vectorized topic chunks
+        const chapterIdsWithPages = new Set(pages.filter(p => !!p.sourceBookIndexId && p.extractionStatus === 'GOLDEN_VECTORIZED').map(p => p.sourceBookIndexId));
+        return indices.filter(idx => chapterIdsWithPages.has(idx.id));
+    }, [indices, pages]);
+
+    const hasInitializedSelectAll = useRef(false);
+
+    useEffect(() => {
+        if (validChapters.length > 0 && !hasInitializedSelectAll.current) {
+            setSelectedIndexIds(validChapters.map(c => c.id));
+            hasInitializedSelectAll.current = true;
+        }
+    }, [validChapters]);
+
+    const handleSelectAll = (select) => {
+        setSelectedIndexIds(select ? validChapters.map(c => c.id) : []);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col overflow-hidden max-h-[90vh]">
+                <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-pink-50 to-indigo-50 grow-0 shrink-0">
+                    <div>
+                        <h2 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
+                            <Sparkles className="w-6 h-6 text-pink-600" /> Automated Question Engine (RAG Pipeline)
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Generate highly accurate practice questions from AI Vector Data using mapped curriculum rules.
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-white/80 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                <div className="flex bg-slate-50 border-b border-slate-200 px-6 shrink-0 pt-2 gap-4">
+                    <button 
+                        onClick={() => setActiveTab('config')}
+                        className={`pb-3 pt-2 px-2 text-sm font-bold border-b-2 transition-all ${activeTab === 'config' ? 'border-pink-500 text-pink-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <span className="flex items-center gap-2"><Settings size={16}/> Extraction Settings</span>
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('schema')}
+                        className={`pb-3 pt-2 px-2 text-sm font-bold border-b-2 transition-all ${activeTab === 'schema' ? 'border-indigo-500 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <span className="flex items-center gap-2"><FileJson size={16}/> Curriculum Rules & JSON Config</span>
+                    </button>
+                </div>
+
+                <div className="p-0 overflow-hidden flex flex-col lg:flex-row flex-1 bg-white">
+                    {/* LEFT COLUMN: Main Dynamic Content depending on Tab */}
+                    <div className="flex-1 overflow-y-auto p-6 custom-scrollbar border-r border-slate-100 bg-white">
+                        
+                        {activeTab === 'config' && (
+                            <div className="space-y-6">
+                                {/* Source Type Toggle */}
+                                <div className="space-y-3">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">1. Source Content Type</label>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div 
+                                            onClick={() => setSourceType('TEXTBOOK')}
+                                            className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex flex-col gap-2 ${sourceType === 'TEXTBOOK' ? 'border-pink-500 bg-pink-50 text-pink-700 shadow-sm' : 'border-slate-200 hover:border-slate-300 text-slate-500 bg-slate-50 hover:bg-slate-100/50'}`}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <div className={`p-1.5 rounded-lg shrink-0 ${sourceType === 'TEXTBOOK' ? 'bg-pink-100' : 'bg-white shadow-sm'}`}>
+                                                    <BookOpen className={sourceType === 'TEXTBOOK' ? 'text-pink-600' : ''} size={16} />
+                                                </div>
+                                                <h4 className="font-bold text-sm leading-tight">Generate New<br/>(Textbook)</h4>
+                                            </div>
+                                            <p className="text-[10px] mt-0.5 opacity-80 leading-tight">Generate fresh questions by reading theory content.</p>
+                                        </div>
+                                        <div 
+                                            onClick={() => setSourceType('GUIDEBOOK')}
+                                            className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex flex-col gap-2 ${sourceType === 'GUIDEBOOK' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-slate-200 hover:border-slate-300 text-slate-500 bg-slate-50 hover:bg-slate-100/50'}`}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <div className={`p-1.5 rounded-lg shrink-0 ${sourceType === 'GUIDEBOOK' ? 'bg-indigo-100' : 'bg-white shadow-sm'}`}>
+                                                    <ListOrdered className={sourceType === 'GUIDEBOOK' ? 'text-indigo-600' : ''} size={16} />
+                                                </div>
+                                                <h4 className="font-bold text-sm leading-tight">Extract Only<br/>(Guide/Bank)</h4>
+                                            </div>
+                                            <p className="text-[10px] mt-0.5 opacity-80 leading-tight">Extract existing board/practice questions exactly.</p>
+                                        </div>
+                                        <div 
+                                            onClick={() => setSourceType('HYBRID')}
+                                            className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex flex-col gap-2 ${sourceType === 'HYBRID' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-200 hover:border-slate-300 text-slate-500 bg-slate-50 hover:bg-slate-100/50'}`}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <div className={`p-1.5 rounded-lg shrink-0 ${sourceType === 'HYBRID' ? 'bg-emerald-100' : 'bg-white shadow-sm'}`}>
+                                                    <Sparkles className={sourceType === 'HYBRID' ? 'text-emerald-600' : ''} size={16} />
+                                                </div>
+                                                <h4 className="font-bold text-sm leading-tight">Hybrid / Both<br/>(Mixed)</h4>
+                                            </div>
+                                            <p className="text-[10px] mt-0.5 opacity-80 leading-tight">Extract existing questions AND generate new ones from theories.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Target Question Types */}
+                                <div className="space-y-3">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">2. Expected Generative Outputs</label>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {[
+                                            { id: 'MULTIPLE_CHOICE', label: 'MCQ (বহুনির্বাচনি)', desc: 'Generate 4-option multiple choice questions' },
+                                            { id: 'CREATIVE', label: 'CQ (সৃজনশীল প্রশ্ন)', desc: 'Generate Stimulus and 4 sub-questions (ক,খ,গ,ঘ)' },
+                                            { id: 'SHORT_ANSWER', label: 'Short Answer (সংক্ষিপ্ত)', desc: 'Generate 1-2 sentence direct questions' }
+                                        ].map(type => (
+                                            <label key={type.id} className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${selectedQuestionTypes.includes(type.id) ? 'bg-pink-50/50 border-pink-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedQuestionTypes.includes(type.id)}
+                                                    onChange={() => toggleQuestionType(type.id)}
+                                                    className="mt-0.5 w-4 h-4 text-pink-500 rounded border-slate-300 focus:ring-pink-500"
+                                                />
+                                                <div>
+                                                    <p className={`text-sm font-bold ${selectedQuestionTypes.includes(type.id) ? 'text-pink-900' : 'text-slate-700'}`}>{type.label}</p>
+                                                    <p className="text-[10px] text-slate-500 mt-0.5">{type.desc}</p>
+                                                </div>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                                
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 text-amber-800">
+                                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+                                    <div>
+                                        <p className="text-xs font-bold mb-1">RAG Context Alert</p>
+                                        <p className="text-[11px] leading-relaxed opacity-90">
+                                            This pipeline strictly operates on previously mapped AI Vector Topics. If a chapter lacks Golden Data or wasn't "Extracted to Topics" yet, it will not yield questions.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'schema' && (
+                            <div className="space-y-4 h-full flex flex-col">
+                                <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between shrink-0">
+                                    <div>
+                                        <h3 className="font-bold text-indigo-900 text-sm">Subject-Specific Rules Map</h3>
+                                        <p className="text-[11px] text-indigo-700 mt-0.5 font-medium">Auto-detected schema for: <span className="bg-white px-1.5 py-0.5 rounded shadow-sm border border-indigo-200 ml-1">{subjectName || 'Unknown Subject'}</span></p>
+                                    </div>
+                                    <div className="bg-white p-1 rounded-lg shadow-sm border border-indigo-100 flex items-center">
+                                        {loadingSchemas ? <Loader2 size={24} className="animate-spin text-indigo-400 m-2"/> : (
+                                            <select 
+                                                value={selectedSchema} 
+                                                onChange={e => {
+                                                    setSelectedSchema(e.target.value);
+                                                    const sc = schemas.find(s => s.id === e.target.value);
+                                                    setSchemaContent(sc ? sc.content : '');
+                                                }}
+                                                className="w-64 text-xs bg-transparent border-none outline-none focus:ring-0 font-bold text-slate-700 cursor-pointer"
+                                            >
+                                                <option value="">-- Apply Default Pattern --</option>
+                                                {schemas.map(s => (
+                                                    <option key={s.id} value={s.id}>{s.title}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 flex flex-col bg-slate-900 rounded-xl overflow-hidden border border-slate-700 shadow-inner relative group">
+                                    <div className="bg-slate-800/80 px-4 py-2 border-b border-slate-700 flex justify-between items-center z-10 shrink-0">
+                                        <span className="text-[10px] font-mono text-slate-400 flex items-center gap-2"><Code size={12}/> JSON Config Editor</span>
+                                        {selectedSchema && (
+                                            <button 
+                                                onClick={handleSaveSchema}
+                                                disabled={isSavingSchema}
+                                                className="text-[10px] font-bold bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-1 rounded shadow transition-colors flex items-center gap-1 disabled:opacity-50"
+                                            >
+                                                {isSavingSchema ? <Loader2 size={12} className="animate-spin" /> : <Save size={12}/>}
+                                                Update Rule Globally
+                                            </button>
+                                        )}
+                                    </div>
+                                    {selectedSchema ? (
+                                        <textarea 
+                                            value={schemaContent}
+                                            onChange={e => setSchemaContent(e.target.value)}
+                                            className="w-full flex-1 text-xs font-mono bg-transparent text-green-400 p-4 outline-none focus:ring-0 resize-none custom-scrollbar leading-relaxed"
+                                            spellCheck="false"
+                                            placeholder="Paste curriculum JSON rule here..."
+                                        />
+                                    ) : (
+                                        <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-6">
+                                            <FileJson size={48} className="mb-4 opacity-20" />
+                                            <p className="text-sm font-bold text-slate-400 text-center">No specific schema loaded.</p>
+                                            <p className="text-xs mt-2 text-center opacity-70">The default pipeline mapping will be used. <br/>Select a predefined rule from the dropdown above to edit.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
+
+                    {/* RIGHT COLUMN: Target Vector Chapter Selection */}
+                    <div className="w-full lg:w-80 flex flex-col bg-slate-50 border-l border-slate-200 overflow-hidden shrink-0 z-10 shadow-[-10px_0_20px_-15px_rgba(0,0,0,0.05)]">
+                        <div className="px-5 py-4 border-b border-slate-200 flex flex-col gap-2 shrink-0 bg-white">
+                            <h3 className="font-extrabold text-slate-800 text-sm flex items-center justify-between">
+                                Target AI Vector Chapters
+                                <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-black">{selectedIndexIds.length} / {validChapters.length}</span>
+                            </h3>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleSelectAll(true)} className="flex-1 text-[10px] font-bold px-2 py-1.5 bg-slate-100 hover:bg-slate-200 rounded shadow-sm border border-slate-200 text-slate-600 transition-colors">Select All</button>
+                                <button onClick={() => handleSelectAll(false)} className="flex-1 text-[10px] font-bold px-2 py-1.5 bg-slate-100 hover:bg-slate-200 rounded shadow-sm border border-slate-200 text-slate-600 transition-colors">Clear</button>
+                            </div>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
+                            {validChapters.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 p-4">
+                                    <AlertCircle size={32} className="mb-2 opacity-50 text-indigo-300" />
+                                    <p className="text-sm font-bold text-slate-600">No Vector Chapters</p>
+                                    <p className="text-[10px] mt-1 leading-relaxed opacity-80">Sync chapters using Topic Extraction first. Only pre-processed chunks support question generation.</p>
+                                </div>
+                            ) : (
+                                validChapters.map((chapter) => (
+                                    <label 
+                                        key={chapter.id} 
+                                        className={`group flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${selectedIndexIds.includes(chapter.id) ? 'bg-indigo-50 border-indigo-300 shadow-sm' : 'bg-white border-transparent hover:border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md'}`}
+                                    >
+                                        <div className="flex flex-col gap-0.5 pr-2 truncate">
+                                            <span className={`text-[11px] font-bold truncate ${selectedIndexIds.includes(chapter.id) ? 'text-indigo-900 group-hover:text-indigo-700' : 'text-slate-700 group-hover:text-slate-900'}`}>{chapter.indexName}</span>
+                                        </div>
+                                        <div className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border-2 transition-all ${selectedIndexIds.includes(chapter.id) ? 'bg-indigo-500 border-indigo-500' : 'bg-white border-slate-300'}`}>
+                                            {selectedIndexIds.includes(chapter.id) && <Check size={12} strokeWidth={4} className="text-white" />}
+                                        </div>
+                                        <input 
+                                            type="checkbox"
+                                            className="sr-only"
+                                            checked={selectedIndexIds.includes(chapter.id)}
+                                            onChange={() => {
+                                                setSelectedIndexIds(prev => prev.includes(chapter.id) ? prev.filter(x => x !== chapter.id) : [...prev, chapter.id]);
+                                            }}
+                                        />
+                                    </label>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer Action Bar */}
+                <div className="p-5 border-t border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
+                    <p className="text-[10px] text-slate-500 font-medium">Estimated Time: ~{Math.max(1, selectedIndexIds.length * 2)} minutes via Vertex AI</p>
+                    <div className="flex gap-3">
+                        <button onClick={onClose} className="px-6 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-200 rounded-xl transition-colors">Cancel</button>
+                        <button 
+                            onClick={async () => {
+                                // Auto-save schema so custom JSON edits are preserved before generation starts
+                                if (selectedSchema) {
+                                    await handleSaveSchema(true);
+                                }
+                                // Important: Call onStart passing our targetIndexIds instead of pageIds
+                                onStart({ 
+                                    sourceType, 
+                                    selectedSchema, 
+                                    targetQuestionTypes: selectedQuestionTypes, 
+                                    targetIndexIds: selectedIndexIds 
+                                }); 
+                                onClose();
+                            }} 
+                            disabled={selectedIndexIds.length === 0 || isSavingSchema}
+                            className="px-8 py-2.5 bg-gradient-to-r from-pink-500 to-indigo-600 text-white font-extrabold rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                        >
+                            <Zap className="w-4 h-4" /> {isSavingSchema ? 'Saving Rule...' : 'Generate Questions'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 /* ═══════════════════ Main Component ═══════════════════ */
 const ProofreadingWorkspace = () => {
     const { bookId } = useParams();
@@ -242,6 +735,7 @@ const ProofreadingWorkspace = () => {
     // Phase 3E: Background Bulk Extraction Queue
     const [aiQueueJob, setAiQueueJob] = useState(null);
     const [aiQuestionJob, setAiQuestionJob] = useState(null); // PHASE 3E Auto Question Gen Queue
+    const [aiTopicJob, setAiTopicJob] = useState(null); // Topic Extraction Queue
     
     // Page Reorder Modal State
     const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
@@ -250,6 +744,10 @@ const ProofreadingWorkspace = () => {
     const [isAdvancedImageEditorOpen, setIsAdvancedImageEditorOpen] = useState(false);
     const [advancedEditorSource, setAdvancedEditorSource] = useState(null);
     const [isSavingImageEdit, setIsSavingImageEdit] = useState(false);
+
+    // AI Question Gen Modal State
+    const [isQuestionConfigModalOpen, setIsQuestionConfigModalOpen] = useState(false);
+    const [isTopicSyncModalOpen, setIsTopicSyncModalOpen] = useState(false);
 
     const handleSaveImageEdit = async (editedImageObject) => {
         setIsSavingImageEdit(true);
@@ -311,9 +809,16 @@ const ProofreadingWorkspace = () => {
                 const jobData2 = res.status === 204 ? null : res.data;
                 setAiQuestionJob(jobData2);
             } catch (err) {
-                if (err.response && err.response.status === 404) {
-                    setAiQuestionJob(null);
-                }
+                if (err.response && err.response.status === 404) setAiQuestionJob(null);
+            }
+            
+            // Topic Extraction Queue Status
+            try {
+                const res = await axios.get(`/v1/knowledge-hub/jobs/topic-extract/source-books/${bookId}/status`);
+                const jobData3 = res.status === 204 ? null : res.data;
+                setAiTopicJob(jobData3);
+            } catch (err) {
+                if (err.response && err.response.status === 404) setAiTopicJob(null);
             }
         };
 
@@ -321,7 +826,7 @@ const ProofreadingWorkspace = () => {
         timer = setInterval(fetchJobStatus, 5000); // Poll every 5 seconds
         
         return () => clearInterval(timer);
-    }, [bookId, aiQueueJob?.status, aiQuestionJob?.status]);
+    }, [bookId, aiQueueJob?.status, aiQuestionJob?.status, aiTopicJob?.status]);
 
     // Bulk Extract Actions
     const handleStartBulkExtract = async () => {
@@ -350,9 +855,10 @@ const ProofreadingWorkspace = () => {
     };
 
     // Question Gen Actions
-    const handleStartQuestionGen = async () => {
+    const handleStartQuestionGen = async (config = {}) => {
         try {
-            const res = await axios.post(`/v1/knowledge-hub/jobs/generate-questions/source-books/${bookId}/start`);
+            // Include config (sourceType, selectedSchema) if the backend endpoint absorbs it later
+            const res = await axios.post(`/v1/knowledge-hub/jobs/generate-questions/source-books/${bookId}/start`, config);
             setAiQuestionJob(res.data);
             alert("AI Question Engine Started Background Execution!");
         } catch (err) {
@@ -376,6 +882,21 @@ const ProofreadingWorkspace = () => {
         } catch (err) {}
     };
 
+    const handlePauseTopicJob = async () => {
+        if (!aiTopicJob) return;
+        try {
+            const res = await axios.post(`/v1/knowledge-hub/jobs/topic-extract/${aiTopicJob.id}/pause`);
+            setAiTopicJob(res.data);
+        } catch (err) {}
+    };
+
+    const handleResumeTopicJob = async () => {
+        if (!aiTopicJob) return;
+        try {
+            const res = await axios.post(`/v1/knowledge-hub/jobs/topic-extract/${aiTopicJob.id}/resume`);
+            setAiTopicJob(res.data);
+        } catch (err) {}
+    };
 
     // Workspace Resizing State
     const [isResizing, setIsResizing] = useState(false);
@@ -747,6 +1268,35 @@ const ProofreadingWorkspace = () => {
         } catch (err) { console.error(err); }
     };
 
+    const handleExtractTopics = async (indexId) => {
+        try {
+            setIsTopicSyncModalOpen(false);
+            const res = await axios.post(`/v1/knowledge-hub/indexes/${indexId}/extract-topics`);
+            alert(res.data.message || 'Topic extraction started in background.');
+        } catch (err) { 
+            console.error('Extract Topics Error:', err);
+            alert('Failed: ' + (err.response?.data?.error || err.message));
+        }
+    };
+
+    const handleExtractAllTopics = async (targetIndexIds) => {
+        try {
+            setIsTopicSyncModalOpen(false);
+            const res = await axios.post(`/v1/knowledge-hub/source-books/${bookId}/extract-all-topics`, targetIndexIds);
+            
+            // Re-fetch job status to show UI immediately
+            try {
+                const statusRes = await axios.get(`/v1/knowledge-hub/jobs/topic-extract/source-books/${bookId}/status`);
+                if (statusRes.status !== 204) setAiTopicJob(statusRes.data);
+            } catch(e) {}
+            
+            alert(res.data.message || 'Bulk Topic extraction started in background.');
+        } catch (err) { 
+            console.error('Bulk Extract Topics Error:', err);
+            alert('Failed: ' + (err.response?.data?.error || err.message));
+        }
+    };
+
     // Phase 3A: Assign page to chapter index
     const handleAssignPage = async (indexId, pageObj = selectedPage) => {
         if (!pageObj) return;
@@ -826,65 +1376,11 @@ const ProofreadingWorkspace = () => {
                         {treeBCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
                         <span className="hidden sm:inline">B</span>
                     </button>
-                    <Link to={`/knowledge-hub/mapping/${bookId}`}>
-                        <button className="px-2 lg:px-3 py-1.5 bg-white border border-teal-600 text-teal-700 hover:bg-teal-50 font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-xs">
-                            <Layers className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Map Curriculum</span>
-                        </button>
-                    </Link>
                     <Link to={`/knowledge-hub/digitization/${bookId}`}>
                         <button className="px-2 lg:px-3 py-1.5 bg-indigo-600 border border-indigo-700 text-white font-semibold rounded-lg flex items-center gap-1.5 hover:bg-indigo-700 transition-all shadow-sm text-xs">
                             <ImageIcon className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Add Pages</span>
                         </button>
                     </Link>
-                    <Link to={`/questions/drafts`}>
-                        <button className="px-2 lg:px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 font-semibold rounded-lg flex items-center gap-1.5 hover:bg-rose-100 transition-all shadow-sm text-xs ml-1">
-                            <FileText className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Review Drafts</span>
-                        </button>
-                    </Link>
-
-                    {/* AI Question Generation Job Viewer */}
-                    {aiQuestionJob && (aiQuestionJob.status === 'QUEUED' || aiQuestionJob.status === 'IN_PROGRESS' || aiQuestionJob.status === 'PAUSED') ? (
-                        <div className="flex items-center gap-2 bg-pink-50 border border-pink-200 text-pink-800 px-3 py-1.5 rounded-lg shadow-sm w-max ml-1 h-9">
-                            {aiQuestionJob.status === 'PAUSED' ? (
-                                <Zap size={14} className="text-amber-500" />
-                            ) : (
-                                <Loader2 size={14} className="animate-spin text-pink-500 shrink-0" />
-                            )}
-                            <div className="flex flex-col justify-center">
-                                <span className="text-[10px] font-bold leading-tight hidden lg:flex items-center gap-1.5">
-                                    AI Question Generation
-                                    {aiQuestionJob.status === 'PAUSED' && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded uppercase">Paused</span>}
-                                </span>
-                                <div className="hidden lg:block w-24 bg-white border border-pink-100 h-1.5 rounded-full overflow-hidden shrink-0 mt-0.5">
-                                  <div 
-                                      className={`h-full ${aiQuestionJob.status === 'PAUSED' ? 'bg-amber-400' : 'bg-pink-500'} transition-all`} 
-                                      style={{ width: `${aiQuestionJob.totalPagesToProcess > 0 ? (aiQuestionJob.processedPagesCount / aiQuestionJob.totalPagesToProcess) * 100 : 0}%` }} 
-                                  />
-                                </div>
-                            </div>
-                            <span className="text-[10px] font-bold ml-1 text-pink-900 min-w-[24px]">
-                                {aiQuestionJob.processedPagesCount}/{aiQuestionJob.totalPagesToProcess}
-                            </span>
-                            
-                            {aiQuestionJob.status === 'PAUSED' ? (
-                                <button onClick={handleResumeQuestionJob} className="ml-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Resume Question Generation">
-                                    <span className="hidden xl:inline">RESUME</span><span className="xl:hidden">▶</span>
-                                </button>
-                            ) : (
-                                <button onClick={handlePauseQuestionJob} className="ml-1 bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Pause Question Generation">
-                                    <span className="hidden xl:inline">PAUSE</span><span className="xl:hidden">⏸</span>
-                                </button>
-                            )}
-                        </div>
-                    ) : (
-                        // Start Question Generation Button only if no background process is running
-                        // We check if pages have extractionStatus = PROOFREAD (Golden Data)
-                        pages.some(p => p.extractionStatus === 'PROOFREAD') && (
-                            <button onClick={handleStartQuestionGen} className="flex items-center gap-1.5 px-2 lg:px-3 py-1.5 bg-gradient-to-r from-pink-500 to-rose-600 border border-transparent text-white font-semibold rounded-lg hover:from-pink-600 hover:to-rose-700 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
-                                <Sparkles size={14} className="shrink-0" /> <span className="hidden xl:inline">Automate Questions</span>
-                            </button>
-                        )
-                    )}
 
                     {/* Bulk Extraction Tools */}
                     {aiQueueJob && (aiQueueJob.status === 'QUEUED' || aiQueueJob.status === 'IN_PROGRESS' || aiQueueJob.status === 'PAUSED') ? (
@@ -927,6 +1423,108 @@ const ProofreadingWorkspace = () => {
                             </button>
                         )
                     )}
+
+                    <Link to={`/knowledge-hub/mapping/${bookId}`}>
+                        <button className="px-2 lg:px-3 py-1.5 bg-white border border-teal-600 text-teal-700 hover:bg-teal-50 font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-xs ml-1">
+                            <Layers className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Map Curriculum</span>
+                        </button>
+                    </Link>
+
+                    {/* AI Topic Extraction Job Viewer */}
+                    {aiTopicJob && (aiTopicJob.status === 'QUEUED' || aiTopicJob.status === 'IN_PROGRESS' || aiTopicJob.status === 'PAUSED') ? (
+                        <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg shadow-sm w-max ml-1 h-9">
+                            {aiTopicJob.status === 'PAUSED' ? (
+                                <Zap size={14} className="text-amber-500" />
+                            ) : (
+                                <Loader2 size={14} className="animate-spin text-teal-600 shrink-0" />
+                            )}
+                            <div className="flex flex-col justify-center">
+                                <span className="text-[10px] font-bold leading-tight hidden lg:flex items-center gap-1.5">
+                                    Topic Vectors Sync
+                                    {aiTopicJob.status === 'PAUSED' && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded uppercase">Paused</span>}
+                                </span>
+                                <div className="hidden lg:block w-24 bg-white border border-teal-100 h-1.5 rounded-full overflow-hidden shrink-0 mt-0.5">
+                                  <div 
+                                      className={`h-full ${aiTopicJob.status === 'PAUSED' ? 'bg-amber-400' : 'bg-teal-500'} transition-all`} 
+                                      style={{ width: `${aiTopicJob.totalChaptersToProcess > 0 ? (aiTopicJob.processedChaptersCount / aiTopicJob.totalChaptersToProcess) * 100 : 0}%` }} 
+                                  />
+                                </div>
+                            </div>
+                            <span className="text-[10px] font-bold ml-1 text-teal-900 min-w-[24px]">
+                                {aiTopicJob.processedChaptersCount}/{aiTopicJob.totalChaptersToProcess}
+                            </span>
+                            
+                            {aiTopicJob.status === 'PAUSED' ? (
+                                <button onClick={handleResumeTopicJob} className="ml-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Resume Topic Sync">
+                                    <span className="hidden xl:inline">RESUME</span><span className="xl:hidden">▶</span>
+                                </button>
+                            ) : (
+                                <button onClick={handlePauseTopicJob} className="ml-1 bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Pause Topic Sync">
+                                    <span className="hidden xl:inline">PAUSE</span><span className="xl:hidden">⏸</span>
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        pages.some(p => p.extractionStatus === 'PROOFREAD' || p.extractionStatus === 'GOLDEN_VECTORIZED') && (
+                            <button onClick={() => setIsTopicSyncModalOpen(true)} className="flex items-center gap-1.5 px-2 lg:px-3 py-1.5 bg-white border border-teal-200 text-teal-700 font-semibold rounded-lg hover:bg-teal-50 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
+                                <Bot size={14} className="shrink-0 text-teal-500" /> <span className="hidden xl:inline">Extract Topics & Sync</span>
+                            </button>
+                        )
+                    )}
+
+                    {/* AI Question Generation Job Viewer */}
+                    {aiQuestionJob && (aiQuestionJob.status === 'QUEUED' || aiQuestionJob.status === 'IN_PROGRESS' || aiQuestionJob.status === 'PAUSED') ? (
+                        <div className="flex items-center gap-2 bg-pink-50 border border-pink-200 text-pink-800 px-3 py-1.5 rounded-lg shadow-sm w-max ml-1 h-9">
+                            {aiQuestionJob.status === 'PAUSED' ? (
+                                <Zap size={14} className="text-amber-500" />
+                            ) : (
+                                <Loader2 size={14} className="animate-spin text-pink-500 shrink-0" />
+                            )}
+                            <div className="flex flex-col justify-center">
+                                <span className="text-[10px] font-bold leading-tight hidden lg:flex items-center gap-1.5">
+                                    AI Question Generation
+                                    {aiQuestionJob.status === 'PAUSED' && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded uppercase">Paused</span>}
+                                </span>
+                                <div className="hidden lg:block w-24 bg-white border border-pink-100 h-1.5 rounded-full overflow-hidden shrink-0 mt-0.5">
+                                  <div 
+                                      className={`h-full ${aiQuestionJob.status === 'PAUSED' ? 'bg-amber-400' : 'bg-pink-500'} transition-all`} 
+                                      style={{ width: `${aiQuestionJob.totalPagesToProcess > 0 ? (aiQuestionJob.processedPagesCount / aiQuestionJob.totalPagesToProcess) * 100 : 0}%` }} 
+                                  />
+                                </div>
+                            </div>
+                            <span className="text-[10px] font-bold ml-1 text-pink-900 min-w-[24px]">
+                                {aiQuestionJob.processedPagesCount}/{aiQuestionJob.totalPagesToProcess}
+                            </span>
+                            
+                            {aiQuestionJob.status === 'PAUSED' ? (
+                                <button onClick={handleResumeQuestionJob} className="ml-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Resume Question Generation">
+                                    <span className="hidden xl:inline">RESUME</span><span className="xl:hidden">▶</span>
+                                </button>
+                            ) : (
+                                <button onClick={handlePauseQuestionJob} className="ml-1 bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Pause Question Generation">
+                                    <span className="hidden xl:inline">PAUSE</span><span className="xl:hidden">⏸</span>
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        pages.some(p => p.extractionStatus === 'PROOFREAD' || p.extractionStatus === 'GOLDEN_VECTORIZED') && (
+                            bookDetails?.questionExtractionStatus === 'COMPLETED' ? (
+                                <button className="flex items-center gap-1.5 px-2 lg:px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold rounded-lg shadow-sm text-[11px] xl:text-xs ml-1 h-9 cursor-not-allowed" title="Questions have already been generated for this book.">
+                                    <Lock size={14} className="shrink-0" /> <span className="hidden xl:inline">Completed</span>
+                                </button>
+                            ) : (
+                                <button onClick={() => setIsQuestionConfigModalOpen(true)} className="flex items-center gap-1.5 px-2 lg:px-3 py-1.5 bg-gradient-to-r from-pink-500 to-rose-600 border border-transparent text-white font-semibold rounded-lg hover:from-pink-600 hover:to-rose-700 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
+                                    <Sparkles size={14} className="shrink-0" /> <span className="hidden xl:inline">Automate Questions</span>
+                                </button>
+                            )
+                        )
+                    )}
+
+                    <Link to={`/questions/drafts`}>
+                        <button className="px-2 lg:px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 font-semibold rounded-lg flex items-center gap-1.5 hover:bg-rose-100 transition-all shadow-sm text-xs ml-1">
+                            <FileText className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Review Drafts</span>
+                        </button>
+                    </Link>
                 </>,
                 document.getElementById('topbar-actions')
             )}
@@ -1307,7 +1905,9 @@ const ProofreadingWorkspace = () => {
                                                 </div>
                                             ) : (
                                                 <div className="space-y-1.5">
-                                                    {indices.map((idx, indexNumber) => (
+                                                    {indices.map((idx, indexNumber) => {
+                                                        const isVectorized = pages.some(p => p.sourceBookIndexId === idx.id && p.extractionStatus === 'GOLDEN_VECTORIZED');
+                                                        return (
                                                         <div key={idx.id} className={`bg-white border text-sm rounded-lg shadow-sm group transition-all ${selectedPage?.sourceBookIndexId === idx.id ? 'border-teal-500 ring-2 ring-teal-400' : activeTreeBChapter === idx.id ? 'border-indigo-400 ring-1 ring-indigo-200' : 'border-slate-200 hover:border-slate-300'}`}>
                                                             <div className="flex items-center justify-between p-2 cursor-pointer transition-colors"
                                                                 onClick={() => handleAssignPage(selectedPage?.sourceBookIndexId === idx.id ? null : idx.id)}>
@@ -1317,13 +1917,21 @@ const ProofreadingWorkspace = () => {
                                                                     {(idx.mappedChapterId || idx.mappedTopicId) && (
                                                                         <LinkIcon className="w-3 h-3 text-teal-600 ml-1 shrink-0" title="Mapped to Curriculum" />
                                                                     )}
+                                                                    {isVectorized && (
+                                                                        <span className="flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-gradient-to-r from-pink-500 to-indigo-600 text-white shadow-sm shrink-0" title="Vectorized (AI Synced)">
+                                                                            <Sparkles size={8} /> AI
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                                 <div className="flex items-center gap-1.5 shrink-0">
                                                                     {idx.pageCount > 0 && (
                                                                         <span className="px-1.5 py-0.5 bg-teal-50 text-teal-700 text-[9px] font-bold rounded border border-teal-100">{idx.pageCount}p</span>
                                                                     )}
-                                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteIndex(idx.id); }} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                        <Trash2 size={11} />
+                                                                    <button title="Extract Topics & Sync Pinecone" onClick={(e) => { e.stopPropagation(); handleExtractTopics(idx.id); }} className="text-slate-300 hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <Bot size={13} />
+                                                                    </button>
+                                                                    <button title="Delete Chapter Index" onClick={(e) => { e.stopPropagation(); handleDeleteIndex(idx.id); }} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <Trash2 size={13} />
                                                                     </button>
                                                                 </div>
                                                             </div>
@@ -1334,7 +1942,8 @@ const ProofreadingWorkspace = () => {
                                                                 </div>
                                                             )}
                                                         </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
                                           </div>
@@ -1514,6 +2123,29 @@ const ProofreadingWorkspace = () => {
                         </div>
                     )}
                 </div>
+            )}
+
+            {isQuestionConfigModalOpen && (
+                <QuestionEngineConfigModal
+                    bookId={bookId}
+                    classSubjectId={bookDetails?.classSubjectId}
+                    subjectName={bookDetails?.mappedSubjectName}
+                    bookType={bookDetails?.bookType}
+                    pages={pages}
+                    indices={indices}
+                    onClose={() => setIsQuestionConfigModalOpen(false)}
+                    onStart={handleStartQuestionGen}
+                />
+            )}
+
+            {isTopicSyncModalOpen && (
+                <TopicExtractConfigModal
+                    indices={indices}
+                    pages={pages}
+                    onClose={() => setIsTopicSyncModalOpen(false)}
+                    onStartAll={handleExtractAllTopics}
+                    onStartSingle={handleExtractTopics}
+                />
             )}
         </div>
     );

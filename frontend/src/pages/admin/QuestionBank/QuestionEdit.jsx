@@ -10,6 +10,7 @@ import useAutoSave from '../../../hooks/useAutoSave';
 import ImageSidebar from './components/ImageSidebar';
 import MCQOptionsEditor from './components/MCQOptionsEditor';
 import QuestionContentEditor from './components/QuestionContentEditor';
+import CQPartsEditor from './components/CQPartsEditor';
 
 // Helpher function to convert Markdown Images to HTML so RichTextEditor can render them visually!
 const convertMarkdownImagesToHtml = (text) => {
@@ -48,6 +49,7 @@ const QuestionEdit = () => {
     });
 
     const [options, setOptions] = useState([]);
+    const [cqParts, setCqParts] = useState([]);
 
     // Image Upload & Crop States
     const [imageUploading, setImageUploading] = useState(false);
@@ -104,6 +106,62 @@ const QuestionEdit = () => {
                         })));
                     } catch (optErr) {
                         console.error('Failed to load MCQ options', optErr);
+                    }
+                }
+                
+                // Parse out CQ parts if it's a CQ
+                if (questionData.type === 'CQ') {
+                    const html = convertMarkdownImagesToHtml(questionData.questionText || '');
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    
+                    const ansHtml = convertMarkdownImagesToHtml(questionData.correctAnswer || '');
+                    const expHtml = convertMarkdownImagesToHtml(questionData.explanation || '');
+                    
+                    const ansDoc = parser.parseFromString(ansHtml, 'text/html');
+                    const expDoc = parser.parseFromString(expHtml, 'text/html');
+                    
+                    const partsTemp = [];
+                    const qList = doc.querySelectorAll('.cq-questions ol li');
+                    qList.forEach((li, idx) => {
+                        const marks = parseFloat(li.getAttribute('data-marks')) || 1;
+                        const textSpan = li.querySelector('.cq-text');
+                        const label = ['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(97 + idx);
+                        
+                        let partAns = '';
+                        let partExp = '';
+                        
+                        const ansNode = ansDoc.querySelector(`.cq-ans-part[data-label=\"${label}\"] .cq-ans-content`);
+                        if (ansNode) partAns = ansNode.innerHTML;
+                        else if (ansDoc.body.textContent && idx === 0) partAns = ansDoc.body.innerHTML; // fallback
+                        
+                        const expNode = expDoc.querySelector(`.cq-exp-part[data-label=\"${label}\"] .cq-exp-content`);
+                        if (expNode) partExp = expNode.innerHTML;
+                        else if (expDoc.body.textContent && idx === 0) partExp = expDoc.body.innerHTML; // fallback
+                        
+                        partsTemp.push({
+                            label: label,
+                            text: textSpan ? textSpan.innerHTML : li.textContent,
+                            marks: marks,
+                            answer: partAns,
+                            explanation: partExp
+                        });
+                    });
+                    
+                    if (partsTemp.length > 0) {
+                        setCqParts(partsTemp);
+                        const stemDiv = doc.querySelector('.cq-stem');
+                        if (stemDiv) {
+                            setFormData(prev => ({ ...prev, stimulus: stemDiv.innerHTML }));
+                        }
+                    } else {
+                        // Fallback to empty standard CQ if parsing failed or doesn't have the structure
+                        setCqParts([
+                            { label: 'ক', text: '', answer: '', explanation: '', marks: 1 },
+                            { label: 'খ', text: '', answer: '', explanation: '', marks: 2 },
+                            { label: 'গ', text: '', answer: '', explanation: '', marks: 3 },
+                            { label: 'ঘ', text: '', answer: '', explanation: '', marks: 4 }
+                        ]);
                     }
                 }
 
@@ -338,8 +396,12 @@ const QuestionEdit = () => {
         setMessage(null);
 
         // Validation
-        if (isEmptyQuill(formData.questionText) || !formData.academicClassId || !formData.subjectId || !formData.chapterId) {
+        if (questionType !== 'CQ' && isEmptyQuill(formData.questionText)) {
             setMessage({ type: 'error', text: 'Please fill all required context and question text fields.' });
+            return;
+        }
+        if (!formData.academicClassId || !formData.subjectId || !formData.chapterId) {
+            setMessage({ type: 'error', text: 'Please select Class, Subject, and Chapter.' });
             return;
         }
 
@@ -361,17 +423,47 @@ const QuestionEdit = () => {
 
         setSaving(true);
         try {
+            let finalQuestionText = formData.questionText;
+            let finalAnswerText = formData.correctAnswer;
+            let finalExplanationText = formData.explanation;
+            
+            // If CQ, build the structured HTML string from the parts
+            if (questionType === 'CQ') {
+                let stemHtml = formData.stimulus || '';
+                let combinedHtml = `<div class=\"cq-stem\">${stemHtml}</div><div class=\"cq-questions\"><ol type=\"a\">`;
+                let answersHtml = '<div class=\"cq-answers\">';
+                let explanationsHtml = '<div class=\"cq-explanations\">';
+                
+                cqParts.forEach(sq => {
+                    combinedHtml += `<li data-marks=\"${sq.marks}\"><span class=\"cq-text\">${sq.text}</span> <span class=\"cq-marks\">(${sq.marks})</span></li>`;
+                    if (sq.answer) {
+                        answersHtml += `<div class=\"cq-ans-part\" data-label=\"${sq.label}\" style=\"margin-bottom:8px;\"><strong>${sq.label}) উত্তর:</strong> <span class=\"cq-ans-content\">${sq.answer}</span></div>`;
+                    }
+                    if (sq.explanation) {
+                        explanationsHtml += `<div class=\"cq-exp-part\" data-label=\"${sq.label}\" style=\"margin-bottom:8px;\"><strong>${sq.label}) ব্যাখ্যা:</strong> <span class=\"cq-exp-content\">${sq.explanation}</span></div>`;
+                    }
+                });
+                
+                combinedHtml += '</ol></div>';
+                answersHtml += '</div>';
+                explanationsHtml += '</div>';
+                
+                finalQuestionText = combinedHtml;
+                finalAnswerText = answersHtml === '<div class=\"cq-answers\"></div>' ? '' : answersHtml;
+                finalExplanationText = explanationsHtml === '<div class=\"cq-explanations\"></div>' ? '' : explanationsHtml;
+            }
+
             const questionPayload = {
-                questionText: formData.questionText,
+                questionText: finalQuestionText,
                 marks: formData.marks,
                 difficulty: formData.difficulty,
                 language: formData.language,
-                explanation: formData.explanation,
+                explanation: finalExplanationText,
                 bloomLevel: formData.bloomLevel,
                 stimulus: formData.stimulus,
                 mcqType: formData.mcqType,
                 statements: formData.statements,
-                correctAnswer: questionType !== 'MCQ' ? formData.correctAnswer : null,
+                correctAnswer: questionType !== 'MCQ' ? finalAnswerText : null,
                 classSubject: { id: formData.subjectId },
                 chapter: { id: formData.chapterId },
                 topic: formData.topicId ? { id: formData.topicId } : null,
@@ -410,7 +502,7 @@ const QuestionEdit = () => {
     };
 
     const { restoreData, clearSavedData, hasSavedData, lastSavedTime } = useAutoSave('qst_edit_draft_' + id, {
-        formData, options, versionComment
+        formData, options, cqParts, versionComment
     });
 
     const handleRestoreDraft = () => {
@@ -418,6 +510,7 @@ const QuestionEdit = () => {
         if (saved) {
             if (saved.formData) setFormData(saved.formData);
             if (saved.options) setOptions(saved.options);
+            if (saved.cqParts) setCqParts(saved.cqParts);
             if (saved.versionComment) setVersionComment(saved.versionComment);
             setMessage({ type: 'success', text: 'অটো-সেভ করা ড্রাফট সফলভাবে রিস্টোর হয়েছে!' });
         }
@@ -520,6 +613,14 @@ const QuestionEdit = () => {
                         setFormData={setFormData} 
                         questionType={questionType} 
                     />
+
+                    {/* CQ Parts (Conditional) */}
+                    {questionType === 'CQ' && (
+                        <CQPartsEditor 
+                            cqParts={cqParts}
+                            setCqParts={setCqParts}
+                        />
+                    )}
 
                     {/* MCQ Options (Conditional) */}
                     {questionType === 'MCQ' && (

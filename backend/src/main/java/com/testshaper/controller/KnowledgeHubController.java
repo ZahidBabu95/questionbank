@@ -27,6 +27,7 @@ public class KnowledgeHubController {
 
     private final KnowledgeHubService knowledgeHubService;
     private final DynamicStorageService storageService;
+    private final com.testshaper.service.TopicExtractorService topicExtractorService;
 
     @org.springframework.beans.factory.annotation.Autowired
     private com.testshaper.scheduler.AiExtractionScheduler aiExtractionScheduler;
@@ -372,8 +373,8 @@ public class KnowledgeHubController {
 
     // --- Background Tasks (Ai Question Generation Queue) ---
     @PostMapping("/jobs/generate-questions/source-books/{id}/start")
-    public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> startAiQuestionQueue(@PathVariable UUID id) {
-        return ResponseEntity.ok(knowledgeHubService.startAiQuestionQueue(id));
+    public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> startAiQuestionQueue(@PathVariable UUID id, @RequestBody(required = false) com.testshaper.dto.AiQuestionGenConfigDto config) {
+        return ResponseEntity.ok(knowledgeHubService.startAiQuestionQueue(id, config));
     }
 
     @GetMapping("/jobs/generate-questions/source-books/{id}/status")
@@ -398,6 +399,31 @@ public class KnowledgeHubController {
     @PostMapping("/jobs/generate-questions/{jobId}/cancel")
     public ResponseEntity<com.testshaper.entity.AiQuestionGenerationJob> cancelAiQuestionQueue(@PathVariable UUID jobId) {
         return ResponseEntity.ok(knowledgeHubService.cancelAiQuestionQueue(jobId));
+    }
+
+    // --- Background Tasks (Ai Topic Extraction Queue) ---
+    @GetMapping("/jobs/topic-extract/source-books/{id}/status")
+    public ResponseEntity<com.testshaper.entity.AiTopicExtractionJob> getAiTopicExtractionQueueStatus(@PathVariable UUID id) {
+        com.testshaper.entity.AiTopicExtractionJob job = knowledgeHubService.getAiTopicExtractionQueueStatus(id);
+        if (job == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(job);
+    }
+
+    @PostMapping("/jobs/topic-extract/{jobId}/pause")
+    public ResponseEntity<com.testshaper.entity.AiTopicExtractionJob> pauseAiTopicExtractionQueue(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(knowledgeHubService.pauseAiTopicExtractionQueue(jobId));
+    }
+
+    @PostMapping("/jobs/topic-extract/{jobId}/resume")
+    public ResponseEntity<com.testshaper.entity.AiTopicExtractionJob> resumeAiTopicExtractionQueue(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(knowledgeHubService.resumeAiTopicExtractionQueue(jobId));
+    }
+
+    @PostMapping("/jobs/topic-extract/{jobId}/cancel")
+    public ResponseEntity<com.testshaper.entity.AiTopicExtractionJob> cancelAiTopicExtractionQueue(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(knowledgeHubService.cancelAiTopicExtractionQueue(jobId));
     }
 
     // --- System Health and Active Jobs ---
@@ -452,6 +478,37 @@ public class KnowledgeHubController {
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "AI edit failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Phase 3D: Trigger Semantic Chunking, Topic Extraction, and Pinecone Upsert
+     * This will automatically split a chapter into topics and RAG chunks.
+     */
+    @PostMapping("/indexes/{indexId}/extract-topics")
+    public ResponseEntity<Map<String, String>> extractTopicsForIndex(@PathVariable UUID indexId) {
+        try {
+            topicExtractorService.extractAndMapTopicsForChapter(indexId);
+            return ResponseEntity.ok(Map.of("message", "Topic extraction and Pinecone vector sync started successfully in background."));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to start extraction: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Bulk Topic Extraction for Entire Book
+     */
+    @PostMapping("/source-books/{id}/extract-all-topics")
+    public ResponseEntity<Map<String, String>> extractAllTopicsForBook(@PathVariable UUID id, @RequestBody java.util.List<UUID> targetIndexIds) {
+        try {
+            com.testshaper.entity.AiTopicExtractionJob job = knowledgeHubService.startAiTopicExtractionQueue(id, targetIndexIds);
+            topicExtractorService.processBulkTopicExtractionJob(job.getId(), targetIndexIds);
+            
+            return ResponseEntity.ok(Map.of("message", "Topic extraction and vector sync queued for " + (targetIndexIds != null ? targetIndexIds.size() : 0) + " chapters!"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to start bulk extraction: " + e.getMessage()));
         }
     }
 }

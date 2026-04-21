@@ -145,13 +145,16 @@ const KnowledgeHubReport = () => {
     const detailedData = useMemo(() => {
         if (!hierarchy.classSubjects || !hierarchy.classes) return [];
         
-        return hierarchy.classSubjects.map(subject => {
+        const mappedBookIds = new Set();
+        
+        const mappedRows = hierarchy.classSubjects.map(subject => {
             const cls = hierarchy.classes?.find(c => subject._classId === c.id);
             const stream = hierarchy.streams?.find(s => cls?._streamId === s.id);
             const level = hierarchy.levels?.find(l => stream?._levelId === l.id);
             const globalSubject = hierarchy.subjects?.find(s => subject._subjectId === s.id);
             
             const relatedBooks = books.filter(b => b.classSubjectId === subject.id);
+            relatedBooks.forEach(b => mappedBookIds.add(b.id));
             
             let status = 'PENDING UPLOAD';
             let statusColor = 'bg-rose-50 text-rose-600 border-rose-200';
@@ -160,7 +163,7 @@ const KnowledgeHubReport = () => {
                 if (relatedBooks.some(b => b.isProcessing)) {
                     status = 'PROCESSING BACKGROUND';
                     statusColor = 'bg-amber-50 text-amber-600 border-amber-200';
-                } else if (relatedBooks.some(b => (b.extractedPages > 0 && b.extractedPages >= b.totalPages) || (b.processedPagesCount > 0 && b.processedPagesCount >= b.totalPagesToProcess))) {
+                } else if (relatedBooks.some(b => (b.extractedPages > 0 && b.extractedPages >= b.totalPages) && b.totalPages > 0)) {
                     status = 'EXTRACTION COMPLETED';
                     statusColor = 'bg-emerald-50 text-emerald-600 border-emerald-200';
                 } else if (relatedBooks.some(b => b.extractedPages > 0 || b.processedPagesCount > 0)) {
@@ -186,6 +189,38 @@ const KnowledgeHubReport = () => {
                 books: relatedBooks
             };
         });
+
+        const unmappedBooks = books.filter(b => !mappedBookIds.has(b.id));
+        if (unmappedBooks.length > 0) {
+            let status = 'UNASSIGNED';
+            let statusColor = 'bg-slate-100 text-slate-600 border-slate-300';
+            if (unmappedBooks.some(b => b.isProcessing)) {
+                status = 'PROCESSING BACKGROUND';
+                statusColor = 'bg-amber-50 text-amber-600 border-amber-200';
+            } else if (unmappedBooks.some(b => b.extractedPages > 0 && b.extractedPages >= b.totalPages && b.totalPages > 0)) {
+                status = 'EXTRACTION COMPLETED';
+                statusColor = 'bg-emerald-50 text-emerald-600 border-emerald-200';
+            } else if (unmappedBooks.some(b => b.extractedPages > 0)) {
+                status = 'PARTIALLY EXTRACTED';
+                statusColor = 'bg-blue-50 text-blue-600 border-blue-200';
+            }
+
+            mappedRows.unshift({
+                id: 'unassigned',
+                levelId: 'none',
+                streamId: 'none',
+                classId: 'none',
+                levelName: 'Unassigned',
+                streamName: 'Unassigned',
+                className: 'Unassigned',
+                subjectName: 'No Curriculum Subject',
+                status,
+                statusColor,
+                books: unmappedBooks
+            });
+        }
+        
+        return mappedRows;
     }, [hierarchy, books]);
 
     // Apply Dropdown Filters
@@ -344,7 +379,10 @@ const KnowledgeHubReport = () => {
 
     const handleJobAction = async (jobId, jobType, action) => {
         try {
-            const endpointType = jobType === "AI_VISION_EXTRACTION" ? "bulk-extract" : "generate-questions";
+            let endpointType = "bulk-extract";
+            if (jobType === "AI_QUESTION_GENERATION") endpointType = "generate-questions";
+            if (jobType === "AI_TOPIC_EXTRACTION") endpointType = "topic-extract";
+            
             await axios.post(`/v1/knowledge-hub/jobs/${endpointType}/${jobId}/${action}`);
             fetchSystemStats(); // Refresh stats immediately
         } catch (error) {
@@ -628,7 +666,7 @@ const KnowledgeHubReport = () => {
                                                                     </button>
                                                                 )}
                                                             </div>
-                                                            <div className="flex items-center gap-3 text-xs font-medium text-slate-500">
+                                                            <div className="flex items-center gap-3 text-xs font-medium text-slate-500 flex-wrap">
                                                                 <span className="bg-slate-200 px-2 py-0.5 rounded">{b.bookType}</span>
                                                                 {b.isProcessing ? (
                                                                     <>
@@ -641,6 +679,11 @@ const KnowledgeHubReport = () => {
                                                                      <span className="text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12}/> Extraction Completed ({b.processedPagesCount} pages)</span>
                                                                 ) : (
                                                                     <span>{b.extractedPages} of {b.totalPages} indexed pages</span>
+                                                                )}
+                                                                {b.vectorizedChunks > 0 && (
+                                                                    <span className="ml-auto bg-purple-50 border border-purple-200 text-purple-700 px-2.5 py-0.5 rounded-lg flex items-center gap-1 font-bold">
+                                                                        <Database size={12} /> {b.vectorizedChunks} Vector Chunks Synced
+                                                                    </span>
                                                                 )}
                                                             </div>
                                                         </div>
@@ -692,8 +735,8 @@ const KnowledgeHubReport = () => {
                         </div>
                         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
                             <h3 className="text-slate-500 font-bold uppercase tracking-widest text-xs flex items-center gap-2 mb-2"><Boxes size={14}/> Background Queues</h3>
-                            <div className="text-4xl text-slate-900 font-black tracking-tight">{(systemStats?.extractionJobs?.length || 0) + (systemStats?.questionJobs?.length || 0)} <span className="text-xl text-slate-400 font-bold">Active</span></div>
-                            <p className="text-sm font-medium text-slate-500 mt-2">Combined vector extraction and question generation tasks currently in the worker queue.</p>
+                            <div className="text-4xl text-slate-900 font-black tracking-tight">{(systemStats?.extractionJobs?.length || 0) + (systemStats?.questionJobs?.length || 0) + (systemStats?.topicExtractionJobs?.length || 0)} <span className="text-xl text-slate-400 font-bold">Active</span></div>
+                            <p className="text-sm font-medium text-slate-500 mt-2">Combined vector extraction, topic mapping, and question generation tasks currently in the worker queue.</p>
                         </div>
                         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
                             <h3 className="text-slate-500 font-bold uppercase tracking-widest text-xs flex items-center gap-2 mb-2"><CheckCircle size={14}/> Server AI Threads</h3>
@@ -723,7 +766,7 @@ const KnowledgeHubReport = () => {
                             </div>
                         </div>
                         <div className="p-0">
-                            {(!systemStats.extractionJobs?.length && !systemStats.questionJobs?.length) ? (
+                            {(!systemStats.extractionJobs?.length && !systemStats.questionJobs?.length && !systemStats.topicExtractionJobs?.length) ? (
                                 <div className="p-12 text-center flex flex-col items-center justify-center">
                                     <CheckCircle size={48} className="text-slate-300 mb-4"/>
                                     <h4 className="text-xl font-bold text-slate-800 mb-2">No Active Jobs</h4>
@@ -731,12 +774,14 @@ const KnowledgeHubReport = () => {
                                 </div>
                             ) : (
                                 <div className="divide-y divide-slate-100">
-                                    {[...(systemStats.extractionJobs || []), ...(systemStats.questionJobs || [])].map((job) => (
+                                    {[...(systemStats.extractionJobs || []), ...(systemStats.questionJobs || []), ...(systemStats.topicExtractionJobs || [])].map((job) => (
                                         <div key={job.id} className="p-6 hover:bg-slate-50 flex items-center justify-between gap-6 transition-colors">
                                             <div className="flex-1">
                                                 <div className="flex items-center gap-3 mb-2">
                                                     <span className={`px-2.5 py-0.5 rounded text-[10px] uppercase font-black tracking-widest ${
-                                                        job.type === 'AI_VISION_EXTRACTION' ? 'bg-indigo-100 text-indigo-700' : 'bg-fuchsia-100 text-fuchsia-700'
+                                                        job.type === 'AI_VISION_EXTRACTION' ? 'bg-indigo-100 text-indigo-700' :
+                                                        job.type === 'AI_TOPIC_EXTRACTION' ? 'bg-emerald-100 text-emerald-700' : 
+                                                        'bg-fuchsia-100 text-fuchsia-700'
                                                     }`}>
                                                         {job.type.replace(/_/g, ' ')}
                                                     </span>

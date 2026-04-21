@@ -124,4 +124,84 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* -------------------------------------
+     CQ Part Global Styles 
+     Makes a. b. c. d. subquestions appear as distinct cards everywhere
+  -------------------------------------- */
+  .cq-questions {
+    margin-top: 0.5rem;
+  }
+  
+  .cq-questions ol {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-left: 0 !important;
+    list-style: none !important;
+    counter-reset: cq-part;
+  }
+  
+  .cq-questions li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0 !important;
+  }
+
+  .prose .cq-questions li::before {
+    counter-increment: cq-part;
+    content: counter(cq-part, lower-alpha) ". ";
+    font-weight: 800;
+    color: #475569;
+    background-color: #f1f5f9;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    margin-right: 0.5rem;
+    font-size: 0.7rem;
+    display: inline-flex;
+  }
+  
+  .cq-questions li .cq-text {
+    flex-grow: 1;
+  }
+
+  .cq-questions li .cq-marks {
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #64748b;
+    background-color: #f1f5f9;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.25rem;
+    margin-left: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  /* CQ Answers and Explanations Styles */
+  .cq-answers, .cq-explanations {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .cq-ans-part, .cq-exp-part {
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0 !important;
+  }
+
+  .cq-ans-part strong, .cq-exp-part strong {
+    display: block;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569;
+    margin-bottom: 0.25rem;
+  }
 }

@@ -117,15 +117,36 @@ const CQCreate = () => {
                 stimulusImages.forEach(img => { stemHtml += `<img src="${img.url}" alt="${img.name}" style="max-width:100%;margin:4px 0;border-radius:8px;" />`; });
                 stemHtml += '</div>';
             }
-            let combinedHtml = `<div class="cq-stem">${stemHtml}</div><div class="cq-questions"><ol type="a">`;
-            subQuestions.forEach(sq => { combinedHtml += `<li data-marks="${sq.marks}"><span class="cq-text">${sq.text}</span> <span class="cq-marks">(${sq.marks})</span></li>`; });
+            let combinedHtml = `<div class=\"cq-stem\">${stemHtml}</div><div class=\"cq-questions\"><ol type=\"a\">`;
+            let answersHtml = '<div class=\"cq-answers\">';
+            let explanationsHtml = '<div class=\"cq-explanations\">';
+
+            subQuestions.forEach(sq => {
+                combinedHtml += `<li data-marks=\"${sq.marks}\"><span class=\"cq-text\">${sq.text}</span> <span class=\"cq-marks\">(${sq.marks})</span></li>`;
+                if (sq.answer) {
+                    answersHtml += `<div class=\"cq-ans-part\" data-label=\"${sq.label}\" style=\"margin-bottom:8px;\"><strong>${sq.label}) উত্তর:</strong> <span class=\"cq-ans-content\">${sq.answer}</span></div>`;
+                }
+                if (sq.explanation) {
+                    explanationsHtml += `<div class=\"cq-exp-part\" data-label=\"${sq.label}\" style=\"margin-bottom:8px;\"><strong>${sq.label}) ব্যাখ্যা:</strong> <span class=\"cq-exp-content\">${sq.explanation}</span></div>`;
+                }
+            });
+            
             combinedHtml += '</ol></div>';
+            answersHtml += '</div>';
+            explanationsHtml += '</div>';
 
             const payload = {
-                questionText: combinedHtml, stimulus: stemHtml, marks: totalMarks,
-                difficulty: formData.difficulty, language: formData.language,
-                academicClass: { id: formData.academicClassId }, classSubject: { id: formData.subjectId },
-                chapter: { id: formData.chapterId }, topic: formData.topicId ? { id: formData.topicId } : null,
+                questionText: combinedHtml, 
+                stimulus: stemHtml, 
+                marks: totalMarks,
+                correctAnswer: answersHtml === '<div class=\"cq-answers\"></div>' ? null : answersHtml,
+                explanation: explanationsHtml === '<div class=\"cq-explanations\"></div>' ? null : explanationsHtml,
+                difficulty: formData.difficulty, 
+                language: formData.language,
+                academicClass: { id: formData.academicClassId }, 
+                classSubject: { id: formData.subjectId },
+                chapter: { id: formData.chapterId }, 
+                topic: formData.topicId ? { id: formData.topicId } : null,
                 sourceReference: examSources.length > 0 ? JSON.stringify(examSources) : null
             };
 
@@ -135,7 +156,7 @@ const CQCreate = () => {
             }
             setMessage({ type: 'success', text: 'সৃজনশীল প্রশ্ন সফলভাবে তৈরি হয়েছে!' });
             setFormData(prev => ({ ...prev, stem: '' }));
-            setSubQuestions(activeStructure.parts.map(p => ({ label: p.label, text: '', marks: p.marks })));
+            setSubQuestions(activeStructure.parts.map(p => ({ label: p.label, text: '', answer: '', explanation: '', marks: p.marks })));
             setStimulusImages([]); setExamSources([]);
         } catch (error) {
             console.error("Failed to create question", error);
@@ -305,11 +326,23 @@ const CQCreate = () => {
                                                 <div className="flex items-center justify-between mb-1">
                                                     <span className="text-[10px] font-bold uppercase tracking-wide opacity-60">{part.level}</span>
                                                 </div>
-                                                <textarea rows={2}
-                                                    className="w-full p-2.5 text-sm border border-white/60 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none bg-white/90 transition-all resize-none leading-relaxed"
-                                                    value={sq.text}
-                                                    onChange={(e) => { const n = [...subQuestions]; n[index].text = e.target.value; setSubQuestions(n); }}
-                                                    placeholder={part.placeholder} />
+                                                <div className="space-y-3">
+                                                    <textarea rows={2}
+                                                        className="w-full p-2.5 text-sm border border-white/60 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none bg-white/90 transition-all resize-none leading-relaxed"
+                                                        value={sq.text || ''}
+                                                        onChange={(e) => { const n = [...subQuestions]; n[index].text = e.target.value; setSubQuestions(n); }}
+                                                        placeholder={part.placeholder} />
+                                                    <textarea rows={2}
+                                                        className="w-full p-2.5 text-sm border border-emerald-200/60 rounded-lg focus:ring-2 focus:ring-emerald-500/20 outline-none bg-emerald-50/50 hover:bg-emerald-50 transition-all resize-none leading-relaxed"
+                                                        value={sq.answer || ''}
+                                                        onChange={(e) => { const n = [...subQuestions]; n[index].answer = e.target.value; setSubQuestions(n); }}
+                                                        placeholder={`${part.label} অংশের উত্তর লিখুন (ঐচ্ছিক)...`} />
+                                                    <textarea rows={2}
+                                                        className="w-full p-2.5 text-sm border border-amber-200/60 rounded-lg focus:ring-2 focus:ring-amber-500/20 outline-none bg-amber-50/50 hover:bg-amber-50 transition-all resize-none leading-relaxed"
+                                                        value={sq.explanation || ''}
+                                                        onChange={(e) => { const n = [...subQuestions]; n[index].explanation = e.target.value; setSubQuestions(n); }}
+                                                        placeholder={`${part.label} অংশের ব্যাখ্যা লিখুন (ঐচ্ছিক)...`} />
+                                                </div>
                                             </div>
                                         </div>
                                     );

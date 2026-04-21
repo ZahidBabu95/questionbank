@@ -17,12 +17,14 @@ const QuestionContentEditor = memo(({ formData, setFormData, questionType }) => 
                         height="min-h-[120px]" className="border border-slate-200 rounded-lg overflow-hidden" />
                 </div>
 
-                <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Question Text *</label>
-                    <RichTextEditor value={formData.questionText || ''}
-                        onChange={(val) => setFormData(prev => prev.questionText !== val ? { ...prev, questionText: val } : prev)}
-                        height="min-h-[160px]" className="border border-slate-200 rounded-lg overflow-hidden" />
-                </div>
+                {questionType !== 'CQ' && (
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">Question Text *</label>
+                        <RichTextEditor value={formData.questionText || ''}
+                            onChange={(val) => setFormData(prev => prev.questionText !== val ? { ...prev, questionText: val } : prev)}
+                            height="min-h-[160px]" className="border border-slate-200 rounded-lg overflow-hidden" />
+                    </div>
+                )}
 
                 {formData.mcqType === 'MULTIPLE_COMPLETION' && (
                     <div className="bg-indigo-50/20 p-5 border border-indigo-100 rounded-xl">
@@ -56,7 +58,7 @@ const QuestionContentEditor = memo(({ formData, setFormData, questionType }) => 
                     </div>
                 )}
 
-                {questionType !== 'MCQ' && (
+                {questionType !== 'MCQ' && questionType !== 'CQ' && (
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Correct Answer</label>
                         <RichTextEditor value={formData.correctAnswer || ''}
@@ -65,12 +67,14 @@ const QuestionContentEditor = memo(({ formData, setFormData, questionType }) => 
                     </div>
                 )}
 
-                <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Explanation (ব্যাখ্যা) <span className="text-slate-400 font-normal">- Optional</span></label>
-                    <RichTextEditor value={formData.explanation || ''}
-                        onChange={(val) => setFormData(prev => prev.explanation !== val ? { ...prev, explanation: val } : prev)}
-                        height="min-h-[120px]" className="border border-slate-200 rounded-lg overflow-hidden" />
-                </div>
+                {questionType !== 'CQ' && (
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">Explanation (ব্যাখ্যা) <span className="text-slate-400 font-normal">- Optional</span></label>
+                        <RichTextEditor value={formData.explanation || ''}
+                            onChange={(val) => setFormData(prev => prev.explanation !== val ? { ...prev, explanation: val } : prev)}
+                            height="min-h-[120px]" className="border border-slate-200 rounded-lg overflow-hidden" />
+                    </div>
+                )}
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mt-10 pt-6 border-t border-slate-100">

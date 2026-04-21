@@ -46,8 +46,11 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     private final AiBillingService aiBillingService;
     private final com.testshaper.repository.AiBulkExtractionJobRepository aiBulkExtractionJobRepository;
     private final com.testshaper.repository.AiQuestionGenerationJobRepository aiQuestionGenerationJobRepository;
+    private final com.testshaper.repository.AiTopicExtractionJobRepository aiTopicExtractionJobRepository;
     private final com.testshaper.repository.AiKnowledgeBaseRepository aiKnowledgeBaseRepository;
     private final com.testshaper.repository.QuestionRepository questionRepository;
+    private final com.testshaper.repository.QuestionSourceRepository questionSourceRepository;
+    private final com.testshaper.repository.CurriculumDocumentChunkRepository curriculumDocumentChunkRepository;
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -1019,6 +1022,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         dto.setTotalPages((int) knowledgePageRepository.countBySourceBookId(entity.getId()));
         dto.setExtractedPages((int) knowledgePageRepository.countBySourceBookIdAndExtractionStatus(entity.getId(), com.testshaper.entity.KnowledgePage.ExtractionStatus.EXTRACTED));
         dto.setGoldenPages((int) knowledgePageRepository.countGoldenPagesBySourceBookId(entity.getId()));
+        dto.setVectorizedChunks(curriculumDocumentChunkRepository.countBySourceBookId(entity.getId()));
         
         return dto;
     }
@@ -1342,36 +1346,62 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
 
     @Override
     @Transactional
-    public com.testshaper.entity.AiQuestionGenerationJob startAiQuestionQueue(UUID sourceBookId) {
+    public com.testshaper.entity.AiQuestionGenerationJob startAiQuestionQueue(UUID sourceBookId, com.testshaper.dto.AiQuestionGenConfigDto config) {
         SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
             .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found"));
 
         java.util.Optional<com.testshaper.entity.AiQuestionGenerationJob> existingOpt = aiQuestionGenerationJobRepository.findFirstBySourceBookIdOrderByCreatedAtDesc(sourceBookId);
+        long pendingChunks = 0;
         
-        long pendingPages = knowledgePageRepository.countBySourceBookIdAndExtractionStatusIn(
-            sourceBookId, 
-            java.util.List.of(com.testshaper.entity.KnowledgePage.ExtractionStatus.PROOFREAD)
-        );
+        if (config != null && config.getTargetIndexIds() != null && !config.getTargetIndexIds().isEmpty()) {
+            pendingChunks = curriculumDocumentChunkRepository.countBySourceBookIndexIdIn(config.getTargetIndexIds());
+            if (pendingChunks == 0) {
+                // Fallback for legacy extracted chunks without sourceBookIndexId
+                java.util.List<UUID> targetChapterIds = new java.util.ArrayList<>();
+                for (UUID idxId : config.getTargetIndexIds()) {
+                    com.testshaper.entity.SourceBookIndex idx = sourceBookIndexRepository.findById(idxId).orElse(null);
+                    if (idx != null && idx.getMappedChapter() != null) {
+                        targetChapterIds.add(idx.getMappedChapter().getId());
+                    }
+                }
+                if (!targetChapterIds.isEmpty()) {
+                    pendingChunks = curriculumDocumentChunkRepository.countBySourceBookIdAndMappedTopic_Chapter_IdIn(sourceBookId, targetChapterIds);
+                }
+            }
+        } else {
+            pendingChunks = curriculumDocumentChunkRepository.countBySourceBookId(sourceBookId);
+        }
         
-        if (pendingPages == 0) {
-            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "No extracted pages found. Please run Bulk Extraction first.");
+        if (pendingChunks == 0) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "No vector topic chunks found. Please Extract Topics & Sync first.");
+        }
+
+        String configJson = null;
+        if (config != null) {
+            try {
+                configJson = objectMapper.writeValueAsString(config);
+            } catch (Exception e) {
+                log.error("Failed to serialize Question Config", e);
+            }
         }
 
         com.testshaper.entity.AiQuestionGenerationJob job;
         if (existingOpt.isPresent()) {
             job = existingOpt.get();
             job.setStatus(com.testshaper.entity.AiQuestionGenerationJob.JobStatus.QUEUED);
+            job.setTotalPagesToProcess((int) pendingChunks);
             job.setProcessedPagesCount(0);
             job.setFailedPagesCount(0);
-            job.setTotalPagesToProcess((int) pendingPages);
+            job.setJobConfiguration(configJson);
         } else {
             job = new com.testshaper.entity.AiQuestionGenerationJob();
             job.setSourceBook(book);
             job.setTenantId(book.getTenantId());
             job.setStatus(com.testshaper.entity.AiQuestionGenerationJob.JobStatus.QUEUED);
-            job.setTotalPagesToProcess((int) pendingPages);
+            job.setTotalPagesToProcess((int) pendingChunks);
             job.setProcessedPagesCount(0);
             job.setFailedPagesCount(0);
+            job.setJobConfiguration(configJson);
         }
 
         return aiQuestionGenerationJobRepository.save(job);
@@ -1414,31 +1444,96 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
 
     @Override
     @Transactional
-    public int generateQuestionsForPage(UUID sourceBookId, UUID pageId) throws Exception {
-        com.testshaper.entity.KnowledgePage page = knowledgePageRepository.findById(pageId)
-            .orElseThrow(() -> new RuntimeException("Page not found"));
+    public com.testshaper.entity.AiTopicExtractionJob startAiTopicExtractionQueue(UUID sourceBookId, java.util.List<UUID> targetIndexIds) {
+        SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found"));
 
-        if (!page.getSourceBook().getId().equals(sourceBookId)) {
-            throw new RuntimeException("Page does not belong to this book.");
+        java.util.Optional<com.testshaper.entity.AiTopicExtractionJob> existingOpt = aiTopicExtractionJobRepository.findTopBySourceBookIdOrderByCreatedAtDesc(sourceBookId);
+        
+        com.testshaper.entity.AiTopicExtractionJob job;
+        if (existingOpt.isPresent()) {
+            job = existingOpt.get();
+            job.setStatus(com.testshaper.entity.AiTopicExtractionJob.JobStatus.QUEUED);
+            job.setProcessedChaptersCount(0);
+            job.setFailedChaptersCount(0);
+            job.setTotalChaptersToProcess(targetIndexIds != null ? targetIndexIds.size() : 0);
+        } else {
+            job = new com.testshaper.entity.AiTopicExtractionJob();
+            job.setSourceBook(book);
+            job.setTenantId(book.getTenantId());
+            job.setStatus(com.testshaper.entity.AiTopicExtractionJob.JobStatus.QUEUED);
+            job.setTotalChaptersToProcess(targetIndexIds != null ? targetIndexIds.size() : 0);
+            job.setProcessedChaptersCount(0);
+            job.setFailedChaptersCount(0);
+        }
+        return aiTopicExtractionJobRepository.save(job);
+    }
+
+    @Override
+    public com.testshaper.entity.AiTopicExtractionJob getAiTopicExtractionQueueStatus(UUID sourceBookId) {
+        return aiTopicExtractionJobRepository.findTopBySourceBookIdOrderByCreatedAtDesc(sourceBookId).orElse(null);
+    }
+
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiTopicExtractionJob pauseAiTopicExtractionQueue(UUID jobId) {
+        com.testshaper.entity.AiTopicExtractionJob job = aiTopicExtractionJobRepository.findById(jobId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        job.setStatus(com.testshaper.entity.AiTopicExtractionJob.JobStatus.PAUSED);
+        return aiTopicExtractionJobRepository.save(job);
+    }
+
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiTopicExtractionJob resumeAiTopicExtractionQueue(UUID jobId) {
+        com.testshaper.entity.AiTopicExtractionJob job = aiTopicExtractionJobRepository.findById(jobId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        job.setStatus(com.testshaper.entity.AiTopicExtractionJob.JobStatus.QUEUED);
+        return aiTopicExtractionJobRepository.save(job);
+    }
+
+    @Override
+    @Transactional
+    public com.testshaper.entity.AiTopicExtractionJob cancelAiTopicExtractionQueue(UUID jobId) {
+        com.testshaper.entity.AiTopicExtractionJob job = aiTopicExtractionJobRepository.findById(jobId)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Job not found"));
+        if (job.getStatus() != com.testshaper.entity.AiTopicExtractionJob.JobStatus.COMPLETED) {
+            job.setStatus(com.testshaper.entity.AiTopicExtractionJob.JobStatus.CANCELLED);
+            return aiTopicExtractionJobRepository.save(job);
+        }
+        return job;
+    }
+
+    @Override
+    @Transactional
+    public int generateQuestionsForChunk(UUID sourceBookId, UUID chunkId, String jobConfigurationJson) throws Exception {
+        com.testshaper.entity.CurriculumDocumentChunk chunk = curriculumDocumentChunkRepository.findById(chunkId)
+            .orElseThrow(() -> new RuntimeException("Vector Chunk not found"));
+
+        if (!chunk.getSourceBook().getId().equals(sourceBookId)) {
+            throw new RuntimeException("Chunk does not belong to this book.");
         }
 
-        String pageSourceRef = "knowledge_page_" + pageId.toString();
+        com.testshaper.dto.AiQuestionGenConfigDto config = null;
+        if (jobConfigurationJson != null) {
+            try { config = objectMapper.readValue(jobConfigurationJson, com.testshaper.dto.AiQuestionGenConfigDto.class); } catch (Exception ignored) {}
+        }
+
+        String pageSourceRef = "chunk_" + chunkId.toString();
         boolean alreadyHasDrafts = questionRepository.existsBySourceReferenceAndStatus(pageSourceRef, com.testshaper.entity.Question.QuestionStatus.DRAFT);
-        if (alreadyHasDrafts) {
-            log.info("Page {} already has DRAFT questions. Skipping generation to prevent duplicates.", pageId);
+        
+        if (alreadyHasDrafts && config == null) {
+            log.info("Chunk {} already has DRAFT questions. Skipping generation to prevent duplicates.", chunkId);
             return 0; // successfully skipped
         }
 
-        String markdown = page.getGoldenMarkdown();
-        if (markdown == null || markdown.isBlank()) {
-            markdown = page.getExtractedMarkdown();
-        }
+        String markdown = chunk.getChunkText();
 
         if (markdown == null || markdown.isBlank()) {
-            throw new RuntimeException("Page must be extracted first before generating questions.");
+            throw new RuntimeException("Chunk must have text before generating questions.");
         }
 
-        SourceBookMaster book = page.getSourceBook();
+        SourceBookMaster book = chunk.getSourceBook();
         com.testshaper.entity.ClassSubject classSubject = book.getClassSubject();
         
         String ruleSchema = "[\n" +
@@ -1452,33 +1547,93 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             "    \"explanation\": \"Because context says so.\",\n" +
             "    \"bloomLevel\": \"REMEMBERING\",\n" +
             "    \"difficulty\": \"MEDIUM\"\n" +
+            "  },\n" +
+            "  {\n" +
+            "    \"questionType\": \"CREATIVE\",\n" +
+            "    \"questionText\": \"Scenario based broad question (CQ) or descriptive question\",\n" +
+            "    \"stimulus\": \"Context paragraph or image here\",\n" +
+            "    \"options\": [],\n" +
+            "    \"answer\": \"Detailed text grading rubric and sample answer\",\n" +
+            "    \"marks\": 4.0,\n" +
+            "    \"explanation\": \"\",\n" +
+            "    \"bloomLevel\": \"APPLYING\",\n" +
+            "    \"difficulty\": \"HARD\"\n" +
+            "  },\n" +
+            "  {\n" +
+            "    \"questionType\": \"SHORT_ANSWER\",\n" +
+            "    \"questionText\": \"Short explicit question\",\n" +
+            "    \"stimulus\": \"Context if necessary\",\n" +
+            "    \"options\": [],\n" +
+            "    \"answer\": \"Short text description\",\n" +
+            "    \"marks\": 2.0,\n" +
+            "    \"explanation\": \"\",\n" +
+            "    \"bloomLevel\": \"UNDERSTANDING\",\n" +
+            "    \"difficulty\": \"MEDIUM\"\n" +
             "  }\n" +
             "]";
 
-        if (classSubject != null && classSubject.getSubject() != null) {
+        boolean schemaFound = false;
+        if (config != null && config.getSelectedSchema() != null && !config.getSelectedSchema().isBlank()) {
+            try {
+                com.testshaper.entity.AiKnowledgeBase kbSchema = aiKnowledgeBaseRepository.findById(java.util.UUID.fromString(config.getSelectedSchema())).orElse(null);
+                if (kbSchema != null && kbSchema.getContent() != null && !kbSchema.getContent().isBlank()) {
+                    ruleSchema = kbSchema.getContent();
+                    schemaFound = true;
+                }
+            } catch (Exception e) { /* ignored fallback */ }
+        }
+        
+        if (!schemaFound && classSubject != null && classSubject.getSubject() != null) {
             String subjectName = classSubject.getSubject().getName();
             String tagToSearch = "RULE_FOR_" + subjectName.replaceAll("\\s+", "");
             java.util.List<com.testshaper.entity.AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(tagToSearch);
             if (!rules.isEmpty()) {
                 ruleSchema = rules.get(0).getContent(); 
-                // Always force inject the stimulus property if user forgot it in their DB rule
-                if (ruleSchema != null && !ruleSchema.contains("\"stimulus\"")) {
-                    ruleSchema = ruleSchema.replaceFirst("\\{", "\\{\n    \"stimulus\": \"![alt](url) or contextual text. VERY IMPORTANT for images!\",");
-                }
             }
+        }
+        
+        // Always force inject the stimulus property if user forgot it in their DB rule
+        if (ruleSchema != null && !ruleSchema.contains("\"stimulus\"")) {
+            ruleSchema = ruleSchema.replaceFirst("\\{", "\\{\n    \"stimulus\": \"![alt](url) or contextual text. VERY IMPORTANT for images!\",");
+        }
+
+
+
+        String sourceTypeInstruction = "";
+        String bType = "TEXTBOOK";
+        if (config != null && config.getSourceType() != null && !config.getSourceType().isBlank()) {
+            bType = config.getSourceType().toUpperCase();
+        } else if (book != null && book.getBookType() != null) {
+            bType = book.getBookType().name();
+        }
+
+        if ("GUIDE".equals(bType) || "QUESTION_BANK".equals(bType) || "GUIDEBOOK".equals(bType)) {
+            sourceTypeInstruction = "The source material is a GUIDEBOOK, TEST-PAPER, or QUESTION BANK. It contains existing questions and answers. **CRITICAL**: Extract the EXACT questions from the text and put their correct answers from the text. Do NOT make up or hallucinate new questions.\n";
+        } else if ("HYBRID".equals(bType) || "BOTH".equals(bType)) {
+            sourceTypeInstruction = "The source material contains BOTH educational theories AND existing exercise questions. **HYBRID INSTRUCTION**: 1. Accurately EXTRACT any existing questions you find exactly as they are. AND 2. GENERATE new, high-quality, creative questions based on the theory sections.\n";
+        } else {
+            sourceTypeInstruction = "The source material is a TEXTBOOK. It contains educational theories and possibly some chapter-end exercises.\n";
+        }
+
+        String requestedTypesStr = "";
+        if (config != null && config.getTargetQuestionTypes() != null && !config.getTargetQuestionTypes().isEmpty()) {
+            requestedTypesStr = "6. **TARGET QUESTION TYPES**: Your response is STRICTLY restricted to only these types: [" + String.join(", ", config.getTargetQuestionTypes()) + "]. Do NOT generate or extract any question types outside of this list.\n";
         }
 
         String prompt = "You are an expert curriculum question setter and data parser. Read the provided TEXT context below.\n" +
                         "INSTRUCTIONS:\n" +
+                        sourceTypeInstruction +
                         "1. If the text contains existing examination questions or exercises, your primary task is to **EXTRACT EXACT EXISTING QUESTIONS**. Do NOT make up variations.\n" +
                         "2. If the text is an educational chapter with NO existing questions, your task is to **GENERATE high-quality questions** based on the theories inside.\n" +
                         "3. If the text is just a Table of Contents (সূচিপত্র/Index), Title Page, Copyright Page, or noise, do **NOT** generate questions. Simply return an empty JSON array [].\n" +
                         "4. **PRESERVE IMAGES (CRITICAL):** If the markdown text contains images `![alt](url)`, you MUST pair them with the appropriate question! Put the image markdown in the `stimulus` field or `questionText` field. Do NOT lose the image link!\n" +
                         "5. **STRIP NUMBERS:** Remove any serial numbers (e.g. '1. ', '১। ', 'Q:') from the beginning of `questionText`.\n" +
+                        requestedTypesStr +
                         "CRITICAL: You MUST strictly conform to the following JSON Schema array. Do not return any conversational text, ONLY a raw JSON array.\n\n" +
                         "TARGET JSON SCHEMA:\n" +
                         ruleSchema + "\n\n" +
-                        "CONTEXT TEXT:\n" + markdown;
+                        "FOCUS ON THE FOLLOWING TOPIC: " + (chunk.getMappedTopic() != null ? chunk.getMappedTopic().getName() : "Unknown") + "\n\n" +
+                        "VECTOR CHUNK CONTEXT:\n" + markdown;
 
         java.util.Map<String, String> aiSettings = generalSettingService.getGlobalSettings(com.testshaper.entity.GeneralSetting.SettingCategory.AI);
         String billingMode = aiSettings.getOrDefault("ai_billing_mode", aiSettings.getOrDefault("ai_google_mode", "FREE_POOL"));
@@ -1544,43 +1699,127 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                         
                         com.fasterxml.jackson.databind.JsonNode questionsArray = objectMapper.readTree(rawJsonResponse);
                         if (!questionsArray.isArray()) {
-                            throw new RuntimeException("AI Response was not a JSON Array.");
+                            if (questionsArray.isObject() && questionsArray.has("question_formats") && questionsArray.get("question_formats").isArray()) {
+                                questionsArray = questionsArray.get("question_formats");
+                            } else if (questionsArray.isObject() && questionsArray.has("questions") && questionsArray.get("questions").isArray()) {
+                                questionsArray = questionsArray.get("questions");
+                            } else {
+                                throw new RuntimeException("AI Response was not a JSON Array.");
+                            }
                         }
 
                         int savedCount = 0;
-                        for (com.fasterxml.jackson.databind.JsonNode qNode : questionsArray) {
+                        for (com.fasterxml.jackson.databind.JsonNode rootNode : questionsArray) {
+                            com.fasterxml.jackson.databind.JsonNode qNode = rootNode.has("question") ? rootNode.get("question") : rootNode;
+
                             com.testshaper.entity.Question q = new com.testshaper.entity.Question();
                             q.setTenantId(book.getTenantId());
                             q.setClassSubject(book.getClassSubject());
                             
-                            java.util.Optional<com.testshaper.entity.SourceBookIndex> chapterIndexOpt = sourceBookIndexRepository.findBySourceBookIdAndStartPageLessThanEqualAndEndPageGreaterThanEqual(
-                                book.getId(), page.getPageNumber(), page.getPageNumber()
-                            ).stream().findFirst();
-
-                            if (chapterIndexOpt.isPresent() && chapterIndexOpt.get().getMappedChapter() != null) {
-                                q.setChapter(chapterIndexOpt.get().getMappedChapter());
+                            if (chunk.getMappedTopic() != null && chunk.getMappedTopic().getChapter() != null) {
+                                q.setChapter(chunk.getMappedTopic().getChapter());
+                                q.setTopic(chunk.getMappedTopic());
                             }
 
                             q.setType(com.testshaper.entity.Question.QuestionType.MCQ);
-                            if (qNode.hasNonNull("questionType")) {
+                            if (qNode.hasNonNull("questionType") || qNode.hasNonNull("type")) {
                                 try {
-                                    q.setType(com.testshaper.entity.Question.QuestionType.valueOf(qNode.get("questionType").asText().toUpperCase()));
+                                    String typeStr = qNode.hasNonNull("questionType") ? qNode.get("questionType").asText() : qNode.get("type").asText();
+                                    q.setType(com.testshaper.entity.Question.QuestionType.valueOf(typeStr.toUpperCase()));
                                 } catch (Exception ignored) {}
+                            }
+                            
+                            if (qNode.hasNonNull("mcqType")) {
+                                q.setMcqType(qNode.get("mcqType").asText());
                             }
 
                             String qText = qNode.path("questionText").asText("Generated Question");
                             qText = qText.replaceFirst("^\\s*(?:[\\d০-৯]+|[a-zA-Zক-ষ])\\s*[\\.\\)\\-:]\\s*", "");
+                            
+                            // Merge sub_parts for CQ into question text
+                            StringBuilder explanationBuilder = new StringBuilder();
+                            if (rootNode.hasNonNull("sub_parts") && rootNode.get("sub_parts").isArray()) {
+                                StringBuilder stemHtmlBuilder = new StringBuilder();
+                                
+                                String stemSource = qText;
+                                if (qNode.hasNonNull("stimulus") && !qNode.get("stimulus").asText().isBlank()) {
+                                    stemSource = qNode.get("stimulus").asText();
+                                } else if (rootNode.hasNonNull("stimulus") && !rootNode.get("stimulus").asText().isBlank()) {
+                                    stemSource = rootNode.get("stimulus").asText();
+                                }
+                                
+                                // Format the stem inside cq-stem struct, just like CQCreate.jsx
+                                stemHtmlBuilder.append("<div class=\"cq-stem\">").append(stemSource).append("</div>");
+                                
+                                // Explicitly set it on q.setStimulus
+                                q.setStimulus(stemSource); 
+
+                                StringBuilder cqBuilder = new StringBuilder();
+                                cqBuilder.append(stemHtmlBuilder).append("<div class=\"cq-questions\"><ol type=\"a\">");
+
+                                StringBuilder answersHtmlBuilder = new StringBuilder("<div class=\"cq-answers\">");
+                                StringBuilder explanationsHtmlBuilder = new StringBuilder("<div class=\"cq-explanations\">");
+
+                                for (com.fasterxml.jackson.databind.JsonNode sp : rootNode.get("sub_parts")) {
+                                    String part = sp.hasNonNull("part_label") ? sp.get("part_label").asText() : sp.path("part").asText("");
+                                    String sqText = sp.hasNonNull("question") ? sp.get("question").asText() : sp.path("questionText").asText("");
+                                    String ans = sp.hasNonNull("answer") ? sp.get("answer").asText() : "";
+                                    String hint = sp.path("answer_hint").asText(sp.path("explanation").asText(""));
+                                    Double m = sp.hasNonNull("part_mark") ? sp.get("part_mark").asDouble() : sp.path("marks").asDouble(1.0);
+                                    
+                                    // HTML formatting matches exactly what the frontend uses
+                                    cqBuilder.append("<li data-marks=\"").append(m).append("\">")
+                                             .append("<span class=\"cq-text\">").append(sqText).append("</span>")
+                                             .append(" <span class=\"cq-marks\">(").append(m).append(")</span></li>");
+                                    
+                                    if(!ans.isBlank()) {
+                                        answersHtmlBuilder.append("<div class=\"cq-ans-part\" data-label=\"").append(part).append("\" style=\"margin-bottom:8px;\">");
+                                        answersHtmlBuilder.append("<strong>").append(part).append(") উত্তর:</strong> <span class=\"cq-ans-content\">").append(ans).append("</span></div>");
+                                    }
+                                    if(!hint.isBlank()) {
+                                        explanationsHtmlBuilder.append("<div class=\"cq-exp-part\" data-label=\"").append(part).append("\" style=\"margin-bottom:8px;\">");
+                                        explanationsHtmlBuilder.append("<strong>").append(part).append(") ব্যাখ্যা:</strong> <span class=\"cq-exp-content\">").append(hint).append("</span></div>");
+                                        explanationBuilder.append(part).append(") ").append(hint).append("\n"); // Fallback
+                                    }
+                                }
+                                cqBuilder.append("</ol></div>");
+                                answersHtmlBuilder.append("</div>");
+                                explanationsHtmlBuilder.append("</div>");
+                                
+                                qText = cqBuilder.toString();
+                                
+                                if (answersHtmlBuilder.length() > 25) {
+                                    q.setCorrectAnswer(answersHtmlBuilder.toString());
+                                }
+                                if (explanationsHtmlBuilder.length() > 30) {
+                                    q.setExplanation(explanationsHtmlBuilder.toString());
+                                }
+                            }
+                            
                             q.setQuestionText(qText);
                             
-                            if (qNode.hasNonNull("stimulus")) {
-                                q.setStimulus(qNode.get("stimulus").asText());
+                            if (q.getStimulus() == null || q.getStimulus().isBlank()) {
+                                if (qNode.hasNonNull("stimulus")) {
+                                    q.setStimulus(qNode.get("stimulus").asText());
+                                } else if (rootNode.hasNonNull("stimulus")) {
+                                    q.setStimulus(rootNode.get("stimulus").asText());
+                                }
                             }
 
                             q.setMarks(qNode.hasNonNull("marks") ? qNode.get("marks").asDouble() : 1.0);
                             q.setNegativeMarks(0.0);
                             q.setCorrectAnswer(qNode.path("answer").asText(null));
-                            q.setExplanation(qNode.path("explanation").asText(""));
-                            q.setLanguage("Bangla");
+                            
+                            // Parse Statements for Multiple Completion Type
+                            if ((rootNode.hasNonNull("statements") && rootNode.get("statements").isArray()) || (qNode.hasNonNull("statements") && qNode.get("statements").isArray())) {
+                                com.fasterxml.jackson.databind.JsonNode stmts = rootNode.hasNonNull("statements") ? rootNode.get("statements") : qNode.get("statements");
+                                for (com.fasterxml.jackson.databind.JsonNode st : stmts) {
+                                    q.getStatements().add(st.asText());
+                                }
+                            }
+                            
+                            q.setExplanation(qNode.path("explanation").asText(explanationBuilder.toString()));
+                            q.setLanguage(book.getLanguage() != null ? book.getLanguage() : "Bangla");
                             q.setBloomLevel(qNode.path("bloomLevel").asText("UNDERSTANDING"));
                             q.setDifficulty(com.testshaper.entity.Question.DifficultyLevel.MEDIUM);
                             if (qNode.hasNonNull("difficulty")) {
@@ -1590,22 +1829,53 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                             q.setStatus(com.testshaper.entity.Question.QuestionStatus.DRAFT);
                             q.setAiGenerated(true);
                             q.setAiModelName(model);
-                            q.setSourceReference("knowledge_page_" + pageId.toString());
+                            q.setSourceReference("chunk_" + chunkId.toString());
 
-                            if (qNode.hasNonNull("options") && qNode.get("options").isArray()) {
-                                int limit = Math.min(qNode.get("options").size(), 4);
+                            com.fasterxml.jackson.databind.JsonNode optionsNode = rootNode.hasNonNull("options") ? rootNode.get("options") : qNode.get("options");
+                            if (optionsNode != null && optionsNode.isArray()) {
+                                int limit = Math.min(optionsNode.size(), 4);
                                 for (int i = 0; i < limit; i++) {
                                     com.testshaper.entity.QuestionOption opt = new com.testshaper.entity.QuestionOption();
                                     opt.setQuestion(q);
-                                    opt.setOptionLabel(String.valueOf((char)('A' + i)));
-                                    opt.setOptionText(qNode.get("options").get(i).asText());
-                                    // simple logic for isCorrect: if text exactly matches answer
-                                    opt.setCorrect(opt.getOptionText().equals(q.getCorrectAnswer()));
+                                    opt.setOptionLabel(optionsNode.get(i).path("optionLabel").asText(String.valueOf((char)('A' + i))));
+                                    opt.setOptionText(optionsNode.get(i).path("optionText").asText(optionsNode.get(i).asText()));
+                                    
+                                    if (optionsNode.get(i).hasNonNull("isCorrect")) {
+                                        opt.setCorrect(optionsNode.get(i).get("isCorrect").asBoolean());
+                                    } else {
+                                        opt.setCorrect(opt.getOptionText().equals(q.getCorrectAnswer()));
+                                    }
+                                    
                                     q.getOptions().add(opt);
                                 }
                             }
                             
                             questionRepository.save(q);
+                            
+                            com.fasterxml.jackson.databind.JsonNode sourcesNode = rootNode.hasNonNull("sources") ? rootNode.get("sources") : qNode.get("sources");
+                            if (sourcesNode != null && sourcesNode.isArray()) {
+                                for(com.fasterxml.jackson.databind.JsonNode sNode : sourcesNode) {
+                                    com.testshaper.entity.QuestionSource qs = new com.testshaper.entity.QuestionSource();
+                                    qs.setQuestion(q);
+                                    
+                                    try {
+                                        if (sNode.hasNonNull("sourceType")) {
+                                            qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.valueOf(sNode.get("sourceType").asText().toUpperCase()));
+                                        } else {
+                                            qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER);
+                                        }
+                                    } catch(Exception ignored) { qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER); }
+                                    
+                                    if(sNode.hasNonNull("examYear")) qs.setExamYear(sNode.get("examYear").asInt());
+                                    if(sNode.hasNonNull("organizationName") && !sNode.get("organizationName").asText().isBlank()) qs.setOrganizationName(sNode.get("organizationName").asText());
+                                    if(sNode.hasNonNull("examName") && !sNode.get("examName").asText().isBlank()) qs.setExamName(sNode.get("examName").asText());
+                                    if(sNode.hasNonNull("session") && !sNode.get("session").asText().isBlank()) qs.setSession(sNode.get("session").asText());
+                                    if(sNode.hasNonNull("note") && !sNode.get("note").asText().isBlank()) qs.setNote(sNode.get("note").asText());
+                                    
+                                    questionSourceRepository.save(qs);
+                                }
+                            }
+
                             savedCount++;
                         }
 
@@ -1714,6 +1984,34 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         
         result.put("extractionJobs", extractionList);
         result.put("questionJobs", questionList);
+        
+        // 3. Topic Extraction Jobs
+        List<com.testshaper.entity.AiTopicExtractionJob> activeTopicJobs = aiTopicExtractionJobRepository.findAll().stream()
+            .filter(j -> j.getStatus() == com.testshaper.entity.AiTopicExtractionJob.JobStatus.QUEUED 
+                      || j.getStatus() == com.testshaper.entity.AiTopicExtractionJob.JobStatus.IN_PROGRESS 
+                      || j.getStatus() == com.testshaper.entity.AiTopicExtractionJob.JobStatus.PAUSED)
+            .toList();
+            
+        List<Map<String, Object>> topicList = new ArrayList<>();
+        for (com.testshaper.entity.AiTopicExtractionJob job : activeTopicJobs) {
+            Map<String, Object> m = new java.util.HashMap<>();
+            m.put("id", job.getId());
+            m.put("type", "AI_TOPIC_EXTRACTION");
+            m.put("status", job.getStatus().name());
+            m.put("totalPages", job.getTotalChaptersToProcess());
+            m.put("processedPages", job.getProcessedChaptersCount());
+            m.put("failedPages", job.getFailedChaptersCount());
+            int tPercent = job.getTotalChaptersToProcess() > 0 ? (job.getProcessedChaptersCount() * 100) / job.getTotalChaptersToProcess() : 0;
+            m.put("progress", Math.min(tPercent, 100));
+            
+            // Get book details
+            sourceBookMasterRepository.findById(job.getSourceBook().getId()).ifPresent(b -> {
+                m.put("sourceBookId", b.getId());
+                m.put("bookTitle", b.getTitle());
+            });
+            topicList.add(m);
+        }
+        result.put("topicExtractionJobs", topicList);
         result.put("activeWorkerNodes", com.testshaper.scheduler.AiExtractionScheduler.currentWorkerSize);
         
         return result;

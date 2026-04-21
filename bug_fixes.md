@@ -13,6 +13,12 @@ This document tracks identified bugs, their root causes, and how they were solve
 ## ✅ SOLVED BUGS
 *(Move bugs here after they are fixed and briefly describe the solution.)*
 
+### 6. Phase 3D Topic Extraction Crash (document_id cannot be null)
+**Location:** `TopicExtractorServiceImpl` & Database Schema (`curriculum_document_chunks`)
+**Description:** During the background bulk transaction for Phase 3D Semantic Chunking, saving AI-generated topics threw a `SQLIntegrityConstraintViolationException` stating `Column 'document_id' cannot be null`.
+**Root Cause:** The `CurriculumDocumentChunk.java` entity rightly marked the `document` relation as optional because AI extracted chunks derive directly from `SourceBookIndex` and `KnowledgePage`. However, the physical MySQL database schema was originally created with an explicit `NOT NULL` constraint for the `document_id` column, leading to transaction crashes despite Java entity configurations.
+**Solution Applied:** Executed a direct database migration (`ALTER TABLE questionshaper.curriculum_document_chunks MODIFY document_id char(36) NULL;`) to drop the constraint, successfully aligning the target schema with the Java object mappings.
+
 ### 1. Image Selection, Cursor Focus Jumps & Missing Toolbar
 **Location:** `GoldenEditor.jsx` (`ResizableImageView` -> `handleWrapperMouseDown`)
 **Description:** Clicking on an inline image frequently failed to select the node on the second attempt, made the text cursor jump erratically, and caused the context toolbar to disappear.
