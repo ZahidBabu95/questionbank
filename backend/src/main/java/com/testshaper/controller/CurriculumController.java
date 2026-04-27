@@ -95,6 +95,9 @@ public class CurriculumController {
             org.springframework.security.core.userdetails.UserDetails userDetails) {
 
         try {
+            // Read bytes BEFORE uploading to storage, as Cloudflare R2/S3 upload consumes the stream
+            byte[] fileBytes = file.getBytes();
+            
             String filePath = storageService.uploadFile(file, null, "curriculum/" + academicYear);
 
             CurriculumDocument doc = new CurriculumDocument();
@@ -119,7 +122,7 @@ public class CurriculumController {
             log.info("Curriculum document uploaded: {} ({})", title, academicYear);
 
             // Trigger AI Chunking for RAG asynchronously
-            analyzerService.processAndSaveChunks(saved.getId(), file.getBytes(), false);
+            analyzerService.processAndSaveChunks(saved.getId(), fileBytes, false);
 
             return ResponseEntity.ok(saved);
         } catch (Exception e) {
@@ -264,31 +267,65 @@ public class CurriculumController {
             String prompt = """
                 আপনি QuestionShaper-এর Question Format Analyzer। নিচে কারিকুলাম ইন্টেলিজেন্স ইঞ্জিনে আগে থেকেই প্রসেস ও ভেক্টরাইজ করা ডকুমেন্ট থেকে এক্সট্রাক্ট করা কন্টেন্ট দেওয়া হয়েছে।
 
-                **আপনার কাজ:** ফাইল আবার analyse করবেন না। শুধুমাত্র এই কন্টেন্ট থেকে প্রশ্নের ধরন, প্যাটার্ন ও ফরমেট শিখুন এবং একটি JSON ARRAY তৈরি করুন যেটা QuestionShaper স্বয়ংক্রিয়ভাবে প্রশ্ন স্ক্র্যাপ ও তৈরি করতে টেমপ্লেট হিসেবে ব্যবহার করবে।
+                **আপনার কাজ:** ফাইল আবার analyse করবেন না। শুধুমাত্র এই কন্টেন্ট থেকে প্রশ্নের ধরন, প্যাটার্ন ও ফরমেট শিখুন এবং একটি JSON OBJECT তৈরি করুন যেটা QuestionShaper স্বয়ংক্রিয়ভাবে প্রশ্ন স্ক্র্যাপ, তৈরি এবং Exam Editor কনফিগার করতে ব্যবহার করবে।
 
                 **বিষয়:** %s
                 **শ্রেণী:** %s
 
-                প্রতিটি আলাদা প্রশ্নের ধরনের জন্য (যেমন: MCQ, সংক্ষিপ্ত প্রশ্ন, সৃজনশীল/কাঠামোবদ্ধ, রচনা, শূন্যস্থান পূরণ, সত্য/মিথ্যা, মিলকরণ) একটি JSON object তৈরি করুন:
-                - "questionType": ধরন (MULTIPLE_CHOICE, SHORT_ANSWER, CREATIVE, ESSAY, TRUE_FALSE, FILL_BLANK, MATCHING)
-                - "questionText": ডকুমেন্ট থেকে একটি বাস্তব উদাহরণ প্রশ্ন (মূল ভাষায়)
-                - "options": MCQ-এর জন্য অপশন অ্যারে, অন্যদের জন্য ফাঁকা অ্যারে
-                - "answer": সঠিক উত্তর (যদি পাওয়া যায়)
-                - "marks": বরাদ্দকৃত নম্বর
-                - "totalQuestions": এই ধরনের মোট প্রশ্ন সংখ্যা
-                - "instructions": এই প্রশ্নের ধরনের বিশেষ নির্দেশনা বা নিয়ম
-                - "className": "%s"
-                - "subjectName": "%s"
-                - "bloomLevel": ব্লুমের ট্যাক্সোনমি লেভেল (REMEMBERING, UNDERSTANDING, APPLYING, ANALYZING, EVALUATING, CREATING)
-                - "difficulty": কঠিনতার মাত্রা (EASY, MEDIUM, HARD)
-                - "sectionName": ডকুমেন্টে সেকশনের নাম (যদি থাকে, যেমন: "ক বিভাগ", "Section A")
-                - "questionPattern": প্রশ্নের প্যাটার্ন বর্ণনা (যেমন: "৪টি অপশন থেকে ১টি সঠিক উত্তর বাছাই", "উদ্দীপক-ভিত্তিক সৃজনশীল")
+                আপনাকে অবশ্যই নিচের JSON ফরম্যাটে উত্তর দিতে হবে:
+                {
+                  "subject": "%s",
+                  "generation_rules": {
+                    "guidelines": "[অত্যন্ত গুরুত্বপূর্ণ: ইমেজের লিঙ্ক (যেমন: ![Diagram](url)) পেলে তা অবশ্যই questionText বা stimulus-এর ভেতরে রাখতে হবে। ইমেজ আলাদা করে ফাঁকা প্রশ্ন বানানো সম্পূর্ণ নিষেধ।]"
+                  },
+                  "scraping_rules": [
+                    {
+                      "questionType": "MULTIPLE_CHOICE | SHORT_ANSWER | CREATIVE | ESSAY | TRUE_FALSE | FILL_BLANK",
+                      "questionText": "ডকুমেন্ট থেকে একটি বাস্তব উদাহরণ প্রশ্ন (চিত্র থাকলে ![Diagram](url) এখানেই বসবে)",
+                      "options": ["MCQ-এর জন্য অপশন অ্যারে, অন্যদের জন্য ফাঁকা []"],
+                      "answer": "সঠিক উত্তর",
+                      "marks": "বরাদ্দকৃত নম্বর (number)",
+                      "totalQuestions": "এই ধরনের মোট প্রশ্ন সংখ্যা (number)",
+                      "instructions": "এই প্রশ্নের ধরনের বিশেষ নির্দেশনা",
+                      "className": "%s",
+                      "subjectName": "%s",
+                      "bloomLevel": "REMEMBERING | UNDERSTANDING | APPLYING | ANALYZING | EVALUATING | CREATING",
+                      "difficulty": "EASY | MEDIUM | HARD",
+                      "sectionName": "সেকশনের নাম (যদি থাকে)",
+                      "questionPattern": "প্রশ্নের প্যাটার্ন বর্ণনা"
+                    }
+                  ],
+                  "editor_config": {
+                    "allowed_blocks": ["MCQ", "CQ", "SHORT", "EQUATION", "DIAGRAM" (ডকুমেন্টের উপর ভিত্তি করে নির্ধারণ করুন)],
+                    "toolbar_features": ["math_formula", "draw_canvas", "table" (প্রয়োজন অনুযায়ী)],
+                    "validation_rules": {
+                      "CQ_TOTAL_MARKS": 10,
+                      "MCQ_TOTAL_MARKS": 1,
+                      "CQ_MAX_SUBPARTS": 4
+                    }
+                  },
+                  "generation_blueprint": {
+                    "mandatory_sections": [
+                      { "name": "বহুনির্বাচনি প্রশ্ন (MCQ)", "type": "MCQ", "target_ratio": "30%%" },
+                      { "name": "সৃজনশীল প্রশ্ন (CQ)", "type": "CQ", "target_ratio": "70%%" }
+                    ],
+                    "bloom_target": {
+                      "KNOWLEDGE": 30,
+                      "COMPREHENSION": 30,
+                      "APPLICATION": 20,
+                      "HIGHER_ORDER": 20
+                    },
+                    "custom_prompts": {
+                      "generation": "এই বিষয়ের জন্য এআই-কে প্রশ্ন জেনারেট করার বিশেষ নির্দেশিকা।"
+                    }
+                  }
+                }
 
-                শুধুমাত্র বৈধ JSON ARRAY রিটার্ন করুন। কোনো markdown বা ব্যাখ্যা দিবেন না।
+                শুধুমাত্র বৈধ JSON OBJECT রিটার্ন করুন। কোনো markdown বা ব্যাখ্যা দিবেন না।
 
                 PRE-PROCESSED DOCUMENT CHUNKS:
                 %s
-                """.formatted(subjectName, className, className, subjectName, contextBuilder.toString());
+                """.formatted(subjectName, className, subjectName, className, subjectName, contextBuilder.toString());
 
             String aiResponse = analyzerService.generateSchemaCompletion(prompt);
 
@@ -345,32 +382,66 @@ public class CurriculumController {
             String prompt = """
                 আপনি QuestionShaper-এর Question Format Analyzer।
 
-                **আপনার কাজ:** নিচের প্রদত্ত sample প্রশ্নের টেক্সট বিশ্লেষণ করুন এবং QuestionShaper-এর জন্য একটি JSON ARRAY তৈরি করুন যা প্রশ্ন স্ক্র্যাপিং ও তৈরিতে টেমপ্লেট হিসেবে ব্যবহৃত হবে।
+                **আপনার কাজ:** নিচের প্রদত্ত sample প্রশ্নের টেক্সট বিশ্লেষণ করুন এবং QuestionShaper-এর জন্য একটি JSON OBJECT তৈরি করুন যা প্রশ্ন স্ক্র্যাপিং, তৈরি এবং Exam Editor কনফিগারেশনে ব্যবহৃত হবে।
 
                 **বিষয়:** %s
                 **শ্রেণী:** %s
                 %s
 
-                প্রতিটি আলাদা প্রশ্নের ধরনের জন্য (MCQ, সংক্ষিপ্ত, সৃজনশীল/CQ, রচনা ইত্যাদি) একটি JSON object তৈরি করুন:
-                - "questionType": MULTIPLE_CHOICE | SHORT_ANSWER | CREATIVE | ESSAY | TRUE_FALSE | FILL_BLANK
-                - "questionText": sample থেকে একটি বাস্তব উদাহরণ প্রশ্ন
-                - "options": MCQ-এর জন্য অপশন অ্যারে, অন্যদের জন্য ফাঁকা []
-                - "answer": সঠিক উত্তর
-                - "marks": বরাদ্দকৃত নম্বর
-                - "totalQuestions": এই ধরনের মোট প্রশ্ন সংখ্যা
-                - "instructions": এই প্রশ্নের ধরনের বিশেষ নির্দেশনা
-                - "className": "%s"
-                - "subjectName": "%s"
-                - "bloomLevel": REMEMBERING|UNDERSTANDING|APPLYING|ANALYZING|EVALUATING|CREATING
-                - "difficulty": EASY|MEDIUM|HARD
-                - "sectionName": সেকশনের নাম (যদি থাকে)
-                - "questionPattern": প্রশ্নের প্যাটার্ন বর্ণনা
+                আপনাকে অবশ্যই নিচের JSON ফরম্যাটে উত্তর দিতে হবে:
+                {
+                  "subject": "%s",
+                  "generation_rules": {
+                    "guidelines": "[অত্যন্ত গুরুত্বপূর্ণ: ইমেজের লিঙ্ক (যেমন: ![Diagram](url)) পেলে তা অবশ্যই questionText বা stimulus-এর ভেতরে রাখতে হবে। ইমেজ আলাদা করে ফাঁকা প্রশ্ন বানানো সম্পূর্ণ নিষেধ।]"
+                  },
+                  "scraping_rules": [
+                    {
+                      "questionType": "MULTIPLE_CHOICE | SHORT_ANSWER | CREATIVE | ESSAY | TRUE_FALSE | FILL_BLANK",
+                      "questionText": "sample থেকে একটি বাস্তব উদাহরণ প্রশ্ন (চিত্র থাকলে ![Diagram](url) এখানেই বসবে)",
+                      "options": ["MCQ-এর জন্য অপশন অ্যারে, অন্যদের জন্য ফাঁকা []"],
+                      "answer": "সঠিক উত্তর",
+                      "marks": "বরাদ্দকৃত নম্বর (number)",
+                      "totalQuestions": "এই ধরনের মোট প্রশ্ন সংখ্যা (number)",
+                      "instructions": "এই প্রশ্নের ধরনের বিশেষ নির্দেশনা",
+                      "className": "%s",
+                      "subjectName": "%s",
+                      "bloomLevel": "REMEMBERING | UNDERSTANDING | APPLYING | ANALYZING | EVALUATING | CREATING",
+                      "difficulty": "EASY | MEDIUM | HARD",
+                      "sectionName": "সেকশনের নাম (যদি থাকে)",
+                      "questionPattern": "প্রশ্নের প্যাটার্ন বর্ণনা"
+                    }
+                  ],
+                  "editor_config": {
+                    "allowed_blocks": ["MCQ", "CQ", "SHORT", "EQUATION", "DIAGRAM"],
+                    "toolbar_features": ["math_formula", "draw_canvas", "table"],
+                    "validation_rules": {
+                      "CQ_TOTAL_MARKS": 10,
+                      "MCQ_TOTAL_MARKS": 1,
+                      "CQ_MAX_SUBPARTS": 4
+                    }
+                  },
+                  "generation_blueprint": {
+                    "mandatory_sections": [
+                      { "name": "বহুনির্বাচনি প্রশ্ন (MCQ)", "type": "MCQ", "target_ratio": "30%%" },
+                      { "name": "সৃজনশীল প্রশ্ন (CQ)", "type": "CQ", "target_ratio": "70%%" }
+                    ],
+                    "bloom_target": {
+                      "KNOWLEDGE": 30,
+                      "COMPREHENSION": 30,
+                      "APPLICATION": 20,
+                      "HIGHER_ORDER": 20
+                    },
+                    "custom_prompts": {
+                      "generation": "এই বিষয়ের জন্য এআই-কে প্রশ্ন জেনারেট করার বিশেষ নির্দেশিকা।"
+                    }
+                  }
+                }
 
-                শুধুমাত্র বৈধ JSON ARRAY রিটার্ন করুন। কোনো markdown বা বাড়তি text দিবেন না।
+                শুধুমাত্র বৈধ JSON OBJECT রিটার্ন করুন। কোনো markdown বা বাড়তি text দিবেন না।
 
                 SAMPLE QUESTIONS TEXT:
                 %s
-                """.formatted(subjectName, className, extraInstruction, className, subjectName, sampleText);
+                """.formatted(subjectName, className, extraInstruction, subjectName, className, subjectName, sampleText);
 
             String aiResponse = analyzerService.generateSchemaCompletion(prompt);
 

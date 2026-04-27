@@ -60,6 +60,7 @@ export const MENU_ITEMS = [
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'],
         submenu: [
             { title: 'Resource Library', path: '/knowledge-hub/library', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+            { title: 'Synchronized Library', path: '/knowledge-hub/sync-library', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
             { title: 'Course Mapping', path: '/knowledge-hub/mapping', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] }
         ]
     },
@@ -73,6 +74,7 @@ export const MENU_ITEMS = [
                 roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
                 submenu: [
                     { title: 'All Questions', path: '/questions', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+                    { title: 'Drafts (AI Generated)', path: '/questions/drafts', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { title: 'Pending', path: '/questions/pending', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { title: 'Approved', path: '/questions/approved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
                     { title: 'Rejected', path: '/questions/rejected', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
@@ -110,7 +112,8 @@ export const MENU_ITEMS = [
                 submenu: [
                     { title: 'Auto Generate', path: '/exams/generate/auto', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { title: 'Saved Exams', path: '/exams/generate/saved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Paper Editor', path: '/exams/generate/editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { title: 'Nexus Paper Engine (V2)', path: '/exams/generate/nexus-editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { title: 'Legacy Editor', path: '/exams/generate/editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { title: 'Manual Select', path: '/exams/generate/manual', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                 ]
             },

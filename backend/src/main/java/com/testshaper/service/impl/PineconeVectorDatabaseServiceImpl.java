@@ -222,4 +222,30 @@ public class PineconeVectorDatabaseServiceImpl implements VectorDatabaseService 
              log.error("Failed to delete document chunks for docId {}: {}", docId, e.getMessage(), e);
          }
     }
+
+    @Override
+    public void deleteByMetadata(Map<String, Object> filterMetadata, String namespace) {
+         if (!isConfigured() || filterMetadata == null || filterMetadata.isEmpty()) return;
+         
+         log.info("Deleting vector chunks with metadata filter {} in namespace {}", filterMetadata, namespace);
+         try {
+             String baseUrl = host.startsWith("http") ? host : "https://" + host;
+             String url = baseUrl + "/vectors/delete";
+             
+             Map<String, Object> requestBody = new HashMap<>();
+             requestBody.put("filter", filterMetadata);
+             if (namespace != null && !namespace.isBlank()) {
+                 requestBody.put("namespace", namespace);
+             }
+             
+             HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), createHeaders());
+             restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+             
+             log.debug("Successfully issued metadata delete to Pinecone");
+         } catch (HttpStatusCodeException e) {
+             log.error("Pinecone API Error during metadata delete: {} - Body: {}", e.getStatusCode(), e.getResponseBodyAsString());
+         } catch (Exception e) {
+             log.error("Failed to delete vector chunks by metadata: {}", e.getMessage(), e);
+         }
+    }
 }

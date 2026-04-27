@@ -1,6 +1,7 @@
 package com.testshaper.service;
 
 import java.util.UUID;
+import org.springframework.scheduling.annotation.Async;
 
 public interface TopicExtractorService {
 
@@ -17,7 +18,15 @@ public interface TopicExtractorService {
      *
      * @param sourceBookIndexId The ID of the specific chapter index
      */
-    void extractAndMapTopicsForChapter(UUID sourceBookIndexId);
+    @Async
+    void extractAndMapTopicsForChapter(UUID sourceBookIndexId, UUID jobId);
     void processBulkTopicExtractionJob(java.util.UUID jobId, java.util.List<java.util.UUID> targetIndexIds);
-
+    void deleteSyncForChapters(UUID bookId, java.util.List<UUID> targetIndexIds);
+    void updateChunkText(UUID chunkId, String newText);
+    
+    // Internal batching methods exposed for proxy
+    void cleanupOldData(UUID sourceBookIndexId, UUID bookId, com.testshaper.entity.Chapter mappedChapter);
+    void updatePageStatus(java.util.List<com.testshaper.entity.KnowledgePage> pages);
+    void processBatch(com.testshaper.entity.SourceBookIndex index, com.testshaper.entity.Chapter mappedChapter, java.util.List<com.testshaper.entity.KnowledgePage> batchPages, int batchIndex);
+    void saveTopicsAndChunks(com.testshaper.entity.SourceBookIndex index, com.testshaper.entity.Chapter mappedChapter, com.fasterxml.jackson.databind.JsonNode rootArray, int batchIndex);
 }

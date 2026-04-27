@@ -210,6 +210,7 @@ public class QuestionServiceImpl implements QuestionService {
                 filters.get("filterStatus"),
                 filters.get("filterType"),
                 filters.get("search"),
+                filters.get("language"),
                 filters.get("levelId"),
                 filters.get("streamId"),
                 filters.get("classId"),

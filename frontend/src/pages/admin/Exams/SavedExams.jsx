@@ -147,7 +147,7 @@ const SavedExams = () => {
                                         <td className="px-5 py-4">
                                             <div className="flex items-center justify-end gap-2">
                                                 <Link
-                                                    to={`/exams/generate/editor/${exam.id}`}
+                                                    to={`/exams/generate/nexus-editor/${exam.id}`}
                                                     className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-amber-600 hover:border-amber-200 hover:bg-amber-50 flex items-center justify-center transition-all"
                                                     title="Edit"
                                                 >

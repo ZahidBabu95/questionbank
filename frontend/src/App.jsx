@@ -43,6 +43,7 @@ import ManualExamBuilder from './pages/admin/Exams/ManualExamBuilder';
 import ExamList from './pages/admin/Exams/ExamList';
 import SavedExams from './pages/admin/Exams/SavedExams';
 import ExamEditor from './pages/admin/Exams/ExamEditor';
+import NexusEditor from './pages/admin/Exams/NexusEditor/NexusEditor';
 import CurriculumLibrary from './pages/admin/CurriculumLibrary';
 import AiUploadHistory from './pages/admin/AiUploadHistory';
 import AiApiKeys from './pages/admin/QuestionBank/AiApiKeys';
@@ -57,6 +58,7 @@ import BillingOverview from './pages/admin/Billing/BillingOverview';
 import LandingEditor from './pages/admin/CMS/LandingEditor';
 import BlogList from './pages/admin/CMS/Blog/BlogList';
 import BlogEditor from './pages/admin/CMS/Blog/BlogEditor';
+import SyncCommandCenter from './pages/admin/KnowledgeHub/SyncCommandCenter';
 import CategoryManagement from './pages/admin/CMS/Blog/CategoryManagement';
 import BlogListing from './pages/Public/Blog/BlogListing';
 import BlogPostDetail from './pages/Public/Blog/BlogPostDetail';
@@ -64,13 +66,12 @@ import SupportDashboard from './pages/admin/Support/SupportDashboard';
 import KnowledgeBaseManager from './pages/admin/Support/KnowledgeBaseManager';
 import AllNotificationsPage from './pages/admin/Notifications/AllNotificationsPage';
 import ResourceLibrary from './pages/admin/KnowledgeHub/ResourceLibrary';
+import SyncLibrary from './pages/admin/KnowledgeHub/SyncLibrary';
 import DigitizationWorkspace from './pages/admin/KnowledgeHub/DigitizationWorkspace';
 import ProofreadingWorkspace from './pages/admin/KnowledgeHub/ProofreadingWorkspace';
 import KnowledgeMapWorkspace from './pages/admin/KnowledgeHub/KnowledgeMapWorkspace';
 import CurriculumMappingList from './pages/admin/KnowledgeHub/CurriculumMappingList';
 import { useParams } from 'react-router-dom';
-
-
 import { UploadProvider } from './context/UploadContext';
 
 const ProtectedRoute = ({ children }) => {
@@ -135,6 +136,7 @@ function App() {
                         <Route path="/exams/generate/auto" element={<AutoExamGenerator />} />
                         <Route path="/exams/generate/manual" element={<ManualExamBuilder />} />
                         <Route path="/exams/generate/saved" element={<SavedExams />} />
+                        <Route path="/exams/generate/nexus-editor/:id?" element={<NexusEditor />} />
                         <Route path="/exams/generate/editor/:id?" element={<ExamEditor />} />
                         <Route path="/exams/edit/:id" element={<RedirectToEditor />} />
                         <Route path="/exams/download/pdf" element={<ExamList />} />
@@ -170,6 +172,8 @@ function App() {
 
                         {/* Knowledge Hub */}
                         <Route path="/knowledge-hub/library" element={<ResourceLibrary />} />
+                        <Route path="/knowledge-hub/sync-library" element={<SyncLibrary />} />
+                        <Route path="/knowledge-hub/sync-command-center/:bookId" element={<SyncCommandCenter />} />
                         <Route path="/knowledge-hub/digitization/:bookId" element={<DigitizationWorkspace />} />
                         <Route path="/knowledge-hub/proofreading/:bookId" element={<ProofreadingWorkspace />} />
                         <Route path="/knowledge-hub/mapping" element={<CurriculumMappingList />} />

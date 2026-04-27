@@ -79,6 +79,18 @@ public class Exam extends BaseTenantEntity {
     @Column(name = "created_by")
     private String createdBy;
 
+    // Nexus Paper Engine (V2) Fields
+    @Enumerated(EnumType.STRING)
+    @Column(name = "editor_mode", nullable = false)
+    private ExamEditorMode editorMode = ExamEditorMode.STRICT_LINKED;
+
+    @Column(name = "raw_content", columnDefinition = "LONGTEXT")
+    private String rawContent;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "template_id")
+    private ExamTemplate examTemplate;
+
     // AI-Ready fields
     @Column(name = "ai_generated")
     private boolean aiGenerated = false;

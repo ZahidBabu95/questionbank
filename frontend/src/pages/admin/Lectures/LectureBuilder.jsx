@@ -167,7 +167,9 @@ const LectureBuilder = () => {
                                 <option value="EASY">Easy</option><option value="MEDIUM">Medium</option><option value="HARD">Hard</option>
                             </select>
                             <select value={language} onChange={e => setLanguage(e.target.value)} className="text-xs bg-slate-100 border-none rounded p-1 outline-none text-slate-600">
-                                <option value="Bangla">Bangla</option><option value="English">English</option>
+                                <option value="Bangla">Bangla</option>
+                                <option value="English">English</option>
+                                <option value="Bilingual">Bilingual</option>
                             </select>
                         </div>
                     </div>

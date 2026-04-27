@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.testshaper.entity.CurriculumDocument;
 import com.testshaper.entity.CurriculumDocumentChunk;
 import com.testshaper.repository.CurriculumDocumentChunkRepository;
+import com.testshaper.repository.GeneralSettingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -11,6 +12,7 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.*;
 
@@ -25,9 +27,13 @@ public class CurriculumAnalyzerService {
     private final ObjectMapper objectMapper;
     private final DynamicStorageService storageService;
     private final VectorDatabaseService vectorDatabaseService;
+    private final GeneralSettingRepository settingRepository;
+
+    private static volatile int currentWorkerSize = 4;
+    private final ThreadPoolTaskExecutor workerPool = new ThreadPoolTaskExecutor();
 
     @jakarta.annotation.PostConstruct
-    public void resetStuckJobs() {
+    public void init() {
         log.info("Checking for stuck curriculum processing jobs from previous server run...");
         List<CurriculumDocument> stuckDocs = documentRepository.findByProcessingStatus(CurriculumDocument.ProcessingStatus.PROCESSING);
         if (!stuckDocs.isEmpty()) {
@@ -39,6 +45,21 @@ public class CurriculumAnalyzerService {
             documentRepository.saveAll(stuckDocs);
             log.info("Reset {} stuck documents to FAILED so they can be resumed.", stuckDocs.size());
         }
+
+        // Initialize Dynamic Worker Pool for Curriculum Processing
+        settingRepository.findByTenantIdIsNullAndKey("AI_WORKER_POOL_SIZE").ifPresent(setting -> {
+            try {
+                currentWorkerSize = Integer.parseInt(setting.getValue());
+                log.info("Loaded AI Worker Pool size from DB for CurriculumAnalyzer: {}", currentWorkerSize);
+            } catch (NumberFormatException ignored) {}
+        });
+
+        workerPool.setCorePoolSize(currentWorkerSize);
+        workerPool.setMaxPoolSize(currentWorkerSize);
+        workerPool.setQueueCapacity(5000);
+        workerPool.setThreadNamePrefix("CurriculumWorker-");
+        workerPool.setDaemon(true);
+        workerPool.initialize();
     }
 
     /**
@@ -117,10 +138,15 @@ public class CurriculumAnalyzerService {
     /**
      * Reads the entire PDF, splits it into smaller chunks, and saves to database.
      * This forms the "Knowledge Base" for the RAG Chatbot.
-     * Executed asynchronously so UI is not blocked.
+     * Executed asynchronously using the dynamic worker pool so UI is not blocked.
      */
-    @Async
     public void processAndSaveChunks(UUID documentId, byte[] fileBytes, boolean forceRegenerate) {
+        workerPool.execute(() -> {
+            doProcessAndSaveChunks(documentId, fileBytes, forceRegenerate);
+        });
+    }
+
+    private void doProcessAndSaveChunks(UUID documentId, byte[] fileBytes, boolean forceRegenerate) {
         log.info("Starting background RAG chunking for document id: {}", documentId);
         
         Optional<CurriculumDocument> docOpt = documentRepository.findById(documentId);

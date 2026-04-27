@@ -31,6 +31,9 @@ public class KnowledgeHubController {
 
     @org.springframework.beans.factory.annotation.Autowired
     private com.testshaper.scheduler.AiExtractionScheduler aiExtractionScheduler;
+    
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.testshaper.scheduler.AiQuestionGenScheduler aiQuestionGenScheduler;
 
     @PostMapping("/upload-image")
     public ResponseEntity<Map<String, String>> uploadImage(@RequestParam("file") MultipartFile file) {
@@ -435,6 +438,7 @@ public class KnowledgeHubController {
     @PostMapping("/system-health-jobs/workers")
     public ResponseEntity<Map<String, Object>> updateWorkerSize(@RequestParam("size") int size) {
         aiExtractionScheduler.setMaxWorkers(size);
+        aiQuestionGenScheduler.setMaxWorkers(size);
         return ResponseEntity.ok(Map.of("success", true, "newSize", size));
     }
 
@@ -488,7 +492,7 @@ public class KnowledgeHubController {
     @PostMapping("/indexes/{indexId}/extract-topics")
     public ResponseEntity<Map<String, String>> extractTopicsForIndex(@PathVariable UUID indexId) {
         try {
-            topicExtractorService.extractAndMapTopicsForChapter(indexId);
+            topicExtractorService.extractAndMapTopicsForChapter(indexId, null);
             return ResponseEntity.ok(Map.of("message", "Topic extraction and Pinecone vector sync started successfully in background."));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -496,9 +500,15 @@ public class KnowledgeHubController {
         }
     }
 
-    /**
-     * Bulk Topic Extraction for Entire Book
-     */
+    @GetMapping("/indexes/{indexId}/topics-preview")
+    public ResponseEntity<List<Map<String, Object>>> getTopicsAndChunksByIndex(@PathVariable UUID indexId) {
+        try {
+            return ResponseEntity.ok(knowledgeHubService.getTopicsAndChunksByIndex(indexId));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @PostMapping("/source-books/{id}/extract-all-topics")
     public ResponseEntity<Map<String, String>> extractAllTopicsForBook(@PathVariable UUID id, @RequestBody java.util.List<UUID> targetIndexIds) {
         try {
@@ -509,6 +519,54 @@ public class KnowledgeHubController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Failed to start bulk extraction: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Bulk Vector Sync Deletion
+     */
+    @PostMapping("/source-books/{id}/delete-sync")
+    public ResponseEntity<Map<String, String>> deleteSyncForChapters(@PathVariable UUID id, @RequestBody java.util.List<UUID> targetIndexIds) {
+        try {
+            topicExtractorService.deleteSyncForChapters(id, targetIndexIds);
+            return ResponseEntity.ok(Map.of("message", "Sync data deleted successfully for " + (targetIndexIds != null ? targetIndexIds.size() : 0) + " chapters."));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to delete sync data: " + e.getMessage()));
+        }
+    }
+
+    // --- Phase 3F: Synchronized Library & Command Center ---
+    @GetMapping("/source-books/{id}/sync-integrity")
+    public ResponseEntity<Map<String, Object>> getSyncIntegrity(@PathVariable UUID id) {
+        try {
+            return ResponseEntity.ok(knowledgeHubService.getSyncIntegrity(id));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to fetch sync integrity: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/source-books/{id}/indices/{indexId}/vector-preview")
+    public ResponseEntity<Map<String, String>> getVectorPreview(@PathVariable UUID id, @PathVariable UUID indexId) {
+        try {
+            String markdown = knowledgeHubService.getVectorPreview(id, indexId);
+            return ResponseEntity.ok(Map.of("markdown", markdown));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to generate preview: " + e.getMessage()));
+        }
+    }
+
+    @PutMapping("/chunks/{chunkId}")
+    public ResponseEntity<Map<String, String>> updateChunkText(@PathVariable UUID chunkId, @RequestBody Map<String, String> body) {
+        try {
+            String newText = body.get("chunkText");
+            topicExtractorService.updateChunkText(chunkId, newText);
+            return ResponseEntity.ok(Map.of("message", "Chunk updated successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to update chunk: " + e.getMessage()));
         }
     }
 }

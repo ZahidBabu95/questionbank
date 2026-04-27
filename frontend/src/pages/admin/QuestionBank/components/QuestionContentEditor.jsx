@@ -104,6 +104,7 @@ const QuestionContentEditor = memo(({ formData, setFormData, questionType }) => 
                     <select value={formData.language} onChange={(e) => setFormData({ ...formData, language: e.target.value })} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:border-indigo-400 outline-none">
                         <option value="Bangla">Bangla</option>
                         <option value="English">English</option>
+                        <option value="Bilingual">Bilingual</option>
                     </select>
                 </div>
             </div>

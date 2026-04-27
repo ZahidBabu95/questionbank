@@ -57,6 +57,7 @@ public class Question extends BaseTenantEntity {
 
     @org.hibernate.annotations.BatchSize(size = 100)
     @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("optionLabel ASC")
     private java.util.List<QuestionOption> options = new java.util.ArrayList<>();
 
     @org.hibernate.annotations.BatchSize(size = 100)

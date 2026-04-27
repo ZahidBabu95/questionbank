@@ -116,7 +116,7 @@ public class AiExtractionScheduler {
             // Fetch next batch of pending pages up to exactly the allocated threads limit
             org.springframework.data.domain.Page<KnowledgePage> pageBatch = pageRepository.findBySourceBookIdAndExtractionStatusIn(
                 job.getSourceBook().getId(),
-                java.util.List.of(KnowledgePage.ExtractionStatus.PENDING, KnowledgePage.ExtractionStatus.FAILED),
+                java.util.List.of(KnowledgePage.ExtractionStatus.PENDING),
                 PageRequest.of(0, threadsPerJob, Sort.by("pageNumber").ascending())
             );
 

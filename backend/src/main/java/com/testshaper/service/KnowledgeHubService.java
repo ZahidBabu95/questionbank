@@ -31,6 +31,7 @@ public interface KnowledgeHubService {
     com.testshaper.dto.SourceBookIndexDto createSourceBookIndex(UUID sourceBookId, com.testshaper.dto.SourceBookIndexDto dto);
     com.testshaper.dto.SourceBookIndexDto updateSourceBookIndex(UUID sourceBookId, UUID indexId, com.testshaper.dto.SourceBookIndexDto dto);
     void deleteSourceBookIndex(UUID sourceBookId, UUID indexId);
+    java.util.List<java.util.Map<String, Object>> getTopicsAndChunksByIndex(UUID indexId);
 
     // --- Page-to-Chapter Assignment (Phase 3A) ---
     com.testshaper.dto.KnowledgePageDto assignPageToIndex(UUID sourceBookId, UUID pageId, UUID sourceBookIndexId);
@@ -69,4 +70,8 @@ public interface KnowledgeHubService {
 
     // --- GoldenEditor AI Text Editing ---
     String callAiTextEdit(String prompt) throws Exception;
+    
+    // --- Phase 3F: Synchronized Library & Command Center ---
+    java.util.Map<String, Object> getSyncIntegrity(UUID sourceBookId);
+    String getVectorPreview(UUID sourceBookId, UUID indexId);
 }

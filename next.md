@@ -1,7 +1,7 @@
 # 📚 Knowledge Hub: Next Steps & Implementation Plan
 
 > **Vision:** A centralized EdTech AI Brain using RAG, transforming digitized books into Golden Records for a Role-Based Chatbot (Teacher/Student Agentic Workflows).
-> **Last Updated:** 2026-04-19 (Phase 3.5.1 — Professional WYSIWYG Editor Planning)
+> **Last Updated:** 2026-04-24 (Phase C — Nexus Paper Engine Editor Modernization Planning)
 
 ---
 
@@ -14,6 +14,10 @@
 | Phase 3C: Knowledge Map Bridge (Tree B ↔ Tree A) | ✅ Done |
 | Phase 3E: Automated Question Extraction | ✅ Done |
 | **Phase 3.5 — Base WYSIWYG GoldenEditor** | ✅ Done |
+| Dynamic Wizard for Auto Exam Generator | ✅ Done |
+| Dynamic Wizard for Manual Exam Builder | ✅ Done |
+| Question Allocation Tracker & UI Fixes | ✅ Done |
+| Backend Payload Validation & API Fixes | ✅ Done |
 | Image Selection & Dragging Issues Fixed | ✅ Done |
 | LaTeX Focus Issues Fixed | ✅ Done |
 | Alignment parseHTML Bugs Fixed | ✅ Done |
@@ -89,8 +93,8 @@ Golden Content → Semantic Chunks → Pinecone vectorization।
 - [x] Chunking Strategy: Semantic Topic Grouping via Gemini 2.5 Flash
 - [x] Metadata per chunk: `{ bookId, chapterId, topicId, topicName, hasImage }`
 - [x] Backend: Pinecone upsert endpoint reuse
-- [ ] Frontend: "Sync to Vector DB" button / Queue status in UI
-- [ ] Frontend: Knowledge Hub dashboard sync status indicator
+- [x] Frontend: "Sync to Vector DB" button / Queue status in UI (`Extract Topics & Sync` Modal)
+- [x] Frontend: Knowledge Hub dashboard sync status indicator (Background Polling for AI Topic Jobs)
 
 ---
 
@@ -101,6 +105,24 @@ Golden Content → Semantic Chunks → Pinecone vectorization।
 - [x] Backend: Extracted questions → existing `QuestionBank` MCQ/CQ creation endpoint
 - [x] Frontend: "Automate Questions" button in Proofreading workspace with Job Queue polling
 - [x] Review UI: Reuse existing QuestionList via `/questions/drafts` route with "DRAFT" badge integration
+
+---
+
+## 🚀 NEW: Phase 3F — Synchronized Library (Sync Command Center)
+**Priority: HIGH (Enterprise Scaling) | Target: Next Sessions**
+
+**Objective:** Handle 100-worker concurrency for paid API keys, ensure 100% data integrity before Question Generation, and manage Vector Database records efficiently.
+
+**Backend Architecture Overhaul (Speed & Safety):**
+- [ ] **Parallel Topic Extraction:** Refactor `TopicExtractorServiceImpl` to use `CompletableFuture` or `ThreadPoolTaskExecutor`. Process 30-50 chapters concurrently instead of sequentially.
+- [ ] **Idempotent Re-Sync (Auto-Cleanup):** Add Pinecone Metadata Delete (`chapterId=XYZ`) and MySQL Chunk Delete before regenerating any chapter to prevent duplicate vectors.
+- [ ] **Data Integrity Checker API:** Create `GET /api/v1/knowledge-hub/books/{id}/sync-integrity` to compare total pages vs materialized vector chunks.
+
+**Frontend UI/UX (The Command Center):**
+- [ ] **New Route:** `/knowledge-hub/sync-library` to view all synced and processing books.
+- [ ] **Book Level Controls:** Copyable `bookId`, live Progress Bar, global Pause/Resume/Cancel.
+- [ ] **Granular Chapter Control:** Drill-down dashboard showing Table of Contents with individual `Re-Sync` buttons for missing or failed chapters.
+- [ ] **Data Verification Viewer:** A modal to preview the plain text "Chunks" that were actually sent to Pinecone.
 
 ---
 
@@ -273,3 +295,102 @@ For the next session, we are upgrading the basic sequential `@Scheduled` queues 
 - **Status:** Planning Phase
 - **Details:** If matching old questions exist in the topic, append new tags (e.g. "Dhaka Board 2026") instead of duplicating arrays.
 
+
+---
+
+## 🎯 Current Session Accomplishments (April 2026 - Split-Screen Review & Vector UI)
+- **Phase 3D Vector UI Integration:**
+  - Fixed an issue where the `TopicExtractConfigModal` was missing from the UI render tree in `ProofreadingWorkspace.jsx`, making the "Extract Topics & Sync" button unresponsive.
+  - The modal now successfully opens and routes commands to `handleExtractAllTopics` for processing Single and Bulk chapter extraction workflows.
+  - Integrated AI Topic Job queue polling on the frontend so users can see the processing status visually via `aiTopicJob` loading indicators.
+- **Split-Screen Review Mode Enhancements (`QuestionList.jsx`):**
+  - Made the entire `QuestionListItem` card globally clickable to quickly set the `selectedQuestion` state for a seamless side-by-side preview experience.
+  - Implemented an `isViewing` prop to visually highlight the actively selected question card (with a blue/indigo border) so reviewers don't get lost while scrolling the list.
+- **Backend Compilation Stability:**
+  - Resolved a missing `java.util.Collections` import in `KnowledgeHubServiceImpl` that was breaking the Spring Boot backend compilation process.
+- **MCQ Interface & Filtering Enhancements:**
+  - Implemented dynamic, index-based option labeling (ক, খ, গ, ঘ) for MCQ questions to resolve random ordering issues.
+  - Added support for English version questions, dynamically switching option labels to (A, B, C, D) based on the `language` field.
+  - Introduced a "Version/Language" filter dropdown to the advanced filter toolbar in `QuestionList.jsx` and connected it to the backend `QuestionSpecification` to enable precise querying by language.
+
+## 🎯 Current Session Accomplishments (April 2026 - Exam Editor Refactoring & Bengali Localization)
+- **Exam Editor Component Decoupling:**
+  - Successfully decoupled the monolithic `ExamEditor.jsx` by extracting the core paper rendering logic into `PaperCanvas.jsx`.
+- **WYSIWYG InlineGoldenEditor Enhancements:**
+  - Integrated `InlineGoldenEditor` for seamless editing of questions and MCQ options natively on the paper.
+  - Resolved `ReferenceError` related to `isUpdating` during state changes to ensure stable synchronization.
+  - Implemented a smart Floating Toolbar that appears on focus, providing quick access to Bold, Italic, Math Equation, and List formatting.
+- **Bengali Localization & Typesetting Polish:**
+  - Automatically convert right-aligned total marks (e.g., `[10]`) into Bengali numerals (`[১০]`) based on the selected font mode.
+  - Implemented custom CSS to render Bengali alphabet bullet points (`ক), খ), গ), ঘ)`) dynamically for ordered lists when the paper is in Bengali mode.
+  - Adjusted line spacing (`margin-bottom: 0.4em`) to resemble professional exam papers without excessive gaps.
+- **AI Question Generator Prompt Tweaks:**
+  - Updated the backend `AIQuestionServiceImpl.java` extraction and generation prompts to enforce that AI generates sub-question marks using Bengali numerals without brackets (e.g., `১, ২, ৩, ৪`).
+
+## 🚀 HIGHEST PRIORITY: The "Nexus Paper Engine" (V2 Exam Editor)
+
+The legacy `ExamEditor.jsx` (and its subcomponents) will be completely deprecated and replaced by a brand-new, enterprise-grade editor named **"Nexus Paper Engine"** (or simply the V2 Editor). This new engine seamlessly bridges the gap between strict Assessment Analytics and flexible document formatting.
+
+### Phase 1: Planning & Architecture
+- [x] Defined Dual-Mode Operation Engine (Strict Analytics vs Free-Text Edit).
+- [x] Planned UI/UX layout for dynamic Sidebar, Central Canvas, and Template Properties.
+
+### Phase 2: Database Models & Backend API
+- [x] Refactored `Exam.java` entity to include `editorMode`, `rawContent`, and `template_id`.
+- [x] Created `ExamTemplate` entity for saving blueprint logic and structures.
+- [x] Built comprehensive REST controllers and services for Exam Templates.
+
+### Phase 3: Tiptap Core Canvas Integration
+- [x] Engineered `PaperCanvasV2` component powered by headless Tiptap.
+- [x] Integrated real-time state synchronization for `rawContent`.
+- [x] Implemented visual mode switching (Strict/Locked vs Free-Edit CSS states).
+
+### Phase 4: Tiptap Custom Extensions
+- [x] Developed `QuestionBlockNode` custom ReactNodeViewRenderer.
+- [x] Designed responsive UI rendering for MCQ and CQ blocks within the editor.
+- [x] Implemented absolute content locking for `STRICT_LINKED` mode.
+
+### Phase 5: Blueprint Template Logic (Right Panel)
+- [x] Connected frontend to Backend `/v1/exams/templates` API.
+- [x] Built Dynamic Template Selector UI.
+- [x] Enabled 1-click loading of JSON structural blueprints into the canvas.
+
+### Phase 6: Save & Persist Architecture
+- [x] Implemented `createTemplate` API logic.
+- [x] Integrated "Save as Template" functionality to persist current UI structures into the DB.
+- [x] Integrated "Save Document" functionality to create actual `Exam` manual records with Tiptap HTML content.
+
+### Phase 7: Question Bank & Hot-Swapping (Left Panel)
+- [x] Connected real backend `questionService` with pagination and debounced searching.
+- [x] Enabled intelligent Drag-and-Drop functionality of real questions into the canvas.
+- [x] Built the dynamic drop-handler inside Tiptap to securely map dragged questions to `QuestionBlockNode`.
+
+### Upcoming Deprecation Phase
+- [ ] Update Sidebar Navigation Links to point fully to the new Enterprise Editor.
+- [ ] Build robust PDF Export Service that converts this Tiptap HTML string into a beautiful server-rendered or client-rendered document.
+
+---
+
+## 🚀 Upcoming Focus: Publishing Pipeline
+
+The next phases will also aim to elevate the Exam Generation modules (`/auto`, `/manual`, `/saved`, `/editor`) from basic functional prototypes to a robust, SaaS-grade enterprise assessment pipeline.
+
+### 1. Advanced Exam Editor Refactoring & Optimization (`/exams/generate/editor`)
+- **Component Decoupling:** Break down the monolithic 124KB `ExamEditor.jsx` into smaller, highly maintainable sub-components (`PaperCanvas`, `EditorToolbar`, `QuestionInspector`, `HeaderSettings`).
+- **GoldenEditor Integration:** Replace basic content editables with the highly-optimized, Tiptap-based `GoldenEditor` to ensure stable handling of inline LaTeX equations, complex tables, and high-resolution images.
+- **AI-Powered "Hot Swap":** Introduce a "Regenerate/Swap" button on individual questions within the paper. This will allow teachers to seamlessly replace an unsatisfactory question with a semantically similar one from the Question Bank without leaving the editor.
+
+### 2. Manual Exam Builder Enhancements (`/exams/generate/manual`)
+- **Logical Sectioning (Group Management):** Transition from a flat "Assessment Cart" to a structured blueprint allowing users to create logical groups (e.g., "Group A - Compulsory", "Group B - Answer any 3").
+- **Drag-and-Drop Reordering:** Integrate a modern DND library (e.g., `@dnd-kit/core`) to allow visual reordering of questions and sections directly within the cart.
+- **Usage Conflict Detection:** Implement visual warnings if a selected question was recently used in a different exam for the same academic class, minimizing redundancy and repetition.
+
+### 3. Auto Exam Generator Intelligence (`/exams/generate/auto`)
+- **Pre-flight Blueprint Validation:** Add real-time validation checks against the database before submission. For example, if a user requests "20 Hard CQs from Chapter 1" but the bank only holds 12, the UI will proactively prompt ratio adjustments.
+- **Saveable Assessment Templates:** Allow administrative users and teachers to save their specific difficulty ratios and structures as "Blueprint Templates" (e.g., "Standard Class 10 Weekly Model Test") for one-click re-use.
+- **Bloom's Taxonomy Transition:** Evolve beyond basic "Easy/Medium/Hard" difficulty sliders to incorporate Bloom's Cognitive Levels (Knowledge, Comprehension, Application, Higher Order) for standardized, compliant paper generation.
+
+### 4. Saved Exams Library & Publishing Engine (`/exams/generate/saved`)
+- **Exam Variant Generation (Sets):** Build functionality to instantly generate mathematically equivalent variants (Set A, Set B, Set C) of the same exam by shuffling options or substituting parallel questions to prevent cheating.
+- **Professional PDF Export Engine:** Replace the mocked download endpoints with a robust, enterprise-grade PDF rendering engine capable of supporting institutional headers, watermarks, exact 2-column formatting, and print-ready margins.
+- **Workflow & Lifecycle Tracking:** Introduce clear lifecycle statuses (Draft, Under Review, Finalized, Published) with basic usage analytics (e.g., "Printed 5 times", "Assigned online").

@@ -232,8 +232,9 @@ const ShortQuestionCreate = () => {
                         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">ভাষা</label>
                             <select value={formData.language} onChange={(e) => setFormData({ ...formData, language: e.target.value })} className="w-full p-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50/50">
-                                <option value="Bangla">বাংলা</option>
+                                <option value="Bangla">Bangla</option>
                                 <option value="English">English</option>
+                                <option value="Bilingual">Bilingual</option>
                             </select>
                         </div>
 

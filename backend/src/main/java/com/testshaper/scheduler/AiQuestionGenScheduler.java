@@ -15,8 +15,8 @@ import org.springframework.data.domain.Sort;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import jakarta.annotation.PostConstruct;
 
 @Component
 @RequiredArgsConstructor
@@ -28,15 +28,42 @@ public class AiQuestionGenScheduler {
     private final com.testshaper.repository.SourceBookIndexRepository sourceBookIndexRepository;
     private final KnowledgeHubService knowledgeHubService;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+    private final com.testshaper.repository.GeneralSettingRepository settingRepository;
 
-    // Phase 6: Dynamic Worker Pool (Configured to map available Active API Keys)
-    private static final int MAX_WORKERS = 6;
-    private final ExecutorService workerPool = Executors.newFixedThreadPool(MAX_WORKERS, runnable -> {
-        Thread thread = new Thread(runnable);
-        thread.setDaemon(true); // Ensures JVM can shutdown gracefully
-        thread.setName("AiQuestionWorker-" + thread.getId());
-        return thread;
-    });
+    public static volatile int currentWorkerSize = 6;
+    private final ThreadPoolTaskExecutor workerPool = new ThreadPoolTaskExecutor();
+
+    @PostConstruct
+    public void init() {
+        settingRepository.findByTenantIdIsNullAndKey("AI_WORKER_POOL_SIZE").ifPresent(setting -> {
+            try {
+                currentWorkerSize = Integer.parseInt(setting.getValue());
+            } catch (NumberFormatException ignored) {}
+        });
+
+        workerPool.setCorePoolSize(currentWorkerSize);
+        workerPool.setMaxPoolSize(currentWorkerSize);
+        workerPool.setQueueCapacity(5000);
+        workerPool.setThreadNamePrefix("AiQuestionWorker-");
+        workerPool.setDaemon(true);
+        workerPool.initialize();
+    }
+
+    public void setMaxWorkers(int size) {
+        if (size < 1) size = 1;
+        if (size > 200) size = 200;
+        
+        if (size > currentWorkerSize) {
+            workerPool.setMaxPoolSize(size);
+            workerPool.setCorePoolSize(size);
+        } else if (size < currentWorkerSize) {
+            workerPool.setCorePoolSize(size);
+            workerPool.setMaxPoolSize(size);
+        }
+        
+        currentWorkerSize = size;
+        log.info("AI Question Worker Pool size updated dynamically to: {}", size);
+    }
 
     // Skewed slightly from Extraction Scheduler (which runs at 3000ms delay)
     @Scheduled(fixedDelay = 4000)
@@ -45,14 +72,14 @@ public class AiQuestionGenScheduler {
         List<AiQuestionGenerationJob> activeJobs = jobRepository.findByStatus(AiQuestionGenerationJob.JobStatus.IN_PROGRESS);
 
         // Auto-promote QUEUED jobs safely
-        if (activeJobs.size() < MAX_WORKERS) {
+        if (activeJobs.size() < currentWorkerSize) {
             List<AiQuestionGenerationJob> queuedJobs = jobRepository.findByStatus(AiQuestionGenerationJob.JobStatus.QUEUED);
             for (AiQuestionGenerationJob qj : queuedJobs) {
                 qj.setStatus(AiQuestionGenerationJob.JobStatus.IN_PROGRESS);
                 jobRepository.save(qj);
                 activeJobs.add(qj);
                 log.info("Dispatcher promoted QUEUED question gen job for SourceBook: {}", qj.getSourceBook().getId());
-                if (activeJobs.size() >= MAX_WORKERS) break;
+                if (activeJobs.size() >= currentWorkerSize) break;
             }
         }
 
@@ -66,7 +93,7 @@ public class AiQuestionGenScheduler {
         }
 
         // Distributed Round-Robin assignment
-        int threadsPerJob = Math.max(1, MAX_WORKERS / activeJobs.size());
+        int threadsPerJob = Math.max(1, currentWorkerSize / activeJobs.size());
         
         List<Callable<Void>> concurrentTasks = new ArrayList<>();
         java.util.Set<java.util.UUID> completedJobIds = new java.util.HashSet<>();
@@ -143,7 +170,7 @@ public class AiQuestionGenScheduler {
 
         if (!concurrentTasks.isEmpty()) {
             try {
-                workerPool.invokeAll(concurrentTasks);
+                workerPool.getThreadPoolExecutor().invokeAll(concurrentTasks);
             } catch (InterruptedException e) {
                 log.error("Worker pool interrupted during Question Gen execution", e);
                 Thread.currentThread().interrupt();

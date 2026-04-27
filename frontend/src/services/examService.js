@@ -81,6 +81,15 @@ const examService = {
     publishManualExam: async (examId) => {
         const res = await axios.patch(`/v1/exams/manual/${examId}/publish`);
         return res.data;
+    },
+    // --- Nexus Engine Templates ---
+    getTemplates: async () => {
+        const res = await axios.get('/v1/exams/templates');
+        return res.data;
+    },
+    createTemplate: async (payload) => {
+        const res = await axios.post('/v1/exams/templates', payload);
+        return res.data;
     }
 };
 

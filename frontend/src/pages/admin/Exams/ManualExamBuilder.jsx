@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Save, BookOpen, Layers, Search, Plus, Trash2, CheckCircle2, Loader2, Target, Check, LayoutGrid, ChevronRight, Calculator } from 'lucide-react';
+import { Sparkles, Save, BookOpen, Layers, Search, Plus, Trash2, Loader2, Target, Check, LayoutGrid, ChevronRight, ChevronLeft, Copy } from 'lucide-react';
 import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
 import useAcademicHierarchy from '../../../hooks/useAcademicHierarchy';
+import axios from '../../../utils/axios';
 
 const ManualExamBuilder = () => {
     const navigate = useNavigate();
@@ -20,45 +21,96 @@ const ManualExamBuilder = () => {
     const [examInfo, setExamInfo] = useState({
         title: '',
         durationMinutes: 120,
-        totalMarks: 100,
-        totalQuestions: 50,
         language: 'Bangla',
         examType: 'MODEL_TEST'
     });
+
+    const [dynamicSections, setDynamicSections] = useState([]);
+    const [userStructure, setUserStructure] = useState({});
+    const [loadingBlueprint, setLoadingBlueprint] = useState(false);
 
     // Builder States
     const [chapters, setChapters] = useState([]);
     const [topics, setTopics] = useState([]);
     const [filters, setFilters] = useState({
-        chapterId: '',
-        topicId: '',
-        type: '',
-        difficulty: '',
-        keyword: ''
+        chapterId: '', topicId: '', type: '', difficulty: '', keyword: ''
     });
 
     const [searchResults, setSearchResults] = useState([]);
     const [searching, setSearching] = useState(false);
-    const [addLoading, setAddLoading] = useState(null); // questionId
+    const [addLoading, setAddLoading] = useState(null); 
+    const [cart, setCart] = useState([]); 
 
-    const [cart, setCart] = useState([]); // Array of questions in exam
     const currentMarks = cart.reduce((sum, q) => sum + (q.marks || 0), 0);
+    const defaultMarksMap = { 'MCQ': 1, 'CQ': 10, 'SHORT': 2 };
 
-    // Default marks for quick add
-    const defaultMarksMap = {
-        'MCQ': 1,
-        'CQ': 10,
-        'SHORT': 2
+    const targetTotals = Object.entries(userStructure).reduce((acc, [type, struct]) => {
+        const count = parseInt(struct.count) || 0;
+        const marks = parseFloat(struct.marks) || 1;
+        acc.qs += count;
+        acc.marks += (count * marks);
+        acc[type] = count;
+        return acc;
+    }, { qs: 0, marks: 0 });
+
+    useEffect(() => {
+        if (subjectId) fetchSchema();
+        else { setDynamicSections([]); setUserStructure({}); }
+    }, [subjectId]);
+
+    const fetchSchema = async () => {
+        setLoadingBlueprint(true);
+        try {
+            const selectedSubjectObj = subjects.find(s => s.classSubjectId == subjectId);
+            const selectedClassName = classes.find(c => c.id == classId)?.name;
+            if (selectedSubjectObj?.subjectName) {
+                const subTag = 'RULE_FOR_' + selectedSubjectObj.subjectName.replace(/\s/g, '');
+                const altTag = selectedSubjectObj.subjectName;
+                const kbRes = await axios.get('/v1/support/knowledge');
+                let validRules = [...kbRes.data.filter(k => k.tags && (k.tags.includes(subTag) || k.tags.includes(altTag))), ...kbRes.data.filter(k => k.content && k.content.includes(selectedSubjectObj.subjectName))];
+                validRules = validRules.filter(k => {
+                    try { const p = JSON.parse(k.content); return Array.isArray(p) || (p && p.generation_blueprint); } catch(e) { return false; }
+                });
+
+                if (validRules.length > 0) {
+                    const matchedRule = validRules.find(r => (r.tags && r.tags.includes(selectedClassName)) || (r.content && r.content.includes(selectedClassName))) || validRules[0];
+                    const schemaObj = JSON.parse(matchedRule.content);
+                    let sections = [];
+                    let initialStruct = {};
+
+                    if (Array.isArray(schemaObj)) {
+                        const uniqueTypes = [...new Set(schemaObj.map(r => r.questionType))];
+                        sections = uniqueTypes.map(t => {
+                            const rule = schemaObj.find(r => r.questionType === t);
+                            let tName = t === 'MULTIPLE_CHOICE' ? 'MCQ' : t === 'CREATIVE' ? 'CQ' : t === 'SHORT_ANSWER' ? 'SHORT' : t;
+                            return { name: rule.sectionName || tName, type: tName };
+                        });
+                        schemaObj.forEach(r => {
+                            let t = r.questionType === 'MULTIPLE_CHOICE' ? 'MCQ' : r.questionType === 'CREATIVE' ? 'CQ' : r.questionType === 'SHORT_ANSWER' ? 'SHORT' : r.questionType;
+                            initialStruct[t] = { count: 0, marks: r.marks || 1 };
+                        });
+                    } else {
+                        sections = schemaObj.generation_blueprint?.mandatory_sections || [];
+                        (schemaObj.scraping_rules || []).forEach(r => {
+                            let t = r.questionType === 'MULTIPLE_CHOICE' ? 'MCQ' : r.questionType === 'CREATIVE' ? 'CQ' : r.questionType === 'SHORT_ANSWER' ? 'SHORT' : r.questionType;
+                            initialStruct[t] = { count: 0, marks: r.marks || 1 };
+                        });
+                        sections.forEach(sec => { if (!initialStruct[sec.type]) initialStruct[sec.type] = { count: 0, marks: 1 }; });
+                    }
+                    setDynamicSections(sections);
+                    setUserStructure(initialStruct);
+                } else setDynamicSections([]);
+            }
+        } catch (e) { console.error(e); } finally { setLoadingBlueprint(false); }
     };
 
-    // When entering step 2, load chapters for the filter panel from the subject
+    // Initialize chapters for Step 2
     useEffect(() => {
         if (subjectId && step === 2) {
             setChapters(subjectChapters);
         }
     }, [subjectId, step, subjectChapters]);
 
-    // Chapter → Topics for filter panel
     useEffect(() => {
         if (filters.chapterId) {
             academicService.getTopicsByChapter(filters.chapterId).then(setTopics).catch(console.error);
@@ -67,20 +119,16 @@ const ManualExamBuilder = () => {
         }
     }, [filters.chapterId]);
 
-    // Step 1 → Step 2
     const handleCreateDraft = async () => {
-        if (!examInfo.title || !subjectId || !examInfo.totalMarks || !examInfo.totalQuestions) {
-            return alert("Please fill all required fields correctly.");
-        }
-
+        if (!examInfo.title || !subjectId) return alert("Please enter exam name and select subject.");
+        if (targetTotals.qs === 0) return alert("Please set a valid question structure.");
         setLoading(true);
         try {
             const res = await examService.createManualExam({
                 title: examInfo.title,
                 examType: examInfo.examType,
                 classSubjectId: subjectId,
-                totalMarks: parseFloat(examInfo.totalMarks),
-                totalQuestions: parseInt(examInfo.totalQuestions),
+                totalMarks: targetTotals.marks,
                 durationMinutes: parseInt(examInfo.durationMinutes),
                 language: examInfo.language,
                 instructions: "",
@@ -94,84 +142,57 @@ const ManualExamBuilder = () => {
                 setExamId(res.data.id);
                 setCart(res.data.questions || []);
                 setStep(2);
-                searchQuestions(); // Initial search
+                searchQuestions();
             }
         } catch (e) {
-            console.error(e);
             alert("Error creating exam draft");
         } finally {
             setLoading(false);
         }
     };
 
-    // Search Questions
     const searchQuestions = async (e) => {
         if (e) e.preventDefault();
         setSearching(true);
         try {
-            const params = {
-                classSubjectId: subjectId,
-                ...filters,
-                size: 50
-            };
+            const cleanFilters = {};
+            Object.entries(filters).forEach(([k, v]) => {
+                if (v !== '') cleanFilters[k] = v;
+            });
+            const params = { classSubjectId: subjectId, ...cleanFilters, size: 50 };
             const res = await examService.searchQuestionsForManualExam(params);
-            if (res.success) {
-                setSearchResults(res.data.content);
-            }
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setSearching(false);
-        }
+            if (res.success) setSearchResults(res.data.content);
+        } catch (e) { console.error(e); } finally { setSearching(false); }
     };
 
-    // Add Question
     const handleAddQuestion = async (q, marks) => {
-        if (cart.length >= examInfo.totalQuestions) {
-            return alert("Maximum question limit reached for this exam!");
-        }
+        if (cart.length >= targetTotals.qs) return alert("Maximum question limit reached for this exam!");
         setAddLoading(q.id);
         try {
-            const payload = {
-                questionId: q.id,
-                marks: marks || defaultMarksMap[q.type] || 1,
-                sectionId: null
-            };
+            const payload = { questionId: q.id, marks: marks || defaultMarksMap[q.type] || 1, sectionId: null };
             const res = await examService.addQuestionToManualExam(examId, payload);
-            if (res.success) {
-                setCart(res.data.questions);
-            }
+            if (res.success) setCart(res.data.questions);
         } catch (e) {
-            console.error(e);
-            alert(e.response?.data?.message || "Error adding question");
+            alert("Error adding question");
         } finally {
             setAddLoading(null);
         }
     };
 
-    // Remove Question
     const handleRemoveQuestion = async (questionId) => {
         try {
             const res = await examService.removeQuestionFromManualExam(examId, questionId);
-            if (res.success) {
-                setCart(res.data.questions);
-            }
-        } catch (e) {
-            console.error(e);
-        }
+            if (res.success) setCart(res.data.questions);
+        } catch (e) {}
     };
 
-    // Publish
     const handlePublish = async () => {
         if (cart.length === 0) return alert("Select at least one question to publish.");
         try {
             setLoading(true);
             const res = await examService.publishManualExam(examId);
-            if (res.success) {
-                navigate(`/exams/generate/editor/${examId}`);
-            }
+            if (res.success) navigate(`/exams/generate/nexus-editor/${examId}`);
         } catch (e) {
-            console.error(e);
             alert("Failed to publish exam.");
         } finally {
             setLoading(false);
@@ -180,328 +201,270 @@ const ManualExamBuilder = () => {
 
     const isInCart = (id) => cart.some(eq => eq.originalQuestionId === id);
 
-    const selectCls = "w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-all disabled:opacity-40 disabled:cursor-not-allowed";
+    const selectCls = "w-full bg-white/50 border border-slate-200 rounded-xl p-3.5 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all disabled:opacity-40 hover:border-slate-300";
+    const inputCls = "w-full bg-white/50 border border-slate-200 rounded-xl p-3.5 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all hover:border-slate-300";
 
-    // --- RENDERS ---
-
-    if (step === 1) {
+    // --- STEP 2: DUAL PANE BUILDER ---
+    if (step === 2) {
         return (
-            <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-8 font-outfit text-slate-800 pb-20">
-                <div className="max-w-2xl mx-auto mt-10">
-                    <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-                        <div className="mb-8 border-b border-slate-100 pb-6 text-center">
-                            <div className="w-14 h-14 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                <LayoutGrid size={28} />
-                            </div>
-                            <h1 className="text-3xl font-black text-slate-800 tracking-tight">
-                                Manual Exam Builder
-                            </h1>
-                            <p className="text-slate-500 mt-2 font-medium">Create a custom paper by picking exactly which questions you want.</p>
+            <div className="min-h-screen bg-slate-50 font-outfit text-slate-800 flex flex-col h-screen overflow-hidden">
+                <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 flex justify-between items-center shadow-sm shrink-0 z-40">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                            <LayoutGrid size={20} />
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
-                            {/* Exam Title */}
-                            <div className="md:col-span-2">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Exam Title (পরীক্ষার নাম)</label>
-                                <input
-                                    type="text"
-                                    value={examInfo.title}
-                                    onChange={(e) => setExamInfo({ ...examInfo, title: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                                    placeholder="e.g. Weekly Test - Physics"
-                                />
-                            </div>
-
-                            {/* Level */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">স্তর (Level)</label>
-                                <select value={levelId} onChange={e => setLevelId(e.target.value)} className={selectCls}>
-                                    <option value="">স্তর বাছুন</option>
-                                    {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                                </select>
-                            </div>
-
-                            {/* Stream */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">বিভাগ/ধারা (Stream)</label>
-                                <select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!levelId} className={selectCls}>
-                                    <option value="">বিভাগ বাছুন</option>
-                                    {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                            </div>
-
-                            {/* Class */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">শ্রেণি (Class)</label>
-                                <select value={classId} onChange={e => setClassId(e.target.value)} disabled={!streamId} className={selectCls}>
-                                    <option value="">শ্রেণি বাছুন</option>
-                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                            </div>
-
-                            {/* Subject */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">বিষয় (Subject)</label>
-                                <select value={subjectId} onChange={e => setSubjectId(e.target.value)} disabled={!classId} className={selectCls}>
-                                    <option value="">বিষয় বাছুন</option>
-                                    {subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
-                                </select>
-                            </div>
-
-                            {/* Total Marks */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Target Total Marks</label>
-                                <input
-                                    type="number"
-                                    value={examInfo.totalMarks}
-                                    onChange={(e) => setExamInfo({ ...examInfo, totalMarks: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                                />
-                            </div>
-
-                            {/* Total Questions */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Target No. of Questions</label>
-                                <input
-                                    type="number"
-                                    value={examInfo.totalQuestions}
-                                    onChange={(e) => setExamInfo({ ...examInfo, totalQuestions: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                                />
-                            </div>
-
-                            {/* Language */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Language</label>
-                                <select value={examInfo.language} onChange={(e) => setExamInfo({ ...examInfo, language: e.target.value })} className={selectCls}>
-                                    <option value="Bangla">Bangla</option>
-                                    <option value="English">English</option>
-                                </select>
-                            </div>
-
-                            {/* Duration */}
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Duration (Min)</label>
-                                <input
-                                    type="number"
-                                    value={examInfo.durationMinutes}
-                                    onChange={(e) => setExamInfo({ ...examInfo, durationMinutes: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                                />
-                            </div>
+                        <div>
+                            <h1 className="text-xl font-black text-slate-800 leading-tight">{examInfo.title}</h1>
+                            <p className="text-xs font-bold text-emerald-600 tracking-wide uppercase">Manual Selection Mode</p>
                         </div>
-
-                        <button
-                            onClick={handleCreateDraft}
-                            disabled={loading || !subjectId || !examInfo.title}
-                            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg disabled:shadow-none"
-                        >
-                            {loading ? <Loader2 className="animate-spin" /> : <span>Start Selecting Questions</span>}
-                            {!loading && <ChevronRight size={20} />}
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-end">
+                            <div className="text-[10px] font-black uppercase text-slate-400">Cart Target</div>
+                            <div className="text-sm font-black text-slate-700">{cart.length} / {targetTotals.qs} Qs <span className="text-slate-300 mx-1">•</span> <span className="text-emerald-600">{currentMarks} / {targetTotals.marks} Marks</span></div>
+                        </div>
+                        <button onClick={handlePublish} disabled={loading || cart.length === 0} className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-md ${cart.length > 0 && !loading ? 'bg-slate-800 hover:bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                            {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Publish Paper
                         </button>
+                    </div>
+                </div>
+
+                <div className="flex-1 flex gap-4 overflow-hidden relative p-4 max-w-[1600px] w-full mx-auto">
+                    {/* LEFT: Search Panel */}
+                    <div className="w-80 bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col shrink-0 overflow-hidden">
+                        <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+                            <h2 className="font-black text-slate-800 flex items-center gap-2"><Search size={18} className="text-emerald-500" /> Question Bank</h2>
+                        </div>
+                        <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                            <form onSubmit={searchQuestions} className="space-y-5">
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Chapter</label>
+                                    <select value={filters.chapterId} onChange={(e) => setFilters({ ...filters, chapterId: e.target.value })} className={selectCls}>
+                                        <option value="">All Chapters</option>
+                                        {chapters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Topic</label>
+                                    <select value={filters.topicId} onChange={(e) => setFilters({ ...filters, topicId: e.target.value })} className={selectCls}>
+                                        <option value="">All Topics</option>
+                                        {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Type</label>
+                                        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} className={selectCls}>
+                                            <option value="">Any</option>
+                                            <option value="MCQ">MCQ</option>
+                                            <option value="CQ">CQ</option>
+                                            <option value="SHORT">Short</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Difficulty</label>
+                                        <select value={filters.difficulty} onChange={(e) => setFilters({ ...filters, difficulty: e.target.value })} className={selectCls}>
+                                            <option value="">Any</option>
+                                            <option value="EASY">Easy</option>
+                                            <option value="MEDIUM">Med</option>
+                                            <option value="HARD">Hard</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Keyword</label>
+                                    <input type="text" value={filters.keyword} onChange={(e) => setFilters({ ...filters, keyword: e.target.value })} className={inputCls} placeholder="Search text..." />
+                                </div>
+                                <button type="submit" disabled={searching} className="w-full py-3 bg-emerald-50 text-emerald-700 font-black rounded-xl border border-emerald-200 hover:bg-emerald-100 transition-all flex items-center justify-center gap-2">
+                                    {searching ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />} Find Questions
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    {/* MIDDLE: Search Results */}
+                    <div className="flex-1 bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col min-w-0 overflow-hidden">
+                        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                            <h2 className="font-black text-slate-800 flex items-center gap-2"><Target size={18} className="text-violet-500" /> Results</h2>
+                            <span className="text-[11px] bg-slate-200 text-slate-700 px-3 py-1 rounded-full font-black uppercase tracking-wider">{searchResults.length} found</span>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4 bg-slate-50/30">
+                            {searching ? (
+                                <div className="flex items-center justify-center h-full text-slate-400"><Loader2 size={32} className="animate-spin" /></div>
+                            ) : searchResults.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                    <Search size={48} className="text-slate-200 mb-4" />
+                                    <p className="font-bold">No questions found.</p>
+                                </div>
+                            ) : (
+                                searchResults.map(q => {
+                                    const inCart = isInCart(q.id);
+                                    return (
+                                        <div key={q.id} className={`p-5 rounded-2xl border transition-all flex gap-5 ${inCart ? 'border-emerald-300 bg-emerald-50/50 opacity-80' : 'border-slate-200 bg-white hover:border-emerald-200 hover:shadow-md'}`}>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex gap-2 mb-3">
+                                                    <span className="text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">{q.type}</span>
+                                                    <span className="text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">{q.difficulty}</span>
+                                                </div>
+                                                <div className="text-[15px] font-medium text-slate-800 line-clamp-3 leading-relaxed" dangerouslySetInnerHTML={{ __html: q.questionText }} />
+                                            </div>
+                                            <div className="w-24 shrink-0 flex flex-col items-end justify-between border-l border-slate-100 pl-4">
+                                                <div className="text-[11px] font-black text-slate-400 text-right uppercase tracking-wider">{defaultMarksMap[q.type]} Marks</div>
+                                                <button
+                                                    onClick={() => handleAddQuestion(q)}
+                                                    disabled={inCart || addLoading === q.id || cart.length >= targetTotals.qs}
+                                                    className={`w-full py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${inCart ? 'bg-emerald-100 text-emerald-700 cursor-not-allowed border border-emerald-200' : 'bg-white border text-slate-700 hover:bg-slate-50 hover:border-slate-300 border-slate-200 active:scale-95'}`}
+                                                >
+                                                    {addLoading === q.id ? <Loader2 size={14} className="animate-spin" /> : inCart ? <><Check size={14} strokeWidth={3} /> Added</> : <><Plus size={14} strokeWidth={3} /> Add</>}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+
+                    {/* RIGHT: Blueprint Cart */}
+                    <div className="w-80 bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col shrink-0 overflow-hidden relative">
+                        <div className="h-2 w-full bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+                        <div className="p-5 border-b border-slate-100 bg-white">
+                            <h2 className="font-black flex items-center gap-2 text-slate-800 text-lg mb-4">
+                                <BookOpen size={20} className="text-emerald-500" /> Exam Cart
+                            </h2>
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                <div className="flex justify-between text-[11px] font-black uppercase mb-2">
+                                    <span className={currentMarks > targetTotals.marks ? 'text-rose-500' : 'text-slate-500'}>Score: {currentMarks}</span>
+                                    <span className="text-emerald-600">Target: {targetTotals.marks}</span>
+                                </div>
+                                <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                                    <div className={`h-full transition-all ${currentMarks > targetTotals.marks ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min((currentMarks / targetTotals.marks) * 100, 100)}%` }}></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 bg-slate-50/50">
+                            {cart.length === 0 ? (
+                                <div className="text-center p-6 text-slate-400 text-[11px] font-black uppercase tracking-widest pt-20 flex flex-col items-center">
+                                    <Layers size={40} className="mb-3 text-slate-200" /> Cart is empty
+                                </div>
+                            ) : (
+                                cart.map((q, idx) => (
+                                    <div key={q.id} className="p-3 bg-white border border-slate-200 hover:border-emerald-300 rounded-2xl flex items-center justify-between group shadow-sm transition-all hover:shadow-md">
+                                        <div className="w-7 h-7 rounded-xl bg-slate-100 text-slate-500 text-[10px] font-black flex items-center justify-center shrink-0">{idx + 1}</div>
+                                        <div className="flex-1 min-w-0 px-3">
+                                            <div className="text-[13px] font-bold text-slate-700 truncate" dangerouslySetInnerHTML={{ __html: q.questionText?.substring(0, 40) + '...' }} />
+                                            <div className="text-[10px] font-black text-slate-400 uppercase mt-0.5">{q.type} <span className="text-slate-300 mx-1">•</span> {q.marks} Marks</div>
+                                        </div>
+                                        <button onClick={() => handleRemoveQuestion(q.originalQuestionId)} className="w-8 h-8 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
         );
     }
 
+    // --- STEP 1 (WIZARD) ---
     return (
-        <div className="min-h-screen bg-[#F8FAFC] p-2 md:p-6 font-outfit text-slate-800 flex flex-col h-screen overflow-hidden">
-            {/* Top Bar */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-4 flex justify-between items-center shrink-0">
-                <div>
-                    <h1 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                        <LayoutGrid className="text-indigo-600" size={24} /> {examInfo.title}
-                    </h1>
-                    <span className="text-sm font-medium text-slate-500 pl-8">Drafting Mode • Pick your questions</span>
-                </div>
-                <div className="flex bg-slate-100 rounded-lg p-1">
-                    <div className="px-4 py-1.5 rounded-md bg-white shadow-sm font-bold text-sm text-slate-700">Target: {examInfo.totalQuestions} Q</div>
-                    <div className="px-4 py-1.5 font-bold text-sm text-slate-500">{examInfo.totalMarks} Marks</div>
+        <div className="min-h-screen bg-slate-50 font-outfit pb-24">
+            <div className="bg-white border-b border-slate-200 sticky top-0 z-40 px-4 md:px-8 py-5 shadow-sm">
+                <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                            <LayoutGrid size={24} />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">Manual Exam Builder</h1>
+                            <p className="text-sm font-bold text-emerald-600 tracking-wide uppercase">Handpick Questions</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Builder Container */}
-            <div className="flex-1 flex gap-4 overflow-hidden relative">
-
-                {/* LEFT: Search Panel */}
-                <div className="w-80 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col shrink-0">
-                    <div className="p-4 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
-                        <h2 className="font-bold flex items-center gap-2"><Search size={18} /> Question Bank</h2>
-                    </div>
-                    <div className="p-4 overflow-y-auto custom-scrollbar flex-1 space-y-4">
-                        <form onSubmit={searchQuestions} className="space-y-4">
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Chapter</label>
-                                <select value={filters.chapterId} onChange={(e) => setFilters({ ...filters, chapterId: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm font-medium focus:border-indigo-500 outline-none">
-                                    <option value="">All Chapters</option>
-                                    {chapters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Topic</label>
-                                <select value={filters.topicId} onChange={(e) => setFilters({ ...filters, topicId: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm font-medium focus:border-indigo-500 outline-none">
-                                    <option value="">All Topics</option>
-                                    {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Type</label>
-                                    <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm font-medium outline-none shrink-0">
-                                        <option value="">All Types</option>
-                                        <option value="MCQ">MCQ</option>
-                                        <option value="CQ">CQ</option>
-                                        <option value="SHORT">Short</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Difficulty</label>
-                                    <select value={filters.difficulty} onChange={(e) => setFilters({ ...filters, difficulty: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm font-medium outline-none">
-                                        <option value="">Any</option>
-                                        <option value="EASY">Easy</option>
-                                        <option value="MEDIUM">Medium</option>
-                                        <option value="HARD">Hard</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Keyword</label>
-                                <input type="text" value={filters.keyword} onChange={(e) => setFilters({ ...filters, keyword: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm font-medium outline-none" placeholder="Search..." />
-                            </div>
-
-                            <button type="submit" disabled={searching} className="w-full py-2.5 bg-indigo-50 text-indigo-700 font-bold rounded-lg border border-indigo-200 hover:bg-indigo-100 flex items-center justify-center gap-2 disabled:opacity-50">
-                                {searching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Search
-                            </button>
-                        </form>
-                    </div>
-                </div>
-
-                {/* MIDDLE: Search Results */}
-                <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col min-w-0">
-                    <div className="p-4 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl flex justify-between items-center">
-                        <h2 className="font-bold flex items-center gap-2"><Target size={18} className="text-indigo-500" /> Results</h2>
-                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold">{searchResults.length} found</span>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 bg-slate-50/30">
-                        {searching ? (
-                            <div className="flex items-center justify-center h-full text-slate-400">
-                                <Loader2 size={32} className="animate-spin" />
-                            </div>
-                        ) : searchResults.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                <Search size={48} className="text-slate-200 mb-4" />
-                                <p>No questions found. Try removing filters.</p>
-                            </div>
-                        ) : (
-                            searchResults.map(q => {
-                                const inCart = isInCart(q.id);
-                                return (
-                                    <div key={q.id} className={`p-4 rounded-xl border transition-all flex gap-4 ${inCart ? 'border-indigo-300 bg-indigo-50/30 opacity-70' : 'border-slate-200 bg-white hover:border-indigo-200 hover:shadow-sm'}`}>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex gap-2 mb-2">
-                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-slate-100 text-slate-600">{q.type}</span>
-                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-slate-100 text-slate-600">{q.difficulty}</span>
-                                                {q.bloomLevel && <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider border border-slate-200 text-slate-400">{q.bloomLevel}</span>}
-                                            </div>
-                                            <div
-                                                className="text-sm font-medium text-slate-800 line-clamp-3 leading-relaxed"
-                                                dangerouslySetInnerHTML={{ __html: q.questionText }}
-                                            />
-                                        </div>
-                                        <div className="w-24 shrink-0 flex flex-col items-end justify-between">
-                                            <div className="text-xs font-bold text-slate-400 text-right">{defaultMarksMap[q.type]} Marks</div>
-                                            <button
-                                                onClick={() => handleAddQuestion(q)}
-                                                disabled={inCart || addLoading === q.id || cart.length >= examInfo.totalQuestions}
-                                                className={`w-full py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all ${
-                                                    inCart ? 'bg-indigo-100 text-indigo-600 cursor-not-allowed' :
-                                                    'bg-white border text-slate-700 hover:bg-slate-50 border-slate-200 active:scale-95'
-                                                }`}
-                                            >
-                                                {addLoading === q.id ? <Loader2 size={14} className="animate-spin" /> :
-                                                 inCart ? <><Check size={14} /> Added</> : <><Plus size={14} /> Add</>}
-                                            </button>
-                                        </div>
+            <div className="max-w-6xl mx-auto p-4 md:p-8 mt-4">
+                <div className="animate-in fade-in slide-in-from-bottom-8 duration-500 space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* LEFT: Basic Info */}
+                        <div className="lg:col-span-7 space-y-6">
+                            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
+                                <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2 mb-6">
+                                    <Layers className="text-emerald-500" /> Exam Configuration
+                                </h2>
+                                <div className="space-y-5">
+                                    <div>
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Exam Title</label>
+                                        <input type="text" value={examInfo.title} onChange={e => setExamInfo({...examInfo, title: e.target.value})} className={inputCls} placeholder="e.g. Weekly Manual Test" />
                                     </div>
-                                );
-                            })
-                        )}
-                    </div>
-                </div>
-
-                {/* RIGHT: Blueprint Cart */}
-                <div className="w-80 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col shrink-0 overflow-hidden relative">
-                    <div className="h-1.5 w-full bg-gradient-to-r from-emerald-400 to-teal-500"></div>
-                    <div className="p-4 border-b border-slate-100 bg-emerald-50/30">
-                        <h2 className="font-bold flex items-center justify-between text-slate-800">
-                            <span className="flex items-center gap-2"><BookOpen size={18} className="text-emerald-600" /> Assessment Cart</span>
-                        </h2>
-
-                        {/* Progress Bar */}
-                        <div className="mt-4">
-                            <div className="flex justify-between text-[10px] font-black uppercase mb-1">
-                                <span className={currentMarks > examInfo.totalMarks ? 'text-rose-500' : 'text-slate-500'}>Score: {currentMarks}</span>
-                                <span className="text-emerald-600">Max: {examInfo.totalMarks}</span>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Level</label><select value={levelId} onChange={e => setLevelId(e.target.value)} className={selectCls}><option value="">Select Level</option>{levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Stream</label><select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!levelId} className={selectCls}><option value="">Select Stream</option>{streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Class</label><select value={classId} onChange={e => setClassId(e.target.value)} disabled={!streamId} className={selectCls}><option value="">Select Class</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Subject</label><select value={subjectId} onChange={e => setSubjectId(e.target.value)} disabled={!classId} className={selectCls}><option value="">Select Subject</option>{subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}</select></div>
+                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Language</label><select value={examInfo.language} onChange={e => setExamInfo({...examInfo, language: e.target.value})} className={selectCls}><option value="Bangla">Bangla</option><option value="English">English</option><option value="Bilingual">Bilingual</option></select></div>
+                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Duration (Min)</label><input type="number" value={examInfo.durationMinutes} onChange={e => setExamInfo({...examInfo, durationMinutes: e.target.value})} className={inputCls} /></div>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-full transition-all ${currentMarks > examInfo.totalMarks ? 'bg-rose-500' : 'bg-emerald-500'}`}
-                                    style={{ width: `${Math.min((currentMarks / examInfo.totalMarks) * 100, 100)}%` }}
-                                ></div>
-                            </div>
-                            <div className="text-[10px] font-black uppercase mt-1 text-slate-400 text-right space-x-2">
-                                <span>{cart.length} / {examInfo.totalQuestions}</span>
-                                <span>Questions Items</span>
+
+                            {/* RIGHT: Blueprint Structure */}
+                            <div className="lg:col-span-5 space-y-6">
+                                <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col h-full relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-100 rounded-bl-full -mr-10 -mt-10 opacity-50 z-0"></div>
+                                    <div className="relative z-10">
+                                        <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2 mb-2"><Target className="text-emerald-500" /> Target Blueprint</h2>
+                                        <p className="text-sm text-slate-500 mb-6 font-medium">Define your target question counts for manual picking.</p>
+
+                                        {loadingBlueprint ? (
+                                            <div className="py-12 flex flex-col items-center justify-center text-emerald-500"><Loader2 size={32} className="animate-spin mb-3" /><span className="font-bold">Loading Structure...</span></div>
+                                        ) : !subjectId ? (
+                                            <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">Select a subject to load the blueprint.</div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {dynamicSections.map(sec => (
+                                                    <div key={sec.type} className="bg-slate-50 rounded-2xl p-4 border border-slate-100 hover:border-emerald-200 transition-all hover:shadow-sm">
+                                                        <div className="flex justify-between items-center mb-3">
+                                                            <div className="font-bold text-slate-800">{sec.name}</div>
+                                                            <div className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-1 rounded uppercase">{sec.type}</div>
+                                                        </div>
+                                                        <div className="flex gap-3">
+                                                            <div className="flex-1"><label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Target Qs</label><input type="number" min="0" value={userStructure[sec.type]?.count || 0} onChange={e => setUserStructure({...userStructure, [sec.type]: { ...userStructure[sec.type], count: e.target.value }})} className="w-full bg-white border border-slate-200 rounded-xl p-2 text-center font-black text-slate-700 outline-none focus:border-emerald-500" /></div>
+                                                            <div className="flex-1"><label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Marks/Q</label><input type="number" min="1" value={userStructure[sec.type]?.marks || 1} onChange={e => setUserStructure({...userStructure, [sec.type]: { ...userStructure[sec.type], marks: e.target.value }})} className="w-full bg-white border border-slate-200 rounded-xl p-2 text-center font-black text-slate-700 outline-none focus:border-emerald-500" /></div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+
+                                                <div className="mt-6 pt-6 border-t border-slate-100">
+                                                    <div className="bg-slate-800 text-white rounded-2xl p-5 shadow-lg shadow-slate-800/20">
+                                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cart Capacity</div>
+                                                        <div className="text-3xl font-black text-emerald-400">{targetTotals.marks} <span className="text-lg font-bold text-slate-300">Marks</span> / {targetTotals.qs} <span className="text-lg font-bold text-slate-300">Qs</span></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-
-                    {/* Cart Items */}
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 bg-slate-50/50">
-                        {cart.length === 0 ? (
-                            <div className="text-center p-6 text-slate-400 text-xs font-bold uppercase tracking-wider pt-20 flex flex-col items-center">
-                                <BookOpen size={32} className="mb-2 text-slate-300" />
-                                Cart is empty
-                            </div>
-                        ) : (
-                            cart.map((q, idx) => (
-                                <div key={q.id} className="p-3 bg-white border border-slate-200 hover:border-emerald-200 rounded-xl flex items-center justify-between group">
-                                    <div className="w-6 h-6 rounded bg-slate-100 text-slate-500 text-[10px] font-black flex items-center justify-center shrink-0">
-                                        {idx + 1}
-                                    </div>
-                                    <div className="flex-1 min-w-0 px-3">
-                                        <div className="text-xs font-bold text-slate-700 truncate" dangerouslySetInnerHTML={{ __html: q.questionText?.substring(0, 40) + '...' }} />
-                                        <div className="text-[10px] font-medium text-slate-400">{q.type} • {q.marks} Marks</div>
-                                    </div>
-                                    <button
-                                        onClick={() => handleRemoveQuestion(q.originalQuestionId)}
-                                        className="w-7 h-7 rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                                    >
-                                        <Trash2 size={13} />
-                                    </button>
-                                </div>
-                            ))
-                        )}
-                    </div>
-
-                    <div className="p-4 border-t border-slate-100 bg-white shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-                        <button
-                            onClick={handlePublish}
-                            disabled={loading || cart.length === 0}
-                            className={`w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-md ${
-                                cart.length > 0 && !loading
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white hover:-translate-y-0.5'
-                                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                            }`}
-                        >
-                            {loading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                            {loading ? 'Publishing...' : 'Publish & Edit Paper'}
-                        </button>
-                    </div>
                 </div>
+            </div>
 
+            <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/80 border-t border-slate-200 p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
+                <div className="max-w-6xl w-full mx-auto flex justify-end items-center">
+                    <button 
+                        onClick={handleCreateDraft}
+                        disabled={loading || !subjectId || targetTotals.qs === 0}
+                        className="px-10 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
+                    >
+                        {loading ? <Loader2 className="animate-spin" /> : <span>Start Manual Selection</span>}
+                        {!loading && <ChevronRight size={20} />}
+                    </button>
+                </div>
             </div>
         </div>
     );

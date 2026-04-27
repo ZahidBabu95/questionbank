@@ -447,6 +447,7 @@ public class AIQuestionServiceImpl implements AIQuestionService {
                 1. Extract EVERY question. This is a descriptive/creative question.
                 2. Do NOT create or look for MCQ options. Leave 'options' array empty or omit it.
                 3. Include stimulus/uddipok (উদ্দীপক) if present. If sub-questions (ক, খ, গ, ঘ) share one stimulus, combine them or extract them logically.
+                4. CRITICAL: Any marks assigned to sub-questions (e.g. 1, 2, 3, 4) MUST be in Bengali numerals WITHOUT any brackets. Output exactly like ১, ২, ৩, ৪ at the end of the sentence. Do NOT use English digits for marks and do NOT use brackets.
                 """;
             schema = """
                 {"metadata":{"className":"","classLevel":"","subject":"","chapter":"","chapterNo":"","topic":"","sourceUrl":""},"questions":[{"questionText":"text WITHOUT serial number","sourcePage":1,"stimulus":"দিয়ে উদ্দীপক","imageUrl":"","options":[],"correctAnswer":"short answer or empty","bloomLevel":"","difficulty":"","explanation":"","source":""}]}
@@ -540,6 +541,7 @@ public class AIQuestionServiceImpl implements AIQuestionService {
             8. Write ALL explanations in BANGLA (বাংলা) language ONLY. Do NOT write in English.
             9. Make questions factually accurate and educationally valuable
             10. Vary the questioning style (direct, negative, scenario-based)
+            11. CRITICAL: If generating CQ/Descriptive questions, append the marks at the end of sub-questions using Bengali numerals WITHOUT brackets, e.g., ১, ২, ৩, ৪. Do NOT use English numerals or brackets like (১).
             %s
 
             RESPOND ONLY with a valid JSON array. No markdown, no explanation. Each element:

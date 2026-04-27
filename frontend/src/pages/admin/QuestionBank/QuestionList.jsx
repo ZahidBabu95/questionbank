@@ -7,7 +7,7 @@ import RevisePanel from './components/RevisePanel';
 import RevisionReviewPanel from './components/RevisionReviewPanel';
 import MarkdownRenderer from '../../../components/MarkdownRenderer';
 
-const CQCombinedRenderer = ({ q, showAnswer, showExplanation }) => {
+const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) => {
     const parts = useMemo(() => {
         const questionText = q.questionText || '';
         const correctAnswer = q.correctAnswer || '';
@@ -52,7 +52,7 @@ const CQCombinedRenderer = ({ q, showAnswer, showExplanation }) => {
     }, [q, showAnswer, showExplanation]);
 
     if (!parts || parts.length === 0) {
-        return <MarkdownRenderer content={q.type === 'CQ' && q.questionText && q.questionText.includes('<div class="cq-questions">') ? '<div class="cq-questions">' + q.questionText.split('<div class="cq-questions">')[1] : q.questionText} />;
+        return <MarkdownRenderer content={q.type === 'CQ' && q.questionText && q.questionText.includes('<div class="cq-questions">') ? '<div class="cq-questions">' + q.questionText.split('<div class="cq-questions">')[1] : q.questionText} className={isDark ? 'prose-invert' : ''} />;
     }
 
     return (
@@ -60,25 +60,25 @@ const CQCombinedRenderer = ({ q, showAnswer, showExplanation }) => {
             <ol>
             {parts.map((p, idx) => (
                 <div key={idx} className="flex flex-col gap-1.5 w-full relative mb-1.5">
-                    <li className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-2.5 px-3 shadow-sm min-h-[44px]">
+                    <li className={`flex items-center justify-between ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white border-slate-200'} border rounded-lg p-2.5 px-3 shadow-sm min-h-[44px]`}>
                         <div className="flex items-start gap-2 flex-1 min-w-0 pr-4 z-10 font-[500]">
-                            <span className="shrink-0 font-bold text-slate-700 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-[11px] leading-none mt-0.5">{p.label}.</span>
+                            <span className={`shrink-0 font-bold ${isDark ? 'text-slate-300 bg-slate-700 border-slate-600' : 'text-slate-700 bg-slate-50 border-slate-200'} border px-1.5 py-0.5 rounded text-[11px] leading-none mt-0.5`}>{p.label}.</span>
                             <div className="flex-1 min-w-0">
-                                <MarkdownRenderer content={p.text} className="!max-w-full prose-p:!m-0 prose-p:!p-0" />
+                                <MarkdownRenderer content={p.text} className={`!max-w-full prose-p:!m-0 prose-p:!p-0 ${isDark ? 'prose-invert' : ''}`} />
                             </div>
                         </div>
-                        <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded shrink-0 z-10 w-8 text-center border border-slate-200/50">({p.marks.toFixed(1)})</span>
+                        <span className={`text-[10px] font-black ${isDark ? 'text-slate-400 bg-slate-800 border-slate-700' : 'text-slate-500 bg-slate-100 border-slate-200/50'} px-2 py-1 rounded shrink-0 z-10 w-8 text-center border`}>({p.marks.toFixed(1)})</span>
                     </li>
                     {showAnswer && p.answer && (
-                        <div className="ml-[1.5rem] p-3 pb-2 pt-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[12px] text-emerald-900 border-l-[3px] border-l-emerald-400 mt-0.5 shadow-sm">
-                            <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 mb-1.5 uppercase tracking-wider"><CheckCircle size={12}/> উত্তর ({p.label}):</span>
-                            <MarkdownRenderer content={p.answer} className="-mt-1 !max-w-full" />
+                        <div className={`ml-[1.5rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-emerald-900/10 border-emerald-800/30 text-emerald-300 border-l-[3px] border-l-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-900 border-l-[3px] border-l-emerald-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
+                            <span className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-emerald-500' : 'text-emerald-600'} mb-1.5 uppercase tracking-wider`}><CheckCircle size={12}/> উত্তর ({p.label}):</span>
+                            <MarkdownRenderer content={p.answer} className={`-mt-1 !max-w-full ${isDark ? 'prose-invert' : ''}`} />
                         </div>
                     )}
                     {showExplanation && p.explanation && (
-                        <div className="ml-[1.5rem] p-3 pb-2 pt-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[12px] text-amber-900 border-l-[3px] border-l-amber-400 mt-0.5 shadow-sm">
-                            <span className="flex items-center gap-1.5 text-[10px] font-bold text-amber-600 mb-1.5"><Layers size={12}/> ব্যাখ্যা ({p.label}):</span>
-                            <MarkdownRenderer content={p.explanation} className="-mt-1 !max-w-full" />
+                        <div className={`ml-[1.5rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-amber-900/10 border-amber-800/30 text-amber-300 border-l-[3px] border-l-amber-600' : 'bg-amber-50 border-amber-200 text-amber-900 border-l-[3px] border-l-amber-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
+                            <span className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-amber-500' : 'text-amber-600'} mb-1.5`}><Layers size={12}/> ব্যাখ্যা ({p.label}):</span>
+                            <MarkdownRenderer content={p.explanation} className={`-mt-1 !max-w-full ${isDark ? 'prose-invert' : ''}`} />
                         </div>
                     )}
                 </div>
@@ -88,7 +88,7 @@ const CQCombinedRenderer = ({ q, showAnswer, showExplanation }) => {
     );
 };
 
-const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, isSaved, onView, onDelete, onRevise, onReview, isSuperAdmin, hasPerm }) => {
+const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, isSaved, onView, onDelete, onRevise, onReview, isSuperAdmin, hasPerm, splitScreenMode, isViewing }) => {
     const navigate = useNavigate();
     const [showAnswer, setShowAnswer] = useState(false);
     const [showExplanation, setShowExplanation] = useState(false);
@@ -102,8 +102,16 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
     const typeLabel = q.type === 'MCQ' ? 'Multiple Choice' : q.type === 'CQ' ? 'Creative' : q.type === 'SHORT' ? 'Short Answer' : q.type;
 
     return (
-        <div className={`border-b border-slate-200 transition-all duration-200 ${
-            q.status === 'REVISED' ? 'bg-rose-50/50 border-l-4 border-l-rose-400'
+        <div 
+            id={`question-item-${q.id}`}
+            onClick={(e) => {
+                if (splitScreenMode && !['BUTTON', 'INPUT', 'A'].includes(e.target.tagName)) {
+                    onView(q);
+                }
+            }}
+            className={`border-b border-slate-200 transition-all duration-200 ${splitScreenMode ? 'cursor-pointer hover:bg-slate-50' : ''} ${
+            isViewing ? 'bg-indigo-50 border-l-4 border-l-indigo-500' 
+            : q.status === 'REVISED' ? 'bg-rose-50/50 border-l-4 border-l-rose-400'
             : isSelected ? 'bg-blue-50/40' : 'bg-white'
         }`}>
 
@@ -263,6 +271,7 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 </div>
 
                 {/* Action Buttons */}
+                {!splitScreenMode && (
                 <div className="flex items-center gap-1.5 shrink-0">
                     {/* Like */}
                     <button
@@ -332,10 +341,133 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                         </button>
                     )}
                 </div>
+                )}
             </div>
         </div>
     );
 });
+
+
+const QuestionPreviewContent = ({ selectedQuestion, isDark = false }) => {
+    const getStatusBadge = (status) => {
+        switch (status) {
+            case 'APPROVED': return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/50' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max`}><CheckCircle size={14} /> Approved</span>;
+            case 'REJECTED': return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-rose-900/30 text-rose-400 border-rose-800/50' : 'bg-rose-50 text-rose-700 border-rose-200'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max`}><XCircle size={14} /> Rejected</span>;
+            case 'PENDING': return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-amber-900/30 text-amber-400 border-amber-800/50' : 'bg-amber-50 text-amber-700 border-amber-200'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max`}><Clock size={14} /> Pending</span>;
+            case 'REVISED': return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-rose-900/50 text-rose-300 border-rose-800/50' : 'bg-rose-100 text-rose-800 border-rose-300'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max`}><Edit size={14} /> Revised</span>;
+            case 'DRAFT': return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-slate-50 text-slate-600 border-slate-200'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max`}><FileText size={14} /> Draft</span>;
+            default: return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-slate-50 text-slate-600 border-slate-200'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center w-max`}>Draft</span>;
+        }
+    };
+
+    return (
+        <div className={`p-6 overflow-y-auto flex-1 custom-scrollbar ${isDark ? 'text-slate-300' : ''}`}>
+            <div className="flex items-center gap-3 mb-6">
+                <span className={`px-3 py-1 ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'} rounded-md text-xs font-bold tracking-widest uppercase`}>{selectedQuestion.type}</span>
+                <span className={`px-3 py-1 rounded-md text-xs font-bold tracking-widest uppercase ${selectedQuestion.difficulty === 'EASY' ? (isDark ? 'bg-emerald-900/30 text-emerald-400' : 'bg-emerald-50 text-emerald-700') : selectedQuestion.difficulty === 'MEDIUM' ? (isDark ? 'bg-amber-900/30 text-amber-400' : 'bg-amber-50 text-amber-700') : (isDark ? 'bg-rose-900/30 text-rose-400' : 'bg-rose-50 text-rose-700')}`}>{selectedQuestion.difficulty}</span>
+                {getStatusBadge(selectedQuestion.status)}
+            </div>
+
+            <div className="space-y-6">
+                {selectedQuestion.classSubject && (
+                    <div>
+                        <h3 className={`text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'} uppercase tracking-wider mb-2`}>Subject Context</h3>
+                        <div className={`p-4 ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50/80 border-slate-100'} rounded-xl border`}>
+                            <p className={`${isDark ? 'text-slate-200' : 'text-slate-800'} font-semibold`}>{selectedQuestion.classSubject.academicClass?.name} • {selectedQuestion.classSubject.subject?.name}</p>
+                            {(selectedQuestion.chapter || selectedQuestion.topic) && (
+                                <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'} mt-1.5 flex items-center gap-2`}>
+                                    {selectedQuestion.chapter?.name}
+                                    {selectedQuestion.topic && <span className={isDark ? 'text-slate-600' : 'text-slate-300'}>/</span>}
+                                    {selectedQuestion.topic?.name}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {!selectedQuestion.classSubject && selectedQuestion.sourceReference && (
+                    <div>
+                        <h3 className={`text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'} uppercase tracking-wider mb-2`}>Source / Context</h3>
+                        <div className={`p-4 ${isDark ? 'bg-violet-900/20 border-violet-800/50' : 'bg-violet-50/80 border-violet-100'} rounded-xl border flex items-center gap-3`}>
+                            <p className={`${isDark ? 'text-slate-200' : 'text-slate-800'} font-semibold flex-1`}>{selectedQuestion.sourceReference}</p>
+                            {selectedQuestion.aiGenerated && <span className={`text-[10px] ${isDark ? 'bg-violet-900/50 text-violet-300 border-violet-800' : 'bg-violet-100 text-violet-600 border-violet-200'} border px-2 py-0.5 rounded-md font-bold whitespace-nowrap`}>AI Imported</span>}
+                        </div>
+                    </div>
+                )}
+
+                {selectedQuestion.stimulus && (
+                    <div>
+                        <h3 className={`text-sm font-bold ${isDark ? 'text-amber-500' : 'text-amber-600'} uppercase tracking-wider mb-2`}>Stimulus (উদ্দীপক)</h3>
+                        <div className={`p-4 ${isDark ? 'bg-amber-900/10 border-amber-800/30 text-slate-200' : 'bg-amber-50 border-amber-100 text-slate-800'} rounded-xl border font-medium leading-relaxed`}>
+                            <MarkdownRenderer content={selectedQuestion.stimulus} className={isDark ? 'prose-invert' : ''} />
+                        </div>
+                    </div>
+                )}
+
+                <div>
+                    <h3 className={`text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'} uppercase tracking-wider mb-2`}>Question</h3>
+                    <div className={`text-lg font-medium ${isDark ? 'text-white' : 'text-slate-900'} leading-relaxed`}>
+                        {selectedQuestion.type === 'CQ' ? (
+                            <CQCombinedRenderer q={selectedQuestion} showAnswer={true} showExplanation={true} isDark={isDark} />
+                        ) : (
+                            <MarkdownRenderer content={selectedQuestion.questionText} className={isDark ? 'prose-invert' : ''} />
+                        )}
+                    </div>
+                    {selectedQuestion.mcqType === 'MULTIPLE_COMPLETION' && selectedQuestion.statements && selectedQuestion.statements.length > 0 && (
+                        <div className={`mt-3 pl-4 border-l-2 ${isDark ? 'border-indigo-500/50 text-slate-300' : 'border-indigo-200 text-slate-700'} space-y-2`}>
+                            {selectedQuestion.statements.map((stmt, sIdx) => (
+                                <div key={sIdx} className="text-sm font-medium leading-relaxed">
+                                    <MarkdownRenderer content={stmt} className={isDark ? 'prose-invert' : ''} />
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {selectedQuestion.type === 'MCQ' && selectedQuestion.options && selectedQuestion.options.length > 0 && (
+                    <div>
+                        <h3 className={`text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'} uppercase tracking-wider mb-3`}>Answers / Options</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {selectedQuestion.options.map((opt, idx) => {
+                                const enLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
+                                const bnLabels = ['ক', 'খ', 'গ', 'ঘ', 'ঙ', 'চ'];
+                                const isEnglish = selectedQuestion.language === 'English';
+                                const displayLabel = isEnglish ? enLabels[idx] : bnLabels[idx];
+                                return (
+                                <div key={opt.id} className={`p-3 rounded-xl border-2 flex items-center gap-3 ${opt.isCorrect ? (isDark ? 'border-emerald-600/50 bg-emerald-900/20' : 'border-emerald-500 bg-emerald-50') : (isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-100 bg-white')}`}>
+                                    <span className={`flex shadow-sm items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${opt.isCorrect ? (isDark ? 'bg-emerald-600 text-white' : 'bg-emerald-500 text-white') : (isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-600')}`}>{displayLabel}</span>
+                                    <span className={`text-sm flex-1 ${opt.isCorrect ? (isDark ? 'text-emerald-400 font-bold' : 'text-emerald-900 font-bold') : (isDark ? 'text-slate-300 font-medium' : 'text-slate-700 font-medium')}`}>
+                                        <MarkdownRenderer content={opt.optionText} className={isDark ? 'prose-invert' : ''} />
+                                    </span>
+                                    {opt.isCorrect && <CheckCircle size={18} className={`${isDark ? 'text-emerald-500' : 'text-emerald-500'} ml-auto`} />}
+                                </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {selectedQuestion.correctAnswer && selectedQuestion.type !== 'MCQ' && selectedQuestion.type !== 'CQ' && (
+                    <div>
+                        <h3 className={`text-sm font-bold ${isDark ? 'text-emerald-500' : 'text-emerald-600'} uppercase tracking-wider mb-2 flex items-center gap-2`}><CheckCircle size={16} /> Correct Answer</h3>
+                        <div className={`p-4 ${isDark ? 'bg-emerald-900/10 text-emerald-300 border-emerald-800/30' : 'bg-emerald-50 text-emerald-900 border-emerald-200'} font-medium leading-relaxed rounded-xl border`}>
+                            <MarkdownRenderer content={selectedQuestion.correctAnswer} className={isDark ? 'prose-invert' : ''} />
+                        </div>
+                    </div>
+                )}
+
+                {selectedQuestion.explanation && selectedQuestion.type !== 'CQ' && (
+                    <div>
+                        <h3 className={`text-sm font-bold ${isDark ? 'text-blue-500' : 'text-blue-600'} uppercase tracking-wider mb-2`}>Explanation (ব্যাখ্যা)</h3>
+                        <div className={`p-4 ${isDark ? 'bg-blue-900/10 text-blue-300 border-blue-800/30' : 'bg-blue-50 text-blue-900 border-blue-200'} font-medium leading-relaxed rounded-xl border`}>
+                            <MarkdownRenderer content={selectedQuestion.explanation} className={isDark ? 'prose-invert' : ''} />
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
 
 const QuestionList = () => {
@@ -364,6 +496,7 @@ const QuestionList = () => {
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [filterType, setFilterType] = useState('ALL');
+    const [filterLanguage, setFilterLanguage] = useState('ALL');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedQuestion, setSelectedQuestion] = useState(null);
     const [selectedIds, setSelectedIds] = useState([]);
@@ -372,6 +505,7 @@ const QuestionList = () => {
     const [totalElements, setTotalElements] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [viewMode, setViewMode] = useState('ALL');
+    const [splitScreenMode, setSplitScreenMode] = useState(false);
     const [savedIds, setSavedIds] = useState(() => {
         try { return JSON.parse(localStorage.getItem('savedQuestionIds') || '[]'); } catch { return []; }
     });
@@ -520,6 +654,7 @@ const QuestionList = () => {
                 size: itemsPerPage,
                 filterStatus: filterStatus === 'ALL' ? '' : filterStatus,
                 filterType: filterType === 'ALL' ? '' : filterType,
+                language: filterLanguage === 'ALL' ? '' : filterLanguage,
                 search: searchQuery,
                 levelId: selectedLevelId,
                 streamId: selectedStreamId,
@@ -545,7 +680,7 @@ const QuestionList = () => {
             fetchQuestions();
         }, 300); // 300ms debounce for search query typing
         return () => clearTimeout(timer);
-    }, [currentPage, itemsPerPage, filterStatus, filterType, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
+    }, [currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
 
     const handleDelete = React.useCallback(async (id) => {
         if (window.confirm('Are you sure you want to delete this question?')) {
@@ -561,6 +696,11 @@ const QuestionList = () => {
 
     const handleViewQuestion = React.useCallback(async (q) => {
         setSelectedQuestion(q);
+        setTimeout(() => {
+            const el = document.getElementById(`question-item-${q.id}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 50);
+        
         if (q.type === 'MCQ') {
             try {
                 const options = await questionService.getOptions(q.id);
@@ -609,10 +749,33 @@ const QuestionList = () => {
         }
     };
 
+    const handleQuickAction = async (questionId, status) => {
+        try {
+            await questionService.updateStatusBulk([questionId], status);
+            setQuestions(prev => prev.map(q => q.id === questionId ? { ...q, status } : q));
+            
+            // Auto-select next question
+            const currentIndex = questions.findIndex(q => q.id === questionId);
+            if (currentIndex >= 0 && currentIndex < questions.length - 1) {
+                handleViewQuestion(questions[currentIndex + 1]);
+            } else if (currentIndex === questions.length - 1) {
+                // If it's the last item on the current page, try to go to next page
+                if (currentPage < totalPages) {
+                    setCurrentPage(p => p + 1);
+                    setSelectedQuestion(null); // will need to click the next page's first item
+                } else {
+                    setSelectedQuestion(null);
+                }
+            }
+        } catch (error) {
+            alert("Action failed.");
+        }
+    };
+
     useEffect(() => {
         setSelectedIds([]);
         setCurrentPage(1); // Reset page to 1 when any filter changes
-    }, [filterStatus, filterType, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
+    }, [filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
 
     const typeTabs = [
         { id: 'ALL', label: 'All Types' },
@@ -647,6 +810,7 @@ const QuestionList = () => {
         setSelectedTopicId('');
         setSearchQuery('');
         setFilterType('ALL');
+        setFilterLanguage('ALL');
     };
 
     return (
@@ -689,15 +853,25 @@ const QuestionList = () => {
                         </button>
                     </div>
 
-                    <div className="relative w-full md:max-w-md shrink-0">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search explicitly by question text..."
-                            className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all placeholder:text-slate-400 font-medium"
-                        />
+                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                        <button
+                            onClick={() => setSplitScreenMode(!splitScreenMode)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                            title="Toggle Split-Screen Review Mode"
+                        >
+                            <GitCompare size={14} /> Review Mode
+                        </button>
+
+                        <div className="relative w-full md:w-[300px] shrink-0">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search explicitly by question text..."
+                                className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all placeholder:text-slate-400 font-medium"
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -706,6 +880,13 @@ const QuestionList = () => {
                     <div className="flex items-center gap-1.5 text-slate-500 font-bold shrink-0 mr-1">
                         <Filter size={14} className="text-primary" /> <span className="text-[10px] uppercase tracking-wider hidden sm:inline">Filters:</span>
                     </div>
+
+                    <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer min-w-[90px] max-w-[110px] truncate">
+                        <option value="ALL">সব ভার্সন</option>
+                        <option value="Bangla">Bangla</option>
+                        <option value="English">English</option>
+                        <option value="Bilingual">Bilingual</option>
+                    </select>
                     
                     <select value={selectedLevelId} onChange={(e) => setSelectedLevelId(e.target.value)} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer min-w-[90px] max-w-[130px] truncate">
                         <option value="">সব স্তর</option>
@@ -815,43 +996,129 @@ const QuestionList = () => {
                 </div>
             </div>
 
-            <div className="flex flex-col gap-4 px-4 md:px-6 py-4">
-                {loading ? (
-                    <div className="py-16 text-center bg-white rounded-3xl border border-slate-100 shadow-sm mt-4">
-                        <div className="flex flex-col items-center justify-center gap-4">
-                            <div className="w-8 h-8 border-4 border-indigo-100 border-t-primary rounded-full animate-spin"></div>
-                            <span className="text-slate-500 text-sm font-bold tracking-wide">Loading Questions...</span>
+            <div className={`flex gap-4 px-4 md:px-6 py-4 ${splitScreenMode ? 'flex-col md:flex-row h-[65vh] overflow-hidden' : 'flex-col'}`}>
+                {/* List Side */}
+                <div className={`${splitScreenMode ? 'w-full md:w-1/2 overflow-y-auto pr-1 md:pr-2 custom-scrollbar flex flex-col gap-4' : 'w-full flex flex-col gap-4'}`}>
+                    {loading ? (
+                        <div className="py-16 text-center bg-white rounded-3xl border border-slate-100 shadow-sm mt-4">
+                            <div className="flex flex-col items-center justify-center gap-4">
+                                <div className="w-8 h-8 border-4 border-indigo-100 border-t-primary rounded-full animate-spin"></div>
+                                <span className="text-slate-500 text-sm font-bold tracking-wide">Loading Questions...</span>
+                            </div>
                         </div>
-                    </div>
-                ) : questions.length === 0 ? (
-                    <div className="py-20 flex flex-col items-center justify-center gap-4 bg-white rounded-3xl border border-dashed border-slate-300 mt-4">
-                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
-                            <Layers size={40} className="text-slate-300" />
+                    ) : questions.length === 0 ? (
+                        <div className="py-20 flex flex-col items-center justify-center gap-4 bg-white rounded-3xl border border-dashed border-slate-300 mt-4">
+                            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
+                                <Layers size={40} className="text-slate-300" />
+                            </div>
+                            <div className="text-center">
+                                <h3 className="text-xl font-black text-slate-700 tracking-tight">No elements discovered</h3>
+                                <p className="text-slate-500 text-sm mt-1 max-w-sm font-medium">We couldn't find any questions matching your active filters or search terms.</p>
+                            </div>
                         </div>
-                        <div className="text-center">
-                            <h3 className="text-xl font-black text-slate-700 tracking-tight">No elements discovered</h3>
-                            <p className="text-slate-500 text-sm mt-1 max-w-sm font-medium">We couldn't find any questions matching your active filters or search terms.</p>
+                    ) : (
+                        <div className="flex flex-col gap-0 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            {(viewMode === 'FAVORITES' ? questions.filter(q => savedIds.includes(q.id)) : questions).map((q, index) => (
+                                <QuestionListItem 
+                                    key={q.id}
+                                    q={q}
+                                    index={index + 1 + (currentPage - 1) * itemsPerPage}
+                                    isSelected={selectedIds.includes(q.id)}
+                                    onSelect={handleSelectItem}
+                                    onSave={handleSaveToggle}
+                                    isSaved={savedIds.includes(q.id)}
+                                    onView={handleViewQuestion}
+                                    onDelete={handleDelete}
+                                    onRevise={setReviseItem}
+                                    onReview={setReviewItem}
+                                    isSuperAdmin={isSuperAdmin}
+                                    hasPerm={hasPerm}
+                                    splitScreenMode={splitScreenMode}
+                                    isViewing={selectedQuestion?.id === q.id}
+                                />
+                            ))}
                         </div>
-                    </div>
-                ) : (
-                    <div className="flex flex-col gap-0 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                        {(viewMode === 'FAVORITES' ? questions.filter(q => savedIds.includes(q.id)) : questions).map((q, index) => (
-                            <QuestionListItem 
-                                key={q.id}
-                                q={q}
-                                index={index + 1 + (currentPage - 1) * itemsPerPage}
-                                isSelected={selectedIds.includes(q.id)}
-                                onSelect={handleSelectItem}
-                                onSave={handleSaveToggle}
-                                isSaved={savedIds.includes(q.id)}
-                                onView={handleViewQuestion}
-                                onDelete={handleDelete}
-                                onRevise={setReviseItem}
-                                onReview={setReviewItem}
-                                isSuperAdmin={isSuperAdmin}
-                                hasPerm={hasPerm}
-                            />
-                        ))}
+                    )}
+                </div>
+
+                {/* Split Screen Preview Side */}
+                {splitScreenMode && (
+                    <div className="w-full md:w-1/2 hidden md:flex flex-col bg-slate-900 border border-slate-800 rounded-2xl shadow-inner overflow-hidden h-full relative" style={{ backgroundImage: 'radial-gradient(#334155 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
+                        {selectedQuestion ? (
+                            <>
+                                <div className="bg-slate-900/90 backdrop-blur-sm m-4 rounded-xl shadow-lg border border-slate-700/60 overflow-hidden flex flex-col flex-1 relative">
+                                    <QuestionPreviewContent selectedQuestion={selectedQuestion} isDark={true} />
+                                </div>
+                                <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.5)] z-10">
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={() => {
+                                                const currentIndex = questions.findIndex(q => q.id === selectedQuestion.id);
+                                                if (currentIndex > 0) handleViewQuestion(questions[currentIndex - 1]);
+                                            }}
+                                            className="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-black tracking-wide hover:bg-slate-700 hover:text-white transition-colors shadow-sm uppercase"
+                                        >
+                                            Prev
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                const currentIndex = questions.findIndex(q => q.id === selectedQuestion.id);
+                                                if (currentIndex < questions.length - 1) handleViewQuestion(questions[currentIndex + 1]);
+                                            }}
+                                            className="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-black tracking-wide hover:bg-slate-700 hover:text-white transition-colors shadow-sm uppercase"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {hasPerm && hasPerm('EDIT') && (
+                                            <button 
+                                                onClick={() => navigate(`/questions/edit/${selectedQuestion.id}`)}
+                                                className="flex items-center justify-center w-9 h-9 bg-slate-800 border-2 border-slate-700 text-slate-400 hover:text-blue-400 hover:border-blue-500 rounded-lg transition-colors"
+                                                title="Edit"
+                                            >
+                                                <Edit size={15} />
+                                            </button>
+                                        )}
+                                        {isSuperAdmin && (
+                                            <button 
+                                                onClick={async () => {
+                                                    const currentIndex = questions.findIndex(q => q.id === selectedQuestion.id);
+                                                    await handleDelete(selectedQuestion.id);
+                                                    if (currentIndex >= 0 && currentIndex < questions.length - 1) {
+                                                        handleViewQuestion(questions[currentIndex + 1]);
+                                                    } else {
+                                                        setSelectedQuestion(null);
+                                                    }
+                                                }}
+                                                className="flex items-center justify-center w-9 h-9 bg-slate-800 border-2 border-slate-700 text-slate-400 hover:text-rose-400 hover:border-rose-500 hover:bg-rose-900/30 rounded-lg transition-colors"
+                                                title="Delete"
+                                            >
+                                                <Trash2 size={15} />
+                                            </button>
+                                        )}
+                                        <button 
+                                            onClick={() => handleQuickAction(selectedQuestion.id, 'REJECTED')}
+                                            className="flex items-center gap-2 px-4 py-2 bg-slate-800 border-2 border-rose-500/30 text-rose-400 hover:bg-rose-500/10 hover:border-rose-500 rounded-lg text-xs font-black transition-colors uppercase tracking-wider"
+                                        >
+                                            <ThumbsDown size={14} strokeWidth={3} /> Reject
+                                        </button>
+                                        <button 
+                                            onClick={() => handleQuickAction(selectedQuestion.id, 'APPROVED')}
+                                            className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-400 rounded-lg text-xs font-black transition-all shadow-md shadow-emerald-900/50 uppercase tracking-wider transform hover:scale-[1.02] active:scale-[0.98] border border-emerald-500/50"
+                                        >
+                                            <ThumbsUp size={14} strokeWidth={3} /> Approve
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-8 text-center m-4 bg-slate-800/50 backdrop-blur-sm rounded-xl border border-dashed border-slate-700">
+                                <GitCompare size={48} className="mb-4 text-slate-600" />
+                                <h3 className="text-lg font-bold text-slate-300 mb-2">Review Mode Active</h3>
+                                <p className="text-sm">Click "View" on any question from the list to preview it here side-by-side.</p>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -924,7 +1191,7 @@ const QuestionList = () => {
                 </div>
             </div>
 
-            {selectedQuestion && (
+            {selectedQuestion && !splitScreenMode && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                         <div className="flex justify-between items-center p-6 border-b border-slate-100">

@@ -28,4 +28,8 @@ public interface CurriculumDocumentChunkRepository extends JpaRepository<Curricu
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Modifying
     void deleteByDocumentId(UUID documentId);
+    
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying
+    void deleteBySourceBookIndexId(UUID sourceBookIndexId);
 }

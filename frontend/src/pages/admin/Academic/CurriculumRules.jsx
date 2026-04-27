@@ -259,10 +259,10 @@ const CurriculumRules = () => {
     const generateDefaultMockSchema = (subName, className, docs = []) => {
         // Build a document-type-aware default schema
         const docTypes = docs.map(d => d.docType);
-        const schema = [];
+        const scraping_rules = [];
 
         if (docTypes.includes('SAMPLE_PAPER') || docTypes.includes('QUESTION_GUIDELINE') || docs.length === 0) {
-            schema.push({
+            scraping_rules.push({
                 questionType: 'MULTIPLE_CHOICE',
                 questionText: '(AI will extract real questions from the PDFs)',
                 options: ['Option A', 'Option B', 'Option C', 'Option D'],
@@ -275,7 +275,7 @@ const CurriculumRules = () => {
                 bloomLevel: 'REMEMBERING',
                 difficulty: 'EASY'
             });
-            schema.push({
+            scraping_rules.push({
                 questionType: 'SHORT_ANSWER',
                 questionText: '(AI will detect short answer patterns from the PDFs)',
                 options: [],
@@ -288,7 +288,7 @@ const CurriculumRules = () => {
                 bloomLevel: 'UNDERSTANDING',
                 difficulty: 'MEDIUM'
             });
-            schema.push({
+            scraping_rules.push({
                 questionType: 'CREATIVE',
                 questionText: '(AI will map creative/structured question patterns)',
                 options: [],
@@ -304,7 +304,7 @@ const CurriculumRules = () => {
         }
 
         if (docTypes.includes('SYLLABUS') || docTypes.includes('CURRICULUM')) {
-            schema.push({
+            scraping_rules.push({
                 questionType: 'ESSAY',
                 questionText: '(Syllabus-based essay question pattern)',
                 options: [],
@@ -319,8 +319,8 @@ const CurriculumRules = () => {
             });
         }
 
-        if (schema.length === 0) {
-            schema.push({
+        if (scraping_rules.length === 0) {
+            scraping_rules.push({
                 questionType: 'MULTIPLE_CHOICE',
                 questionText: 'Click "🤖 AI Generate" to analyze documents and build schema',
                 options: [],
@@ -330,6 +330,35 @@ const CurriculumRules = () => {
                 subjectName: subName
             });
         }
+
+        const schema = {
+            subject: subName,
+            scraping_rules: scraping_rules,
+            editor_config: {
+                allowed_blocks: ["MCQ", "CQ", "SHORT", "EQUATION", "DIAGRAM"],
+                toolbar_features: ["math_formula", "draw_canvas", "table", "image_upload"],
+                validation_rules: {
+                    CQ_TOTAL_MARKS: 10,
+                    MCQ_TOTAL_MARKS: 1,
+                    CQ_MAX_SUBPARTS: 4
+                }
+            },
+            generation_blueprint: {
+                mandatory_sections: [
+                    { name: "বহুনির্বাচনি প্রশ্ন (MCQ)", type: "MCQ", target_ratio: "30%" },
+                    { name: "সৃজনশীল প্রশ্ন (CQ)", type: "CQ", target_ratio: "70%" }
+                ],
+                bloom_target: {
+                    KNOWLEDGE: 30,
+                    COMPREHENSION: 30,
+                    APPLICATION: 20,
+                    HIGHER_ORDER: 20
+                },
+                custom_prompts: {
+                    generation: "Select target documents to let AI auto-configure this section."
+                }
+            }
+        };
 
         return JSON.stringify(schema, null, 4);
     };

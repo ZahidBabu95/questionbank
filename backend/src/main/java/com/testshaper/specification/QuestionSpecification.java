@@ -17,6 +17,7 @@ public class QuestionSpecification {
             String filterStatus,
             String filterType,
             String searchQuery,
+            String filterLanguage,
             String selectedLevelId,
             String selectedStreamId,
             String selectedClassId,
@@ -69,6 +70,11 @@ public class QuestionSpecification {
                 try {
                     predicates.add(cb.equal(root.get("type"), Question.QuestionType.valueOf(filterType.toUpperCase())));
                 } catch (Exception e) {}
+            }
+
+            // Language filter
+            if (StringUtils.hasText(filterLanguage) && !"ALL".equalsIgnoreCase(filterLanguage)) {
+                predicates.add(cb.equal(root.get("language"), filterLanguage));
             }
 
             // Search query

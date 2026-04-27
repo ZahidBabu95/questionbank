@@ -217,7 +217,7 @@ const ReorderPagesModal = ({ pages, bookId, onClose, onApplied }) => {
 };
 
 /* ═══════════════════ Topic Extract Config Modal ═══════════════════ */
-const TopicExtractConfigModal = ({ indices, pages, onClose, onStartAll, onStartSingle }) => {
+const TopicExtractConfigModal = ({ indices, pages, onClose, onStartAll, onStartSingle, onPreviewTopic }) => {
     const [mode, setMode] = useState('ALL'); // 'ALL' or 'SINGLE'
     const [selectedIndexIds, setSelectedIndexIds] = useState([]);
 
@@ -294,7 +294,16 @@ const TopicExtractConfigModal = ({ indices, pages, onClose, onStartAll, onStartS
                                             )}
                                             <span className={`font-bold text-sm ${selectedIndexIds.includes(idx.id) ? 'text-teal-800' : 'text-slate-700'}`}>{i+1}. {idx.indexName}</span>
                                         </div>
-                                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{indexPages.length} Golden Pages</span>
+                                        <div className="flex items-center gap-2">
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); onPreviewTopic(idx); }}
+                                                className="text-[10px] flex items-center gap-1 bg-white border border-teal-200 text-teal-600 hover:bg-teal-50 px-2 py-0.5 rounded-full transition-colors"
+                                                title="Preview Topics & Chunks"
+                                            >
+                                                <Bot size={12} /> Preview Topics
+                                            </button>
+                                            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{indexPages.length} Golden Pages</span>
+                                        </div>
                                     </div>
                                     
                                     {indexPages.length > 0 ? (
@@ -352,6 +361,107 @@ const TopicExtractConfigModal = ({ indices, pages, onClose, onStartAll, onStartS
 };
 
 
+/* ═══════════════════ Preview Topics Modal ═══════════════════ */
+const PreviewTopicsModal = ({ indexId, indexName, onClose }) => {
+    const [loading, setLoading] = useState(true);
+    const [topics, setTopics] = useState([]);
+    const [error, setError] = useState(null);
+    const [expandedTopicId, setExpandedTopicId] = useState(null);
+
+    useEffect(() => {
+        const fetchTopics = async () => {
+            try {
+                const res = await axios.get(`/v1/knowledge-hub/indexes/${indexId}/topics-preview`);
+                setTopics(res.data);
+            } catch (err) {
+                setError(err.response?.data?.message || err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchTopics();
+    }, [indexId]);
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+                <div className="p-4 bg-teal-50 border-b border-teal-100 flex items-center justify-between shrink-0">
+                    <div>
+                        <h2 className="text-lg font-bold text-teal-800 flex items-center gap-2">
+                            <Bot className="w-5 h-5" /> AI Extracted Topics & Chunks Preview
+                        </h2>
+                        <p className="text-xs text-teal-600 mt-1">
+                            Chapter: <span className="font-bold">{indexName}</span>
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="p-2 text-teal-400 hover:bg-teal-100 rounded-lg transition-colors">
+                        <X className="w-5 h-5"/>
+                    </button>
+                </div>
+                
+                <div className="p-5 flex-1 overflow-y-auto bg-slate-50">
+                    {loading ? (
+                        <div className="flex justify-center items-center h-40">
+                            <Loader2 className="w-8 h-8 text-teal-500 animate-spin" />
+                        </div>
+                    ) : error ? (
+                        <div className="p-4 bg-red-50 text-red-600 rounded-lg">{error}</div>
+                    ) : topics.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+                            <Layers className="w-12 h-12 mb-3 opacity-20" />
+                            <p>No topics or chunks found. Did you sync this chapter?</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {topics.map(topic => (
+                                <div key={topic.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <div 
+                                        className="p-4 bg-slate-50 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors"
+                                        onClick={() => setExpandedTopicId(expandedTopicId === topic.id ? null : topic.id)}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-teal-100 text-teal-700 p-2 rounded-lg">
+                                                <Tag size={16} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-slate-800">{topic.name}</h3>
+                                                <p className="text-xs text-slate-500">{topic.chunkCount} Vector Chunks</p>
+                                            </div>
+                                        </div>
+                                        {expandedTopicId === topic.id ? <ChevronDown size={20} className="text-slate-400" /> : <ChevronRight size={20} className="text-slate-400" />}
+                                    </div>
+                                    
+                                    {expandedTopicId === topic.id && (
+                                        <div className="p-4 border-t border-slate-200 space-y-3 bg-slate-50/50">
+                                            {topic.chunks.length === 0 ? (
+                                                <p className="text-sm text-slate-400 italic">No chunks mapped to this topic.</p>
+                                            ) : (
+                                                topic.chunks.map((chunk, idx) => (
+                                                    <div key={chunk.id} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm relative">
+                                                        <div className="absolute top-2 right-2 flex gap-2">
+                                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-mono">Page {chunk.pageNumber}</span>
+                                                            <span className="text-[10px] bg-indigo-50 text-indigo-500 px-2 py-0.5 rounded-full font-mono">{chunk.tokenCount} Tokens</span>
+                                                        </div>
+                                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Chunk #{idx + 1}</span>
+                                                        <div className="text-sm text-slate-700 whitespace-pre-wrap font-mono leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100 max-h-60 overflow-y-auto">
+                                                            {chunk.chunkText}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 /* ═══════════════════ Question Engine Config Modal ═══════════════════ */
 const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookType, pages, indices, onClose, onStart }) => {
     const [activeTab, setActiveTab] = useState('config'); // 'config' | 'schema'
@@ -367,7 +477,10 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
     
     // Target Question Types
     const [selectedQuestionTypes, setSelectedQuestionTypes] = useState(['MULTIPLE_CHOICE', 'CREATIVE', 'SHORT_ANSWER']);
+    const [allowedQuestionTypes, setAllowedQuestionTypes] = useState(['MULTIPLE_CHOICE', 'CREATIVE', 'SHORT_ANSWER']);
+    
     const toggleQuestionType = (type) => {
+        if (!allowedQuestionTypes.includes(type)) return;
         setSelectedQuestionTypes(prev => 
             prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
         );
@@ -379,6 +492,56 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
     const [isSavingSchema, setIsSavingSchema] = useState(false);
     const [loadingSchemas, setLoadingSchemas] = useState(false);
     const [schemas, setSchemas] = useState([]);
+
+    // Automatically enforce curriculum question types when schema loads
+    useEffect(() => {
+        if (!schemaContent) {
+            setAllowedQuestionTypes(['MULTIPLE_CHOICE', 'CREATIVE', 'SHORT_ANSWER']);
+            return;
+        }
+        try {
+            const schemaObj = JSON.parse(schemaContent);
+            let allowed = new Set();
+
+            if (Array.isArray(schemaObj)) {
+                schemaObj.forEach(r => {
+                    if (r.questionType) allowed.add(r.questionType);
+                });
+            } else {
+                if (schemaObj.editor_config && schemaObj.editor_config.allowed_blocks) {
+                    schemaObj.editor_config.allowed_blocks.forEach(t => {
+                        if (t === 'MCQ') allowed.add('MULTIPLE_CHOICE');
+                        if (t === 'CQ') allowed.add('CREATIVE');
+                        if (t === 'SHORT') allowed.add('SHORT_ANSWER');
+                    });
+                } else if (schemaObj.scraping_rules) {
+                    schemaObj.scraping_rules.forEach(r => {
+                        if (r.questionType) allowed.add(r.questionType);
+                    });
+                }
+                
+                // Fallback to generation_blueprint
+                if (allowed.size === 0 && schemaObj.generation_blueprint && schemaObj.generation_blueprint.mandatory_sections) {
+                     schemaObj.generation_blueprint.mandatory_sections.forEach(sec => {
+                         if (sec.type === 'MCQ') allowed.add('MULTIPLE_CHOICE');
+                         if (sec.type === 'CQ') allowed.add('CREATIVE');
+                         if (sec.type === 'SHORT') allowed.add('SHORT_ANSWER');
+                     });
+                }
+            }
+
+            if (allowed.size > 0) {
+                const allowedArr = Array.from(allowed);
+                setAllowedQuestionTypes(allowedArr);
+                // Auto-select only the allowed ones
+                setSelectedQuestionTypes(prev => prev.filter(t => allowedArr.includes(t)));
+            } else {
+                setAllowedQuestionTypes(['MULTIPLE_CHOICE', 'CREATIVE', 'SHORT_ANSWER']);
+            }
+        } catch (e) {
+            console.error("Failed to parse schema for question types", e);
+        }
+    }, [schemaContent]);
 
     useEffect(() => {
         const fetchSchemas = async () => {
@@ -539,20 +702,26 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
                                             { id: 'MULTIPLE_CHOICE', label: 'MCQ (বহুনির্বাচনি)', desc: 'Generate 4-option multiple choice questions' },
                                             { id: 'CREATIVE', label: 'CQ (সৃজনশীল প্রশ্ন)', desc: 'Generate Stimulus and 4 sub-questions (ক,খ,গ,ঘ)' },
                                             { id: 'SHORT_ANSWER', label: 'Short Answer (সংক্ষিপ্ত)', desc: 'Generate 1-2 sentence direct questions' }
-                                        ].map(type => (
-                                            <label key={type.id} className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${selectedQuestionTypes.includes(type.id) ? 'bg-pink-50/50 border-pink-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                        ].map(type => {
+                                            const isAllowed = allowedQuestionTypes.includes(type.id);
+                                            return (
+                                            <label key={type.id} className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${!isAllowed ? 'opacity-60 cursor-not-allowed bg-slate-50 border-slate-200' : selectedQuestionTypes.includes(type.id) ? 'bg-pink-50/50 border-pink-200 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
                                                 <input 
                                                     type="checkbox" 
+                                                    disabled={!isAllowed}
                                                     checked={selectedQuestionTypes.includes(type.id)}
                                                     onChange={() => toggleQuestionType(type.id)}
-                                                    className="mt-0.5 w-4 h-4 text-pink-500 rounded border-slate-300 focus:ring-pink-500"
+                                                    className="mt-0.5 w-4 h-4 text-pink-500 rounded border-slate-300 focus:ring-pink-500 disabled:opacity-50"
                                                 />
                                                 <div>
-                                                    <p className={`text-sm font-bold ${selectedQuestionTypes.includes(type.id) ? 'text-pink-900' : 'text-slate-700'}`}>{type.label}</p>
+                                                    <p className={`text-sm font-bold flex items-center flex-wrap gap-2 ${!isAllowed ? 'text-slate-500' : selectedQuestionTypes.includes(type.id) ? 'text-pink-900' : 'text-slate-700'}`}>
+                                                        {type.label}
+                                                        {!isAllowed && <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Restricted by Curriculum</span>}
+                                                    </p>
                                                     <p className="text-[10px] text-slate-500 mt-0.5">{type.desc}</p>
                                                 </div>
                                             </label>
-                                        ))}
+                                        )})}
                                     </div>
                                 </div>
                                 
@@ -709,6 +878,75 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
     );
 };
 
+/* ═══════════════════ Page Thumbnail (Optimized) ═══════════════════ */
+const PageThumbnail = React.memo(({ page, isSelected, isCover, pageFlag, isOpenMenu, menuCoords, onToggleMenu, onFlag, onDeletePage, onClick }) => {
+    return (
+        <div onClick={() => onClick(page)}
+            className={`shrink-0 w-[65px] h-[85px] rounded-lg cursor-pointer transition-all duration-200 ease-out origin-bottom border-2 overflow-hidden relative group 
+            ${isSelected ? 'border-indigo-600 shadow-xl scale-[1.3] z-50 -translate-y-2' : 'border-transparent hover:border-slate-300 hover:scale-[1.3] hover:z-50 hover:-translate-y-2'}`}>
+            {page.imageUrl.toLowerCase().endsWith('.pdf') ? (
+                <div className="w-full h-full bg-slate-200 flex items-center justify-center text-slate-400"><Layers className="w-6 h-6" /></div>
+            ) : (
+                <img src={page.imageUrl} alt={`Page ${page.sourcePageNo}`} loading="lazy" className="w-full h-full object-cover bg-slate-100" />
+            )}
+            <div className="absolute inset-x-0 bottom-0 bg-black/60 text-white text-[9px] font-bold text-center py-0.5">P {page.sourcePageNo}</div>
+
+            {page.isGolden || page.extractionStatus === 'PROOFREAD' ? (
+                <div className="absolute top-1 right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center text-white shadow-sm ring-1 ring-white z-10" title="Golden">
+                    <Star className="w-2.5 h-2.5" fill="white" />
+                </div>
+            ) : page.extractionStatus === 'EXTRACTED' ? (
+                <div className="absolute top-1 right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-sm ring-1 ring-white z-10">
+                    <CheckCircle className="w-3 h-3" />
+                </div>
+            ) : (
+                <div className="absolute top-1 right-1 w-4 h-4 bg-amber-300 rounded-full flex items-center justify-center text-white shadow-sm ring-1 ring-white z-10">
+                    <Clock className="w-3 h-3" />
+                </div>
+            )}
+
+            {page.sourceBookIndexId && (
+                <div className="absolute top-1 left-1 w-4 h-4 bg-teal-600 rounded-full flex items-center justify-center text-white shadow-sm ring-1 ring-white z-10" title="Chapter assigned">
+                    <Tag className="w-2.5 h-2.5" />
+                </div>
+            )}
+
+            <button onClick={(e) => onToggleMenu(e, page.id)} title="Options"
+                className={`absolute bottom-5 left-1/2 -translate-x-1/2 w-5 h-5 bg-slate-900/90 rounded border border-slate-700/50 flex items-center justify-center text-white transition-opacity hover:bg-slate-800 z-20 shadow-sm ${isOpenMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                <MoreVertical size={12} />
+            </button>
+
+            {isOpenMenu && createPortal(
+                <div onMouseLeave={() => onToggleMenu({currentTarget: {getBoundingClientRect: ()=>({})}, stopPropagation:()=>{}}, page.id)} className="fixed bg-white rounded-xl shadow-2xl border border-slate-200 z-[100] py-1.5 w-40 overflow-hidden" style={{ left: menuCoords.x, top: menuCoords.y, transform: 'translate(-50%, 0)' }}>
+                    <button onClick={(e) => onFlag(e, page.id, 'isCover')} className="w-full px-3 py-2 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-between">
+                        <span className="flex items-center gap-2"><ImageIcon size={12} className="text-indigo-500"/> Cover Art</span>
+                        {isCover && <CheckCircle size={12} className="text-indigo-600" />}
+                    </button>
+                    <button onClick={(e) => onFlag(e, page.id, 'isPubInfo')} className="w-full px-3 py-2 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-between">
+                        <span className="flex items-center gap-2"><Info size={12} className="text-amber-500"/> Publication Info</span>
+                        {pageFlag?.isPubInfo && <CheckCircle size={12} className="text-amber-600" />}
+                    </button>
+                    <button onClick={(e) => onFlag(e, page.id, 'isTOC')} className="w-full px-3 py-2 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-between">
+                        <span className="flex items-center gap-2"><Bookmark size={12} className="text-teal-500"/> Table of Contents</span>
+                        {pageFlag?.isTOC && <CheckCircle size={12} className="text-teal-600" />}
+                    </button>
+                    <div className="border-t border-slate-100 my-1 w-full" />
+                    <button onClick={(e) => { onToggleMenu({stopPropagation:()=>{}}, page.id); onDeletePage(e, page.id); }} className="w-full px-3 py-2 text-left text-[11px] font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2">
+                        <Trash2 size={12} /> Delete Page
+                    </button>
+                </div>,
+                document.body
+            )}
+
+            <div className="absolute top-6 left-1 flex flex-col gap-0.5 z-10">
+                {isCover && <div className="w-3.5 h-3.5 bg-indigo-500 rounded flex items-center justify-center text-white shadow-sm ring-1 ring-white" title="Cover Art"><ImageIcon size={8}/></div>}
+                {pageFlag?.isPubInfo && <div className="w-3.5 h-3.5 bg-amber-500 rounded flex items-center justify-center text-white shadow-sm ring-1 ring-white" title="Publication Info"><Info size={8}/></div>}
+                {pageFlag?.isTOC && <div className="w-3.5 h-3.5 bg-teal-500 rounded flex items-center justify-center text-white shadow-sm ring-1 ring-white" title="TOC"><Bookmark size={8}/></div>}
+            </div>
+        </div>
+    );
+});
+
 /* ═══════════════════ Main Component ═══════════════════ */
 const ProofreadingWorkspace = () => {
     const { bookId } = useParams();
@@ -748,6 +986,7 @@ const ProofreadingWorkspace = () => {
     // AI Question Gen Modal State
     const [isQuestionConfigModalOpen, setIsQuestionConfigModalOpen] = useState(false);
     const [isTopicSyncModalOpen, setIsTopicSyncModalOpen] = useState(false);
+    const [previewTopicIndex, setPreviewTopicIndex] = useState(null);
 
     const handleSaveImageEdit = async (editedImageObject) => {
         setIsSavingImageEdit(true);
@@ -961,19 +1200,26 @@ const ProofreadingWorkspace = () => {
     const [openMenuId, setOpenMenuId] = useState(null);
     const [menuCoords, setMenuCoords] = useState({ x: 0, y: 0 });
 
-    const toggleMenu = (e, id) => {
+    const toggleMenu = React.useCallback((e, id) => {
         e.stopPropagation();
-        if (openMenuId === id) {
-            setOpenMenuId(null);
-        } else {
-            const rect = e.currentTarget.getBoundingClientRect();
-            setMenuCoords({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
-            setOpenMenuId(id);
-        }
-    };
+        setOpenMenuId(prev => {
+            if (prev === id) return null;
+            if (e.currentTarget?.getBoundingClientRect) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setMenuCoords({ x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+            }
+            return id;
+        });
+    }, []);
 
-    const handleFlag = async (e, id, type) => {
+    const latestState = useRef({ pages, bookDetails, pageFlags });
+    useEffect(() => {
+        latestState.current = { pages, bookDetails, pageFlags };
+    }, [pages, bookDetails, pageFlags]);
+
+    const handleFlag = React.useCallback(async (e, id, type) => {
         e.stopPropagation();
+        const { pages, bookDetails, pageFlags } = latestState.current;
         
         if (type === 'isCover') {
             const page = pages.find(p => p.id === id);
@@ -993,7 +1239,6 @@ const ProofreadingWorkspace = () => {
             setPageFlags(prev => ({ ...prev, [id]: { ...prev[id], [type]: nextValue } }));
             
             try {
-                // Determine the payload to patch based on toggle type
                 const payload = {};
                 if (type === 'isPubInfo') {
                     payload.isPubInfo = nextValue;
@@ -1005,12 +1250,49 @@ const ProofreadingWorkspace = () => {
                 await axios.patch(`/v1/knowledge-hub/source-books/${bookId}/pages/${id}/flags`, payload);
             } catch (err) {
                 console.error("Failed to save flag to backend", err);
-                // Revert state on failure
                 setPageFlags(prev => ({ ...prev, [id]: { ...prev[id], [type]: !nextValue } }));
             }
         }
         setOpenMenuId(null);
-    };
+    }, [bookId]);
+
+    const handleDeletePage = React.useCallback(async (e, pageId) => {
+        e.stopPropagation();
+        if (!window.confirm('Are you sure you want to delete this page?')) return;
+        try {
+            await axios.delete(`/v1/knowledge-hub/source-books/${bookId}/pages/${pageId}`);
+            setPages(prev => prev.filter(p => p.id !== pageId));
+            setSelectedPage(prev => prev?.id === pageId ? null : prev);
+        } catch (err) {
+            alert('Failed to delete page: ' + (err.response?.data?.error || err.message));
+        }
+    }, [bookId]);
+
+    const handlePageClick = React.useCallback((p) => {
+        setSelectedPage(p);
+        
+        let draft = p.goldenMarkdown || p.extractedMarkdown || '';
+        
+        // TRUNCATE if it's absurdly large to prevent browser freeze!
+        if (draft && draft.length > 50000) {
+            console.warn('Draft is too large, truncating to prevent freeze!');
+            draft = draft.substring(0, 50000) + '\n\n...[TRUNCATED due to excessive length]';
+        }
+        
+        setGoldenDraft(draft);
+        setIsEditingGolden(true);
+        setImageZoom(1);
+    }, []);
+
+    const vectorizedIndexIds = useMemo(() => {
+        const ids = new Set();
+        pages.forEach(p => {
+            if (p.extractionStatus === 'GOLDEN_VECTORIZED' && p.sourceBookIndexId) {
+                ids.add(p.sourceBookIndexId);
+            }
+        });
+        return ids;
+    }, [pages]);
 
     const fetchInitialData = async () => {
         setLoading(true);
@@ -1095,8 +1377,14 @@ const ProofreadingWorkspace = () => {
             setSelectedPage(updatedPage);
             setPages(prev => prev.map(p => p.id === selectedPage.id ? updatedPage : p));
             
+            let safeMarkdown = markdown || '';
+            if (safeMarkdown.length > 50000) {
+                console.warn('Extracted draft is too large, truncating to prevent freeze!');
+                safeMarkdown = safeMarkdown.substring(0, 50000) + '\n\n...[TRUNCATED due to excessive length]';
+            }
+            
             // Instantly sync the new data to the GoldenEditor draft pipeline
-            setGoldenDraft(markdown || '');
+            setGoldenDraft(safeMarkdown);
             setIsEditingGolden(true);
         } catch (err) {
             alert('AI Extraction Failed: ' + (err.response?.data?.error || err.message));
@@ -1182,17 +1470,7 @@ const ProofreadingWorkspace = () => {
         }
     };
 
-    const handleDeletePage = async (e, pageId) => {
-        e.stopPropagation();
-        if (!window.confirm('Are you sure you want to delete this page?')) return;
-        try {
-            await axios.delete(`/v1/knowledge-hub/source-books/${bookId}/pages/${pageId}`);
-            setPages(prev => prev.filter(p => p.id !== pageId));
-            if (selectedPage?.id === pageId) setSelectedPage(null);
-        } catch (err) {
-            alert('Failed to delete page: ' + (err.response?.data?.error || err.message));
-        }
-    };
+    // handleDeletePage moved to stable useCallback above
 
     const [isCropperOpen, setIsCropperOpen] = useState(false);
     const [isCroppingImageUpload, setIsCroppingImageUpload] = useState(false);
@@ -1570,79 +1848,19 @@ const ProofreadingWorkspace = () => {
                                 </button>
                                 
                                 {pages.map((p) => (
-                                    <div key={p.id} onClick={() => { 
-                                            setSelectedPage(p); 
-                                            setGoldenDraft(p.goldenMarkdown || p.extractedMarkdown || '');
-                                            setIsEditingGolden(true); // Default to editing mode right away
-                                            setImageZoom(1); 
-                                        }}
-                                        className={`shrink-0 w-[65px] h-[85px] rounded-lg cursor-pointer transition-all duration-200 ease-out origin-bottom border-2 overflow-hidden relative group 
-                                        ${selectedPage?.id === p.id ? 'border-indigo-600 shadow-xl scale-[1.3] z-50 -translate-y-2' : 'border-transparent hover:border-slate-300 hover:scale-[1.3] hover:z-50 hover:-translate-y-2'}`}>
-                                        {p.imageUrl.toLowerCase().endsWith('.pdf') ? (
-                                            <div className="w-full h-full bg-slate-200 flex items-center justify-center text-slate-400"><Layers className="w-6 h-6" /></div>
-                                        ) : (
-                                            <img src={p.imageUrl} alt={`Page ${p.sourcePageNo}`} className="w-full h-full object-cover" />
-                                        )}
-                                        <div className="absolute inset-x-0 bottom-0 bg-black/60 text-white text-[9px] font-bold text-center py-0.5">P {p.sourcePageNo}</div>
-
-                                        {/* Status badge — priority: golden > extracted > pending */}
-                                        {p.isGolden || p.extractionStatus === 'PROOFREAD' ? (
-                                            <div className="absolute top-1 right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center text-white shadow-sm ring-1 ring-white z-10" title="Golden">
-                                                <Star className="w-2.5 h-2.5" fill="white" />
-                                            </div>
-                                        ) : p.extractionStatus === 'EXTRACTED' ? (
-                                            <div className="absolute top-1 right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-sm ring-1 ring-white z-10">
-                                                <CheckCircle className="w-3 h-3" />
-                                            </div>
-                                        ) : (
-                                            <div className="absolute top-1 right-1 w-4 h-4 bg-amber-300 rounded-full flex items-center justify-center text-white shadow-sm ring-1 ring-white z-10">
-                                                <Clock className="w-3 h-3" />
-                                            </div>
-                                        )}
-
-                                        {/* Chapter assigned badge */}
-                                        {p.sourceBookIndexId && (
-                                            <div className="absolute top-1 left-1 w-4 h-4 bg-teal-600 rounded-full flex items-center justify-center text-white shadow-sm ring-1 ring-white z-10" title="Chapter assigned">
-                                                <Tag className="w-2.5 h-2.5" />
-                                            </div>
-                                        )}
-
-                                        {/* Dropdown Menu Trigger */}
-                                        <button onClick={(e) => toggleMenu(e, p.id)} title="Options"
-                                            className={`absolute bottom-5 left-1/2 -translate-x-1/2 w-5 h-5 bg-slate-900/90 rounded border border-slate-700/50 flex items-center justify-center text-white transition-opacity hover:bg-slate-800 z-20 shadow-sm ${openMenuId === p.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                                            <MoreVertical size={12} />
-                                        </button>
-
-                                        {/* Dropdown Menu Portal */}
-                                        {openMenuId === p.id && createPortal(
-                                            <div onMouseLeave={() => setOpenMenuId(null)} className="fixed bg-white rounded-xl shadow-2xl border border-slate-200 z-[100] py-1.5 w-40 overflow-hidden" style={{ left: menuCoords.x, top: menuCoords.y, transform: 'translate(-50%, 0)' }}>
-                                                <button onClick={(e) => handleFlag(e, p.id, 'isCover')} className="w-full px-3 py-2 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-between">
-                                                    <span className="flex items-center gap-2"><ImageIcon size={12} className="text-indigo-500"/> Cover Art</span>
-                                                    {bookDetails?.coverImageUrl === p.imageUrl && <CheckCircle size={12} className="text-indigo-600" />}
-                                                </button>
-                                                <button onClick={(e) => handleFlag(e, p.id, 'isPubInfo')} className="w-full px-3 py-2 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-between">
-                                                    <span className="flex items-center gap-2"><Info size={12} className="text-amber-500"/> Publication Info</span>
-                                                    {pageFlags[p.id]?.isPubInfo && <CheckCircle size={12} className="text-amber-600" />}
-                                                </button>
-                                                <button onClick={(e) => handleFlag(e, p.id, 'isTOC')} className="w-full px-3 py-2 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center justify-between">
-                                                    <span className="flex items-center gap-2"><Bookmark size={12} className="text-teal-500"/> Table of Contents</span>
-                                                    {pageFlags[p.id]?.isTOC && <CheckCircle size={12} className="text-teal-600" />}
-                                                </button>
-                                                <div className="border-t border-slate-100 my-1 w-full" />
-                                                <button onClick={(e) => { setOpenMenuId(null); handleDeletePage(e, p.id); }} className="w-full px-3 py-2 text-left text-[11px] font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2">
-                                                    <Trash2 size={12} /> Delete Page
-                                                </button>
-                                            </div>,
-                                            document.body
-                                        )}
-
-                                        {/* Status Flags */}
-                                        <div className="absolute top-6 left-1 flex flex-col gap-0.5 z-10">
-                                           {bookDetails?.coverImageUrl === p.imageUrl && <div className="w-3.5 h-3.5 bg-indigo-500 rounded flex items-center justify-center text-white shadow-sm ring-1 ring-white" title="Cover Art"><ImageIcon size={8}/></div>}
-                                           {pageFlags[p.id]?.isPubInfo && <div className="w-3.5 h-3.5 bg-amber-500 rounded flex items-center justify-center text-white shadow-sm ring-1 ring-white" title="Publication Info"><Info size={8}/></div>}
-                                           {pageFlags[p.id]?.isTOC && <div className="w-3.5 h-3.5 bg-teal-500 rounded flex items-center justify-center text-white shadow-sm ring-1 ring-white" title="TOC"><Bookmark size={8}/></div>}
-                                        </div>
-                                    </div>
+                                    <PageThumbnail
+                                        key={p.id}
+                                        page={p}
+                                        isSelected={selectedPage?.id === p.id}
+                                        isCover={bookDetails?.coverImageUrl === p.imageUrl}
+                                        pageFlag={pageFlags[p.id]}
+                                        isOpenMenu={openMenuId === p.id}
+                                        menuCoords={menuCoords}
+                                        onToggleMenu={toggleMenu}
+                                        onFlag={handleFlag}
+                                        onDeletePage={handleDeletePage}
+                                        onClick={handlePageClick}
+                                    />
                                 ))}
                             </div>
 
@@ -1906,7 +2124,7 @@ const ProofreadingWorkspace = () => {
                                             ) : (
                                                 <div className="space-y-1.5">
                                                     {indices.map((idx, indexNumber) => {
-                                                        const isVectorized = pages.some(p => p.sourceBookIndexId === idx.id && p.extractionStatus === 'GOLDEN_VECTORIZED');
+                                                        const isVectorized = vectorizedIndexIds.has(idx.id);
                                                         return (
                                                         <div key={idx.id} className={`bg-white border text-sm rounded-lg shadow-sm group transition-all ${selectedPage?.sourceBookIndexId === idx.id ? 'border-teal-500 ring-2 ring-teal-400' : activeTreeBChapter === idx.id ? 'border-indigo-400 ring-1 ring-indigo-200' : 'border-slate-200 hover:border-slate-300'}`}>
                                                             <div className="flex items-center justify-between p-2 cursor-pointer transition-colors"
@@ -2144,7 +2362,19 @@ const ProofreadingWorkspace = () => {
                     pages={pages}
                     onClose={() => setIsTopicSyncModalOpen(false)}
                     onStartAll={handleExtractAllTopics}
-                    onStartSingle={handleExtractTopics}
+                    onStartSingle={(idx) => handleExtractAllTopics([idx])}
+                    onPreviewTopic={(idx) => {
+                        setIsTopicSyncModalOpen(false);
+                        setPreviewTopicIndex(idx);
+                    }}
+                />
+            )}
+
+            {previewTopicIndex && (
+                <PreviewTopicsModal
+                    indexId={previewTopicIndex.id}
+                    indexName={previewTopicIndex.indexName}
+                    onClose={() => setPreviewTopicIndex(null)}
                 />
             )}
         </div>

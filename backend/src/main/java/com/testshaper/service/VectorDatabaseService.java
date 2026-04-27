@@ -36,4 +36,12 @@ public interface VectorDatabaseService {
      * @param docId The ID of the CurriculumDocument
      */
     void deleteDocumentChunks(String docId);
+
+    /**
+     * Delete embedded chunks from the Vector Database using metadata filters.
+     * 
+     * @param filterMetadata The metadata map to filter by (e.g. {"chapterId": "xyz"})
+     * @param namespace The namespace to delete from (e.g. "book-123")
+     */
+    void deleteByMetadata(Map<String, Object> filterMetadata, String namespace);
 }

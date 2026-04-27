@@ -3,8 +3,8 @@
 
 ---
 
-## 📅 সর্বশেষ সেশন: 2026-04-22
-**অবস্থান:** Phase 3E: Automated Question Extraction UI/UX Update & Dynamic Engine Configuration ✅ সম্পন্ন
+## 📅 সর্বশেষ সেশন: 2026-04-24
+**অবস্থান:** Phase 3D: Live Server Pinecone Vector Sync Bug Fix & DB Schema Update ✅ সম্পন্ন
 
 ---
 
@@ -12,40 +12,37 @@
 
 ---
 
-### 🚀 Phase 3E: Dynamic Question Generation/Extraction Pipeline
+### 🚀 Phase 3D: Pinecone Vector Sync Bug Resolution (Live Server)
 
 | কাজ | ফাইল / সিস্টেম |
 |-----|------|
-| **Dynamic Configuration UI:** Proofreading Workspace-এ RAG Pipeline মডালে ৩-টি অত্যাধুনিক অপশন যুক্ত করা হয়েছে (Generate New, Extract Only, Hybrid) | `ProofreadingWorkspace.jsx` |
-| **Backend AI Prompt Instruction Adaptation:** User-কর্তৃক নির্বাচিত মোডের (Textbook, Guidebook, Hybrid/Both) উপর ভিত্তি করে Vertex AI/Gemini-এর Prompting behavior dynamically change করা, যাতে এআই কখনো ভুল করে থিওরি থেকে শুধু শুধু এক্সট্রাক্ট না করে বা গাইড থেকে নিজে নিজে প্রশ্ন না বানায়। | `KnowledgeHubServiceImpl.java` |
-| **Java Compilation Error Fix:** আগের সেশনে `cq-answers` HTML template-এর literal string-এ ভুলে কিছু broken Escape character (`\"`) যুক্ত হয়ে Spring Boot failure সৃষ্টি করেছিলো— সেটি ফিক্স করে Backend চালু করা হয়েছে। | `KnowledgeHubServiceImpl.java` |
+| **Production Properties Update:** লাইভ সার্ভারের `application-prod.properties` ফাইলে Pinecone-এর API Key, Host এবং Dimension মিসিং ছিল, যার কারণে সার্ভারে සাইলেন্টলি (Without Error) Vector Sync স্কিপ হয়ে যেত। সেগুলো যুক্ত করা হয়েছে। | `application-prod.properties` |
+| **MySQL Constraint Fix:** লাইভ সার্ভারে `curriculum_document_chunks` টেবিলের `document_id` কলামটি `NOT NULL` হিসেবে সেট করা ছিল। এর কারণে `TopicExtractorServiceImpl` ডাটা সেভ করার সময় `DataIntegrityViolationException` দিচ্ছিলো। MySQL Workbench ব্যবহার করে ভিজ্যুয়ালি এই কনস্ট্রেইন্ট ফিক্স করা হয়েছে (Allowed NULL)। | `Live Database` |
 
 **মূল অর্জন:**
-Knowledge Hub-এর RAG Pipeline এখন সম্পূর্ণ ডায়নামিক। সিস্টেম নিজে থেকেই `bookType` বুঝে নেবে যে এটি কি TextBook নাকি Guide/Question Bank। আপনি চাইলে UI থেকে Force করে Hybrid বা Mixed Mode সিলেক্ট করতে পারবেন যাতে AI একই সাথে পূর্বের প্রশ্ন স্ক্যান করে এবং থিওরি পড়ে নতুন প্রশ্ন বানায়।
+Knowledge Hub-এর Topic Extraction এখন লোকাল মেশিনের পাশাপাশি লাইভ সার্ভারেও ১০০% সঠিকভাবে কাজ করছে। AI দ্বারা এক্সট্রাক্ট করা টপিকগুলো এখন রিয়েল-টাইমে ডাটাবেজে এবং Pinecone Vector DB-তে সফলভাবে সেভ হচ্ছে।
 
 ---
 
 ## 🔧 সমস্ত পরিবর্তিত ফাইল (এই সেশন)
 
 ```
-frontend/
-  src/pages/admin/KnowledgeHub/ProofreadingWorkspace.jsx
-
 backend/
-  src/main/java/com/testshaper/service/impl/KnowledgeHubServiceImpl.java
+  src/main/resources/application-prod.properties
 ```
+*Live MySQL Database `curriculum_document_chunks` table schema altered.*
 
 ---
 
 ## 🎯 পরবর্তী কাজ
 
 ### কী করতে হবে:
-1. **Frontend UI Integration:** Knowledge Hub প্যানেলে Theme Analysis / Vector Sync progress indicator এবং AI জেনারেটেড Topic-গুলো এবং Chunk-গুলোর প্রিভিউ দেখার ব্যবস্থা করা।
+1. **Nexus Paper Engine (V2 Exam Editor) [Phase C]:** Legacy Exam Editor-কে সরিয়ে Tiptap-ভিত্তিক ডায়নামিক Nexus Editor এর কাজ শুরু করা। (Drag-and-Drop, Subject-Specific Toolbar, Canvas Modernization)।
 2. **Review Panel:** AI Review Drafts (Generated & Extracted Questions) প্যানেলটিকে আরও Advanced করা।
-3. **Phase 4 Preparation:** Teacher vs Student Agentic Workflows.
+3. **Frontend UI Integration:** Knowledge Hub প্যানেলে Theme Analysis / Vector Sync progress indicator এবং AI জেনারেটেড Topic-গুলোর প্রিভিউ দেখার ব্যবস্থা করা।
 
 ---
 
 ## 📞 পরের সেশনে প্রথম বার্তা
 
-> "সিস্টেমের RAG Pipeline-এর Dynamic Engine Configuration ও Backend Compilation Issue সফলভাবে ফিক্স করা হয়েছে। এখন এআই সম্পূর্ণ নিজে থেকে বইয়ের টাইপ বুঝে Hybrid, Textbook বা Guidebook অনুযায়ী কাজ করবে। আমরা এখন Frontend-এ Vector Sync Status বা Chatbot RAG Testing শুরু করতে পারি।"
+> "গত সেশনে আমরা লাইভ সার্ভারের Pinecone Vector Sync-এর Silent Failure এবং MySQL Database Constraint (document_id) ইস্যু সফলভাবে ফিক্স করেছি। এখন লাইভ সার্ভারে টপিক এক্সট্রাকশন এবং ভেক্টর সিংক ১০০% সঠিকভাবে কাজ করছে। আপনি কি এখন Nexus Paper Engine (V2 Exam Editor) এর কাজ শুরু করতে চান, নাকি Knowledge Hub-এর UI নিয়ে কাজ করবেন?"

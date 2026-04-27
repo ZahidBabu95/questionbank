@@ -37,6 +37,8 @@ const ResourceLibrary = () => {
     const [filterStream, setFilterStream] = useState('');
     const [filterClass, setFilterClass] = useState('');
     const [filterSubject, setFilterSubject] = useState('');
+    const [filterSyncPercent, setFilterSyncPercent] = useState('ALL');
+    const [filterExtractPercent, setFilterExtractPercent] = useState('ALL');
 
     // Modal Mapping Filters
     const [modalLevel, setModalLevel] = useState('');
@@ -77,7 +79,7 @@ const ResourceLibrary = () => {
     // Auto-reset pagination limit when any filter changes
     useEffect(() => {
         setDisplayLimit(12);
-    }, [searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject]);
+    }, [searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterExtractPercent]);
 
     const filteredBooks = useMemo(() => {
         return books.filter(b => {
@@ -85,6 +87,26 @@ const ResourceLibrary = () => {
                                  (b.authorName && b.authorName.toLowerCase().includes(searchQuery.toLowerCase())) ||
                                  (b.publisher && b.publisher.toLowerCase().includes(searchQuery.toLowerCase()));
             const matchesType = activeFilterType === 'ALL' || b.bookType === activeFilterType;
+            
+            const syncPercent = b.totalPages > 0 ? Math.round(((b.goldenPages || 0) / b.totalPages) * 100) : 0;
+            let matchesSyncPercent = true;
+            if (filterSyncPercent !== 'ALL') {
+                if (filterSyncPercent === '0-25') matchesSyncPercent = syncPercent >= 0 && syncPercent <= 25;
+                else if (filterSyncPercent === '26-50') matchesSyncPercent = syncPercent > 25 && syncPercent <= 50;
+                else if (filterSyncPercent === '51-75') matchesSyncPercent = syncPercent > 50 && syncPercent <= 75;
+                else if (filterSyncPercent === '76-99') matchesSyncPercent = syncPercent > 75 && syncPercent < 100;
+                else if (filterSyncPercent === '100') matchesSyncPercent = syncPercent === 100;
+            }
+
+            const extractPercent = b.totalPages > 0 ? Math.round(((b.extractedPages || 0) / b.totalPages) * 100) : 0;
+            let matchesExtractPercent = true;
+            if (filterExtractPercent !== 'ALL') {
+                if (filterExtractPercent === '0-25') matchesExtractPercent = extractPercent >= 0 && extractPercent <= 25;
+                else if (filterExtractPercent === '26-50') matchesExtractPercent = extractPercent > 25 && extractPercent <= 50;
+                else if (filterExtractPercent === '51-75') matchesExtractPercent = extractPercent > 50 && extractPercent <= 75;
+                else if (filterExtractPercent === '76-99') matchesExtractPercent = extractPercent > 75 && extractPercent < 100;
+                else if (filterExtractPercent === '100') matchesExtractPercent = extractPercent === 100;
+            }
             
             let matchesHierarchy = true;
             if (filterSubject) {
@@ -103,9 +125,9 @@ const ResourceLibrary = () => {
                 matchesHierarchy = validSubjects.includes(b.classSubjectId);
             }
 
-            return matchesSearch && matchesType && matchesHierarchy;
+            return matchesSearch && matchesType && matchesHierarchy && matchesSyncPercent && matchesExtractPercent;
         });
-    }, [books, searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, hierarchy]);
+    }, [books, searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterExtractPercent, hierarchy]);
 
     // Intersection Observer for Infinite Scrolling
     useEffect(() => {
@@ -349,7 +371,7 @@ const ResourceLibrary = () => {
                 {/* ═══ Professional Filters & Search ═══ */}
                 <div className="sticky top-0 z-30 bg-[#F8FAFC]/80 backdrop-blur-md py-4 space-y-4">
                     <div className="flex flex-col xl:flex-row gap-4">
-                        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                             <div className="relative">
                                 <span className="absolute -top-2 left-3 bg-[#F8FAFC] px-1 text-[10px] font-black text-indigo-500 uppercase z-10">Level</span>
                                 <select 
@@ -398,6 +420,36 @@ const ResourceLibrary = () => {
                                         const subjectName = hierarchy.subjects?.find(s => s.id === cs._subjectId)?.name || 'Unknown';
                                         return <option key={cs.id} value={cs.id}>{subjectName}</option>;
                                     })}
+                                </select>
+                            </div>
+                            <div className="relative">
+                                <span className="absolute -top-2 left-3 bg-[#F8FAFC] px-1 text-[10px] font-black text-indigo-500 uppercase z-10">Extraction</span>
+                                <select 
+                                    value={filterExtractPercent} 
+                                    onChange={e => setFilterExtractPercent(e.target.value)} 
+                                    className="w-full bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-2xl px-4 py-3 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                >
+                                    <option value="ALL">All Extracted</option>
+                                    <option value="0-25">0% - 25%</option>
+                                    <option value="26-50">26% - 50%</option>
+                                    <option value="51-75">51% - 75%</option>
+                                    <option value="76-99">76% - 99%</option>
+                                    <option value="100">100% Extracted</option>
+                                </select>
+                            </div>
+                            <div className="relative">
+                                <span className="absolute -top-2 left-3 bg-[#F8FAFC] px-1 text-[10px] font-black text-indigo-500 uppercase z-10">Golden Sync</span>
+                                <select 
+                                    value={filterSyncPercent} 
+                                    onChange={e => setFilterSyncPercent(e.target.value)} 
+                                    className="w-full bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-2xl px-4 py-3 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                >
+                                    <option value="ALL">All Synced</option>
+                                    <option value="0-25">0% - 25%</option>
+                                    <option value="26-50">26% - 50%</option>
+                                    <option value="51-75">51% - 75%</option>
+                                    <option value="76-99">76% - 99%</option>
+                                    <option value="100">100% Synced</option>
                                 </select>
                             </div>
                         </div>

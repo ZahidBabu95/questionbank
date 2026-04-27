@@ -1,6 +1,7 @@
 package com.testshaper.dto;
 
 import com.testshaper.entity.Exam;
+import com.testshaper.entity.ExamEditorMode;
 import com.testshaper.entity.Question;
 import lombok.Data;
 
@@ -31,6 +32,11 @@ public class ExamDTO {
     private boolean aiGenerated;
     private String createdBy;
     private LocalDateTime createdAt;
+
+    // Nexus Engine fields
+    private ExamEditorMode editorMode;
+    private String rawContent;
+    private UUID templateId;
 
     // Academic info
     private String subjectName;

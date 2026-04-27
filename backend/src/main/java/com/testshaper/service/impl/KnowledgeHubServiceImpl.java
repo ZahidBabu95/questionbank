@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
+import java.util.Collections;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.web.client.RestTemplate;
@@ -18,9 +19,13 @@ import org.springframework.http.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Base64;
 import com.testshaper.service.AiBillingService;
+import com.testshaper.entity.KnowledgePage;
+import com.testshaper.entity.CurriculumDocumentChunk;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
@@ -51,8 +56,15 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     private final com.testshaper.repository.QuestionRepository questionRepository;
     private final com.testshaper.repository.QuestionSourceRepository questionSourceRepository;
     private final com.testshaper.repository.CurriculumDocumentChunkRepository curriculumDocumentChunkRepository;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = createRestTemplateWithTimeouts();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private RestTemplate createRestTemplateWithTimeouts() {
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(15000); // 15 seconds
+        factory.setReadTimeout(90000);    // 90 seconds (Gemini can be slow)
+        return new RestTemplate(factory);
+    }
 
     @Override
     @org.springframework.scheduling.annotation.Async
@@ -1102,6 +1114,51 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         sourceBookIndexRepository.delete(index);
     }
 
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public List<Map<String, Object>> getTopicsAndChunksByIndex(UUID indexId) {
+        com.testshaper.entity.SourceBookIndex index = sourceBookIndexRepository.findById(indexId)
+                .orElseThrow(() -> new RuntimeException("Index not found"));
+
+        if (index.getMappedChapter() == null) {
+            return Collections.emptyList();
+        }
+
+        List<com.testshaper.entity.Topic> topics = topicRepository.findByChapterId(index.getMappedChapter().getId());
+        
+        // Fetch all chunks for this index
+        List<com.testshaper.entity.CurriculumDocumentChunk> chunks = curriculumDocumentChunkRepository
+                .findBySourceBookIndexIdIn(Collections.singletonList(indexId), org.springframework.data.domain.Pageable.unpaged())
+                .getContent();
+
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        for (com.testshaper.entity.Topic topic : topics) {
+            Map<String, Object> topicMap = new java.util.HashMap<>();
+            topicMap.put("id", topic.getId());
+            topicMap.put("name", topic.getName());
+
+            List<Map<String, Object>> chunkList = chunks.stream()
+                    .filter(c -> c.getMappedTopic() != null && c.getMappedTopic().getId().equals(topic.getId()))
+                    .map(c -> {
+                        Map<String, Object> cMap = new java.util.HashMap<>();
+                        cMap.put("id", c.getId());
+                        cMap.put("chunkText", c.getChunkText());
+                        cMap.put("pageNumber", c.getPageNumber());
+                        cMap.put("tokenCount", c.getTokenCount());
+                        cMap.put("isVisionExtracted", c.getIsVisionExtracted());
+                        return cMap;
+                    })
+                    .collect(Collectors.toList());
+
+            topicMap.put("chunks", chunkList);
+            topicMap.put("chunkCount", chunkList.size());
+            result.add(topicMap);
+        }
+        
+        return result;
+    }
+
     private com.testshaper.dto.SourceBookIndexDto mapIndexToDto(com.testshaper.entity.SourceBookIndex entity) {
         com.testshaper.dto.SourceBookIndexDto dto = new com.testshaper.dto.SourceBookIndexDto();
         dto.setId(entity.getId());
@@ -1272,6 +1329,18 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     public com.testshaper.entity.AiBulkExtractionJob startAiExtractionQueue(UUID sourceBookId) {
         SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
             .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found"));
+
+        // Reset any FAILED pages to PENDING so they can be retried
+        java.util.List<com.testshaper.entity.KnowledgePage> failedPages = knowledgePageRepository.findBySourceBookIdAndExtractionStatusIn(
+            sourceBookId, 
+            java.util.List.of(com.testshaper.entity.KnowledgePage.ExtractionStatus.FAILED), 
+            org.springframework.data.domain.Pageable.unpaged()
+        ).getContent();
+        
+        for (com.testshaper.entity.KnowledgePage fp : failedPages) {
+            fp.setExtractionStatus(com.testshaper.entity.KnowledgePage.ExtractionStatus.PENDING);
+            knowledgePageRepository.save(fp);
+        }
 
         // Check if there is already a running or queued job for this book
         java.util.Optional<com.testshaper.entity.AiBulkExtractionJob> existingOpt = aiBulkExtractionJobRepository.findFirstBySourceBookIdOrderByCreatedAtDesc(sourceBookId);
@@ -1592,6 +1661,33 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             }
         }
         
+        String generationGuidelines = "";
+        try {
+            com.fasterxml.jackson.databind.JsonNode rootSchemaNode = objectMapper.readTree(ruleSchema);
+            if (rootSchemaNode.isObject() && rootSchemaNode.has("scraping_rules")) {
+                if (rootSchemaNode.has("generation_rules") && rootSchemaNode.get("generation_rules").isObject()) {
+                    com.fasterxml.jackson.databind.JsonNode genRules = rootSchemaNode.get("generation_rules");
+                    if (genRules.hasNonNull("guidelines")) {
+                        generationGuidelines = "8. **SPECIAL CURRICULUM GUIDELINES**: " + genRules.get("guidelines").asText() + "\n";
+                    }
+                    if (genRules.hasNonNull("language")) {
+                        String lang = genRules.get("language").asText();
+                        generationGuidelines += "9. **SCHEMA REQUESTED LANGUAGE**: As a fallback, if book version is not set, use " + lang + " language.\n";
+                    }
+                }
+                if (rootSchemaNode.has("generation_blueprint") && rootSchemaNode.get("generation_blueprint").isObject()) {
+                    com.fasterxml.jackson.databind.JsonNode blueprint = rootSchemaNode.get("generation_blueprint");
+                    if (blueprint.hasNonNull("bloom_target") && blueprint.get("bloom_target").isObject()) {
+                        generationGuidelines += "10. **BLOOM'S TAXONOMY TARGETS**: Distribute the questions across these cognitive levels based on the curriculum blueprint: " + blueprint.get("bloom_target").toString() + ".\n";
+                    }
+                }
+                com.fasterxml.jackson.databind.JsonNode scrapingRules = rootSchemaNode.get("scraping_rules");
+                ruleSchema = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(scrapingRules);
+            }
+        } catch (Exception e) {
+            // Ignored, schema might be the old flat array format
+        }
+
         // Always force inject the stimulus property if user forgot it in their DB rule
         if (ruleSchema != null && !ruleSchema.contains("\"stimulus\"")) {
             ruleSchema = ruleSchema.replaceFirst("\\{", "\\{\n    \"stimulus\": \"![alt](url) or contextual text. VERY IMPORTANT for images!\",");
@@ -1618,6 +1714,16 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         String requestedTypesStr = "";
         if (config != null && config.getTargetQuestionTypes() != null && !config.getTargetQuestionTypes().isEmpty()) {
             requestedTypesStr = "6. **TARGET QUESTION TYPES**: Your response is STRICTLY restricted to only these types: [" + String.join(", ", config.getTargetQuestionTypes()) + "]. Do NOT generate or extract any question types outside of this list.\n";
+            if (config.getTargetQuestionTypes().contains("MULTIPLE_CHOICE") || config.getTargetQuestionTypes().contains("MCQ")) {
+                requestedTypesStr += "6.1 **MULTIPLE CHOICE TYPES (CRITICAL)**: Include a mix of 'SIMPLE' MCQs, 'MULTIPLE_COMPLETION' (বহুপদী) MCQs, and 'SITUATION_SET' (অভিন্ন তথ্যভিত্তিক) MCQs.\n" +
+                                     "  - For MULTIPLE_COMPLETION, include a 'statements' array (e.g. [\"i. st 1\", \"ii. st 2\", \"iii. st 3\"]) and set 'mcqType' to 'MULTIPLE_COMPLETION'. Make 'options' combinations (e.g. 'i ও ii').\n" +
+                                     "  - For SITUATION_SET, group 2-3 questions sharing the EXACT SAME 'stimulus' text/image, and set 'mcqType' to 'SITUATION_SET'.\n";
+            }
+        }
+
+        String bookLanguageInstruction = "";
+        if (book != null && book.getLanguage() != null && !book.getLanguage().isBlank()) {
+            bookLanguageInstruction = "7. **LANGUAGE VERSION**: The source material is in [" + book.getLanguage() + "] version. You MUST generate or extract the questions exactly in [" + book.getLanguage() + "] language. If the version is English, output strictly in English. If Bangla, output strictly in Bangla. If Bilingual, follow the source text format.\n";
         }
 
         String prompt = "You are an expert curriculum question setter and data parser. Read the provided TEXT context below.\n" +
@@ -1629,6 +1735,8 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                         "4. **PRESERVE IMAGES (CRITICAL):** If the markdown text contains images `![alt](url)`, you MUST pair them with the appropriate question! Put the image markdown in the `stimulus` field or `questionText` field. Do NOT lose the image link!\n" +
                         "5. **STRIP NUMBERS:** Remove any serial numbers (e.g. '1. ', '১। ', 'Q:') from the beginning of `questionText`.\n" +
                         requestedTypesStr +
+                        bookLanguageInstruction +
+                        generationGuidelines +
                         "CRITICAL: You MUST strictly conform to the following JSON Schema array. Do not return any conversational text, ONLY a raw JSON array.\n\n" +
                         "TARGET JSON SCHEMA:\n" +
                         ruleSchema + "\n\n" +
@@ -1710,7 +1818,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
 
                         int savedCount = 0;
                         for (com.fasterxml.jackson.databind.JsonNode rootNode : questionsArray) {
-                            com.fasterxml.jackson.databind.JsonNode qNode = rootNode.has("question") ? rootNode.get("question") : rootNode;
+                            com.fasterxml.jackson.databind.JsonNode qNode = (rootNode.has("question") && rootNode.get("question").isObject()) ? rootNode.get("question") : rootNode;
 
                             com.testshaper.entity.Question q = new com.testshaper.entity.Question();
                             q.setTenantId(book.getTenantId());
@@ -1724,8 +1832,18 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                             q.setType(com.testshaper.entity.Question.QuestionType.MCQ);
                             if (qNode.hasNonNull("questionType") || qNode.hasNonNull("type")) {
                                 try {
-                                    String typeStr = qNode.hasNonNull("questionType") ? qNode.get("questionType").asText() : qNode.get("type").asText();
-                                    q.setType(com.testshaper.entity.Question.QuestionType.valueOf(typeStr.toUpperCase()));
+                                    String typeStr = qNode.hasNonNull("questionType") ? qNode.get("questionType").asText().toUpperCase() : qNode.get("type").asText().toUpperCase();
+                                    if (typeStr.equals("MULTIPLE_CHOICE") || typeStr.equals("MCQ")) {
+                                        q.setType(com.testshaper.entity.Question.QuestionType.MCQ);
+                                    } else if (typeStr.equals("CREATIVE") || typeStr.equals("CQ")) {
+                                        q.setType(com.testshaper.entity.Question.QuestionType.CQ);
+                                    } else if (typeStr.equals("SHORT_ANSWER") || typeStr.equals("SHORT")) {
+                                        q.setType(com.testshaper.entity.Question.QuestionType.SHORT);
+                                    } else if (typeStr.equals("TRUE_FALSE")) {
+                                        q.setType(com.testshaper.entity.Question.QuestionType.TRUE_FALSE);
+                                    } else {
+                                        q.setType(com.testshaper.entity.Question.QuestionType.valueOf(typeStr));
+                                    }
                                 } catch (Exception ignored) {}
                             }
                             
@@ -1733,7 +1851,14 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                                 q.setMcqType(qNode.get("mcqType").asText());
                             }
 
-                            String qText = qNode.path("questionText").asText("Generated Question");
+                            String qText = qNode.hasNonNull("questionText") ? qNode.get("questionText").asText() : 
+                                           (rootNode.hasNonNull("question") && rootNode.get("question").isTextual() ? rootNode.get("question").asText() : "");
+                            
+                            if (qText.isBlank() && !qNode.path("stimulus").asText().isBlank()) {
+                                // If there is a stimulus but no question text, we can leave it blank
+                            } else if (qText.isBlank()) {
+                                qText = "Generated Question";
+                            }
                             qText = qText.replaceFirst("^\\s*(?:[\\d০-৯]+|[a-zA-Zক-ষ])\\s*[\\.\\)\\-:]\\s*", "");
                             
                             // Merge sub_parts for CQ into question text
@@ -2080,5 +2205,72 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             if (poolKey != null) keyRotationService.recordError(poolKey.getId(), e.getMessage());
             throw new RuntimeException("AI text edit failed: " + e.getMessage(), e);
         }
+    }
+
+    // --- Phase 3F: Synchronized Library & Command Center ---
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Object> getSyncIntegrity(UUID sourceBookId) {
+        SourceBookMaster book = sourceBookMasterRepository.findById(sourceBookId)
+                .orElseThrow(() -> new RuntimeException("Book not found"));
+
+        List<KnowledgePage> allPages = knowledgePageRepository.findBySourceBookIdOrderByPageNumberAsc(sourceBookId);
+        int totalPages = allPages.size();
+        
+        List<Map<String, Object>> missingPages = new ArrayList<>();
+        int vectorizedCount = 0;
+        
+        for (KnowledgePage p : allPages) {
+            if (p.getExtractionStatus() == KnowledgePage.ExtractionStatus.GOLDEN_VECTORIZED) {
+                vectorizedCount++;
+            } else {
+                Map<String, Object> pageData = new HashMap<>();
+                pageData.put("id", p.getId());
+                pageData.put("pageNumber", p.getPageNumber());
+                pageData.put("status", p.getExtractionStatus().name());
+                if (p.getSourceBookIndex() != null) {
+                    pageData.put("chapterId", p.getSourceBookIndex().getId());
+                    pageData.put("chapterName", p.getSourceBookIndex().getIndexName());
+                }
+                missingPages.add(pageData);
+            }
+        }
+        
+        int vectorChunkCount = curriculumDocumentChunkRepository.countBySourceBookId(sourceBookId);
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("bookId", book.getId());
+        result.put("bookName", book.getTitle());
+        result.put("totalPages", totalPages);
+        result.put("vectorizedPages", vectorizedCount);
+        result.put("missingPages", missingPages);
+        result.put("totalChunks", vectorChunkCount);
+        result.put("isFullySynced", totalPages > 0 && vectorizedCount == totalPages);
+        
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String getVectorPreview(UUID sourceBookId, UUID indexId) {
+        org.springframework.data.domain.Pageable unpaged = org.springframework.data.domain.Pageable.unpaged();
+        org.springframework.data.domain.Page<CurriculumDocumentChunk> page = 
+            curriculumDocumentChunkRepository.findBySourceBookIndexIdIn(List.of(indexId), unpaged);
+            
+        List<CurriculumDocumentChunk> chunks = new ArrayList<>(page.getContent());
+        chunks.sort(Comparator.comparing(CurriculumDocumentChunk::getChunkIndex));
+        
+        if (chunks.isEmpty()) {
+            return "# No Synced Data\nThis chapter has not been synchronized yet.";
+        }
+        
+        StringBuilder preview = new StringBuilder();
+        preview.append("# Synced Preview\n\n");
+        for (CurriculumDocumentChunk chunk : chunks) {
+            String topicName = chunk.getMappedTopic() != null ? chunk.getMappedTopic().getName() : "Unknown Topic";
+            preview.append("### Topic: ").append(topicName).append("\n\n");
+            preview.append(chunk.getChunkText()).append("\n\n---\n\n");
+        }
+        return preview.toString();
     }
 }
