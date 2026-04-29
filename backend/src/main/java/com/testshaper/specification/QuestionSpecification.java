@@ -23,14 +23,38 @@ public class QuestionSpecification {
             String selectedClassId,
             String selectedSubjectId,
             String selectedChapterId,
-            String selectedTopicId) {
+            String selectedTopicId,
+            String className,
+            String subjectName,
+            List<UUID> allowedSubjectIds,
+            String globalTenantId) {
 
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // Only fetch for current tenant
+            // FGAC & Tenant filtering
             if (StringUtils.hasText(tenantId)) {
-                predicates.add(cb.equal(root.get("tenantId"), tenantId));
+                Predicate tenantMatch = cb.equal(root.get("tenantId"), tenantId);
+                
+                // Allow global questions (tenantId is "DEFAULT", null, or the Default Institute's ID) IF they belong to allowed subjects
+                if (allowedSubjectIds != null && !allowedSubjectIds.isEmpty()) {
+                    Predicate isGlobalNull = cb.isNull(root.get("tenantId"));
+                    Predicate isGlobalDefault = cb.equal(root.get("tenantId"), "DEFAULT");
+                    Predicate isGlobalEmpty = cb.equal(root.get("tenantId"), "");
+                    Predicate isGlobalInst = cb.or(); // dummy false
+                    if (StringUtils.hasText(globalTenantId)) {
+                        isGlobalInst = cb.equal(root.get("tenantId"), globalTenantId);
+                    }
+                    Predicate isGlobal = cb.or(isGlobalNull, isGlobalDefault, isGlobalEmpty, isGlobalInst);
+                    
+                    Predicate subjectInAllowed = root.get("classSubject").get("id").in(allowedSubjectIds);
+                    Predicate globalAndAllowed = cb.and(isGlobal, subjectInAllowed);
+                    
+                    predicates.add(cb.or(tenantMatch, globalAndAllowed));
+                } else {
+                    // If no allowed subjects, only show their own tenant's questions
+                    predicates.add(tenantMatch);
+                }
             }
 
             // Exclude deleted ones
@@ -101,6 +125,14 @@ public class QuestionSpecification {
             }
             if (StringUtils.hasText(selectedTopicId)) {
                 predicates.add(cb.equal(root.get("topic").get("id"), UUID.fromString(selectedTopicId)));
+            }
+
+            // Fallback to name-based filtering if IDs aren't present (useful for Editor integration)
+            if (StringUtils.hasText(className)) {
+                predicates.add(cb.equal(root.get("classSubject").get("academicClass").get("name"), className));
+            }
+            if (StringUtils.hasText(subjectName)) {
+                predicates.add(cb.equal(root.get("classSubject").get("subject").get("name"), subjectName));
             }
 
             query.distinct(true);

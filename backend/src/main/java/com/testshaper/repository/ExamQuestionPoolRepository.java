@@ -18,8 +18,8 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
      * questions.
      * Optimized for large question banks with indexed lookups.
      */
-    @Query("SELECT q FROM Question q " +
-            "WHERE q.tenantId = :tenantId " +
+    @Query("SELECT q.id FROM Question q " +
+            "WHERE (:tenantId = 'DEFAULT' OR q.tenantId = :tenantId) " +
             "AND q.status = 'APPROVED' " +
             "AND q.classSubject.id = :classSubjectId " +
             "AND q.type = :type " +
@@ -28,7 +28,7 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             "AND (:chapterIds IS NULL OR q.chapter.id IN :chapterIds) " +
             "AND (q.id NOT IN :excludedIds) " +
             "AND q.deleted = false")
-    List<Question> findEligibleQuestions(
+    List<UUID> findEligibleQuestionIds(
             @Param("tenantId") String tenantId,
             @Param("classSubjectId") UUID classSubjectId,
             @Param("type") Question.QuestionType type,
@@ -38,7 +38,7 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             @Param("excludedIds") Set<UUID> excludedIds);
 
     @Query("SELECT COUNT(q) FROM Question q " +
-            "WHERE q.tenantId = :tenantId " +
+            "WHERE (:tenantId = 'DEFAULT' OR q.tenantId = :tenantId) " +
             "AND q.status = 'APPROVED' " +
             "AND q.classSubject.id = :classSubjectId " +
             "AND q.deleted = false")

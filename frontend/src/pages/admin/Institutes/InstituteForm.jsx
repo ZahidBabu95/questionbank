@@ -3,6 +3,7 @@ import { Save, X, Upload, Zap, Database, Users } from 'lucide-react';
 import instituteService from '../../../services/instituteService';
 import billingService from '../../../services/billingService';
 import { useNavigate, useParams } from 'react-router-dom';
+import axios from '../../../utils/axios';
 
 const InstituteForm = () => {
     const { id } = useParams();
@@ -36,12 +37,43 @@ const InstituteForm = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    const [hierarchy, setHierarchy] = useState(null);
+    const [assignedSubjectIds, setAssignedSubjectIds] = useState([]);
+
     useEffect(() => {
         fetchPackages();
+        fetchHierarchy();
         if (isEdit) {
             fetchInstitute();
+            fetchAssignedSubjects();
         }
     }, [id]);
+
+    const fetchHierarchy = async () => {
+        try {
+            const res = await axios.get('/v1/academic/hierarchy');
+            setHierarchy(res.data);
+        } catch (err) {
+            console.error("Failed to fetch hierarchy", err);
+        }
+    };
+
+    const fetchAssignedSubjects = async () => {
+        try {
+            const res = await instituteService.getAssignedSubjects(id);
+            setAssignedSubjectIds(res || []);
+        } catch (err) {
+            console.error("Failed to fetch assigned subjects", err);
+        }
+    };
+
+    const handleSubjectToggle = (classSubjectId) => {
+        setAssignedSubjectIds(prev => 
+            prev.includes(classSubjectId) 
+            ? prev.filter(i => i !== classSubjectId)
+            : [...prev, classSubjectId]
+        );
+    };
 
     const fetchPackages = async () => {
         try {
@@ -107,11 +139,17 @@ const InstituteForm = () => {
         }
 
         try {
+            let targetId = id;
             if (isEdit) {
                 await instituteService.updateInstitute(id, data);
             } else {
-                await instituteService.createInstitute(data);
+                const newInst = await instituteService.createInstitute(data);
+                targetId = newInst.id;
             }
+            
+            // Assign subjects
+            await instituteService.assignSubjects(targetId, assignedSubjectIds);
+            
             navigate('/institutes');
         } catch (err) {
             setError("Failed to save institute. " + (err.response?.data?.message || err.message));
@@ -221,6 +259,48 @@ const InstituteForm = () => {
                             <input type="number" name="storageLimitMb" value={formData.storageLimitMb} onChange={handleChange} className="w-full p-2.5 border border-slate-300 rounded-lg text-sm" />
                         </div>
                     </div>
+                </fieldset>
+
+                {/* Academic Access Control */}
+                <fieldset className="border border-slate-200 p-6 rounded-xl bg-slate-50/50">
+                    <legend className="text-sm font-bold text-slate-700 px-3 bg-white border border-slate-200 rounded-full py-1">Academic Access Control (Assigned Subjects)</legend>
+                    <p className="text-xs text-slate-500 mb-4">Select which subjects this workspace can access. Leave completely blank to allow access to ALL subjects (default), or restrict them to specific subjects.</p>
+                    
+                    {hierarchy ? (
+                        <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
+                            {hierarchy.classes?.map(cls => {
+                                const classSubjects = hierarchy.classSubjects?.filter(cs => cs._classId === cls.id) || [];
+                                if (classSubjects.length === 0) return null;
+                                return (
+                                    <div key={cls.id} className="border border-slate-200 rounded-lg p-3 bg-white">
+                                        <div className="font-bold text-sm text-slate-700 mb-2">{cls.name} <span className="text-slate-400 font-normal">({cls._streamName})</span></div>
+                                        <div className="flex flex-wrap gap-3">
+                                            {classSubjects.map(cs => {
+                                                const subject = hierarchy.subjects?.find(s => s.id === cs._subjectId);
+                                                if (!subject) return null;
+                                                return (
+                                                    <label key={cs.id} className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full border cursor-pointer transition ${assignedSubjectIds.includes(cs.id) ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={assignedSubjectIds.includes(cs.id)} 
+                                                            onChange={() => handleSubjectToggle(cs.id)}
+                                                            className="w-4 h-4 text-indigo-600 rounded border-slate-300"
+                                                        />
+                                                        {subject.name} {subject.paper ? `(${subject.paper})` : ''}
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="text-sm text-slate-500 flex items-center gap-2">
+                            <span className="w-4 h-4 border-2 border-slate-300 border-t-primary rounded-full animate-spin"></span>
+                            Loading curriculum hierarchy...
+                        </div>
+                    )}
                 </fieldset>
 
                 {/* Logo Upload */}

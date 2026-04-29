@@ -28,7 +28,11 @@ public class CustomUserDetailsService implements UserDetailsService {
                                 .orElseThrow(() -> new UsernameNotFoundException(
                                                 "User not found with email: " + usernameOrEmail));
 
-                String tenantId = user.getInstitute() != null ? String.valueOf(user.getInstitute().getId()) : "DEFAULT";
+                boolean isSuperAdmin = user.getRoles().stream().anyMatch(role -> "SUPER_ADMIN".equals(role.getName()));
+                String tenantId = "DEFAULT";
+                if (user.getInstitute() != null && !isSuperAdmin) {
+                    tenantId = String.valueOf(user.getInstitute().getId());
+                }
 
                 return new CustomUserDetails(
                                 user.getEmail(),

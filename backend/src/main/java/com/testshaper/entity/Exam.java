@@ -87,6 +87,9 @@ public class Exam extends BaseTenantEntity {
     @Column(name = "raw_content", columnDefinition = "LONGTEXT")
     private String rawContent;
 
+    @Column(name = "doc_settings_json", columnDefinition = "LONGTEXT")
+    private String docSettingsJson;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "template_id")
     private ExamTemplate examTemplate;

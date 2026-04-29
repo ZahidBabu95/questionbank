@@ -36,6 +36,7 @@ public class ExamDTO {
     // Nexus Engine fields
     private ExamEditorMode editorMode;
     private String rawContent;
+    private String docSettingsJson;
     private UUID templateId;
 
     // Academic info

@@ -13,7 +13,7 @@ import java.util.UUID;
 @Repository
 public interface ExamRepository extends JpaRepository<Exam, UUID> {
 
-        @Query("SELECT e FROM Exam e WHERE e.tenantId = :tenantId AND e.deleted = false " +
+        @Query("SELECT e FROM Exam e WHERE (:tenantId = 'DEFAULT' OR e.tenantId = :tenantId) AND e.deleted = false " +
                         "AND (:title IS NULL OR LOWER(e.title) LIKE LOWER(CONCAT('%', :title, '%')))")
         Page<Exam> findByTenant(@Param("tenantId") String tenantId,
                         @Param("title") String title,

@@ -19,7 +19,7 @@ public class AiKnowledgeBaseController {
     private final AiKnowledgeBaseService service;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<AiKnowledgeBaseDTO>> getAll() {
         return ResponseEntity.ok(service.getAllKnowledge());
     }

@@ -11,6 +11,7 @@ import java.util.UUID;
 @Repository
 public interface TopicRepository extends JpaRepository<Topic, UUID> {
     java.util.List<Topic> findByChapterId(UUID chapterId);
+    java.util.List<Topic> findByChapterIdOrderByNameAsc(UUID chapterId);
     java.util.List<Topic> findByTenantIdAndChapterIdOrderByNameAsc(String tenantId, UUID chapterId);
     Optional<Topic> findByTenantIdAndNameIgnoreCase(String tenantId, String name);
 

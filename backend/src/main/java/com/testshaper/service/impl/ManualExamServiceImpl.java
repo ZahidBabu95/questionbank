@@ -52,6 +52,14 @@ public class ManualExamServiceImpl {
         exam.setManual(true);
         exam.setCreatedBy(createdBy);
 
+        if (req.getEditorMode() != null) {
+            try {
+                exam.setEditorMode(ExamEditorMode.valueOf(req.getEditorMode()));
+            } catch (Exception ignored) {}
+        }
+        exam.setRawContent(req.getRawContent());
+        exam.setDocSettingsJson(req.getDocSettingsJson());
+
         // Create sections
         int sectionOrder = 1;
         for (ManualExamRequest.SectionRequest sr : req.getSections()) {
@@ -83,6 +91,18 @@ public class ManualExamServiceImpl {
         exam.setHeaderText(req.getHeaderText());
         exam.setShuffleQuestions(req.isShuffleQuestions());
         exam.setShuffleOptions(req.isShuffleOptions());
+
+        if (req.getEditorMode() != null) {
+            try {
+                exam.setEditorMode(ExamEditorMode.valueOf(req.getEditorMode()));
+            } catch (Exception ignored) {}
+        }
+        if (req.getRawContent() != null) {
+            exam.setRawContent(req.getRawContent());
+        }
+        if (req.getDocSettingsJson() != null) {
+            exam.setDocSettingsJson(req.getDocSettingsJson());
+        }
 
         return toDTO(examRepository.save(exam));
     }
@@ -164,6 +184,9 @@ public class ManualExamServiceImpl {
     // ── Reorder Questions ─────────────────────────────────────────────────────
     @Transactional
     public ExamDTO reorderQuestions(UUID examId, ReorderRequest req) {
+        // Validate permissions first
+        getExamOrThrow(examId);
+        
         List<ExamQuestion> examQuestions = examQuestionRepository.findByExamIdOrderByQuestionOrderAsc(examId);
         Map<UUID, ExamQuestion> byId = examQuestions.stream()
                 .collect(Collectors.toMap(ExamQuestion::getId, e -> e));
@@ -234,7 +257,17 @@ public class ManualExamServiceImpl {
     // ── Get Exam ──────────────────────────────────────────────────────────────
     @Transactional(readOnly = true)
     public ExamDTO getExam(UUID examId) {
-        return toDTO(getExamOrThrow(examId));
+        Exam exam = examRepository.findById(examId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
+                
+        String currentTenant = TenantContext.getTenantId();
+        // If current user is DEFAULT tenant, allow access.
+        // If exam belongs to DEFAULT tenant, allow access (so others can view global templates).
+        // Otherwise, current user must be in the same tenant as the exam.
+        if (!"DEFAULT".equals(currentTenant) && !"DEFAULT".equals(exam.getTenantId()) && !exam.getTenantId().equals(currentTenant)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return toDTO(exam);
     }
 
     // ── Delete Exam ───────────────────────────────────────────────────────────
@@ -249,8 +282,11 @@ public class ManualExamServiceImpl {
     private Exam getExamOrThrow(UUID examId) {
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
-        if (!exam.getTenantId().equals(TenantContext.getTenantId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+                
+        String currentTenant = TenantContext.getTenantId();
+        // DEFAULT tenant can edit anything. Normal tenants can only edit their own.
+        if (!"DEFAULT".equals(currentTenant) && !exam.getTenantId().equals(currentTenant)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied. Cannot modify cross-tenant data.");
         }
         return exam;
     }
@@ -272,6 +308,13 @@ public class ManualExamServiceImpl {
         dto.setAiGenerated(exam.isAiGenerated());
         dto.setCreatedBy(exam.getCreatedBy());
         dto.setCreatedAt(exam.getCreatedAt());
+
+        dto.setEditorMode(exam.getEditorMode());
+        dto.setRawContent(exam.getRawContent());
+        dto.setDocSettingsJson(exam.getDocSettingsJson());
+        if (exam.getExamTemplate() != null) {
+            dto.setTemplateId(exam.getExamTemplate().getId());
+        }
 
         if (exam.getClassSubject() != null) {
             if (exam.getClassSubject().getSubject() != null)
@@ -296,6 +339,15 @@ public class ManualExamServiceImpl {
                     qDto.setDifficulty(q.getDifficulty());
                     qDto.setBloomLevel(q.getBloomLevel());
                     qDto.setLanguage(q.getLanguage());
+                    if (q.getOptions() != null) {
+                        qDto.setOptions(q.getOptions().stream().map(opt -> {
+                            ExamDTO.OptionDTO odto = new ExamDTO.OptionDTO();
+                            odto.setId(opt.getId());
+                            odto.setOptionText(opt.getOptionText());
+                            odto.setCorrect(opt.isCorrect());
+                            return odto;
+                        }).collect(Collectors.toList()));
+                    }
                     return qDto;
                 }).collect(Collectors.toList()));
 
@@ -314,6 +366,15 @@ public class ManualExamServiceImpl {
         dto.setBloomLevel(q.getBloomLevel());
         dto.setLanguage(q.getLanguage());
         dto.setMarks(q.getMarks());
+        if (q.getOptions() != null) {
+            dto.setOptions(q.getOptions().stream().map(opt -> {
+                ExamDTO.OptionDTO odto = new ExamDTO.OptionDTO();
+                odto.setId(opt.getId());
+                odto.setOptionText(opt.getOptionText());
+                odto.setCorrect(opt.isCorrect());
+                return odto;
+            }).collect(Collectors.toList()));
+        }
         return dto;
     }
 }

@@ -5,6 +5,36 @@ import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
 import useAcademicHierarchy from '../../../hooks/useAcademicHierarchy';
 import axios from '../../../utils/axios';
+import MarkdownRenderer from '../../../components/MarkdownRenderer';
+
+const formatBanglaNumbers = (text) => {
+    if (!text) return text;
+    const banglaDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    // Safely replace digits that appear inside parenthesis (like marks)
+    return text.toString().replace(/\(([\d.]+)\)/g, (match, p1) => {
+        const bnNum = p1.replace(/\d/g, d => banglaDigits[d]);
+        return `(${bnNum})`;
+    });
+};
+
+const toBnNum = (num) => {
+    const banglaDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    return num.toString().replace(/\d/g, d => banglaDigits[d]);
+};
+
+// React-Markdown ignores markdown inside HTML blocks like <div class="cq-stem">.
+// So we must manually parse markdown images into HTML <img> tags first.
+const parseMarkdownImages = (text) => {
+    if (!text) return text;
+    return text.toString().replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
+        let finalUrl = url;
+        // Route R2 bucket images through proxy to avoid CORS/404 block from direct frontend fetch
+        if (url.includes('r2.dev') && !url.includes('proxy-image')) {
+            finalUrl = `/api/v1/public/proxy-image?url=${encodeURIComponent(url)}`;
+        }
+        return `<img src="${finalUrl}" alt="${alt}" referrerPolicy="no-referrer" style="max-width: 100%; max-height: 300px; border-radius: 0.5rem; margin: 0.5rem 0; display: block;" />`;
+    });
+};
 
 const ManualExamBuilder = () => {
     const navigate = useNavigate();
@@ -132,7 +162,7 @@ const ManualExamBuilder = () => {
                 durationMinutes: parseInt(examInfo.durationMinutes),
                 language: examInfo.language,
                 instructions: "",
-                instituteName: "",
+                instituteName: JSON.parse(localStorage.getItem('user') || '{}').instituteName || "",
                 headerText: "",
                 shuffleQuestions: false,
                 shuffleOptions: false,
@@ -164,6 +194,15 @@ const ManualExamBuilder = () => {
             if (res.success) setSearchResults(res.data.content);
         } catch (e) { console.error(e); } finally { setSearching(false); }
     };
+
+    useEffect(() => {
+        if (step === 2) {
+            const timer = setTimeout(() => {
+                searchQuestions();
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [filters.chapterId, filters.topicId, filters.type, filters.difficulty, filters.keyword, step]);
 
     const handleAddQuestion = async (q, marks) => {
         if (cart.length >= targetTotals.qs) return alert("Maximum question limit reached for this exam!");
@@ -307,10 +346,50 @@ const ManualExamBuilder = () => {
                                                     <span className="text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">{q.type}</span>
                                                     <span className="text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">{q.difficulty}</span>
                                                 </div>
-                                                <div className="text-[15px] font-medium text-slate-800 line-clamp-3 leading-relaxed" dangerouslySetInnerHTML={{ __html: q.questionText }} />
+
+                                                {/* CQ Stimulus/Stem rendering (if not already embedded in questionText) */}
+                                                {q.type === 'CQ' && q.stimulus && (!q.questionText || !q.questionText.includes('cq-stem')) && (
+                                                    <MarkdownRenderer 
+                                                        content={parseMarkdownImages(q.stimulus)} 
+                                                        className="text-[14px] text-slate-700 leading-relaxed mb-3 p-3 bg-slate-50/80 rounded-xl border border-slate-100" 
+                                                    />
+                                                )}
+
+                                                <MarkdownRenderer 
+                                                    content={parseMarkdownImages(examInfo.language === 'Bangla' ? formatBanglaNumbers(q.questionText) : q.questionText)}
+                                                    className={`text-[15px] font-medium text-slate-800 leading-relaxed ${q.type === 'CQ' ? 'whitespace-pre-wrap' : 'line-clamp-3'} ${examInfo.language === 'Bangla' ? 'lang-bn' : 'lang-en'}`} 
+                                                />
+                                                
+                                                {/* Statements for MULTIPLE_COMPLETION */}
+                                                {q.statements && q.statements.length > 0 && (
+                                                    <div className="mt-3 space-y-1.5 ml-2">
+                                                        {q.statements.map((stmt, i) => (
+                                                            <div key={i} className="flex gap-2 text-[13px] text-slate-600">
+                                                                <span className="font-bold text-slate-400">{examInfo.language === 'Bangla' ? ['i', 'ii', 'iii', 'iv'][i] : ['i', 'ii', 'iii', 'iv'][i] || i + 1}.</span>
+                                                                <MarkdownRenderer content={parseMarkdownImages(examInfo.language === 'Bangla' ? formatBanglaNumbers(stmt) : stmt)} className="flex-1" />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* MCQ Options */}
+                                                {q.type === 'MCQ' && q.options && q.options.length > 0 && (
+                                                    <div className="grid grid-cols-2 gap-3 mt-4">
+                                                        {q.options.map((opt, i) => (
+                                                            <div key={i} className="flex items-start gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                                                                <span className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-black text-slate-500 shrink-0 mt-0.5">
+                                                                    {examInfo.language === 'Bangla' ? ['ক', 'খ', 'গ', 'ঘ'][i] : ['A', 'B', 'C', 'D'][i]}
+                                                                </span>
+                                                                <MarkdownRenderer content={parseMarkdownImages(opt.optionText)} className="text-[13px] text-slate-700 leading-tight flex-1" />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="w-24 shrink-0 flex flex-col items-end justify-between border-l border-slate-100 pl-4">
-                                                <div className="text-[11px] font-black text-slate-400 text-right uppercase tracking-wider">{defaultMarksMap[q.type]} Marks</div>
+                                                <div className="text-[11px] font-black text-slate-400 text-right uppercase tracking-wider">
+                                                    {examInfo.language === 'Bangla' ? `${toBnNum(defaultMarksMap[q.type])} মার্কস` : `${defaultMarksMap[q.type]} Marks`}
+                                                </div>
                                                 <button
                                                     onClick={() => handleAddQuestion(q)}
                                                     disabled={inCart || addLoading === q.id || cart.length >= targetTotals.qs}
@@ -363,6 +442,23 @@ const ManualExamBuilder = () => {
                                 ))
                             )}
                         </div>
+                    </div>
+                </div>
+
+                {/* Floating Action Bar for Step 2 */}
+                <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/90 border-t border-slate-200 p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
+                    <div className="max-w-[1600px] w-full mx-auto flex justify-between items-center">
+                        <div className="text-sm font-bold text-slate-500">
+                            {cart.length} questions selected out of {targetTotals.qs}
+                        </div>
+                        <button 
+                            onClick={handlePublish} 
+                            disabled={loading || cart.length === 0} 
+                            className={`px-8 py-3.5 rounded-xl font-black flex items-center gap-3 transition-all shadow-xl hover:-translate-y-0.5 ${cart.length > 0 && !loading ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-500/30' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                        >
+                            {loading ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />} 
+                            {loading ? 'Creating Exam...' : 'Create & Open in Editor'}
+                        </button>
                     </div>
                 </div>
             </div>

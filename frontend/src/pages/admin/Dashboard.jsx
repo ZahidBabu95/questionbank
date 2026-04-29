@@ -99,11 +99,11 @@ const Dashboard = () => {
         const fetchStats = async () => {
             try {
                 let data;
-                if (user.roles.includes('SUPER_ADMIN')) {
+                if (user.roles.includes('SUPER_ADMIN') || user.permissions?.includes('ROLES_PERMISSIONS_VIEW') || user.permissions?.includes('SUBSCRIPTION_PACKAGE_VIEW')) {
                     data = await dashboardService.getAdminStats();
-                } else if (user.roles.includes('INSTITUTE_ADMIN')) {
+                } else if (user.roles.includes('INSTITUTE_ADMIN') || user.permissions?.includes('ALL_INSTITUTES_VIEW')) {
                     data = await dashboardService.getInstituteStats();
-                } else if (user.roles.includes('TEACHER')) {
+                } else if (user.roles.includes('TEACHER') || user.permissions?.includes('ADD_QUESTION_VIEW')) {
                     data = await dashboardService.getTeacherStats();
                 } else {
                     data = await dashboardService.getStudentStats();
@@ -151,6 +151,9 @@ const Dashboard = () => {
         return user.permissions?.includes(`${permId}_${action}`);
     };
 
+    const isAdminView = user?.roles?.includes('SUPER_ADMIN') || user?.permissions?.includes('ROLES_PERMISSIONS_VIEW');
+    const isStudentView = !user?.roles?.includes('SUPER_ADMIN') && !user?.permissions?.includes('QUESTION_BANK_ADD_QUESTION_MCQ_VIEW');
+
     return (
         <div className="space-y-4 md:space-y-6 lg:space-y-8">
             {/* ─── Header ─── */}
@@ -175,16 +178,16 @@ const Dashboard = () => {
             {/* ─── KPI Cards ─── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                 {hasPerm('USER_MANAGEMENT', 'VIEW') && (
-                    <KPICard title={user?.roles?.includes('SUPER_ADMIN') ? "Total Users" : "Total Teachers"} count={totalUsers.toLocaleString()} trend={userTrend} icon={Users} gradient="bg-gradient-to-br from-blue-500 to-primary" />
+                    <KPICard title={isAdminView ? "Total Users" : "Total Teachers"} count={totalUsers.toLocaleString()} trend={userTrend} icon={Users} gradient="bg-gradient-to-br from-blue-500 to-primary" />
                 )}
                 {hasPerm('INSTITUTE_MANAGEMENT', 'VIEW') && (
                     <KPICard title="Active Institutes" count={activeInstitutes.toLocaleString()} trend={instituteTrend} icon={BookOpen} gradient="bg-gradient-to-br from-indigo-500 to-secondary" />
                 )}
                 {hasPerm('QUESTION_BANK', 'VIEW') && (
-                    <KPICard title={user?.roles?.includes('STUDENT') ? "My Questions" : "Total Questions"} count={totalQuestions.toLocaleString()} trend={questionTrend || 0} icon={FileQuestion} gradient="bg-gradient-to-br from-violet-500 to-purple-600" />
+                    <KPICard title={isStudentView ? "My Questions" : "Total Questions"} count={totalQuestions.toLocaleString()} trend={questionTrend || 0} icon={FileQuestion} gradient="bg-gradient-to-br from-violet-500 to-purple-600" />
                 )}
                 {hasPerm('EXAM_PAPER', 'VIEW') && (
-                    <KPICard title={user?.roles?.includes('STUDENT') ? "My Exams" : "Exams Conducted"} count={examsConducted.toLocaleString()} trend={examTrend || 0} icon={Activity} gradient="bg-gradient-to-br from-emerald-500 to-teal-600" />
+                    <KPICard title={isStudentView ? "My Exams" : "Exams Conducted"} count={examsConducted.toLocaleString()} trend={examTrend || 0} icon={Activity} gradient="bg-gradient-to-br from-emerald-500 to-teal-600" />
                 )}
             </div>
 

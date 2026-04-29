@@ -38,7 +38,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                         "LEFT JOIN FETCH cs.subject " +
                         "LEFT JOIN FETCH q.chapter " +
                         "LEFT JOIN FETCH q.topic " +
-                        "WHERE q.tenantId = :tenantId " +
+                        "WHERE (:tenantId = 'DEFAULT' OR q.tenantId = :tenantId) " +
                         "AND q.status = 'APPROVED' " +
                         "AND q.deleted = false " +
                         "AND (:classSubjectId IS NULL OR cs.id = :classSubjectId) " +
@@ -50,7 +50,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                         "AND (:keyword IS NULL OR LOWER(q.questionText) LIKE LOWER(CONCAT('%', :keyword, '%')))",
                countQuery = "SELECT COUNT(q) FROM Question q " +
                         "LEFT JOIN q.classSubject cs " +
-                        "WHERE q.tenantId = :tenantId " +
+                        "WHERE (:tenantId = 'DEFAULT' OR q.tenantId = :tenantId) " +
                         "AND q.status = 'APPROVED' " +
                         "AND q.deleted = false " +
                         "AND (:classSubjectId IS NULL OR cs.id = :classSubjectId) " +

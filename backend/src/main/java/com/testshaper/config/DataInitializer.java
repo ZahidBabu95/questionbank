@@ -30,6 +30,7 @@ public class DataInitializer implements CommandLineRunner {
     private final ClassSubjectRepository classSubjectRepository;
     private final PasswordEncoder passwordEncoder;
     private final GeneralSettingRepository generalSettingRepository;
+    private final BillingPackageRepository billingPackageRepository;
 
     @Override
     public void run(String... args) throws Exception {
@@ -111,6 +112,11 @@ public class DataInitializer implements CommandLineRunner {
             createGeneralSettingIfNotFound(GeneralSetting.SettingCategory.STORAGE, "storage_access_key", "f7d7e1e49a4589d76adf43c1ca019550");
             createGeneralSettingIfNotFound(GeneralSetting.SettingCategory.STORAGE, "storage_secret_key", "5f1d415aa7aecc55bf90e7d290ed3f9e9ad69895a8e52d25f221dd65861e1b36");
             createGeneralSettingIfNotFound(GeneralSetting.SettingCategory.STORAGE, "cloudflare_public_url", "https://pub-877664dc8f4f473da7cdcb7fe3b32a76.r2.dev");
+
+            // 4.6 Create Beta Package
+            createBillingPackageIfNotFound("Beta Tester Package", "BETA-01", 
+                    "Exclusive generous package for early beta testers.", 
+                    new java.math.BigDecimal("0.00"));
 
             // 5. Create Academic Data (Session, Class, Subject)
             AcademicSession currentSession = createSessionIfNotFound("2024", true);
@@ -233,6 +239,35 @@ public class DataInitializer implements CommandLineRunner {
             setting.setEncrypted(false);
             generalSettingRepository.save(setting);
             log.info("Created default general setting: {} = {}", key, value);
+        }
+    }
+
+    private void createBillingPackageIfNotFound(String name, String code, String description, java.math.BigDecimal price) {
+        boolean exists = billingPackageRepository.findAll().stream().anyMatch(p -> p.getPackageCode().equals(code));
+        if (!exists) {
+            BillingPackage pkg = new BillingPackage();
+            pkg.setName(name);
+            pkg.setPackageCode(code);
+            pkg.setDescription(description);
+            pkg.setPrice(price);
+            pkg.setCurrency("BDT");
+            pkg.setBillingCycle(BillingPackage.BillingCycle.MONTHLY);
+            pkg.setStatus(BillingPackage.PackageStatus.ACTIVE);
+            
+            pkg.setMaxTeachers(10);
+            pkg.setMaxStudents(100);
+            pkg.setMaxQuestions(5000);
+            pkg.setMaxExamsPerMonth(100);
+            pkg.setMaxLectures(50);
+            pkg.setAiLimitPerMonth(500000);
+            pkg.setStorageLimitMb(1024);
+            
+            pkg.setDisplayName("Beta User (Early Access)");
+            pkg.setHighlightBadge("BETA TESTER");
+            pkg.setSortOrder(1);
+            
+            billingPackageRepository.save(pkg);
+            log.info("Created Beta User Package: {}", code);
         }
     }
 }

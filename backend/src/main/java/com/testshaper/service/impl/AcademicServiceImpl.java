@@ -32,6 +32,7 @@ public class AcademicServiceImpl implements AcademicService {
     private final ChapterRepository chapterRepository;
     private final TopicRepository topicRepository;
     private final AcademicSessionRepository sessionRepository;
+    private final com.testshaper.repository.InstituteRepository instituteRepository;
 
     private String getTenant() {
         String tenant = TenantContext.getTenantId();
@@ -45,6 +46,85 @@ public class AcademicServiceImpl implements AcademicService {
             result.addAll(fetcher.apply(tenant));
         }
         return result;
+    }
+
+    private boolean isFgacRestricted() {
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId != null && !"DEFAULT".equals(tenantId)) {
+            try {
+                Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
+                return inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty();
+            } catch (Exception e) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private java.util.Set<UUID> getFgacAllowedClassSubjectIds() {
+        java.util.Set<UUID> allowed = new java.util.HashSet<>();
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId != null && !"DEFAULT".equals(tenantId)) {
+            try {
+                Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
+                if (inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
+                    for (ClassSubject cs : inst.getAssignedSubjects()) {
+                        allowed.add(cs.getId());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to parse tenant UUID for FGAC", e);
+            }
+        }
+        return allowed;
+    }
+
+    private java.util.Set<UUID> getFgacAllowedClassIds() {
+        java.util.Set<UUID> allowed = new java.util.HashSet<>();
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId != null && !"DEFAULT".equals(tenantId)) {
+            try {
+                Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
+                if (inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
+                    for (ClassSubject cs : inst.getAssignedSubjects()) {
+                        allowed.add(cs.getAcademicClass().getId());
+                    }
+                }
+            } catch (Exception e) { }
+        }
+        return allowed;
+    }
+
+    private java.util.Set<UUID> getFgacAllowedStreamIds() {
+        java.util.Set<UUID> allowed = new java.util.HashSet<>();
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId != null && !"DEFAULT".equals(tenantId)) {
+            try {
+                Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
+                if (inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
+                    for (ClassSubject cs : inst.getAssignedSubjects()) {
+                        allowed.add(cs.getAcademicClass().getStream().getId());
+                    }
+                }
+            } catch (Exception e) { }
+        }
+        return allowed;
+    }
+
+    private java.util.Set<UUID> getFgacAllowedLevelIds() {
+        java.util.Set<UUID> allowed = new java.util.HashSet<>();
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId != null && !"DEFAULT".equals(tenantId)) {
+            try {
+                Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
+                if (inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
+                    for (ClassSubject cs : inst.getAssignedSubjects()) {
+                        allowed.add(cs.getAcademicClass().getStream().getLevel().getId());
+                    }
+                }
+            } catch (Exception e) { }
+        }
+        return allowed;
     }
 
     // ═══ Cache Eviction Helper ═══
@@ -73,7 +153,12 @@ public class AcademicServiceImpl implements AcademicService {
     @Override
     @Cacheable(value = "academicHierarchy", key = "'levels_' + T(com.testshaper.security.TenantContext).getTenantId()")
     public List<AcademicLevel> getAllLevels() {
-        return fetchFromTenants(tenant -> levelRepository.findByTenantIdOrderByOrderAsc(tenant));
+        List<AcademicLevel> list = fetchFromTenants(tenant -> levelRepository.findByTenantIdOrderByOrderAsc(tenant));
+        if (isFgacRestricted()) {
+            java.util.Set<UUID> allowed = getFgacAllowedLevelIds();
+            list.removeIf(l -> !allowed.contains(l.getId()));
+        }
+        return list;
     }
     @Override
     @Transactional
@@ -103,7 +188,12 @@ public class AcademicServiceImpl implements AcademicService {
     @Override
     @Cacheable(value = "academicHierarchy", key = "'streams_' + #levelId")
     public List<AcademicStream> getStreamsByLevel(UUID levelId) {
-        return fetchFromTenants(tenant -> streamRepository.findByTenantIdAndLevelIdOrderByOrderAsc(tenant, levelId));
+        List<AcademicStream> list = fetchFromTenants(tenant -> streamRepository.findByTenantIdAndLevelIdOrderByOrderAsc(tenant, levelId));
+        if (isFgacRestricted()) {
+            java.util.Set<UUID> allowed = getFgacAllowedStreamIds();
+            list.removeIf(s -> !allowed.contains(s.getId()));
+        }
+        return list;
     }
     @Override
     @Transactional
@@ -133,12 +223,22 @@ public class AcademicServiceImpl implements AcademicService {
     @Override
     @Cacheable(value = "academicHierarchy", key = "'classes_stream_' + #streamId")
     public List<AcademicClass> getClassesByStream(UUID streamId) {
-        return fetchFromTenants(tenant -> classRepository.findByTenantIdAndStreamIdOrderByOrderAsc(tenant, streamId));
+        List<AcademicClass> list = fetchFromTenants(tenant -> classRepository.findByTenantIdAndStreamIdOrderByOrderAsc(tenant, streamId));
+        if (isFgacRestricted()) {
+            java.util.Set<UUID> allowed = getFgacAllowedClassIds();
+            list.removeIf(c -> !allowed.contains(c.getId()));
+        }
+        return list;
     }
     @Override
     @Cacheable(value = "academicHierarchy", key = "'all_classes_' + T(com.testshaper.security.TenantContext).getTenantId()")
     public List<AcademicClass> getAllClasses() {
-        return fetchFromTenants(tenant -> classRepository.findByTenantIdOrderByOrderAsc(tenant));
+        List<AcademicClass> list = fetchFromTenants(tenant -> classRepository.findByTenantIdOrderByOrderAsc(tenant));
+        if (isFgacRestricted()) {
+            java.util.Set<UUID> allowed = getFgacAllowedClassIds();
+            list.removeIf(c -> !allowed.contains(c.getId()));
+        }
+        return list;
     }
     @Override
     @Transactional
@@ -266,12 +366,22 @@ public class AcademicServiceImpl implements AcademicService {
                         .collect(Collectors.toList()); 
             }
         });
+        
+        if (isFgacRestricted()) {
+            java.util.Set<UUID> allowed = getFgacAllowedClassSubjectIds();
+            list.removeIf(cs -> !allowed.contains(cs.getId()));
+        }
+        
         return mapToDto(list);
     }
 
     @Override
     public List<com.testshaper.dto.ClassSubjectDTO> getSubjectsByClassAndGroup(UUID classId, UUID groupId, UUID sessionId) {
         List<ClassSubject> list = fetchFromTenants(tenant -> classSubjectRepository.findByTenantIdAndAcademicClassIdAndAcademicGroupIdAndSessionIdOrderByOrderAsc(tenant, classId, groupId, sessionId));
+        if (isFgacRestricted()) {
+            java.util.Set<UUID> allowed = getFgacAllowedClassSubjectIds();
+            list.removeIf(cs -> !allowed.contains(cs.getId()));
+        }
         return mapToDto(list);
     }
     
@@ -330,7 +440,47 @@ public class AcademicServiceImpl implements AcademicService {
     @Override
     @Cacheable(value = "academicHierarchy", key = "'chapters_' + #classSubjectId")
     public List<Chapter> getChaptersByClassSubject(UUID classSubjectId) {
-        return fetchFromTenants(tenant -> chapterRepository.findByTenantIdAndClassSubjectIdOrderByChapterNumberAsc(tenant, classSubjectId));
+        System.out.println("DEBUG: Fetching chapters for classSubjectId=" + classSubjectId);
+        String currentTenant = com.testshaper.security.TenantContext.getTenantId();
+        System.out.println("DEBUG: Current TenantContext: " + currentTenant);
+        
+        ClassSubject cs = classSubjectRepository.findById(classSubjectId).orElse(null);
+        if (cs == null) {
+            System.out.println("DEBUG: ClassSubject not found for id=" + classSubjectId);
+            return new java.util.ArrayList<>();
+        }
+        
+        System.out.println("DEBUG: Found ClassSubject! Tenant=" + cs.getTenantId() + ", Class=" + cs.getAcademicClass().getName() + ", Subject=" + cs.getSubject().getName());
+        
+        java.util.List<Chapter> chapters = new java.util.ArrayList<>();
+        
+        // 1. If the requested ClassSubject is tenant-specific, fetch chapters for it AND its global counterpart
+        if (!"DEFAULT".equals(cs.getTenantId())) {
+            java.util.List<ClassSubject> globalCandidates = classSubjectRepository.findByAcademicClassId(cs.getAcademicClass().getId());
+            UUID globalCsId = null;
+            for (ClassSubject globalCs : globalCandidates) {
+                if ("DEFAULT".equals(globalCs.getTenantId()) && globalCs.getSubject().getName().equalsIgnoreCase(cs.getSubject().getName())) {
+                    globalCsId = globalCs.getId();
+                    break;
+                }
+            }
+            if (globalCsId != null) {
+                final UUID gId = globalCsId;
+                // Fetch ALL chapters for the global ClassSubject (some might have been saved with a tenant ID by mistake, let's just fetch by classSubjectId)
+                List<Chapter> globalChaps = chapterRepository.findByClassSubjectIdOrderByChapterNumberAsc(gId);
+                System.out.println("DEBUG: Found " + globalChaps.size() + " chapters for globalCsId=" + gId + " regardless of tenant");
+                chapters.addAll(globalChaps);
+            }
+        }
+        
+        // 2. Fetch chapters for the specific ClassSubject requested (regardless of the tenant who created the chapter!)
+        // Since ClassSubject is what binds them, if we have access to the ClassSubject, we have access to its chapters.
+        List<Chapter> specificChaps = chapterRepository.findByClassSubjectIdOrderByChapterNumberAsc(classSubjectId);
+        System.out.println("DEBUG: Found " + specificChaps.size() + " chapters for specific classSubjectId=" + classSubjectId);
+        chapters.addAll(specificChaps);
+        
+        System.out.println("DEBUG: Total distinct chapters returned: " + chapters.stream().distinct().count());
+        return chapters.stream().distinct().collect(Collectors.toList());
     }
     @Override
     @Transactional
@@ -368,7 +518,8 @@ public class AcademicServiceImpl implements AcademicService {
     @Override
     @Cacheable(value = "academicHierarchy", key = "'topics_' + #chapterId")
     public List<Topic> getTopicsByChapter(UUID chapterId) {
-        return fetchFromTenants(tenant -> topicRepository.findByTenantIdAndChapterIdOrderByNameAsc(tenant, chapterId));
+        List<Topic> topics = topicRepository.findByChapterIdOrderByNameAsc(chapterId);
+        return topics.stream().distinct().collect(Collectors.toList());
     }
     @Override
     @Transactional
@@ -426,11 +577,36 @@ public class AcademicServiceImpl implements AcademicService {
             }
         }
 
+        // ---------------------------------------------------------
+        // FINE-GRAINED ACADEMIC ACCESS CONTROL
+        // ---------------------------------------------------------
+        java.util.Set<UUID> allowedClassSubjectIds = new java.util.HashSet<>();
+        boolean isRestricted = false;
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId != null && !"DEFAULT".equals(tenantId)) {
+            try {
+                Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
+                if (inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
+                    isRestricted = true;
+                    for (ClassSubject cs : inst.getAssignedSubjects()) {
+                        allowedClassSubjectIds.add(cs.getId());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to parse tenant UUID for FGAC", e);
+            }
+        }
+
         // Build classSubjects
         List<java.util.Map<String, Object>> allClassSubjects = new java.util.ArrayList<>();
         for (AcademicClass cls : getAllClasses()) {
             List<com.testshaper.dto.ClassSubjectDTO> classSubjectDtos = getSubjectsByClass(cls.getId(), null);
             for (com.testshaper.dto.ClassSubjectDTO csDTO : classSubjectDtos) {
+                // Apply FGAC filter
+                if (isRestricted && !allowedClassSubjectIds.contains(csDTO.getClassSubjectId())) {
+                    continue; // Skip restricted subjects
+                }
+                
                 java.util.Map<String, Object> csMap = new java.util.LinkedHashMap<>();
                 csMap.put("id", csDTO.getClassSubjectId());
                 csMap.put("_classId", cls.getId());
@@ -443,11 +619,32 @@ public class AcademicServiceImpl implements AcademicService {
             }
         }
 
+        // Clean up empty parents if restricted
+        if (isRestricted) {
+            java.util.Set<UUID> activeClassIds = new java.util.HashSet<>();
+            for (java.util.Map<String, Object> csMap : allClassSubjects) {
+                activeClassIds.add((UUID) csMap.get("_classId"));
+            }
+            allClasses.removeIf(cMap -> !activeClassIds.contains(cMap.get("id")));
+            
+            java.util.Set<UUID> activeStreamIds = new java.util.HashSet<>();
+            for (java.util.Map<String, Object> cMap : allClasses) {
+                activeStreamIds.add((UUID) cMap.get("_streamId"));
+            }
+            allStreams.removeIf(sMap -> !activeStreamIds.contains(sMap.get("id")));
+            
+            java.util.Set<UUID> activeLevelIds = new java.util.HashSet<>();
+            for (java.util.Map<String, Object> sMap : allStreams) {
+                activeLevelIds.add((UUID) sMap.get("_levelId"));
+            }
+            levels.removeIf(l -> !activeLevelIds.contains(l.getId()));
+        }
+
         java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
         result.put("levels", levels);
         result.put("streams", allStreams);
         result.put("classes", allClasses);
-        result.put("subjects", subjects);
+        result.put("subjects", subjects); // Global subjects list, harmless to keep full
         result.put("classSubjects", allClassSubjects);
         return result;
     }

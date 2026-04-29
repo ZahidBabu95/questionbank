@@ -22,6 +22,7 @@ public class InstituteServiceImpl implements InstituteService {
 
     private final InstituteRepository instituteRepository;
     private final BillingPackageRepository billingPackageRepository;
+    private final com.testshaper.repository.ClassSubjectRepository classSubjectRepository;
     // In a real app, inject FileStorageService here
 
     @Override
@@ -204,5 +205,22 @@ public class InstituteServiceImpl implements InstituteService {
         Institute institute = getInstitute(instituteId);
         institute.setStorageUsedMb(institute.getStorageUsedMb() + sizeMb);
         instituteRepository.save(institute);
+    }
+
+    @Override
+    @Transactional
+    public void assignAcademicSubjects(UUID instituteId, java.util.Set<UUID> classSubjectIds) {
+        Institute institute = getInstitute(instituteId);
+        java.util.List<com.testshaper.entity.ClassSubject> subjects = classSubjectRepository.findAllById(classSubjectIds);
+        institute.setAssignedSubjects(new java.util.HashSet<>(subjects));
+        instituteRepository.save(institute);
+    }
+
+    @Override
+    public java.util.Set<UUID> getAssignedAcademicSubjects(UUID instituteId) {
+        Institute institute = getInstitute(instituteId);
+        return institute.getAssignedSubjects().stream()
+                .map(com.testshaper.entity.ClassSubject::getId)
+                .collect(java.util.stream.Collectors.toSet());
     }
 }

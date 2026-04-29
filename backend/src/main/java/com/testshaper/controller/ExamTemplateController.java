@@ -26,19 +26,19 @@ public class ExamTemplateController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER')")
     public ResponseEntity<ApiResponse<ExamTemplateDTO>> createTemplate(@RequestBody ExamTemplateDTO dto) {
         return ResponseEntity.ok(ApiResponse.success(service.createTemplate(dto), "Template created successfully"));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER')")
     public ResponseEntity<ApiResponse<ExamTemplateDTO>> updateTemplate(@PathVariable UUID id, @RequestBody ExamTemplateDTO dto) {
         return ResponseEntity.ok(ApiResponse.success(service.updateTemplate(id, dto), "Template updated successfully"));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
     public ResponseEntity<ApiResponse<Void>> deleteTemplate(@PathVariable UUID id) {
         service.deleteTemplate(id);
         return ResponseEntity.ok(ApiResponse.success(null, "Template deleted successfully"));

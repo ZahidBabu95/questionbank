@@ -188,7 +188,7 @@ const AutoExamGenerator = () => {
                 durationMinutes: parseInt(examInfo.duration),
                 language: examInfo.language,
                 instructions: "",
-                instituteName: "",
+                instituteName: JSON.parse(localStorage.getItem('user') || '{}').instituteName || "",
                 headerText: "",
                 shuffleQuestions: true,
                 shuffleOptions: true,

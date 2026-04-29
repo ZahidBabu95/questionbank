@@ -47,5 +47,13 @@ export default {
     updateInstitute,
     activateInstitute,
     suspendInstitute,
-    upgradePlan
+    upgradePlan,
+    getAssignedSubjects: async (id) => {
+        const response = await axios.get(`${API_URL}/${id}/assigned-subjects`);
+        return response.data;
+    },
+    assignSubjects: async (id, subjectIds) => {
+        const response = await axios.put(`${API_URL}/${id}/assigned-subjects`, subjectIds);
+        return response.data;
+    }
 };

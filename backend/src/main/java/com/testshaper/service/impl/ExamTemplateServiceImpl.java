@@ -36,6 +36,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         entity.setTemplateName(dto.getTemplateName());
         entity.setGlobal(dto.isGlobal());
         entity.setStructureJson(dto.getStructureJson());
+        entity.setDocSettingsJson(dto.getDocSettingsJson());
         entity.setCreatedBy(dto.getCreatedBy());
         return mapToDto(repository.save(entity));
     }
@@ -46,6 +47,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         entity.setTemplateName(dto.getTemplateName());
         entity.setGlobal(dto.isGlobal());
         entity.setStructureJson(dto.getStructureJson());
+        entity.setDocSettingsJson(dto.getDocSettingsJson());
         return mapToDto(repository.save(entity));
     }
 
@@ -62,6 +64,7 @@ public class ExamTemplateServiceImpl implements ExamTemplateService {
         dto.setTemplateName(entity.getTemplateName());
         dto.setGlobal(entity.isGlobal());
         dto.setStructureJson(entity.getStructureJson());
+        dto.setDocSettingsJson(entity.getDocSettingsJson());
         dto.setCreatedBy(entity.getCreatedBy());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());

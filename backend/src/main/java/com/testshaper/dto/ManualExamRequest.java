@@ -40,6 +40,11 @@ public class ManualExamRequest {
     private boolean shuffleQuestions = false;
     private boolean shuffleOptions = false;
 
+    // Nexus Engine fields
+    private String editorMode;
+    private String rawContent;
+    private String docSettingsJson;
+
     private List<SectionRequest> sections = new ArrayList<>();
 
     @Data

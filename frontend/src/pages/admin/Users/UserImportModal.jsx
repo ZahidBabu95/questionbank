@@ -2,20 +2,33 @@ import React, { useState, useRef } from 'react';
 import { Upload, Download, X, Check, AlertTriangle, FileText, Users, Loader2, RefreshCw } from 'lucide-react';
 import userService from '../../../services/userService';
 
-const ROLES = [
-    { value: 'STUDENT',          label: 'শিক্ষার্থী (Student)'   },
-    { value: 'TEACHER',          label: 'শিক্ষক (Teacher)'       },
-    { value: 'INSTITUTE_ADMIN',  label: 'Institute Admin'         },
-];
-
 const UserImportModal = ({ onClose, onSuccess }) => {
     const [file,          setFile]          = useState(null);
+    const [roles,         setRoles]         = useState([]);
     const [defaultRole,   setDefaultRole]   = useState('STUDENT');
     const [dragging,      setDragging]      = useState(false);
     const [loading,       setLoading]       = useState(false);
     const [result,        setResult]        = useState(null);
     const [error,         setError]         = useState('');
     const fileRef = useRef();
+
+    React.useEffect(() => {
+        const loadRoles = async () => {
+            try {
+                const res = await userService.getRoles();
+                if (res?.success && res?.data) {
+                    setRoles(res.data);
+                } else if (Array.isArray(res)) {
+                    setRoles(res);
+                } else if (res?.data) {
+                    setRoles(res.data);
+                }
+            } catch (err) {
+                console.error("Failed to load roles", err);
+            }
+        };
+        loadRoles();
+    }, []);
 
     const handleDrop = (e) => {
         e.preventDefault();
@@ -99,12 +112,21 @@ const UserImportModal = ({ onClose, onSuccess }) => {
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-2">Default Role</label>
                         <div className="flex gap-2 flex-wrap">
-                            {ROLES.map(r => (
-                                <button key={r.value} onClick={() => setDefaultRole(r.value)}
-                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${defaultRole === r.value ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>
-                                    {r.label}
-                                </button>
-                            ))}
+                            {roles.length > 0 ? (
+                                roles.map(r => (
+                                    <button key={r.name} type="button" onClick={() => setDefaultRole(r.name)}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${defaultRole === r.name ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>
+                                        {r.description || r.name.replace(/_/g, ' ')}
+                                    </button>
+                                ))
+                            ) : (
+                                ['STUDENT', 'TEACHER', 'INSTITUTE_ADMIN'].map(r => (
+                                    <button key={r} type="button" onClick={() => setDefaultRole(r)}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${defaultRole === r ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>
+                                        {r}
+                                    </button>
+                                ))
+                            )}
                         </div>
                     </div>
 

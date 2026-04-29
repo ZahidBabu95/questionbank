@@ -31,4 +31,8 @@ public interface InstituteService {
     void incrementAiUsage(UUID instituteId, int tokens);
 
     void updateStorageUsage(UUID instituteId, double sizeMb);
+
+    void assignAcademicSubjects(UUID instituteId, java.util.Set<UUID> classSubjectIds);
+
+    java.util.Set<UUID> getAssignedAcademicSubjects(UUID instituteId);
 }

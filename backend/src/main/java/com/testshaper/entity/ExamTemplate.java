@@ -21,6 +21,9 @@ public class ExamTemplate extends BaseTenantEntity {
     @Column(name = "structure_json", columnDefinition = "JSON")
     private String structureJson;
 
+    @Column(name = "doc_settings_json", columnDefinition = "JSON")
+    private String docSettingsJson;
+
     @Column(name = "created_by")
     private String createdBy;
 }

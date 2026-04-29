@@ -13,6 +13,7 @@ const UserForm = ({ user, onClose, onSuccess }) => {
         password: '', // Only for create
         instituteId: user?.instituteId || ''
     });
+    const [roles, setRoles] = useState([]);
     const [loading, setLoading] = useState(false);
     const [institutes, setInstitutes] = useState([]);
     const [error, setError] = useState('');
@@ -41,7 +42,24 @@ const UserForm = ({ user, onClose, onSuccess }) => {
                 console.error("Failed to load institutes for form", err);
             }
         };
+
+        const loadRoles = async () => {
+            try {
+                const res = await userService.getRoles();
+                if (res?.success && res?.data) {
+                    setRoles(res.data);
+                } else if (Array.isArray(res)) {
+                    setRoles(res);
+                } else if (res?.data) {
+                    setRoles(res.data);
+                }
+            } catch (err) {
+                console.error("Failed to load roles for form", err);
+            }
+        };
+
         loadInstitutes();
+        loadRoles();
     }, []);
 
     const handleSubmit = async (e) => {
@@ -158,10 +176,20 @@ const UserForm = ({ user, onClose, onSuccess }) => {
                                     onChange={e => setFormData({ ...formData, roles: [e.target.value] })}
                                     style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundPosition: 'right 1rem center', backgroundRepeat: 'no-repeat' }}
                                 >
-                                    <option value="SUPER_ADMIN">Super Admin</option>
-                                    <option value="INSTITUTE_ADMIN">Institute Admin</option>
-                                    <option value="TEACHER">Teacher</option>
-                                    <option value="STUDENT">Student</option>
+                                    {roles.length > 0 ? (
+                                        roles.map(role => (
+                                            <option key={role.id || role.name} value={role.name}>
+                                                {role.description || role.name.replace(/_/g, ' ')}
+                                            </option>
+                                        ))
+                                    ) : (
+                                        <>
+                                            <option value="SUPER_ADMIN">Super Admin</option>
+                                            <option value="INSTITUTE_ADMIN">Institute Admin</option>
+                                            <option value="TEACHER">Teacher</option>
+                                            <option value="STUDENT">Student</option>
+                                        </>
+                                    )}
                                 </select>
                             </div>
 
@@ -169,16 +197,17 @@ const UserForm = ({ user, onClose, onSuccess }) => {
                             <div>
                                 <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
                                     <Building size={15} className="text-indigo-500" /> Assign Institute
-                                    {formData.roles[0] !== 'SUPER_ADMIN' && <span className="text-rose-500">*</span>}
+                                    <span className="text-slate-400 font-normal text-xs ml-auto">(Optional)</span>
                                 </label>
                                 <select
-                                    required={formData.roles[0] !== 'SUPER_ADMIN'}
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none appearance-none"
                                     value={formData.instituteId || ''}
                                     onChange={e => setFormData({ ...formData, instituteId: e.target.value })}
                                     style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundPosition: 'right 1rem center', backgroundRepeat: 'no-repeat' }}
                                 >
-                                    <option value="">{formData.roles[0] === 'SUPER_ADMIN' ? 'Global / Default' : 'Select Institute...'}</option>
+                                    <option value="">
+                                        {formData.roles[0] === 'SUPER_ADMIN' ? 'Global / System Level' : 'Personal Workspace (Auto Create)'}
+                                    </option>
                                     {institutes.map(inst => (
                                         <option key={inst.id} value={inst.id}>
                                             {inst.name} {inst.code ? `(${inst.code})` : ''}

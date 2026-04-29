@@ -64,9 +64,17 @@ public class UserServiceImpl implements UserService {
             instituteIdToUse = currentUser.getInstitute().getId();
         }
 
-        // Validation: If the new user is NOT SUPER_ADMIN, an institute MUST be provided
+        // Handle independent users: If the new user is NOT SUPER_ADMIN and no institute is provided, create a Personal Workspace
         if (!isSuperAdminCreation && instituteIdToUse == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Institute is required for this role. If you are a Super Admin, please specify an institute.");
+            Institute personalInstitute = new Institute();
+            personalInstitute.setName(dto.getName() + "'s Workspace");
+            personalInstitute.setCode("PERS-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+            personalInstitute.setType(Institute.InstituteType.PERSONAL);
+            personalInstitute.setPlanType(Institute.SubscriptionPlan.BETA);
+            personalInstitute.setStatus(Institute.InstituteStatus.ACTIVE);
+            
+            personalInstitute = instituteRepository.save(personalInstitute);
+            instituteIdToUse = personalInstitute.getId();
         }
 
         // Validate Password

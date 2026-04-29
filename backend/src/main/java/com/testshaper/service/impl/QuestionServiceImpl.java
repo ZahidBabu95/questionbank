@@ -28,7 +28,9 @@ public class QuestionServiceImpl implements QuestionService {
     private final QuestionOptionRepository optionRepository;
     private final com.testshaper.service.QuestionFeedbackService feedbackService;
     private final com.testshaper.repository.UserRepository userRepository;
-    private final com.testshaper.service.QuestionFeedbackLearningService feedbackLearningService;
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private com.testshaper.service.QuestionFeedbackLearningService feedbackLearningService;
     private final com.testshaper.repository.QuestionLikeRepository likeRepository;
     private final com.testshaper.repository.QuestionFavoriteRepository favoriteRepository;
     private final com.testshaper.repository.QuestionSourceRepository sourceRepository;
@@ -204,6 +206,27 @@ public class QuestionServiceImpl implements QuestionService {
         
         String tenantId = com.testshaper.security.TenantContext.getTenantId();
         
+        // Fetch FGAC allowed subjects for the user's institute
+        List<UUID> allowedSubjectIds = new java.util.ArrayList<>();
+        if (org.springframework.util.StringUtils.hasText(tenantId)) {
+            String currentUserEmail = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            userRepository.findByEmail(currentUserEmail).ifPresent(user -> {
+                if (user.getInstitute() != null && user.getInstitute().getAssignedSubjects() != null) {
+                    user.getInstitute().getAssignedSubjects().forEach(sub -> allowedSubjectIds.add(sub.getId()));
+                }
+            });
+        }
+
+        // Identify the global tenant ID (Default Institute)
+        String globalTenantId = null;
+        try {
+            globalTenantId = (String) entityManager.createQuery("SELECT CAST(i.id AS string) FROM Institute i WHERE i.code = 'DEFAULT-001'")
+                    .setMaxResults(1)
+                    .getSingleResult();
+        } catch (Exception e) {
+            // ignore if not found
+        }
+        
         org.springframework.data.jpa.domain.Specification<Question> spec = 
             com.testshaper.specification.QuestionSpecification.filterQuestions(
                 tenantId,
@@ -216,7 +239,11 @@ public class QuestionServiceImpl implements QuestionService {
                 filters.get("classId"),
                 filters.get("subjectId"),
                 filters.get("chapterId"),
-                filters.get("topicId")
+                filters.get("topicId"),
+                filters.get("className"),
+                filters.get("subjectName"),
+                allowedSubjectIds,
+                globalTenantId
             );
 
         return questionRepository.findAll(spec, pageable);

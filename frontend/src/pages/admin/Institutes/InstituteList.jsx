@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, MoreVertical, Building2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Filter, MoreVertical, Building2, CheckCircle, XCircle, AlertTriangle, Edit } from 'lucide-react';
 import instituteService from '../../../services/instituteService';
 import { useNavigate } from 'react-router-dom';
 
@@ -121,8 +121,12 @@ const InstituteList = () => {
                                         {getStatusBadge(institute.status)}
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <button className="text-slate-400 hover:text-primary">
-                                            <MoreVertical size={18} />
+                                        <button 
+                                            onClick={() => navigate(`/institutes/edit/${institute.id}`)}
+                                            className="text-slate-400 hover:text-primary p-2 rounded-lg hover:bg-slate-100 transition"
+                                            title="Edit Institute"
+                                        >
+                                            <Edit size={18} />
                                         </button>
                                     </td>
                                 </tr>

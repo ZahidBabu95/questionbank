@@ -25,10 +25,21 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DashboardServiceImpl implements DashboardService {
 
-        private final UserRepository userRepository;
-        private final InstituteRepository instituteRepository;
-        private final QuestionRepository questionRepository;
-        private final ExamRepository examRepository;
+        @org.springframework.beans.factory.annotation.Autowired
+        @org.springframework.context.annotation.Lazy
+        private UserRepository userRepository;
+
+        @org.springframework.beans.factory.annotation.Autowired
+        @org.springframework.context.annotation.Lazy
+        private InstituteRepository instituteRepository;
+
+        @org.springframework.beans.factory.annotation.Autowired
+        @org.springframework.context.annotation.Lazy
+        private QuestionRepository questionRepository;
+
+        @org.springframework.beans.factory.annotation.Autowired
+        @org.springframework.context.annotation.Lazy
+        private ExamRepository examRepository;
 
         @Override
         public DashboardStatsDTO getAdminDashboardStats() {

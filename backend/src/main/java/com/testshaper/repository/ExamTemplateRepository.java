@@ -11,6 +11,6 @@ import java.util.UUID;
 @Repository
 public interface ExamTemplateRepository extends JpaRepository<ExamTemplate, UUID> {
     
-    @Query("SELECT e FROM ExamTemplate e WHERE (e.tenantId = :tenantId OR e.isGlobal = true) AND e.deleted = false")
+    @Query("SELECT e FROM ExamTemplate e WHERE (e.tenantId = :tenantId OR e.tenantId = 'DEFAULT' OR e.isGlobal = true) AND e.deleted = false")
     List<ExamTemplate> findAvailableTemplates(String tenantId);
 }

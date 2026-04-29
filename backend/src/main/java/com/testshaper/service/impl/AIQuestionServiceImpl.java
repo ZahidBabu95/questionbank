@@ -29,7 +29,9 @@ public class AIQuestionServiceImpl implements AIQuestionService {
 
     private final GeneralSettingService generalSettingService;
     private final ApiKeyRotationService keyRotationService;
-    private final QuestionFeedbackLearningService feedbackLearningService;
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private QuestionFeedbackLearningService feedbackLearningService;
     private final AiKnowledgeBaseRepository knowledgeBaseRepository;
     private final AiBillingService aiBillingService;
 

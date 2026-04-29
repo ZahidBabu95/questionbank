@@ -7,6 +7,7 @@ import com.testshaper.entity.*;
 import com.testshaper.repository.ClassSubjectRepository;
 import com.testshaper.repository.ExamQuestionPoolRepository;
 import com.testshaper.repository.ExamRepository;
+import com.testshaper.repository.QuestionRepository;
 import com.testshaper.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ public class ExamGenerationServiceImpl {
 
     private final ExamRepository examRepository;
     private final ExamQuestionPoolRepository questionPoolRepository;
+    private final QuestionRepository questionRepository;
     private final ClassSubjectRepository classSubjectRepository;
     private final ObjectMapper objectMapper;
 
@@ -103,6 +105,12 @@ public class ExamGenerationServiceImpl {
     public ExamDTO updateExam(UUID id, ExamDTO dto) {
         Exam exam = examRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
+                
+        String currentTenant = TenantContext.getTenantId();
+        // DEFAULT tenant can edit anything. Normal tenants can only edit their own.
+        if (!"DEFAULT".equals(currentTenant) && !exam.getTenantId().equals(currentTenant)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied. Cannot modify cross-tenant data.");
+        }
 
         if (dto.getTitle() != null)
             exam.setTitle(dto.getTitle());
@@ -118,6 +126,12 @@ public class ExamGenerationServiceImpl {
             exam.setInstructions(dto.getInstructions());
         if (dto.getStatus() != null)
             exam.setStatus(dto.getStatus());
+        if (dto.getEditorMode() != null)
+            exam.setEditorMode(dto.getEditorMode());
+        if (dto.getRawContent() != null)
+            exam.setRawContent(dto.getRawContent());
+        if (dto.getDocSettingsJson() != null)
+            exam.setDocSettingsJson(dto.getDocSettingsJson());
 
         // Sync Questions if present
         if (dto.getQuestions() != null) {
@@ -188,18 +202,17 @@ public class ExamGenerationServiceImpl {
                 : null;
 
         List<Question> pool = new ArrayList<>();
-        pool.addAll(pickRandom(fetchPool(tenantId, request.getClassSubjectId(),
+        pool.addAll(fetchPool(tenantId, request.getClassSubjectId(),
                 rule.getQuestionType(), Question.DifficultyLevel.EASY,
-                request.getLanguage(), chapterIds, usedIds), easyCount, rule.getQuestionType(),
-                Question.DifficultyLevel.EASY));
-        pool.addAll(pickRandom(fetchPool(tenantId, request.getClassSubjectId(),
+                request.getLanguage(), chapterIds, usedIds, easyCount));
+                
+        pool.addAll(fetchPool(tenantId, request.getClassSubjectId(),
                 rule.getQuestionType(), Question.DifficultyLevel.MEDIUM,
-                request.getLanguage(), chapterIds, usedIds), mediumCount, rule.getQuestionType(),
-                Question.DifficultyLevel.MEDIUM));
-        pool.addAll(pickRandom(fetchPool(tenantId, request.getClassSubjectId(),
+                request.getLanguage(), chapterIds, usedIds, mediumCount));
+                
+        pool.addAll(fetchPool(tenantId, request.getClassSubjectId(),
                 rule.getQuestionType(), Question.DifficultyLevel.HARD,
-                request.getLanguage(), chapterIds, usedIds), hardCount, rule.getQuestionType(),
-                Question.DifficultyLevel.HARD));
+                request.getLanguage(), chapterIds, usedIds, hardCount));
 
         // Build ExamQuestion entries
         List<ExamQuestion> result = new ArrayList<>();
@@ -218,29 +231,41 @@ public class ExamGenerationServiceImpl {
             Question.DifficultyLevel difficulty,
             String language,
             Set<UUID> chapterIds,
-            Set<UUID> excludedIds) {
+            Set<UUID> excludedIds,
+            int needed) {
+            
+        if (needed <= 0) return new ArrayList<>();
+
         Set<UUID> safeExclusions = excludedIds.isEmpty()
                 ? Set.of(UUID.randomUUID()) // avoids empty IN clause issues
                 : excludedIds;
         Set<UUID> safeChapters = (chapterIds == null || chapterIds.isEmpty()) ? null : chapterIds;
 
-        return questionPoolRepository.findEligibleQuestions(
+        List<UUID> eligibleIds = questionPoolRepository.findEligibleQuestionIds(
                 tenantId, classSubjectId, type, difficulty, language, safeChapters, safeExclusions);
-    }
-
-    /**
-     * Weighted random pick — shuffles pool and takes first N.
-     * Logs a warning (does NOT fail) if pool is too small — takes all available.
-     */
-    private List<Question> pickRandom(List<Question> pool, int needed,
-            Question.QuestionType type,
-            Question.DifficultyLevel difficulty) {
-        if (pool.size() < needed) {
+                
+        if (eligibleIds.size() < needed) {
             log.warn("Insufficient questions: needed={} available={} type={} difficulty={}",
-                    needed, pool.size(), type, difficulty);
+                    needed, eligibleIds.size(), type, difficulty);
         }
-        Collections.shuffle(pool, new Random());
-        return pool.stream().limit(Math.max(0, needed)).collect(Collectors.toList());
+                
+        if (eligibleIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Shuffle the IDs directly
+        Collections.shuffle(eligibleIds, new Random());
+        
+        // Limit IDs to exactly what is needed
+        List<UUID> selectedIds = eligibleIds.stream().limit(needed).collect(Collectors.toList());
+        
+        // Now ONLY fetch the required amount!
+        List<Question> selectedQuestions = questionRepository.findAllById(selectedIds);
+        
+        // Ensure they are randomized
+        Collections.shuffle(selectedQuestions, new Random());
+        
+        return selectedQuestions;
     }
 
     // =========================================================
@@ -345,6 +370,15 @@ public class ExamGenerationServiceImpl {
     public ExamDTO getExam(UUID examId) {
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
+                
+        String currentTenant = TenantContext.getTenantId();
+        // If current user is DEFAULT tenant, allow access.
+        // If exam belongs to DEFAULT tenant, allow access (so others can view global templates).
+        // Otherwise, current user must be in the same tenant as the exam.
+        if (!"DEFAULT".equals(currentTenant) && !"DEFAULT".equals(exam.getTenantId()) && !exam.getTenantId().equals(currentTenant)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        
         return toDTO(exam);
     }
 
@@ -379,6 +413,12 @@ public class ExamGenerationServiceImpl {
     public void deleteExam(UUID examId) {
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
+                
+        String currentTenant = TenantContext.getTenantId();
+        if (!"DEFAULT".equals(currentTenant) && !exam.getTenantId().equals(currentTenant)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied. Cannot delete cross-tenant data.");
+        }
+        
         exam.setDeleted(true);
         examRepository.save(exam);
     }
@@ -408,6 +448,13 @@ public class ExamGenerationServiceImpl {
         dto.setCreatedBy(exam.getCreatedBy());
         dto.setInstructions(exam.getInstructions());
         dto.setCreatedAt(exam.getCreatedAt());
+
+        dto.setEditorMode(exam.getEditorMode());
+        dto.setRawContent(exam.getRawContent());
+        dto.setDocSettingsJson(exam.getDocSettingsJson());
+        if (exam.getExamTemplate() != null) {
+            dto.setTemplateId(exam.getExamTemplate().getId());
+        }
 
         if (exam.getClassSubject() != null) {
             if (exam.getClassSubject().getSubject() != null)

@@ -95,6 +95,12 @@ public class Institute extends BaseEntity {
     @Column(name = "storage_used_mb")
     private Double storageUsedMb = 0.0;
 
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(name = "institute_class_subjects",
+            joinColumns = @JoinColumn(name = "institute_id"),
+            inverseJoinColumns = @JoinColumn(name = "class_subject_id"))
+    private java.util.Set<ClassSubject> assignedSubjects = new java.util.HashSet<>();
+
     @Column(name = "expiry_date")
     private java.time.LocalDate expiryDate;
 
@@ -114,7 +120,7 @@ public class Institute extends BaseEntity {
     }
 
     public enum InstituteType {
-        SCHOOL, COLLEGE, UNIVERSITY, COACHING
+        SCHOOL, COLLEGE, UNIVERSITY, COACHING, PERSONAL
     }
 
     public enum InstituteStatus {
@@ -122,7 +128,7 @@ public class Institute extends BaseEntity {
     }
 
     public enum SubscriptionPlan {
-        FREE, BASIC, PREMIUM, ENTERPRISE
+        FREE, BASIC, PREMIUM, ENTERPRISE, BETA
     }
 
     public enum BillingCycle {

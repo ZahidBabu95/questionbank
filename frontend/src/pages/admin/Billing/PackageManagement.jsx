@@ -80,7 +80,11 @@ const PackageManagement = () => {
 
     const handleEdit = (pkg) => {
         setEditingPkg(pkg);
-        setFormData(pkg);
+        setFormData({
+            ...initialFormState,
+            ...pkg,
+            featureFlags: pkg.featureFlags || initialFormState.featureFlags
+        });
         setShowForm(true);
     };
 

@@ -10,6 +10,7 @@ public class ExamTemplateDTO {
     private String templateName;
     private boolean isGlobal;
     private String structureJson;
+    private String docSettingsJson;
     private String createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

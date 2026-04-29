@@ -153,9 +153,7 @@
     margin: 0 !important;
   }
 
-  .prose .cq-questions li::before {
-    counter-increment: cq-part;
-    content: counter(cq-part, lower-alpha) ". ";
+  .cq-questions li::before {
     font-weight: 800;
     color: #475569;
     background-color: #f1f5f9;
@@ -165,6 +163,21 @@
     font-size: 0.7rem;
     display: inline-flex;
   }
+
+  /* Default / English Labels */
+  .cq-questions li:nth-child(1)::before { content: "a)"; }
+  .cq-questions li:nth-child(2)::before { content: "b)"; }
+  .cq-questions li:nth-child(3)::before { content: "c)"; }
+  .cq-questions li:nth-child(4)::before { content: "d)"; }
+  .cq-questions li:nth-child(5)::before { content: "e)"; }
+
+  /* Bangla Labels */
+  .lang-bn .cq-questions li:nth-child(1)::before { content: "ক)"; }
+  .lang-bn .cq-questions li:nth-child(2)::before { content: "খ)"; }
+  .lang-bn .cq-questions li:nth-child(3)::before { content: "গ)"; }
+  .lang-bn .cq-questions li:nth-child(4)::before { content: "ঘ)"; }
+  .lang-bn .cq-questions li:nth-child(5)::before { content: "ঙ)"; }
+
   
   .cq-questions li .cq-text {
     flex-grow: 1;

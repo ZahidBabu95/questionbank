@@ -90,4 +90,19 @@ public class InstituteController {
         instituteService.upgradePlan(id, plan, durationMonths);
         return ResponseEntity.ok().build();
     }
+
+    @GetMapping("/{id}/assigned-subjects")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @userSecurity.isInstituteAdmin(#id)")
+    public ResponseEntity<java.util.Set<UUID>> getAssignedSubjects(@PathVariable UUID id) {
+        return ResponseEntity.ok(instituteService.getAssignedAcademicSubjects(id));
+    }
+
+    @PutMapping("/{id}/assigned-subjects")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<Void> assignSubjects(
+            @PathVariable UUID id,
+            @RequestBody java.util.Set<UUID> classSubjectIds) {
+        instituteService.assignAcademicSubjects(id, classSubjectIds);
+        return ResponseEntity.ok().build();
+    }
 }

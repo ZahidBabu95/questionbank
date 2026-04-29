@@ -29,13 +29,21 @@ const MarkdownRenderer = ({ content, className = '' }) => {
                 remarkPlugins={[remarkMath]}
                 rehypePlugins={[rehypeRaw, rehypeKatex]}
                 components={{
-                    img: ({ node, ...props }) => (
-                        <img {...props} referrerPolicy="no-referrer" className="max-w-full h-auto rounded-lg shadow-sm border border-slate-200 mt-2 mb-3 inline-block" />
-                    ),
+                    img: ({ node, ...props }) => {
+                        let src = props.src || '';
+                        if (src.includes('r2.dev') && !src.includes('proxy-image')) {
+                            src = `/api/v1/public/proxy-image?url=${encodeURIComponent(src)}`;
+                        }
+                        return <img {...props} src={src} referrerPolicy="no-referrer" className="max-w-full h-auto rounded-lg shadow-sm border border-slate-200 mt-2 mb-3 inline-block" />;
+                    },
                     a: ({ node, ...props }) => {
-                        const href = props.href || '';
-                        if (href.match(/\.(jpeg|jpg|gif|png|webp|bmp|svg)(\?.*)?$/i) || href.includes('cloudflarestorage.com')) {
-                            return <img src={href} alt={typeof props.children === 'string' ? props.children : 'Image link'} referrerPolicy="no-referrer" className="max-w-full h-auto rounded-lg shadow-sm border border-slate-200 mt-2 mb-3 inline-block" />;
+                        let href = props.href || '';
+                        if (href.match(/\.(jpeg|jpg|gif|png|webp|bmp|svg)(\?.*)?$/i) || href.includes('cloudflarestorage.com') || href.includes('r2.dev')) {
+                            let src = href;
+                            if (src.includes('r2.dev') && !src.includes('proxy-image')) {
+                                src = `/api/v1/public/proxy-image?url=${encodeURIComponent(src)}`;
+                            }
+                            return <img src={src} alt={typeof props.children === 'string' ? props.children : 'Image link'} referrerPolicy="no-referrer" className="max-w-full h-auto rounded-lg shadow-sm border border-slate-200 mt-2 mb-3 inline-block" />;
                         }
                         return (
                             <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">

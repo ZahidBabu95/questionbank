@@ -82,12 +82,9 @@ const MainLayout = () => {
 
     const userData = JSON.parse(localStorage.getItem('user') || '{}');
     const userName = userData.name || 'User';
-    const userRole = userData.roles ? (
-        userData.roles.includes('SUPER_ADMIN') ? 'Super Admin' :
-            userData.roles.includes('INSTITUTE_ADMIN') ? 'Institute Admin' :
-                userData.roles.includes('TEACHER') ? 'Teacher' :
-                    userData.roles.includes('STUDENT') ? 'Student' : 'User'
-    ) : 'User';
+    const userRole = userData.roles && userData.roles.length > 0
+        ? userData.roles[0].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+        : 'User';
 
     const getPageTitle = (path) => {
         // Dashboard & Profile
