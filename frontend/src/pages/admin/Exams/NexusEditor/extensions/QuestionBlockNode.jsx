@@ -1,7 +1,7 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
 import React from 'react';
-import { RefreshCw, BookOpen, Trash2 } from 'lucide-react';
+import { RefreshCw, Trash2, Edit3, RotateCcw } from 'lucide-react';
 
 const parseMarkdownImages = (text) => {
     if (!text) return text;
@@ -34,7 +34,7 @@ const parseMarkdownImages = (text) => {
         });
     };
 
-    const QuestionComponent = ({ node, editor, deleteNode, updateAttributes }) => {
+    const QuestionComponent = ({ node, editor, deleteNode, updateAttributes, getPos, selected }) => {
         // Strict mode lock removed as per user request to make it fully usable
         const isStrict = editor.view.dom.classList.contains('strict-analytics-mode');
         
@@ -124,7 +124,6 @@ const parseMarkdownImages = (text) => {
                             if (optResult.replaced) anyReplaced = true;
                             return { ...opt, optionText: optResult.text };
                         });
-
                         if (anyReplaced) {
                             updateAttributes({ options: newOptions });
                             window.dispatchEvent(new CustomEvent('nexusImageSelected', {
@@ -133,58 +132,112 @@ const parseMarkdownImages = (text) => {
                         }
                     }
                 };
+            }
+        };
 
+        const handleMouseDown = (e) => {
+            if (e.target.tagName === 'IMG') {
+                const img = e.target;
                 window.dispatchEvent(new CustomEvent('nexusImageSelected', {
                     detail: {
-                        width: width,
-                        align: align,
-                        onUpdate: updateImageConfig
+                        src: img.src,
+                        width: img.style.width || img.width,
+                        height: img.style.height || img.height,
+                        align: img.style.float || img.style.display === 'block' ? 'center' : 'none',
+                        updateImage: (updates) => {
+                            img.style.width = updates.width + 'px';
+                            img.style.height = updates.height + 'px';
+                            if (updates.align === 'center') {
+                                img.style.display = 'block';
+                                img.style.margin = '0 auto';
+                                img.style.float = 'none';
+                            } else if (updates.align === 'none') {
+                                img.style.display = 'inline-block';
+                                img.style.margin = '0';
+                                img.style.float = 'none';
+                            } else {
+                                img.style.display = 'inline-block';
+                                img.style.float = updates.align;
+                            }
+                            setRawContent(editor.getHTML());
+                        }
                     }
                 }));
+                return;
+            }
+        };
+
+        const handleClick = (e) => {
+            if (e.target.tagName === 'IMG') return;
+            const isStrict = editor.view.dom.classList.contains('strict-analytics-mode');
+            if (isStrict) {
+                // Just open the setup panel for the section, or do nothing.
+                window.dispatchEvent(new CustomEvent('nexusOpenTab', { detail: 'questionSetup' }));
             }
         };
 
         return (
-            <NodeViewWrapper 
+                        <NodeViewWrapper 
                 data-type="question-block" 
                 data-numberingstyle={node.attrs.numberingStyle || 'bn'}
-                className={`relative group mb-0 cursor-text`}
+                className={`relative mb-0 transition-all duration-200 rounded-xl ${isStrict ? 'cursor-pointer hover:bg-slate-50' : 'cursor-text'} print:bg-transparent print:scale-100 print:shadow-none print:ring-0`}
                 style={{ 
                     fontSize: fSize ? `${fSize}px` : 'inherit',
                     lineHeight: safeLineGap,
-                    marginBottom: node.attrs.questionGap !== undefined && node.attrs.questionGap !== null ? `${node.attrs.questionGap}px` : undefined
+                    marginBottom: node.attrs.questionGap !== undefined && node.attrs.questionGap !== null ? `${node.attrs.questionGap}px` : undefined,
+                    paddingTop: '8px',
+                    paddingBottom: '8px'
                 }}
-                onMouseDown={handleImageMouseDown}
+                onMouseDown={handleMouseDown}
+                onClick={handleClick}
             >
-                <div className="relative px-0 transition-all">
-                    {/* Action Buttons (Visible on Hover) */}
-                {isStrict && (
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-3 right-2 flex items-center gap-1 bg-white shadow-sm border border-slate-200 rounded-md p-0.5 z-10">
-                        <button className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded" title="Swap Question">
-                            <RefreshCw size={13} />
-                        </button>
-                        <button onClick={deleteNode} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded" title="Remove Question">
-                            <Trash2 size={13} />
-                        </button>
-                    </div>
-                )}
+                <div className="relative transition-all">
+                    {/* Action buttons moved to sidebar */}
+                </div>
 
-                {/* Main Question Text & Marks */}
-                <div className="flex items-start justify-between gap-4 w-full">
-                    <div className="text-slate-900 font-medium flex-1 w-full" 
-                         style={{ textAlign: node.attrs.textAlign || 'left' }}
-                         dangerouslySetInnerHTML={{ __html: parseMarkdownImages(node.attrs.questionText) }} 
-                    />
-                    {node.attrs.marksConfig !== 'hide' && node.attrs.marks && (
-                        <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 mt-0.5 select-none"
-                              style={{ fontSize: fSize ? `${fSize * 0.9}px` : '0.9em' }}>
-                            {node.attrs.marksConfig === 'showBracket' ? `(${node.attrs.marks})` : node.attrs.marks}
-                        </span>
+                <div className="flex flex-col items-start gap-1 w-full">
+                    {node.attrs.stimulus && (
+                        <div className="w-full mb-3 text-slate-800" 
+                             style={{ textAlign: node.attrs.textAlign || 'left', lineHeight: safeLineGap }}
+                             dangerouslySetInnerHTML={{ __html: parseMarkdownImages(node.attrs.stimulus) }} 
+                        />
+                    )}
+                    
+                    <div className="flex items-start justify-between gap-4 w-full">
+                        <div className="text-slate-900 font-medium flex-1 w-full" 
+                             style={{ textAlign: node.attrs.textAlign || 'left' }}
+                             dangerouslySetInnerHTML={{ __html: parseMarkdownImages(node.attrs.questionText) }} 
+                        />
+                        {node.attrs.marksConfig !== 'hide' && node.attrs.marks && (
+                            <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 mt-0.5 select-none"
+                                  style={{ fontSize: fSize ? `${fSize * 0.9}px` : '0.9em' }}>
+                                {node.attrs.marksConfig === 'showBracket' ? `(${node.attrs.marks})` : node.attrs.marks}
+                            </span>
+                        )}
+                    </div>
+                    
+                    {node.attrs.statements && Array.isArray(node.attrs.statements) && node.attrs.statements.length > 0 && (
+                        <div className="w-full mt-2 mb-2 flex justify-center">
+                            <div className="flex flex-wrap justify-center gap-x-8 gap-y-2">
+                                {node.attrs.statements.map((stmt, idx) => {
+                                    const roman = ['i', 'ii', 'iii', 'iv', 'v'][idx] || (idx + 1);
+                                    const safeStmt = typeof stmt === 'string' ? stmt : '';
+                                    // Strip existing prefix like 'i.', 'ii)', '1.', etc.
+                                    const cleanStmt = safeStmt.replace(/^(?:i{1,3}|iv|v|vi{0,3}|ix|x|[0-9]+|[১-৯]+)[\.\)]\s*/i, '').trim();
+                                    return (
+                                        <div key={idx} className="flex gap-2 items-start text-slate-800" style={{ fontSize: fSize ? `${fSize * 0.95}px` : '0.95em' }}>
+                                            <span className="font-medium mt-[1px]">{roman}.</span>
+                                            <div dangerouslySetInnerHTML={{ __html: parseMarkdownImages(cleanStmt) }} />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     )}
                 </div>
                 
                 {/* MCQ Options Rendering */}
-                {node.attrs.type === 'MCQ' && node.attrs.options && node.attrs.options.length > 0 && (
+                {node.attrs.options && Array.isArray(node.attrs.options) && node.attrs.options.length > 0 && (
                     <div className={`options-grid mt-[0.3em] grid gap-x-6 ${node.attrs.optionLayout === 'col4' ? 'grid-cols-4' : node.attrs.optionLayout === 'col2' ? 'grid-cols-2' : 'grid-cols-1'}`}
                          style={{ 
                              rowGap: node.attrs.optionGap ? `${node.attrs.optionGap}px` : '8px',
@@ -236,7 +289,6 @@ const parseMarkdownImages = (text) => {
                         </span>
                     </div>
                 )}
-            </div>
         </NodeViewWrapper>
     );
 };
@@ -248,8 +300,13 @@ export const QuestionBlockNode = Node.create({
 
     addAttributes() {
         return {
+            questionId: { default: null },
+            subjectId: { default: null },
+            chapterId: { default: null },
             type: { default: 'MCQ' },
             questionText: { default: '' },
+            stimulus: { default: '' },
+            statements: { default: [] },
             chapterName: { default: '' },
             marks: { default: 1 },
             options: { default: [] },
@@ -277,9 +334,19 @@ export const QuestionBlockNode = Node.create({
                         options = JSON.parse(optionsRaw);
                     } catch (e) { console.error("Failed to parse options", e); }
                 }
+                const statementsRaw = dom.getAttribute('data-statements');
+                let statements = [];
+                if (statementsRaw) {
+                    try {
+                        statements = JSON.parse(statementsRaw);
+                    } catch (e) { console.error("Failed to parse statements", e); }
+                }
                 return {
+                    questionId: dom.getAttribute('questionid') || null,
                     type: dom.getAttribute('type') || 'MCQ',
                     questionText: dom.getAttribute('questiontext') || '',
+                    stimulus: dom.getAttribute('stimulus') || '',
+                    statements: statements,
                     chapterName: dom.getAttribute('chaptername') || '',
                     marks: Number(dom.getAttribute('marks')) || 1,
                     numberingStyle: dom.getAttribute('numberingstyle') || 'bn',
@@ -299,10 +366,13 @@ export const QuestionBlockNode = Node.create({
     },
 
     renderHTML({ HTMLAttributes }) {
-        const { options, ...restAttrs } = HTMLAttributes;
+        const { options, statements, ...restAttrs } = HTMLAttributes;
         return ['div', mergeAttributes(restAttrs, {
             'data-type': 'question-block',
             'data-options': JSON.stringify(options),
+            'data-statements': JSON.stringify(statements || []),
+            'questionid': HTMLAttributes.questionId || null,
+            'stimulus': HTMLAttributes.stimulus || '',
             'fontsize': HTMLAttributes.fontSize || null,
             'linegap': HTMLAttributes.lineGap || null,
             'optiongap': HTMLAttributes.optionGap || null,

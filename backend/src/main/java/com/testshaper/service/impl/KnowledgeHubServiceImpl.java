@@ -959,7 +959,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     public SourceBookMasterDto getSourceBook(UUID id) {
         SourceBookMaster entity = sourceBookMasterRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Source Book not found"));
-        if(!entity.getTenantId().equals(TenantContext.getTenantId())) {
+        if(!"DEFAULT".equals(TenantContext.getTenantId()) && !entity.getTenantId().equals(TenantContext.getTenantId())) {
              throw new RuntimeException("Unauthorized");
         }
         return mapToDto(entity);
@@ -971,7 +971,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         SourceBookMaster entity = sourceBookMasterRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Source Book not found"));
 
-        if(!entity.getTenantId().equals(TenantContext.getTenantId())) {
+        if(!"DEFAULT".equals(TenantContext.getTenantId()) && !entity.getTenantId().equals(TenantContext.getTenantId())) {
              throw new RuntimeException("Unauthorized");
         }
 

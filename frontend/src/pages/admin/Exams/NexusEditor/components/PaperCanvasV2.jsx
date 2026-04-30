@@ -69,7 +69,8 @@ const PaperCanvasV2 = ({
     editorMode, rawContent, setRawContent, 
     docSettings, zoom = 100,
     editorConfig = null, workspaceTools = null, onPageCountChange,
-    pendingInsertQuestion, onQuestionInserted
+    pendingInsertQuestion, onQuestionInserted,
+    pendingSwapQuestion, onQuestionSwapped
 }) => {
     const s = docSettings || {};
 
@@ -98,6 +99,25 @@ const PaperCanvasV2 = ({
             attributes: {
                 class: 'focus:outline-none min-h-[800px]',
                 style: 'width: 100% !important;'
+            },
+            handleKeyDown: (view, event) => {
+                if (view.dom.classList.contains('strict-analytics-mode')) {
+                    // Allow navigation and copy
+                    const isNav = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key);
+                    const isCopy = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c';
+                    if (!isNav && !isCopy) {
+                        return true; // prevent default
+                    }
+                }
+                return false;
+            },
+            handleTextInput: (view) => {
+                if (view.dom.classList.contains('strict-analytics-mode')) return true;
+                return false;
+            },
+            handlePaste: (view) => {
+                if (view.dom.classList.contains('strict-analytics-mode')) return true;
+                return false;
             },
             handleDrop: (view, event, slice, moved) => {
                 // Ignore if it's just moving text within the editor
@@ -144,6 +164,46 @@ const PaperCanvasV2 = ({
         }
     }, [editor, editorMode]);
 
+    // Extract questions for Document tab and listen for external delete
+    useEffect(() => {
+        if (!editor) return;
+        
+        const extractAndDispatch = () => {
+            const qs = [];
+            editor.state.doc.descendants((node, pos) => {
+                if (node.type.name === 'questionBlock') {
+                    qs.push({ pos, nodeSize: node.nodeSize, attrs: node.attrs });
+                }
+            });
+            window.dispatchEvent(new CustomEvent('nexusDocumentQuestionsUpdate', { detail: qs }));
+        };
+        
+        // Initial extraction
+        extractAndDispatch();
+        
+        // Listen to updates
+        editor.on('update', extractAndDispatch);
+
+        // Listen for delete requests from Document tab
+        const handleDelete = (e) => {
+            if (!e.detail) return;
+            const { pos, nodeSize } = e.detail;
+            // Ensure pos is still valid
+            try {
+                const tr = editor.state.tr.delete(pos, pos + nodeSize);
+                editor.view.dispatch(tr);
+            } catch (err) {
+                console.error("Failed to delete node:", err);
+            }
+        };
+        window.addEventListener('nexusDeleteNodeRequested', handleDelete);
+
+        return () => {
+            editor.off('update', extractAndDispatch);
+            window.removeEventListener('nexusDeleteNodeRequested', handleDelete);
+        };
+    }, [editor]);
+
     // Sync external rawContent changes (e.g., when a Template is clicked)
     useEffect(() => {
         if (editor && rawContent && rawContent !== editor.getHTML()) {
@@ -171,6 +231,25 @@ const PaperCanvasV2 = ({
             if (onQuestionInserted) onQuestionInserted();
         }
     }, [pendingInsertQuestion, editor, onQuestionInserted, setRawContent]);
+
+    // Handle programmatic swap of questions from parent
+    useEffect(() => {
+        if (editor && pendingSwapQuestion) {
+            const { schema } = editor.state;
+            const node = schema.nodes.questionBlock.create(pendingSwapQuestion.attrs);
+            
+            const transaction = editor.state.tr.replaceWith(
+                pendingSwapQuestion.pos, 
+                pendingSwapQuestion.pos + pendingSwapQuestion.nodeSize, 
+                node
+            );
+            editor.view.dispatch(transaction);
+            
+            setRawContent(editor.getHTML());
+            
+            if (onQuestionSwapped) onQuestionSwapped();
+        }
+    }, [pendingSwapQuestion, editor, onQuestionSwapped, setRawContent]);
 
     const prevFormatHashRef = useRef(null);
     const syncTimeoutRef = useRef(null);
@@ -246,11 +325,17 @@ const PaperCanvasV2 = ({
                         let needsUpdate = false;
                         const newAttrs = { ...node.attrs };
                         
-                        if (node.attrs.numberingStyle !== targetSec.numberingStyle) { newAttrs.numberingStyle = targetSec.numberingStyle; needsUpdate = true; }
-                        if (node.attrs.marksConfig !== targetSec.marksConfig) { newAttrs.marksConfig = targetSec.marksConfig; needsUpdate = true; }
-                        if (node.attrs.optionLayout !== targetSec.optionLayout) { newAttrs.optionLayout = targetSec.optionLayout; needsUpdate = true; }
-                        if (node.attrs.optionStyle !== targetSec.optionStyle) { newAttrs.optionStyle = targetSec.optionStyle; needsUpdate = true; }
-                        if (node.attrs.optionDecoration !== targetSec.optionDecoration) { newAttrs.optionDecoration = targetSec.optionDecoration; needsUpdate = true; }
+                        const ns = targetSec.numberingStyle || 'bn';
+                        const mc = targetSec.marksConfig || 'hide';
+                        const ol = targetSec.optionLayout || 'col1';
+                        const os = targetSec.optionStyle || 'bn';
+                        const od = targetSec.optionDecoration || 'rightBracket';
+
+                        if (node.attrs.numberingStyle !== ns) { newAttrs.numberingStyle = ns; needsUpdate = true; }
+                        if (node.attrs.marksConfig !== mc) { newAttrs.marksConfig = mc; needsUpdate = true; }
+                        if (node.attrs.optionLayout !== ol) { newAttrs.optionLayout = ol; needsUpdate = true; }
+                        if (node.attrs.optionStyle !== os) { newAttrs.optionStyle = os; needsUpdate = true; }
+                        if (node.attrs.optionDecoration !== od) { newAttrs.optionDecoration = od; needsUpdate = true; }
                         
                         // Layout & Typography sync
                         const fSize = targetSec.fontSize !== undefined && targetSec.fontSize !== '' ? targetSec.fontSize : s.bodyFontSize;
@@ -603,6 +688,18 @@ const PaperCanvasV2 = ({
 
             {/* Custom CSS for Tiptap in Paper Engine */}
             <style dangerouslySetInnerHTML={{ __html: `
+                .strict-analytics-mode {
+                    caret-color: transparent !important;
+                    user-select: none !important;
+                    -webkit-user-select: none !important;
+                }
+                .strict-analytics-mode [data-section-id] {
+                    pointer-events: none !important;
+                }
+                .strict-analytics-mode p, .strict-analytics-mode h3 {
+                    cursor: default !important;
+                }
+                
                 .ProseMirror {
                     font-family: '${s.bnFont}', sans-serif;
                     font-size: ${ptToPx(s.bodyFontSize)}px;
@@ -726,7 +823,7 @@ const PaperCanvasV2 = ({
                 [data-type="question-block"] {
                     counter-increment: question-counter;
                     margin-bottom: ${s.questionGap !== undefined && s.questionGap !== '' ? s.questionGap : 15}px;
-                    padding-left: 1.8em; /* Explicit space for number */
+                    padding-left: 2.6em !important; /* Explicit space for up to 3-digit numbers */
                     margin-left: 0 !important;
                     position: relative;
                 }
@@ -734,13 +831,13 @@ const PaperCanvasV2 = ({
                 [data-type="question-block"]::before {
                     position: absolute;
                     left: 0; /* Start at the absolute left of the block */
-                    top: 0;
+                    top: 8px; /* Match the paddingTop of QuestionBlockNode for perfect vertical alignment */
                     font-weight: 700;
                     font-size: 1em; /* inherit the dynamic question font size */
                     color: #0f172a;
-                    width: 1.6em;
+                    width: 2.2em; /* Safe width for 3 digits + dot */
                     text-align: right;
-                    padding-right: 0.2em;
+                    padding-right: 0.4em; /* Space between dot and text */
                     white-space: nowrap;
                 }
                 

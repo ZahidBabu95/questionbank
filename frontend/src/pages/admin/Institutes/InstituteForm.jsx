@@ -22,6 +22,7 @@ const InstituteForm = () => {
         country: 'Bangladesh',
         website: '',
         establishedYear: new Date().getFullYear(),
+        medium: 'Bangla',
         planType: 'FREE',
         billingCycle: 'MONTHLY',
         subscriptionPackage: null,
@@ -193,6 +194,38 @@ const InstituteForm = () => {
                             <option value="COACHING">Coaching</option>
                         </select>
                     </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Version / Medium</label>
+                        <div className="flex flex-wrap gap-4 p-2 bg-indigo-50/30 border border-slate-300 rounded-lg">
+                            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                                <input type="checkbox" checked={formData.medium?.includes('Bangla')} onChange={(e) => {
+                                    let meds = formData.medium ? formData.medium.split(',').filter(Boolean) : [];
+                                    if(e.target.checked) { if(!meds.includes('Bangla')) meds.push('Bangla'); }
+                                    else meds = meds.filter(m => m !== 'Bangla');
+                                    handleChange({target: {name: 'medium', value: meds.join(',')}});
+                                }} className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" />
+                                Bangla
+                            </label>
+                            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                                <input type="checkbox" checked={formData.medium?.includes('English')} onChange={(e) => {
+                                    let meds = formData.medium ? formData.medium.split(',').filter(Boolean) : [];
+                                    if(e.target.checked) { if(!meds.includes('English')) meds.push('English'); }
+                                    else meds = meds.filter(m => m !== 'English');
+                                    handleChange({target: {name: 'medium', value: meds.join(',')}});
+                                }} className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" />
+                                English
+                            </label>
+                            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                                <input type="checkbox" checked={formData.medium?.includes('Bilingual')} onChange={(e) => {
+                                    let meds = formData.medium ? formData.medium.split(',').filter(Boolean) : [];
+                                    if(e.target.checked) { if(!meds.includes('Bilingual')) meds.push('Bilingual'); }
+                                    else meds = meds.filter(m => m !== 'Bilingual');
+                                    handleChange({target: {name: 'medium', value: meds.join(',')}});
+                                }} className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" />
+                                Bilingual
+                            </label>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Contact */}
@@ -267,27 +300,79 @@ const InstituteForm = () => {
                     <p className="text-xs text-slate-500 mb-4">Select which subjects this workspace can access. Leave completely blank to allow access to ALL subjects (default), or restrict them to specific subjects.</p>
                     
                     {hierarchy ? (
-                        <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
-                            {hierarchy.classes?.map(cls => {
-                                const classSubjects = hierarchy.classSubjects?.filter(cs => cs._classId === cls.id) || [];
-                                if (classSubjects.length === 0) return null;
+                        <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                            {/* Group classes by Stream to make it much more organized */}
+                            {Array.from(new Set(hierarchy.classes?.map(c => c._streamName))).map(streamName => {
+                                const streamClasses = hierarchy.classes.filter(c => c._streamName === streamName);
+                                if (streamClasses.length === 0) return null;
+                                
                                 return (
-                                    <div key={cls.id} className="border border-slate-200 rounded-lg p-3 bg-white">
-                                        <div className="font-bold text-sm text-slate-700 mb-2">{cls.name} <span className="text-slate-400 font-normal">({cls._streamName})</span></div>
-                                        <div className="flex flex-wrap gap-3">
-                                            {classSubjects.map(cs => {
-                                                const subject = hierarchy.subjects?.find(s => s.id === cs._subjectId);
-                                                if (!subject) return null;
+                                    <div key={streamName || 'General'} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm mb-4">
+                                        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex justify-between items-center sticky top-0 z-10">
+                                            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                                <div className="w-2 h-4 bg-indigo-500 rounded-full"></div>
+                                                {streamName || 'General Stream'}
+                                            </h3>
+                                        </div>
+                                        
+                                        <div className="p-4 space-y-6">
+                                            {streamClasses.map(cls => {
+                                                const classSubjects = hierarchy.classSubjects?.filter(cs => cs._classId === cls.id) || [];
+                                                if (classSubjects.length === 0) return null;
+                                                
+                                                const allClassSubjectIds = classSubjects.map(cs => cs.id);
+                                                const allSelected = allClassSubjectIds.length > 0 && allClassSubjectIds.every(id => assignedSubjectIds.includes(id));
+
                                                 return (
-                                                    <label key={cs.id} className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full border cursor-pointer transition ${assignedSubjectIds.includes(cs.id) ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
-                                                        <input 
-                                                            type="checkbox" 
-                                                            checked={assignedSubjectIds.includes(cs.id)} 
-                                                            onChange={() => handleSubjectToggle(cs.id)}
-                                                            className="w-4 h-4 text-indigo-600 rounded border-slate-300"
-                                                        />
-                                                        {subject.name} {subject.paper ? `(${subject.paper})` : ''}
-                                                    </label>
+                                                    <div key={cls.id} className="border border-slate-100 rounded-lg p-4 bg-white shadow-sm hover:border-indigo-100 transition-colors">
+                                                        <div className="flex flex-wrap md:flex-nowrap justify-between items-start md:items-center mb-3 pb-2 border-b border-slate-50 gap-3">
+                                                            <div className="font-bold text-sm text-slate-700">{cls.name}</div>
+                                                            <div className="flex gap-2">
+                                                                <button 
+                                                                    type="button" 
+                                                                    onClick={() => {
+                                                                        if (allSelected) {
+                                                                            setAssignedSubjectIds(prev => prev.filter(id => !allClassSubjectIds.includes(id)));
+                                                                        } else {
+                                                                            setAssignedSubjectIds(prev => Array.from(new Set([...prev, ...allClassSubjectIds])));
+                                                                        }
+                                                                    }}
+                                                                    className={`text-[10px] font-bold px-3 py-1.5 rounded transition-colors ${allSelected ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
+                                                                >
+                                                                    {allSelected ? 'Deselect All' : 'Select All Subjects'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2.5">
+                                                            {classSubjects.map(cs => {
+                                                                const subject = hierarchy.subjects?.find(s => s.id === cs._subjectId);
+                                                                if (!subject) return null;
+                                                                
+                                                                const isSelected = assignedSubjectIds.includes(cs.id);
+                                                                
+                                                                return (
+                                                                    <label 
+                                                                        key={cs.id} 
+                                                                        className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full border cursor-pointer transition select-none ${
+                                                                            isSelected 
+                                                                                ? 'bg-indigo-50 border-indigo-300 text-indigo-800 shadow-sm'
+                                                                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
+                                                                        }`}
+                                                                    >
+                                                                        <input 
+                                                                            type="checkbox" 
+                                                                            checked={isSelected} 
+                                                                            onChange={() => handleSubjectToggle(cs.id)}
+                                                                            className="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300"
+                                                                        />
+                                                                        <span>
+                                                                            {subject.name} {subject.paper ? `(${subject.paper})` : ''}
+                                                                        </span>
+                                                                    </label>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
                                                 );
                                             })}
                                         </div>

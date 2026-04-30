@@ -115,8 +115,11 @@ export const CollapsibleBox = ({ title, children, defaultOpen = false, toggleKey
                 <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-700 text-[13px]">{title}</span>
                     {toggleKey && (
-                        <div onClick={e => e.preventDefault()}>
-                            <Toggle checked={toggleVal} onChange={e => onToggle(toggleKey, e.target.checked)} />
+                        <div onClick={e => {
+                            e.preventDefault();
+                            onToggle(toggleKey, !toggleVal);
+                        }}>
+                            <Toggle checked={toggleVal} onChange={() => {}} />
                         </div>
                     )}
                 </div>

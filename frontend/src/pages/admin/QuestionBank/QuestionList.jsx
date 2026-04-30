@@ -477,6 +477,7 @@ const QuestionList = () => {
         const roleName = typeof r === 'string' ? r : (r.name || '');
         return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
     }) || user?.email === 'admin' || user?.email?.includes('admin@');
+    const hasFullLangAccess = isSuperAdmin || user?.instituteName === 'DEFAULT';
 
     const hasPerm = (action) => {
         if (isSuperAdmin) return true;
@@ -496,7 +497,7 @@ const QuestionList = () => {
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [filterType, setFilterType] = useState('ALL');
-    const [filterLanguage, setFilterLanguage] = useState('ALL');
+    const [filterLanguage, setFilterLanguage] = useState(user?.instituteMedium || 'ALL');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedQuestion, setSelectedQuestion] = useState(null);
     const [selectedIds, setSelectedIds] = useState([]);
@@ -881,11 +882,11 @@ const QuestionList = () => {
                         <Filter size={14} className="text-primary" /> <span className="text-[10px] uppercase tracking-wider hidden sm:inline">Filters:</span>
                     </div>
 
-                    <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer min-w-[90px] max-w-[110px] truncate">
-                        <option value="ALL">সব ভার্সন</option>
-                        <option value="Bangla">Bangla</option>
-                        <option value="English">English</option>
-                        <option value="Bilingual">Bilingual</option>
+                    <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer min-w-[90px] max-w-[110px] truncate disabled:opacity-50">
+                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual') || user.instituteMedium.includes(',')) && <option value="ALL">সব ভার্সন</option>}
+                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
+                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
+                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
                     </select>
                     
                     <select value={selectedLevelId} onChange={(e) => setSelectedLevelId(e.target.value)} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer min-w-[90px] max-w-[130px] truncate">

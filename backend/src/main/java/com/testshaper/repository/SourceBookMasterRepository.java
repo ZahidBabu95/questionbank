@@ -9,10 +9,13 @@ import java.util.UUID;
 
 @Repository
 public interface SourceBookMasterRepository extends JpaRepository<SourceBookMaster, UUID> {
-    List<SourceBookMaster> findByTenantIdOrderByCreatedAtDesc(String tenantId);
-    org.springframework.data.domain.Page<SourceBookMaster> findByTenantIdOrderByCreatedAtDesc(String tenantId, org.springframework.data.domain.Pageable pageable);
+    @org.springframework.data.jpa.repository.Query("SELECT b FROM SourceBookMaster b WHERE (:tenantId = 'DEFAULT' OR b.tenantId = :tenantId) ORDER BY b.createdAt DESC")
+    List<SourceBookMaster> findByTenantIdOrderByCreatedAtDesc(@org.springframework.data.repository.query.Param("tenantId") String tenantId);
+    
+    @org.springframework.data.jpa.repository.Query("SELECT b FROM SourceBookMaster b WHERE (:tenantId = 'DEFAULT' OR b.tenantId = :tenantId) ORDER BY b.createdAt DESC")
+    org.springframework.data.domain.Page<SourceBookMaster> findByTenantIdOrderByCreatedAtDesc(@org.springframework.data.repository.query.Param("tenantId") String tenantId, org.springframework.data.domain.Pageable pageable);
 
-    @org.springframework.data.jpa.repository.Query("SELECT b FROM SourceBookMaster b WHERE b.tenantId = :tenantId AND " +
+    @org.springframework.data.jpa.repository.Query("SELECT b FROM SourceBookMaster b WHERE (:tenantId = 'DEFAULT' OR b.tenantId = :tenantId) AND " +
        "(:searchTerm IS NULL OR :searchTerm = '' OR LOWER(b.title) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR LOWER(b.authorName) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR LOWER(b.publisher) LIKE LOWER(CONCAT('%', :searchTerm, '%'))) AND " +
        "(:bookType IS NULL OR :bookType = 'ALL' OR CAST(b.bookType AS string) = :bookType) AND " +
        "(COALESCE(:classSubjectIds, NULL) IS NULL OR b.classSubject.id IN :classSubjectIds) " +

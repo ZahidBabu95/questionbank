@@ -80,6 +80,9 @@ public class InstituteServiceImpl implements InstituteService {
         institute.setContactPhone(updatedInfo.getContactPhone());
         institute.setWebsite(updatedInfo.getWebsite());
         institute.setEstablishedYear(updatedInfo.getEstablishedYear());
+        if(updatedInfo.getMedium() != null) {
+            institute.setMedium(updatedInfo.getMedium());
+        }
 
         // Update limits based on updatedInfo or attached package
         if (updatedInfo.getSubscriptionPackage() != null && updatedInfo.getSubscriptionPackage().getId() != null) {

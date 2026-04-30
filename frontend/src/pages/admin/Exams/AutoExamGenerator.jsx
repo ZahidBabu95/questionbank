@@ -17,10 +17,18 @@ const AutoExamGenerator = () => {
         setLevelId, setStreamId, setClassId, setSubjectId,
     } = useAcademicHierarchy();
 
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : {};
+    const isSuperAdmin = user?.roles?.some(r => {
+        const roleName = typeof r === 'string' ? r : (r.name || '');
+        return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
+    }) || user?.email === 'admin' || user?.email?.includes('admin@');
+    const hasFullLangAccess = isSuperAdmin || user?.instituteName === 'DEFAULT';
+
     const [examInfo, setExamInfo] = useState({
         title: '',
         duration: 120,
-        language: 'Bangla',
+        language: user.instituteMedium || 'Bangla',
         examType: 'MODEL_TEST'
     });
 
@@ -298,10 +306,10 @@ const AutoExamGenerator = () => {
                                             </div>
                                             <div>
                                                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Language</label>
-                                                <select value={examInfo.language} onChange={e => setExamInfo({...examInfo, language: e.target.value})} className={selectCls}>
-                                                    <option value="Bangla">Bangla</option>
-                                                    <option value="English">English</option>
-                                                    <option value="Bilingual">Bilingual</option>
+                                                <select value={examInfo.language} onChange={e => setExamInfo({...examInfo, language: e.target.value})} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className={selectCls + (!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual') ? ' opacity-50' : '')}>
+                                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
+                                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
+                                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
                                                 </select>
                                             </div>
                                             <div>

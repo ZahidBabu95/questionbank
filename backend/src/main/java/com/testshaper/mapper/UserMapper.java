@@ -19,6 +19,7 @@ public interface UserMapper {
     @Mappings({
             @Mapping(target = "instituteId", expression = "java(user.getInstitute() != null ? user.getInstitute().getId() : null)"),
             @Mapping(target = "instituteName", expression = "java(user.getInstitute() != null ? user.getInstitute().getName() : null)"),
+            @Mapping(target = "instituteMedium", expression = "java(user.getInstitute() != null ? user.getInstitute().getMedium() : null)"),
             @Mapping(source = "active", target = "active"),
             @Mapping(source = "roles", target = "roles", qualifiedByName = "mapRolesToStrings"),
             @Mapping(source = "roles", target = "permissions", qualifiedByName = "mapPermissionsToStrings")

@@ -48,10 +48,18 @@ const ManualExamBuilder = () => {
         setLevelId, setStreamId, setClassId, setSubjectId,
     } = useAcademicHierarchy();
 
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : {};
+    const isSuperAdmin = user?.roles?.some(r => {
+        const roleName = typeof r === 'string' ? r : (r.name || '');
+        return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
+    }) || user?.email === 'admin' || user?.email?.includes('admin@');
+    const hasFullLangAccess = isSuperAdmin || user?.instituteName === 'DEFAULT';
+
     const [examInfo, setExamInfo] = useState({
         title: '',
         durationMinutes: 120,
-        language: 'Bangla',
+        language: user.instituteMedium || 'Bangla',
         examType: 'MODEL_TEST'
     });
 
@@ -501,7 +509,7 @@ const ManualExamBuilder = () => {
                                         <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Stream</label><select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!levelId} className={selectCls}><option value="">Select Stream</option>{streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
                                         <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Class</label><select value={classId} onChange={e => setClassId(e.target.value)} disabled={!streamId} className={selectCls}><option value="">Select Class</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                                         <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Subject</label><select value={subjectId} onChange={e => setSubjectId(e.target.value)} disabled={!classId} className={selectCls}><option value="">Select Subject</option>{subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}</select></div>
-                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Language</label><select value={examInfo.language} onChange={e => setExamInfo({...examInfo, language: e.target.value})} className={selectCls}><option value="Bangla">Bangla</option><option value="English">English</option><option value="Bilingual">Bilingual</option></select></div>
+                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Language</label><select value={examInfo.language} onChange={e => setExamInfo({...examInfo, language: e.target.value})} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className={selectCls + (!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual') ? ' opacity-50' : '')}>{(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}{(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}{(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}</select></div>
                                         <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Duration (Min)</label><input type="number" value={examInfo.durationMinutes} onChange={e => setExamInfo({...examInfo, durationMinutes: e.target.value})} className={inputCls} /></div>
                                     </div>
                                 </div>

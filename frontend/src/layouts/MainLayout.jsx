@@ -143,10 +143,10 @@ const MainLayout = () => {
     const isZeroPaddingRoute = isFullscreenWorkspace || location.pathname.startsWith('/questions');
 
     return (
-        <div className="flex h-screen bg-[#F8F9FC] font-sans text-slate-900 overflow-hidden">
+        <div className="flex h-screen bg-[#F8F9FC] font-sans text-slate-900 overflow-hidden print:block print:h-auto print:overflow-visible">
             {/* Impersonation Banner */}
             {isImpersonating && (
-                <div className="fixed top-0 left-0 right-0 h-10 bg-red-600 text-white flex items-center justify-center z-50 px-4 shadow-md">
+                <div className="fixed top-0 left-0 right-0 h-10 bg-red-600 text-white flex items-center justify-center z-50 px-4 shadow-md print:hidden">
                     <span className="text-xs sm:text-sm font-medium mr-4 truncate">
                         Impersonating a user. Restricted access applies.
                     </span>
@@ -161,7 +161,7 @@ const MainLayout = () => {
 
 
             {/* Sidebar */}
-            <div className={clsx("h-full", isImpersonating && "pt-10")}>
+            <div className={clsx("h-full print:hidden", isImpersonating && "pt-10")}>
                 <Sidebar
                     isOpen={isSidebarOpen}
                     onClose={() => setIsSidebarOpen(false)}
@@ -170,10 +170,10 @@ const MainLayout = () => {
             </div>
 
             {/* Main Content */}
-            <div className={clsx("flex-1 flex flex-col min-w-0 overflow-hidden relative", isImpersonating && "pt-10")}>
+            <div className={clsx("flex-1 flex flex-col min-w-0 overflow-hidden relative print:static print:block print:p-0 print:m-0 print:overflow-visible", isImpersonating && "pt-10")}>
 
                 {/* Header */}
-                <header className="flex items-center justify-between h-14 md:h-[72px] px-4 md:px-6 bg-white border-b border-slate-100/80 sticky top-0 z-30">
+                <header className="flex items-center justify-between h-14 md:h-[72px] px-4 md:px-6 bg-white border-b border-slate-100/80 sticky top-0 z-30 print:hidden">
                     <div className="flex items-center gap-2 md:gap-4">
                         <button
                             onClick={() => setIsSidebarOpen(true)}
@@ -251,7 +251,7 @@ const MainLayout = () => {
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
                             transition={{ duration: 0.2 }}
-                            className="md:hidden bg-white border-b border-slate-100 overflow-hidden"
+                            className="md:hidden bg-white border-b border-slate-100 overflow-hidden print:hidden"
                         >
                             <div className="px-4 py-3">
                                 <div className="relative">
@@ -270,7 +270,7 @@ const MainLayout = () => {
 
                 {/* Page Content — extra bottom padding on mobile for tab bar */}
                 <main id="main-scroll-container" className={clsx(
-                    "flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0 scroll-smooth overscroll-contain",
+                    "flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0 scroll-smooth overscroll-contain print:static print:block print:p-0 print:m-0 print:overflow-visible",
                     isZeroPaddingRoute ? "p-0" : "p-3 md:p-6 lg:p-8"
                 )}>
                     <div className={clsx(
@@ -293,7 +293,7 @@ const MainLayout = () => {
                 </main>
 
                 {/* ─── Mobile Bottom Tab Bar ─── */}
-                <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-100 px-2 safe-area-bottom">
+                <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-100 px-2 safe-area-bottom print:hidden">
                     <div className="flex items-center justify-around h-14">
                         {bottomTabs.map(tab => {
                             const active = isTabActive(tab.path);

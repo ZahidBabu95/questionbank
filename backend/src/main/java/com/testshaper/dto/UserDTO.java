@@ -18,6 +18,7 @@ public class UserDTO {
     private int contributionPoints;
     private UUID instituteId;
     private String instituteName;
+    private String instituteMedium;
     private Set<String> roles;
     private Set<String> permissions;
     private LocalDateTime createdAt;

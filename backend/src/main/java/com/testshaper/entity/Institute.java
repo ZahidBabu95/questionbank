@@ -22,6 +22,9 @@ public class Institute extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private InstituteType type;
 
+    @Column(name = "medium")
+    private String medium = "Bangla"; // Bangla, English, Bilingual
+
     private String eiin;
 
     private String address;
