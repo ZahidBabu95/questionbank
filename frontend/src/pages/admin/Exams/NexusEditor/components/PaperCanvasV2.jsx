@@ -282,7 +282,8 @@ const PaperCanvasV2 = ({
                 lg: sec.lineGap,
                 og: sec.optionGap,
                 qg: sec.questionGap,
-                ta: sec.textAlign
+                ta: sec.textAlign,
+                cols: sec.columns
             })),
             bodyFs: s.bodyFontSize,
             lineH: s.lineHeight,
@@ -319,7 +320,7 @@ const PaperCanvasV2 = ({
 
                 // 3. Sync Question Node Attributes
                 if (node.type.name === 'questionBlock') {
-                    const targetSec = node.attrs.type === 'MCQ' ? mcqSec : cqSec;
+                    const targetSec = s.sections.find(sec => sec.id === currentSecId) || (node.attrs.type === 'MCQ' ? mcqSec : cqSec);
                     
                     if (targetSec) {
                         let needsUpdate = false;
@@ -783,9 +784,18 @@ const PaperCanvasV2 = ({
                         }
                     `}
                     
-                    /* Apply Line Gap to Headers */
+                    /* Apply column-span to simple headers instead to avoid Chrome crashes */
                     [data-section-id="${sec.id}"] {
+                        column-span: all;
                         line-height: ${Math.max(1.0, Number(sec.lineGap !== undefined && sec.lineGap !== '' ? sec.lineGap : (s.lineHeight || 1.5)))} !important;
+                    }
+                    
+                    /* Hide Empty Nodes */
+                    [data-section-id="${sec.id}"].section-conditions:empty,
+                    [data-section-id="${sec.id}"].section-instructions:empty {
+                        display: none !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
                     }
                     
                     /* Per Section Custom Styling */
@@ -793,7 +803,6 @@ const PaperCanvasV2 = ({
                         font-size: ${ptToPx(sec.fontSize !== undefined && sec.fontSize !== '' ? sec.fontSize : (s.bodyFontSize || 14))}px !important;
                         line-height: ${Math.max(1.2, Number(sec.lineGap !== undefined && sec.lineGap !== '' ? sec.lineGap : (s.lineHeight || 1.5)))} !important;
                         text-align: ${sec.textAlign || 'left'} !important;
-                        ${(sec.columns || 1) === 1 ? `column-span: all;` : `column-span: none;`}
                     }
 
                     /* Ensure paragraphs inside question-block inherit alignment and line-height */

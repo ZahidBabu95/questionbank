@@ -609,6 +609,7 @@ public class AcademicServiceImpl implements AcademicService {
                 
                 java.util.Map<String, Object> csMap = new java.util.LinkedHashMap<>();
                 csMap.put("id", csDTO.getClassSubjectId());
+                csMap.put("name", csDTO.getSubjectName());
                 csMap.put("_classId", cls.getId());
                 csMap.put("_subjectId", csDTO.getSubjectId());
                 csMap.put("order", csDTO.getOrder());

@@ -74,7 +74,17 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
         @Query("SELECT q.type, count(q) FROM Question q GROUP BY q.type")
         List<Object[]> countQuestionsByType();
 
+        @Query("SELECT q.type, count(q) FROM Question q WHERE q.tenantId = :tenantId GROUP BY q.type")
+        List<Object[]> countQuestionsByTypeForTenant(@Param("tenantId") String tenantId);
+
+        @Query("SELECT q.type, count(q) FROM Question q WHERE q.createdBy = :createdBy GROUP BY q.type")
+        List<Object[]> countQuestionsByTypeForCreator(@Param("createdBy") String createdBy);
+
         long countByTenantId(String tenantId);
 
         long countByCreatedBy(String createdBy);
+
+        long countByCreatedAtBetween(java.time.LocalDateTime start, java.time.LocalDateTime end);
+        long countByTenantIdAndCreatedAtBetween(String tenantId, java.time.LocalDateTime start, java.time.LocalDateTime end);
+        long countByCreatedByAndCreatedAtBetween(String createdBy, java.time.LocalDateTime start, java.time.LocalDateTime end);
 }

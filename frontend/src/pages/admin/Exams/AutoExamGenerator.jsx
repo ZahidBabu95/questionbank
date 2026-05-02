@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Sparkles, LayoutGrid, ChevronRight, ChevronLeft, CheckCircle2, Target, BookOpen, ChevronDown, ChevronUp, Loader2, ListChecks, BrainCircuit, AlertCircle } from 'lucide-react';
 import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
@@ -15,7 +15,10 @@ const AutoExamGenerator = () => {
         levels, streams, classes, subjects, chapters,
         levelId, streamId, classId, subjectId,
         setLevelId, setStreamId, setClassId, setSubjectId,
+        restoreHierarchy
     } = useAcademicHierarchy();
+
+    const location = useLocation();
 
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : {};
@@ -28,9 +31,43 @@ const AutoExamGenerator = () => {
     const [examInfo, setExamInfo] = useState({
         title: '',
         duration: 120,
-        language: user.instituteMedium || 'Bangla',
+        language: (user?.instituteMedium && user.instituteMedium.includes(',')) ? 'Bangla' : (user?.instituteMedium || 'Bangla'),
         examType: 'MODEL_TEST'
     });
+
+    useEffect(() => {
+        if (location.state?.prefill && !subjectId) {
+            const prefill = location.state.prefill;
+            const resolveHierarchyAndRestore = async () => {
+                try {
+                    const { data } = await axios.get(`/v1/academic/class-subjects/${prefill.subjectId}/hierarchy`);
+                    
+                    if (data && data.levelId) {
+                        restoreHierarchy({
+                            levelId: data.levelId,
+                            streamId: data.streamId,
+                            classId: data.classId,
+                            classSubjectId: data.classSubjectId,
+                            chapterId: prefill.chapterId || ''
+                        });
+
+                        setExamInfo(prev => ({ ...prev, title: prefill.title }));
+                        
+                        if (prefill.difficulty) {
+                            if (prefill.difficulty === 'Easy') setDifficulty({ easy: 50, medium: 40, hard: 10 });
+                            if (prefill.difficulty === 'Medium') setDifficulty({ easy: 30, medium: 50, hard: 20 });
+                            if (prefill.difficulty === 'Hard') setDifficulty({ easy: 20, medium: 30, hard: 50 });
+                        }
+                        
+                        setStep(2);
+                    }
+                } catch (e) {
+                    console.error("Failed to auto-restore hierarchy from prefill", e);
+                }
+            };
+            resolveHierarchyAndRestore();
+        }
+    }, [location.state]);
 
     const [dynamicSections, setDynamicSections] = useState([]);
     const [userStructure, setUserStructure] = useState({});
@@ -116,8 +153,35 @@ const AutoExamGenerator = () => {
                             }
                         });
                     }
+                    if (location.state?.prefill) {
+                        const prefill = location.state.prefill;
+                        // Overwrite userStructure with custom qsCount if provided
+                        if (prefill.qsCount && prefill.qsCount > 0) {
+                            const mainType = initialStruct['MCQ'] ? 'MCQ' : Object.keys(initialStruct)[0];
+                            if (mainType) {
+                                Object.keys(initialStruct).forEach(k => {
+                                    initialStruct[k].count = 0; // Reset others
+                                });
+                                initialStruct[mainType].count = prefill.qsCount;
+                            }
+                        }
+                    }
+
                     setDynamicSections(sections);
                     setUserStructure(initialStruct);
+
+                    // Auto-allocate if specific chapter is provided in prefill
+                    if (location.state?.prefill?.chapterId) {
+                        const cId = location.state.prefill.chapterId;
+                        const mainType = initialStruct['MCQ'] ? 'MCQ' : Object.keys(initialStruct)[0];
+                        if (mainType && initialStruct[mainType]?.count > 0) {
+                            setAllocations({
+                                [cId]: { [mainType]: initialStruct[mainType].count }
+                            });
+                            // Auto expand that chapter
+                            setExpandedChapters([cId]);
+                        }
+                    }
                 } else setDynamicSections([]);
             }
         } catch (e) { console.error(e); } finally { setLoadingBlueprint(false); }

@@ -2,66 +2,54 @@ import React, { useState, useEffect } from 'react';
 import {
     Users, BookOpen, FileQuestion, Activity,
     TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Calendar,
-    Zap, Target, Clock, Plus, ExternalLink, Loader2, FileText, Layers
+    Zap, Target, Clock, Plus, ExternalLink, Loader2, FileText, Layers, Sparkles
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     BarChart, Bar, Cell
 } from 'recharts';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import dashboardService from '../../services/dashboardService';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
+import { motion } from 'framer-motion';
 
 /* ─── Mobile-first KPI Card ─── */
 const KPICard = ({ title, count, trend, icon: Icon, gradient, iconBg }) => (
-    <div className="bg-white p-4 md:p-5 rounded-2xl shadow-[0_1px_4px_rgba(0,0,0,0.04)] border border-slate-100/60 hover:shadow-md transition-all duration-300 group active:scale-[0.98]">
-        <div className="flex items-center gap-3 md:gap-4">
-            <div className={`w-11 h-11 md:w-12 md:h-12 rounded-2xl ${gradient} text-white flex items-center justify-center shadow-lg flex-shrink-0 group-hover:scale-110 transition-transform duration-300`}>
-                <Icon size={20} strokeWidth={2} />
+    <motion.div 
+        whileHover={{ y: -4, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }}
+        className="bg-white/80 backdrop-blur-xl p-4 md:p-6 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-white/50 hover:border-slate-200 transition-all duration-300 group relative overflow-hidden"
+    >
+        <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-transparent to-slate-100/50 rounded-full blur-2xl group-hover:bg-blue-50/50 transition-colors"></div>
+        <div className="flex items-center gap-4 md:gap-5 relative z-10">
+            <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl ${gradient} text-white flex items-center justify-center shadow-lg shadow-blue-500/10 flex-shrink-0 group-hover:scale-110 transition-transform duration-300 ring-4 ring-white/50`}>
+                <Icon size={24} strokeWidth={2} />
             </div>
             <div className="flex-1 min-w-0">
-                <h3 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight leading-none">{count}</h3>
-                <p className="text-[11px] md:text-xs font-medium text-slate-400 mt-0.5 truncate">{title}</p>
+                <p className="text-xs md:text-sm font-semibold text-slate-500 mb-1 truncate tracking-wide">{title}</p>
+                <h3 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight leading-none">{count}</h3>
             </div>
             {trend !== 0 && (
-                <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] md:text-xs font-bold shrink-0 ${trend > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                    {trend > 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0 shadow-sm ${trend > 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' : 'bg-rose-50 text-rose-600 border border-rose-100/50'}`}>
+                    {trend > 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
                     <span>{Math.abs(trend)}%</span>
                 </div>
             )}
         </div>
-    </div>
+    </motion.div>
 );
 
 /* ─── Quick Action Button ─── */
 const QuickAction = ({ icon: Icon, label, to, color }) => (
     <Link
         to={to}
-        className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl bg-white border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all active:scale-[0.95] group"
+        className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-white/70 backdrop-blur-md border border-white hover:border-blue-200 hover:shadow-lg hover:shadow-blue-500/5 transition-all active:scale-[0.95] group relative overflow-hidden"
     >
-        <div className={`w-10 h-10 rounded-xl ${color} text-white flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform`}>
-            <Icon size={18} strokeWidth={2} />
+        <div className={`w-12 h-12 rounded-2xl ${color} text-white flex items-center justify-center shadow-md shadow-slate-200 group-hover:scale-110 transition-transform duration-300 ring-4 ring-white`}>
+            <Icon size={20} strokeWidth={2} />
         </div>
-        <span className="text-[10px] md:text-[11px] font-bold text-slate-600 text-center leading-tight">{label}</span>
+        <span className="text-xs md:text-sm font-bold text-slate-700 text-center leading-tight">{label}</span>
     </Link>
 );
-
-const activityData = [
-    { name: 'Jan', questions: 240, exams: 120 },
-    { name: 'Feb', questions: 300, exams: 139 },
-    { name: 'Mar', questions: 200, exams: 480 },
-    { name: 'Apr', questions: 278, exams: 390 },
-    { name: 'May', questions: 189, exams: 480 },
-    { name: 'Jun', questions: 239, exams: 380 },
-    { name: 'Jul', questions: 349, exams: 430 },
-];
-
-const questionTypeData = [
-    { name: 'MCQ', value: 45, color: '#3b82f6' },
-    { name: 'CQ', value: 25, color: '#6366f1' },
-    { name: 'Short', value: 20, color: '#8b5cf6' },
-    { name: 'Other', value: 10, color: '#cbd5e1' },
-];
 
 const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -85,13 +73,28 @@ const Dashboard = () => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
-            setUser(JSON.parse(storedUser));
+            const parsedUser = JSON.parse(storedUser);
+            
+            const isSuperAdmin = parsedUser?.roles?.some(r => {
+                const roleName = typeof r === 'string' ? r : (r.name || '');
+                return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
+            }) || parsedUser?.email === 'admin';
+            
+            const isDefaultInstitute = isSuperAdmin || parsedUser?.instituteName === 'DEFAULT' || parsedUser?.instituteName === 'Default Institute';
+            
+            if (!isDefaultInstitute) {
+                navigate('/ai-workspace', { replace: true });
+                return;
+            }
+            
+            setUser(parsedUser);
         }
-    }, []);
+    }, [navigate]);
 
     useEffect(() => {
         if (!user) return;
@@ -154,29 +157,60 @@ const Dashboard = () => {
     const isAdminView = user?.roles?.includes('SUPER_ADMIN') || user?.permissions?.includes('ROLES_PERMISSIONS_VIEW');
     const isStudentView = !user?.roles?.includes('SUPER_ADMIN') && !user?.permissions?.includes('QUESTION_BANK_ADD_QUESTION_MCQ_VIEW');
 
+    const containerVariants = {
+        hidden: { opacity: 0 },
+        visible: {
+            opacity: 1,
+            transition: { staggerChildren: 0.1 }
+        }
+    };
+
+    const itemVariants = {
+        hidden: { y: 20, opacity: 0 },
+        visible: {
+            y: 0,
+            opacity: 1,
+            transition: { type: 'spring', stiffness: 100, damping: 15 }
+        }
+    };
+
+    const currentDate = format(new Date(), 'EEEE, MMMM d, yyyy');
+
     return (
-        <div className="space-y-4 md:space-y-6 lg:space-y-8">
+        <motion.div 
+            className="space-y-6 md:space-y-8 lg:space-y-10"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+        >
             {/* ─── Header ─── */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 bg-gradient-to-r from-blue-50 to-indigo-50/50 p-6 rounded-3xl border border-white shadow-sm">
                 <div>
-                    <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Welcome back, {user?.name || 'there'}! 👋</h1>
-                    <p className="text-slate-500 text-xs md:text-sm mt-0.5">Here's what's happening today.</p>
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="px-3 py-1 bg-white rounded-full text-xs font-bold text-primary shadow-sm border border-slate-100 flex items-center gap-1.5">
+                            <Sparkles size={14} className="text-amber-500" />
+                            {currentDate}
+                        </span>
+                    </div>
+                    <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight">Welcome back, {user?.name || 'there'}! 👋</h1>
+                    <p className="text-slate-500 text-sm md:text-base mt-2 max-w-xl leading-relaxed">Ready to shape some minds today? Here's an overview of your academic workspace.</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <button className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-white border border-slate-200 rounded-xl text-xs md:text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm active:scale-[0.97]">
-                        <Calendar size={14} />
+                <div className="flex items-center gap-3">
+                    <button className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-slate-200/60 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm active:scale-[0.97]">
+                        <Calendar size={16} />
                         <span className="hidden sm:inline">Last 30 Days</span>
                         <span className="sm:hidden">30 Days</span>
                     </button>
-                    <button className="px-3 py-1.5 md:px-4 md:py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-xl text-xs md:text-sm font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg shadow-primary/20 active:scale-[0.97]">
-                        <span className="hidden sm:inline">Download Report</span>
-                        <span className="sm:hidden flex items-center gap-1"><ExternalLink size={14} /> Report</span>
+                    <button className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 active:scale-[0.97]">
+                        <ExternalLink size={16} />
+                        <span className="hidden sm:inline">Export Report</span>
+                        <span className="sm:hidden">Export</span>
                     </button>
                 </div>
-            </div>
+            </motion.div>
 
             {/* ─── KPI Cards ─── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+            <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
                 {hasPerm('USER_MANAGEMENT', 'VIEW') && (
                     <KPICard title={isAdminView ? "Total Users" : "Total Teachers"} count={totalUsers.toLocaleString()} trend={userTrend} icon={Users} gradient="bg-gradient-to-br from-blue-500 to-primary" />
                 )}
@@ -189,12 +223,12 @@ const Dashboard = () => {
                 {hasPerm('EXAM_PAPER', 'VIEW') && (
                     <KPICard title={isStudentView ? "My Exams" : "Exams Conducted"} count={examsConducted.toLocaleString()} trend={examTrend || 0} icon={Activity} gradient="bg-gradient-to-br from-emerald-500 to-teal-600" />
                 )}
-            </div>
+            </motion.div>
 
             {/* ─── Quick Actions ─── */}
-            <div>
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Quick Actions</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+            <motion.div variants={itemVariants}>
+                <h3 className="text-sm font-extrabold text-slate-500 uppercase tracking-[0.2em] mb-4 pl-1">Quick Actions</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
                     {/* Admin/Teacher Quick Actions */}
                     {hasPerm('QUESTION_BANK_ADD_QUESTION_MCQ', 'VIEW') && <QuickAction icon={Plus} label="Add MCQ" to="/questions/create/mcq" color="bg-blue-500" />}
                     {hasPerm('EXAM_PAPER_GENERATOR_AUTO_GENERATE', 'VIEW') && <QuickAction icon={Zap} label="Auto Exam" to="/exams/generate/auto" color="bg-indigo-500" />}
@@ -207,14 +241,15 @@ const Dashboard = () => {
                     {hasPerm('QUESTION_BANK_REPOSITORY_APPROVED', 'VIEW') && !hasPerm('QUESTION_BANK_ADD_QUESTION_MCQ', 'VIEW') && <QuickAction icon={FileQuestion} label="Q-Bank" to="/questions" color="bg-violet-500" />}
                     {hasPerm('REPORTS_PERFORMANCE_INSIGHTS', 'VIEW') && !hasPerm('REPORTS_USAGE_SUMMARY', 'VIEW') && <QuickAction icon={Target} label="My Progress" to="/reports/performance" color="bg-emerald-500" />}
                 </div>
-            </div>
+            </motion.div>
 
             {/* ─── Charts Section ─── */}
             {hasPerm('REPORTS', 'VIEW') && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+                <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-6">
                     {/* Growth Chart */}
-                    <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-[0_1px_6px_rgba(0,0,0,0.03)] border border-slate-100 lg:col-span-2">
-                    <div className="flex items-center justify-between mb-4 md:mb-6">
+                    <div className="bg-white/80 backdrop-blur-xl p-5 md:p-7 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-white lg:col-span-2 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+                    <div className="flex items-center justify-between mb-6 relative z-10">
                         <div>
                             <h3 className="text-sm md:text-base font-bold text-slate-900">Activity Analytics</h3>
                             <p className="text-[11px] md:text-xs text-slate-400 mt-0.5">Questions vs Exams</p>
@@ -285,8 +320,8 @@ const Dashboard = () => {
                 </div>
 
                 {/* Question Types */}
-                <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-[0_1px_6px_rgba(0,0,0,0.03)] border border-slate-100 flex flex-col">
-                    <div className="flex items-center justify-between mb-4 md:mb-6">
+                <div className="bg-white/80 backdrop-blur-xl p-5 md:p-7 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-white flex flex-col relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-6 relative z-10">
                         <h3 className="text-sm md:text-base font-bold text-slate-900">Question Types</h3>
                         <button className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
                             <MoreHorizontal size={16} />
@@ -343,13 +378,13 @@ const Dashboard = () => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </motion.div>
             )}
 
             {/* ─── Recent Activity ─── */}
             {hasPerm('DASHBOARD', 'VIEW') && (
-            <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-[0_1px_6px_rgba(0,0,0,0.03)] border border-slate-100">
-                <div className="flex items-center justify-between mb-4 md:mb-6">
+            <motion.div variants={itemVariants} className="bg-white/80 backdrop-blur-xl p-5 md:p-7 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-white">
+                <div className="flex items-center justify-between mb-6">
                     <h3 className="text-sm md:text-base font-bold text-slate-900">Recent Activity</h3>
                     <button className="text-xs font-semibold text-primary hover:text-blue-700 active:scale-[0.97]">View All</button>
                 </div>
@@ -415,9 +450,9 @@ const Dashboard = () => {
                         </div>
                     ))}
                 </div>
-            </div>
+            </motion.div>
             )}
-        </div>
+        </motion.div>
     );
 };
 

@@ -37,7 +37,7 @@ const getAllChildTreeIds = (moduleObj) => {
 
 // Helper to get every single possible required permission string exactly matching the dynamic tree
 const getAllRequiredPermissionStrings = () => {
-    const actions = ['VIEW', 'CREATE', 'EDIT', 'DELETE'];
+    const actions = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'AI_TOOL', 'PLUS_TOOL'];
     const perms = [];
     const traverse = (nodes) => {
         nodes.forEach(node => {
@@ -246,7 +246,7 @@ const RoleManagement = () => {
                     </div>
                 </td>
                 
-                {['VIEW', 'CREATE', 'EDIT', 'DELETE'].map(action => {
+                {['VIEW', 'CREATE', 'EDIT', 'DELETE', 'AI_TOOL', 'PLUS_TOOL'].map(action => {
                     const permId = getPermId(mod.id, action);
                     const isSuperAdmin = selectedRole?.name === 'SUPER_ADMIN';
                     const isChecked = isSuperAdmin ? true : (permId ? selectedPermIds.includes(permId) : false);
@@ -378,14 +378,16 @@ const RoleManagement = () => {
                     </div>
 
                     <div className="overflow-auto flex-1 p-0 custom-scrollbar">
-                        <table className="w-full min-w-[700px] text-left border-collapse select-none">
+                        <table className="w-full min-w-[800px] text-left border-collapse select-none">
                             <thead className="sticky top-0 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] z-10">
                                 <tr>
-                                    <th className="py-3 px-6 text-[13px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 w-2/5">Module / Menu Tree</th>
-                                    <th className="py-3 px-4 text-[13px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 text-center w-[15%]">View</th>
-                                    <th className="py-3 px-4 text-[13px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 text-center w-[15%]">Create</th>
-                                    <th className="py-3 px-4 text-[13px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 text-center w-[15%]">Edit</th>
-                                    <th className="py-3 px-4 text-[13px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 text-center w-[15%]">Delete</th>
+                                    <th className="py-3 px-6 text-[13px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 w-[28%]">Module / Menu Tree</th>
+                                    <th className="py-3 px-4 text-[13px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 text-center w-[12%]">View</th>
+                                    <th className="py-3 px-4 text-[13px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 text-center w-[12%]">Create</th>
+                                    <th className="py-3 px-4 text-[13px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 text-center w-[12%]">Edit</th>
+                                    <th className="py-3 px-4 text-[13px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 text-center w-[12%]">Delete</th>
+                                    <th className="py-3 px-4 text-[13px] font-bold text-amber-600 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 text-center w-[12%]">AI Tool</th>
+                                    <th className="py-3 px-4 text-[13px] font-bold text-indigo-600 uppercase tracking-wider border-b border-slate-200 bg-slate-50/80 text-center w-[12%]">+ Tool</th>
                                 </tr>
                             </thead>
                             <tbody>

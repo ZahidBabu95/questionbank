@@ -44,6 +44,12 @@ import ExamList from './pages/admin/Exams/ExamList';
 import SavedExams from './pages/admin/Exams/SavedExams';
 import ExamEditor from './pages/admin/Exams/ExamEditor';
 import NexusEditor from './pages/admin/Exams/NexusEditor/NexusEditor';
+import AiWorkspace from './pages/admin/AIWorkspace/AiWorkspace';
+import AiCommandSettings from './pages/admin/AIWorkspace/AiCommandSettings';
+import AiPromptRules from './pages/admin/AIWorkspace/AiPromptRules';
+import AiPersonaMapping from './pages/admin/AIWorkspace/AiPersonaMapping';
+import AiAuditDashboard from './pages/admin/AIWorkspace/AiAuditDashboard';
+import AiToolManager from './pages/admin/AIWorkspace/AiToolManager';
 import CurriculumLibrary from './pages/admin/CurriculumLibrary';
 import AiUploadHistory from './pages/admin/AiUploadHistory';
 import AiApiKeys from './pages/admin/QuestionBank/AiApiKeys';
@@ -117,6 +123,12 @@ function App() {
                     {/* Protected App Routes */}
                     <Route element={<AppLayout />}>
                         <Route path="/dashboard" element={<Dashboard />} />
+                        <Route path="/ai-workspace" element={<AiWorkspace />} />
+                        <Route path="/ai-workspace/admin/settings" element={<AiCommandSettings />} />
+                        <Route path="/ai-workspace/admin/tools" element={<AiToolManager />} />
+                        <Route path="/ai-workspace/admin/prompts" element={<AiPromptRules />} />
+                        <Route path="/ai-workspace/admin/personas" element={<AiPersonaMapping />} />
+                        <Route path="/ai-workspace/admin/audit" element={<AiAuditDashboard />} />
                         <Route path="/profile" element={<MyProfile />} />
 
                         {/* User Management */}

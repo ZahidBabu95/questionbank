@@ -47,7 +47,7 @@ public class DashboardServiceImpl implements DashboardService {
                 long totalInstitutes = instituteRepository.count();
                 long totalQuestions = questionRepository.count();
                 long totalExams = examRepository.count();
-                return buildFullStats(totalUsers, totalInstitutes, totalQuestions, totalExams);
+                return buildFullStats(totalUsers, totalInstitutes, totalQuestions, totalExams, null, null);
         }
 
         @Override
@@ -63,7 +63,7 @@ public class DashboardServiceImpl implements DashboardService {
                 long totalQuestions = questionRepository.countByTenantId(tenantId);
                 long totalExams = examRepository.countByTenantId(tenantId);
 
-                return buildFullStats(totalUsers, 1, totalQuestions, totalExams);
+                return buildFullStats(totalUsers, 1, totalQuestions, totalExams, tenantId, null);
         }
 
         @Override
@@ -73,14 +73,15 @@ public class DashboardServiceImpl implements DashboardService {
                         return getEmptyStats();
                 }
                 String creatorEmail = currentUser.getEmail();
+                String tenantId = (currentUser.getInstitute() != null) ? currentUser.getInstitute().getCode() : null;
                 long myQuestions = questionRepository.countByCreatedBy(creatorEmail);
                 long myExams = examRepository.countByCreatedBy(creatorEmail);
-                return buildFullStats(0, 0, myQuestions, myExams);
+                return buildFullStats(0, 0, myQuestions, myExams, tenantId, creatorEmail);
         }
 
         @Override
         public DashboardStatsDTO getStudentDashboardStats() {
-                return buildFullStats(0, 0, 0, 0);
+                return buildFullStats(0, 0, 0, 0, null, null);
         }
 
         private User getCurrentUser() {
@@ -96,9 +97,16 @@ public class DashboardServiceImpl implements DashboardService {
                                 .build();
         }
 
-        private DashboardStatsDTO buildFullStats(long users, long institutes, long questions, long exams) {
+        private DashboardStatsDTO buildFullStats(long users, long institutes, long questions, long exams, String tenantId, String creatorEmail) {
                 // Map question types
-                List<Object[]> typeCounts = questionRepository.countQuestionsByType();
+                List<Object[]> typeCounts;
+                if (creatorEmail != null) {
+                        typeCounts = questionRepository.countQuestionsByTypeForCreator(creatorEmail);
+                } else if (tenantId != null) {
+                        typeCounts = questionRepository.countQuestionsByTypeForTenant(tenantId);
+                } else {
+                        typeCounts = questionRepository.countQuestionsByType();
+                }
                 long mcqCount = 0, cqCount = 0, shortCount = 0, otherCount = 0;
 
                 for (Object[] result : typeCounts) {
@@ -126,9 +134,17 @@ public class DashboardServiceImpl implements DashboardService {
                                         .value((otherCount * 100) / questions).color("#cbd5e1").build());
                 }
 
-                // Recent Activities
-                Page<Question> recentQuestions = questionRepository
-                                .findAll(PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt")));
+                Page<Question> recentQuestions;
+                if (creatorEmail != null) {
+                        // For a teacher, we could theoretically fetch their own recent questions. 
+                        // But for simplicity, we'll fetch tenant's recent questions.
+                        recentQuestions = questionRepository.searchApproved(tenantId, null, null, null, null, null, null, null, PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt")));
+                } else if (tenantId != null) {
+                        recentQuestions = questionRepository.searchApproved(tenantId, null, null, null, null, null, null, null, PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt")));
+                } else {
+                        recentQuestions = questionRepository.findAll(PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt")));
+                }
+
                 List<DashboardStatsDTO.RecentActivity> activities = recentQuestions.getContent().stream().map(q -> {
                         boolean hasSubject = q.getClassSubject() != null && q.getClassSubject().getSubject() != null;
                         String subjectName = hasSubject ? q.getClassSubject().getSubject().getName()
@@ -146,10 +162,27 @@ public class DashboardServiceImpl implements DashboardService {
                 }).collect(Collectors.toList());
 
                 List<DashboardStatsDTO.ActivityStat> activityTrend = new ArrayList<>();
-                activityTrend.add(DashboardStatsDTO.ActivityStat.builder().name("Jan").questions(10).exams(5).build());
-                activityTrend.add(DashboardStatsDTO.ActivityStat.builder().name("Feb").questions(20).exams(8).build());
-                activityTrend.add(DashboardStatsDTO.ActivityStat.builder().name("Mar").questions((int) questions)
-                                .exams((int) exams).build());
+                for (int i = 5; i >= 0; i--) {
+                        LocalDateTime start = LocalDateTime.now().minusMonths(i).withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+                        LocalDateTime end = start.plusMonths(1).minusSeconds(1);
+                        String monthName = start.getMonth().name().substring(0, 3);
+                        
+                        long qCount = 0;
+                        long eCount = 0;
+                        
+                        if (creatorEmail != null) {
+                                qCount = questionRepository.countByCreatedByAndCreatedAtBetween(creatorEmail, start, end);
+                                eCount = examRepository.countByCreatedByAndCreatedAtBetween(creatorEmail, start, end);
+                        } else if (tenantId != null) {
+                                qCount = questionRepository.countByTenantIdAndCreatedAtBetween(tenantId, start, end);
+                                eCount = examRepository.countByTenantIdAndCreatedAtBetween(tenantId, start, end);
+                        } else {
+                                qCount = questionRepository.countByCreatedAtBetween(start, end);
+                                eCount = examRepository.countByCreatedAtBetween(start, end);
+                        }
+                        
+                        activityTrend.add(DashboardStatsDTO.ActivityStat.builder().name(monthName).questions((int) qCount).exams((int) eCount).build());
+                }
 
                 return DashboardStatsDTO.builder()
                                 .totalUsers(users).userTrend(5.0)

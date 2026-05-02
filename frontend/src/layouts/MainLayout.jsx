@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
-    Menu, Search, Bell, ChevronDown,
+    Menu, Search, Bell, ChevronDown, Box,
     LayoutDashboard, FileQuestion, FileText, Settings, X
 } from 'lucide-react';
 import Sidebar from '../components/layout/Sidebar';
@@ -17,6 +17,17 @@ const MainLayout = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const branding = useBranding();
+
+    // Robustly check if running inside an iframe, so embedding state is preserved across navigations within the iframe
+    const isEmbedded = window !== window.parent || new URLSearchParams(location.search).get('embedded') === 'true';
+
+    if (isEmbedded) {
+        return (
+            <div className="w-full h-screen overflow-y-auto bg-slate-50 custom-scrollbar">
+                <Outlet />
+            </div>
+        );
+    }
 
 
     const handleLogout = () => {
@@ -89,6 +100,7 @@ const MainLayout = () => {
     const getPageTitle = (path) => {
         // Dashboard & Profile
         if (path.startsWith('/dashboard')) return { title: 'Dashboard', subtitle: 'Overview & Statistics' };
+        if (path.startsWith('/ai-workspace')) return { title: 'AI Workspace', subtitle: 'Smart Chat & Content Engine' };
         if (path.startsWith('/profile')) return { title: 'My Profile', subtitle: 'Manage your account settings' };
         if (path.startsWith('/notifications')) return { title: 'Notifications', subtitle: 'All system alerts and updates' };
 
@@ -135,10 +147,20 @@ const MainLayout = () => {
 
     const { title, subtitle } = getPageTitle(location.pathname);
 
-    // Layout configuration flags
+    const isSuperAdmin = userData?.roles?.some(r => {
+        const roleName = typeof r === 'string' ? r : (r.name || '');
+        return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
+    }) || userData?.email === 'admin';
+    const isDefaultInstitute = isSuperAdmin || userData?.instituteName === 'DEFAULT' || userData?.instituteName === 'Default Institute';
+    
+    // Sidebar is entirely restricted to Admins & Default Institute users
+    const hideSidebar = !isDefaultInstitute;
+
+    const isAiWorkspace = location.pathname.startsWith('/ai-workspace');
     const isFullscreenWorkspace = location.pathname.includes('editor') || 
                                   location.pathname.includes('/knowledge-hub/proofreading') || 
-                                  location.pathname.includes('/knowledge-hub/digitization');
+                                  location.pathname.includes('/knowledge-hub/digitization') ||
+                                  isAiWorkspace;
     
     const isZeroPaddingRoute = isFullscreenWorkspace || location.pathname.startsWith('/questions');
 
@@ -161,6 +183,7 @@ const MainLayout = () => {
 
 
             {/* Sidebar */}
+            {!hideSidebar && (
             <div className={clsx("h-full print:hidden", isImpersonating && "pt-10")}>
                 <Sidebar
                     isOpen={isSidebarOpen}
@@ -168,19 +191,23 @@ const MainLayout = () => {
                     onLogout={handleLogout}
                 />
             </div>
+            )}
 
             {/* Main Content */}
             <div className={clsx("flex-1 flex flex-col min-w-0 overflow-hidden relative print:static print:block print:p-0 print:m-0 print:overflow-visible", isImpersonating && "pt-10")}>
 
                 {/* Header */}
+                {!hideSidebar && (
                 <header className="flex items-center justify-between h-14 md:h-[72px] px-4 md:px-6 bg-white border-b border-slate-100/80 sticky top-0 z-30 print:hidden">
                     <div className="flex items-center gap-2 md:gap-4">
+                        {!hideSidebar && (
                         <button
                             onClick={() => setIsSidebarOpen(true)}
                             className="p-2 -ml-1 text-slate-500 rounded-xl md:hidden hover:bg-slate-50 transition-colors active:scale-90"
                         >
                             <Menu className="w-5 h-5" />
                         </button>
+                        )}
 
                         {/* Mobile: Logo / Desktop: Dynamic Header Title */}
                         <div className="md:hidden flex items-center">
@@ -199,9 +226,29 @@ const MainLayout = () => {
                             </motion.div>
                         </div>
 
-                        <div className="hidden md:flex flex-col ml-2">
-                            <h1 className="text-lg font-bold text-slate-800 leading-tight">{title}</h1>
-                            <p className="text-[11px] text-slate-500 font-medium tracking-wide hidden lg:block">{subtitle}</p>
+                        {/* Desktop: Dynamic Header Title or Logo if sidebar is hidden */}
+                        <div className="hidden md:flex items-center gap-3">
+                            {hideSidebar ? (
+                                <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/dashboard')}>
+                                    {branding?.logo_url ? (
+                                        <img src={branding.logo_url} alt="Logo" className="h-8 w-auto object-contain" />
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center shadow-md text-white">
+                                                <Box strokeWidth={2.5} size={16} />
+                                            </div>
+                                            <span className="text-[17px] font-black text-slate-800 tracking-tight leading-tight">
+                                                {branding?.system_name || 'Question Shaper'}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div>
+                                    <h1 className="text-[17px] md:text-xl font-black text-slate-800 tracking-tight">{title}</h1>
+                                    <p className="text-[11px] md:text-sm font-medium text-slate-500 tracking-wide mt-0.5">{subtitle}</p>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -241,9 +288,11 @@ const MainLayout = () => {
                         </Link>
                     </div>
                 </header>
+                )}
 
 
                 {/* Mobile Search Bar (Slide Down) */}
+                {!hideSidebar && (
                 <AnimatePresence>
                     {showMobileSearch && (
                         <motion.div
@@ -267,6 +316,7 @@ const MainLayout = () => {
                         </motion.div>
                     )}
                 </AnimatePresence>
+                )}
 
                 {/* Page Content — extra bottom padding on mobile for tab bar */}
                 <main id="main-scroll-container" className={clsx(
@@ -293,6 +343,7 @@ const MainLayout = () => {
                 </main>
 
                 {/* ─── Mobile Bottom Tab Bar ─── */}
+                {!hideSidebar && (
                 <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-100 px-2 safe-area-bottom print:hidden">
                     <div className="flex items-center justify-around h-14">
                         {bottomTabs.map(tab => {
@@ -329,6 +380,7 @@ const MainLayout = () => {
                         </button>
                     </div>
                 </nav>
+                )}
             </div>
         </div>
     );

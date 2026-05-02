@@ -975,13 +975,15 @@ public class AIQuestionController {
         String query = request.get("query");
         String docId = request.get("docId");
         String filter = request.get("filter"); // e.g., Subject/Class
+        String mode = request.getOrDefault("mode", "strict");
+        String tone = request.getOrDefault("tone", "professional");
 
         if (query == null || query.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("Query cannot be empty", 400));
         }
 
         try {
-            String answer = copilotService.askCopilot(query, docId, filter);
+            String answer = copilotService.askCopilot(query, null, docId, filter, null, mode, tone, null);
             return ResponseEntity.ok(ApiResponse.success(answer, "Copilot answered successfully"));
         } catch (Exception e) {
             log.error("Copilot asking failed: ", e);

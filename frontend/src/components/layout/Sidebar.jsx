@@ -4,7 +4,7 @@ import {
     LayoutDashboard, Users, School, BookOpen, FileQuestion,
     FileText, Layers, BarChart, CreditCard, Settings,
     MessageSquare, ChevronDown, ChevronRight, X, LogOut,
-    Globe, Shield, Box, Building2, PanelLeftClose, PanelLeftOpen, Brain
+    Globe, Shield, Box, Building2, PanelLeftClose, PanelLeftOpen, Brain, Sparkles
 } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,6 +19,19 @@ export const MENU_ITEMS = [
         icon: <LayoutDashboard size={20} strokeWidth={1.8} />,
         path: '/dashboard',
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT']
+    },
+    {
+        title: 'AI Workspace',
+        icon: <Sparkles size={20} strokeWidth={1.8} />,
+        roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
+        submenu: [
+            { title: 'Chat Console', path: '/ai-workspace', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+            { title: 'Tool & Widget Manager', path: '/ai-workspace/admin/tools', roles: ['SUPER_ADMIN'] },
+            { title: 'Command & Settings', path: '/ai-workspace/admin/settings', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { title: 'Prompt Rules', path: '/ai-workspace/admin/prompts', roles: ['SUPER_ADMIN'] },
+            { title: 'Personas Mapping', path: '/ai-workspace/admin/personas', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { title: 'Audit & Telemetry', path: '/ai-workspace/admin/audit', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] }
+        ]
     },
     {
         title: 'User Management',

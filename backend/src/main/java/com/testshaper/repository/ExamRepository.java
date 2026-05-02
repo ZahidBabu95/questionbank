@@ -22,4 +22,8 @@ public interface ExamRepository extends JpaRepository<Exam, UUID> {
         long countByTenantId(String tenantId);
 
         long countByCreatedBy(String createdBy);
+
+        long countByCreatedAtBetween(java.time.LocalDateTime start, java.time.LocalDateTime end);
+        long countByTenantIdAndCreatedAtBetween(String tenantId, java.time.LocalDateTime start, java.time.LocalDateTime end);
+        long countByCreatedByAndCreatedAtBetween(String createdBy, java.time.LocalDateTime start, java.time.LocalDateTime end);
 }

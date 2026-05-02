@@ -497,7 +497,10 @@ const QuestionList = () => {
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [filterType, setFilterType] = useState('ALL');
-    const [filterLanguage, setFilterLanguage] = useState(user?.instituteMedium || 'ALL');
+    const [filterLanguage, setFilterLanguage] = useState(() => {
+        if (user?.instituteMedium && user.instituteMedium.includes(',')) return 'ALL';
+        return user?.instituteMedium || 'ALL';
+    });
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedQuestion, setSelectedQuestion] = useState(null);
     const [selectedIds, setSelectedIds] = useState([]);

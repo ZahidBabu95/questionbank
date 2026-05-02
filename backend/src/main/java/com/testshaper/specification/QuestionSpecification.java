@@ -36,24 +36,22 @@ public class QuestionSpecification {
             if (StringUtils.hasText(tenantId)) {
                 Predicate tenantMatch = cb.equal(root.get("tenantId"), tenantId);
                 
-                // Allow global questions (tenantId is "DEFAULT", null, or the Default Institute's ID) IF they belong to allowed subjects
+                Predicate isGlobalNull = cb.isNull(root.get("tenantId"));
+                Predicate isGlobalDefault = cb.equal(root.get("tenantId"), "DEFAULT");
+                Predicate isGlobalEmpty = cb.equal(root.get("tenantId"), "");
+                Predicate isGlobalInst = cb.or(); // dummy false
+                if (StringUtils.hasText(globalTenantId)) {
+                    isGlobalInst = cb.equal(root.get("tenantId"), globalTenantId);
+                }
+                Predicate isGlobal = cb.or(isGlobalNull, isGlobalDefault, isGlobalEmpty, isGlobalInst);
+                
                 if (allowedSubjectIds != null && !allowedSubjectIds.isEmpty()) {
-                    Predicate isGlobalNull = cb.isNull(root.get("tenantId"));
-                    Predicate isGlobalDefault = cb.equal(root.get("tenantId"), "DEFAULT");
-                    Predicate isGlobalEmpty = cb.equal(root.get("tenantId"), "");
-                    Predicate isGlobalInst = cb.or(); // dummy false
-                    if (StringUtils.hasText(globalTenantId)) {
-                        isGlobalInst = cb.equal(root.get("tenantId"), globalTenantId);
-                    }
-                    Predicate isGlobal = cb.or(isGlobalNull, isGlobalDefault, isGlobalEmpty, isGlobalInst);
-                    
                     Predicate subjectInAllowed = root.get("classSubject").get("id").in(allowedSubjectIds);
                     Predicate globalAndAllowed = cb.and(isGlobal, subjectInAllowed);
-                    
                     predicates.add(cb.or(tenantMatch, globalAndAllowed));
                 } else {
-                    // If no allowed subjects, only show their own tenant's questions
-                    predicates.add(tenantMatch);
+                    // If no allowed subjects are specified, it means no subject restrictions (allow ALL global questions)
+                    predicates.add(cb.or(tenantMatch, isGlobal));
                 }
             }
 

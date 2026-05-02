@@ -353,9 +353,9 @@ public class AIQuestionServiceImpl implements AIQuestionService {
             if (file != null && !file.isEmpty()) {
                 String base64Data = Base64.getEncoder().encodeToString(file.getBytes());
                 String mimeType = file.getContentType();
-                requestBody = buildGeminiRequest(prompt, base64Data, mimeType);
+                requestBody = buildGeminiRequest(prompt, base64Data, mimeType, false);
             } else {
-                requestBody = buildGeminiRequest(prompt, null, null);
+                requestBody = buildGeminiRequest(prompt, null, null, false);
             }
             responseJson = callGeminiApi(requestBody, apiKey, model);
         }
@@ -373,8 +373,14 @@ public class AIQuestionServiceImpl implements AIQuestionService {
         String module = prompt.contains("Copilot") ? "CHATBOT" : "KNOWLEDGE_HUB";
         aiBillingService.recordSystemAiUsage(module, "generateRawCompletion", inTokens, outTokens, timeTaken, true, null);
 
-        // Strip markdown backticks if any
-        return cleanResponse(responseJson);
+        // For raw completion, we just want the raw markdown response,
+        // but we might want to strip code blocks like ```markdown if present.
+        String cleaned = responseJson.trim();
+        if (cleaned.startsWith("```markdown")) cleaned = cleaned.substring(11);
+        else if (cleaned.startsWith("```")) cleaned = cleaned.substring(3);
+        if (cleaned.endsWith("```")) cleaned = cleaned.substring(0, cleaned.length() - 3);
+        
+        return cleaned.trim();
     }
 
     // ═══════════════════ Provider Check ═══════════════════
@@ -569,6 +575,10 @@ public class AIQuestionServiceImpl implements AIQuestionService {
     // ═══════════════════ Gemini Native API ═══════════════════
 
     private Map<String, Object> buildGeminiRequest(String prompt, String base64Data, String mimeType) {
+        return buildGeminiRequest(prompt, base64Data, mimeType, true);
+    }
+
+    private Map<String, Object> buildGeminiRequest(String prompt, String base64Data, String mimeType, boolean expectJson) {
         List<Map<String, Object>> parts = new ArrayList<>();
         parts.add(Map.of("text", prompt));
 
@@ -577,10 +587,14 @@ public class AIQuestionServiceImpl implements AIQuestionService {
         }
 
         Map<String, Object> content = Map.of("parts", parts);
-        Map<String, Object> generationConfig = Map.of(
-                "temperature", 0.3, "topP", 0.95, "maxOutputTokens", 65536,
-                "responseMimeType", "application/json"
-        );
+        Map<String, Object> generationConfig = new LinkedHashMap<>();
+        generationConfig.put("temperature", 0.3);
+        generationConfig.put("topP", 0.95);
+        generationConfig.put("maxOutputTokens", 65536);
+        
+        if (expectJson) {
+            generationConfig.put("responseMimeType", "application/json");
+        }
 
         return Map.of("contents", List.of(content), "generationConfig", generationConfig);
     }

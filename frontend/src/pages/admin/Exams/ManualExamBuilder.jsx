@@ -59,7 +59,7 @@ const ManualExamBuilder = () => {
     const [examInfo, setExamInfo] = useState({
         title: '',
         durationMinutes: 120,
-        language: user.instituteMedium || 'Bangla',
+        language: (user?.instituteMedium && user.instituteMedium.includes(',')) ? 'Bangla' : (user?.instituteMedium || 'Bangla'),
         examType: 'MODEL_TEST'
     });
 
