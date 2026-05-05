@@ -24,9 +24,11 @@ public class BillingPackageDTO {
     private Integer aiLimitPerMonth;
     private Integer storageLimitMb;
     private Map<String, Boolean> featureFlags;
+    private Map<String, Object> pricingRules;
     private String displayName;
     private String highlightBadge;
     private Integer sortOrder;
+    private String associatedRole;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

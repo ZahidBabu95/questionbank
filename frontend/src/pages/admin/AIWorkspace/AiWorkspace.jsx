@@ -6,7 +6,7 @@ import {
     User, GraduationCap, Zap, Sun, Moon, 
     PanelLeftClose, PanelLeftOpen, Trash2, MoreHorizontal,
     FileText, Image, Mic, Paperclip, Copy, ThumbsUp, ThumbsDown, RotateCcw,
-    LogOut, Settings, Box, Bell, Wand2, Archive, Brain, Upload, ChevronRight, ArrowUp
+    LogOut, Settings, Box, Bell, Wand2, Archive, Brain, Upload, ChevronRight, ArrowUp, Layout, X, CheckCircle
 } from 'lucide-react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -15,6 +15,7 @@ import axios from '../../../utils/axios';
 import instituteService from '../../../services/instituteService';
 import { MENU_ITEMS } from '../../../components/layout/Sidebar';
 import settingsService from '../../../services/settingsService';
+import billingService from '../../../services/billingService';
 import { WidgetRegistry, DEFAULT_WORKSPACE_TOOLS } from './components/WidgetRegistry';
 import DynamicToolWidget from './components/DynamicToolWidget';
 import { LiveProvider, LiveError, LivePreview } from 'react-live';
@@ -43,11 +44,20 @@ const AiWorkspace = () => {
     // Derive activeTool from URL
     const activeToolTarget = searchParams.get('tool_url');
     const [activeTool, setActiveTool] = useState(null);
+    const [splitArtifact, setSplitArtifact] = useState(null);
 
     const [userSubjects, setUserSubjects] = useState([]);
     const [selectedSubject, setSelectedSubject] = useState(null);
     const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
     const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
+    
+    const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+    const [availablePackages, setAvailablePackages] = useState([]);
+    const [selectedPackageForRequest, setSelectedPackageForRequest] = useState(null);
+    const [hierarchy, setHierarchy] = useState(null);
+    const [assignedSubjectIds, setAssignedSubjectIds] = useState([]);
+    const [selectedMediums, setSelectedMediums] = useState(['Bangla']);
+    const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
 
     const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
     const [toolsExpanded, setToolsExpanded] = useState(true);
@@ -130,6 +140,76 @@ const AiWorkspace = () => {
         fetchUpdatedUser();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+    };
+
+    const fetchPackagesForModal = async () => {
+        try {
+            const res = await billingService.getPackages();
+            setAvailablePackages(Array.isArray(res) ? res : (res?.data || []));
+        } catch (err) {
+            console.error('Failed to fetch packages:', err);
+        }
+    };
+
+    const handleSubmitWorkspaceRequest = async () => {
+        if (!selectedPackageForRequest) return;
+        
+        let totalPrice = Number(selectedPackageForRequest.price) || 0;
+        let parsedRules = selectedPackageForRequest.pricingRules;
+        if (typeof parsedRules === 'string') {
+            try { parsedRules = JSON.parse(parsedRules); } catch(e) { parsedRules = {}; }
+        }
+        const pricingRules = parsedRules?.subjects || [];
+        assignedSubjectIds.forEach(id => {
+            const rule = pricingRules.find(pr => pr.classSubjectId === id);
+            if (rule && rule.price) totalPrice += Number(rule.price);
+        });
+
+        if (totalPrice > 0) {
+            const proceed = window.confirm(`Your total comes to ৳${totalPrice}.\nProceed to the payment gateway to pay and activate your workspace?`);
+            if (!proceed) return;
+            // Mock payment step
+            alert('Mock Payment Successful! Proceeding with activation...');
+        }
+        
+        setIsSubmittingRequest(true);
+        try {
+            await instituteService.requestWorkspace({
+                packageId: selectedPackageForRequest.id,
+                subjectIds: assignedSubjectIds,
+                medium: selectedMediums.join(',')
+            });
+            alert('Workspace activated successfully! Welcome to your AI Workspace.');
+            
+            // Re-fetch user to update status in localStorage
+            try {
+                const { data: res } = await axios.get(`/v1/users/${user.id}`);
+                if (res?.success && res?.data) {
+                    localStorage.setItem('user', JSON.stringify(res.data));
+                }
+            } catch(e) { console.error(e); }
+            
+            window.location.reload();
+        } catch (err) {
+            console.error('Failed to submit workspace request:', err);
+            alert('Failed to submit request. Please try again.');
+        } finally {
+            setIsSubmittingRequest(false);
+        }
+    };
+
+    const handleSubjectToggle = (classSubjectId) => {
+        setAssignedSubjectIds(prev => 
+            prev.includes(classSubjectId) 
+            ? prev.filter(i => i !== classSubjectId)
+            : [...prev, classSubjectId]
+        );
+    };
 
     useEffect(() => {
         const fetchActiveTools = async () => {
@@ -301,21 +381,25 @@ const AiWorkspace = () => {
 
     useEffect(() => {
         if (activeSessionId) {
-            const loadMessages = async () => {
-                try {
-                    const { data } = await axios.get(`/v1/ai/workspace/sessions/${activeSessionId}/messages`);
-                    if (data.success) {
-                        setMessages(data.data);
+            // Only load messages if we are not actively generating a response. 
+            // This prevents overwriting optimistic user messages on new chat creation.
+            if (!isTyping) {
+                const loadMessages = async () => {
+                    try {
+                        const { data } = await axios.get(`/v1/ai/workspace/sessions/${activeSessionId}/messages`);
+                        if (data.success) {
+                            setMessages(data.data);
+                        }
+                    } catch (error) {
+                        console.error("Failed to load messages:", error);
                     }
-                } catch (error) {
-                    console.error("Failed to load messages:", error);
-                }
-            };
-            loadMessages();
+                };
+                loadMessages();
+            }
         } else {
             setMessages([]);
         }
-    }, [activeSessionId]);
+    }, [activeSessionId, isTyping]);
 
     const suggestedPrompts = [
         { icon: <FileText size={16} />, text: 'Generate 10 MCQs on Newtonian Mechanics', color: 'indigo' },
@@ -324,11 +408,25 @@ const AiWorkspace = () => {
         { icon: <BookOpen size={16} />, text: 'Summarize Chapter 5: Thermodynamics', color: 'rose' },
     ];
 
-    const [aiUsage, setAiUsage] = useState({ used: 0, limit: 10000 });
+    const [aiUsage, setAiUsage] = useState({ used: 0, limit: 100000 });
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isTyping]);
+
+    useEffect(() => {
+        const fetchMyUsage = async () => {
+            try {
+                const { data } = await axios.get('/v1/ai/usage/my-usage');
+                if (data?.success && data?.data) {
+                    setAiUsage(prev => ({ ...prev, used: data.data.used || 0 }));
+                }
+            } catch (err) {
+                console.error("Failed to fetch my AI usage", err);
+            }
+        };
+        fetchMyUsage();
+    }, []);
 
     useEffect(() => {
         const loadUserSubjects = async () => {
@@ -342,10 +440,11 @@ const AiWorkspace = () => {
                 ]);
                 
                 if (instituteRes) {
-                    setAiUsage({ used: 0, limit: instituteRes.aiLimitPerMonth || 1000 });
+                    setAiUsage(prev => ({ ...prev, limit: instituteRes.aiLimitPerMonth || 100000 }));
                 }
 
                 const hierarchy = hierarchyRes.data;
+                setHierarchy(hierarchy);
                 const subjectsList = [];
                 
                 let validClassSubjects = hierarchy.classSubjects || [];
@@ -366,8 +465,20 @@ const AiWorkspace = () => {
                 });
                 
                 setUserSubjects(subjectsList);
+
+                // Check for subscription
+                const hasValidSub = isSuperAdmin || (instituteRes && instituteRes.subscriptionPackage) || (user && user.subscriptionPackage);
+                if (!hasValidSub) {
+                    setShowSubscriptionModal(true);
+                    fetchPackagesForModal();
+                }
+
             } catch (error) {
                 console.error("Failed to load user subjects:", error);
+                if (!isSuperAdmin) {
+                    setShowSubscriptionModal(true);
+                    fetchPackagesForModal();
+                }
             } finally {
                 setIsLoadingSubjects(false);
             }
@@ -655,16 +766,23 @@ const AiWorkspace = () => {
 
                         {/* User Profile */}
                         <div className={`mt-2 p-2 rounded-xl border ${t.card}`}>
-                            <Link to="/profile" className={`flex items-center gap-2.5 p-1.5 rounded-lg transition-colors ${t.hover}`}>
-                                <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold shadow-md shrink-0">
-                                    {user?.name?.charAt(0) || 'U'}
+                            <div className="relative group">
+                                <Link to="/profile" className={`flex items-center gap-2.5 p-1.5 rounded-lg transition-colors ${t.hover}`}>
+                                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold shadow-md shrink-0">
+                                        {user?.name?.charAt(0) || 'U'}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className={`text-[12px] font-semibold truncate ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{user?.name || 'User'}</p>
+                                        <p className={`text-[10px] truncate ${t.textMuted}`}>{user?.roles?.[0] || user?.email || 'Member'}</p>
+                                    </div>
+                                    <MoreHorizontal size={14} className={t.textMuted} />
+                                </Link>
+                                <div className={`absolute bottom-full left-0 mb-2 w-full rounded-xl shadow-xl border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 ${isDark ? 'bg-[#111118] border-[#2a2a3d]' : 'bg-white border-slate-200'}`}>
+                                    <button onClick={handleLogout} className="w-full text-left px-4 py-3 hover:bg-rose-50 hover:text-rose-600 text-[13px] font-semibold text-rose-500 flex items-center gap-2 rounded-xl transition-colors">
+                                        <LogOut size={14} /> Sign Out
+                                    </button>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className={`text-[12px] font-semibold truncate ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{user?.name || 'User'}</p>
-                                    <p className={`text-[10px] truncate ${t.textMuted}`}>{user?.roles?.[0] || user?.email || 'Member'}</p>
-                                </div>
-                                <MoreHorizontal size={14} className={t.textMuted} />
-                            </Link>
+                            </div>
                         </div>
                     </div>
                 </motion.aside>
@@ -847,11 +965,19 @@ const AiWorkspace = () => {
                         </div>
 
                         {/* User Avatar */}
-                        <Link to="/profile" className="flex items-center gap-2 cursor-pointer ml-0.5">
-                            <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold shadow-md">
-                                {user?.name?.charAt(0) || 'U'}
+                        <div className="relative group flex items-center">
+                            <div className="flex items-center gap-2 cursor-pointer ml-0.5">
+                                <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold shadow-md">
+                                    {user?.name?.charAt(0) || 'U'}
+                                </div>
                             </div>
-                        </Link>
+                            <div className={`absolute top-full right-0 mt-2 w-48 rounded-xl shadow-xl border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 ${isDark ? 'bg-[#111118] border-[#2a2a3d]' : 'bg-white border-slate-200'}`}>
+                                <Link to="/profile" className={`block px-4 py-2 text-[13px] font-semibold rounded-t-xl transition-colors ${isDark ? 'hover:bg-[#1a1a28] text-slate-300' : 'hover:bg-slate-50 text-slate-700'}`}>Profile</Link>
+                                <button onClick={handleLogout} className={`w-full text-left px-4 py-2 text-[13px] font-semibold flex items-center gap-2 rounded-b-xl transition-colors ${isDark ? 'hover:bg-[#1a1a28] text-rose-400' : 'hover:bg-slate-50 text-rose-600'}`}>
+                                    <LogOut size={14} /> Sign Out
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </header>
 
@@ -864,7 +990,9 @@ const AiWorkspace = () => {
                         />
                     </div>
                 ) : (
-                <>
+                <div className="flex-1 flex overflow-hidden min-h-0 relative">
+                {/* ─── Left Side (Chat & Input) ─── */}
+                <div className={`flex flex-col h-full transition-all duration-300 ease-in-out ${splitArtifact ? 'w-1/2 border-r ' + (isDark ? 'border-[#1e1e2e]' : 'border-slate-200') : 'w-full'}`}>
                 {/* ─── Chat Content Area ─── */}
                 <div className={`flex-1 overflow-y-auto z-10 custom-scrollbar flex flex-col ${messages.length === 0 ? 'justify-center items-center px-4' : ''}`}>
                     {messages.length === 0 ? (
@@ -1179,6 +1307,14 @@ const AiWorkspace = () => {
 
                                                 {msg.role === 'ai' && (
                                                     <div className="flex items-center gap-1 mt-3">
+                                                        {msg.content && msg.content.length > 50 && (
+                                                            <button 
+                                                                onClick={() => setSplitArtifact(msg)}
+                                                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-colors mr-2 ${isDark ? 'bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20' : 'bg-primary/5 text-primary hover:bg-primary/10'}`}
+                                                            >
+                                                                <Layout size={12} /> Split View
+                                                            </button>
+                                                        )}
                                                         {[
                                                             { icon: <Copy size={13} />, label: 'Copy' },
                                                             { icon: <ThumbsUp size={13} />, label: 'Good' },
@@ -1358,10 +1494,258 @@ const AiWorkspace = () => {
                         </div>
                     </div>
                 )}
-                </>
+                </div> {/* End Left Side */}
+
+                {/* ─── Right Side (Split Artifact View) ─── */}
+                <AnimatePresence>
+                    {splitArtifact && (
+                        <motion.div
+                            initial={{ opacity: 0, x: 20, width: 0 }}
+                            animate={{ opacity: 1, x: 0, width: '50%' }}
+                            exit={{ opacity: 0, x: 20, width: 0 }}
+                            className={`h-full flex flex-col shadow-xl z-20 ${isDark ? 'bg-[#0a0a0f]' : 'bg-white'}`}
+                        >
+                            <div className={`flex items-center justify-between p-4 border-b shrink-0 ${isDark ? 'border-[#1e1e2e] bg-[#111118]' : 'border-slate-100 bg-slate-50'}`}>
+                                <h3 className={`font-bold flex items-center gap-2 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                                    <FileText size={16} className="text-primary" /> {splitArtifact.role === 'ai' ? 'Preview / Solution' : 'Details'}
+                                </h3>
+                                <button 
+                                    onClick={() => setSplitArtifact(null)}
+                                    className={`p-1.5 rounded-md transition-colors ${isDark ? 'hover:bg-[#1a1a28] text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
+                                <div className={`prose prose-sm max-w-none prose-p:leading-relaxed prose-li:my-1 prose-ul:list-disc prose-ol:list-decimal ${isDark ? 'prose-invert prose-strong:text-indigo-300 prose-headings:text-white' : 'prose-slate prose-strong:text-indigo-900 prose-headings:text-slate-800'}`}>
+                                    <ReactMarkdown>{splitArtifact.content}</ReactMarkdown>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                </div>
                 )}
 
             </div>
+
+            {/* Subscription Modal */}
+            <AnimatePresence>
+                {showSubscriptionModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className={`relative w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl shadow-2xl p-8 ${isDark ? 'bg-[#111118] text-white' : 'bg-white text-slate-900'}`}
+                        >
+                            <button 
+                                onClick={() => setShowSubscriptionModal(false)}
+                                className={`absolute top-6 right-6 p-2 rounded-full transition-colors ${isDark ? 'bg-[#1a1a28] hover:bg-[#2a2a3d] text-slate-400' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
+                            >
+                                <X size={24} />
+                            </button>
+                            <div className="text-center mb-10">
+                                <h2 className="text-3xl font-extrabold mb-3">Choose Your Plan</h2>
+                                <p className={`text-lg ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Select a subscription package to unlock AI features</p>
+                            </div>
+                            
+                            {selectedPackageForRequest ? (
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-center bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                                        <div>
+                                            <h3 className="font-bold text-indigo-900">Selected Plan: {selectedPackageForRequest.name}</h3>
+                                            <p className="text-xs text-indigo-600">Select the subjects you want to access</p>
+                                        </div>
+                                        <button 
+                                            onClick={() => setSelectedPackageForRequest(null)}
+                                            className="text-xs font-bold text-slate-500 hover:text-indigo-600 bg-white px-3 py-1.5 rounded border border-slate-200"
+                                        >
+                                            Change Plan
+                                        </button>
+                                    </div>
+                                    
+                                    {hierarchy ? (() => {
+                                        let parsedRules = selectedPackageForRequest.pricingRules;
+                                        if (typeof parsedRules === 'string') {
+                                            try { parsedRules = JSON.parse(parsedRules); } catch(e) { parsedRules = {}; }
+                                        }
+                                        const pricingRules = parsedRules?.subjects || [];
+                                        const hasPricingRules = pricingRules.length > 0;
+
+                                        return (
+                                        <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                                            {/* Stream Grouping */}
+                                            {Array.from(new Set(hierarchy.classes?.map(c => c._streamName))).map(streamName => {
+                                                const streamClasses = hierarchy.classes.filter(c => c._streamName === streamName);
+                                                if (streamClasses.length === 0) return null;
+                                                
+                                                // Check if this stream has any active subjects in the package
+                                                const activeStreamClasses = streamClasses.filter(cls => {
+                                                    const classSubjects = hierarchy.classSubjects?.filter(cs => cs._classId === cls.id) || [];
+                                                    return classSubjects.some(cs => pricingRules.find(pr => pr.classSubjectId === cs.id));
+                                                });
+                                                
+                                                if (activeStreamClasses.length === 0) return null;
+
+                                                return (
+                                                    <div key={streamName || 'General'} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm mb-4">
+                                                        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex justify-between items-center sticky top-0 z-10">
+                                                            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                                                <div className="w-2 h-4 bg-indigo-500 rounded-full"></div>
+                                                                {streamName || 'General Stream'}
+                                                            </h3>
+                                                        </div>
+                                                        
+                                                        <div className="p-4 space-y-6">
+                                                            {activeStreamClasses.map(cls => {
+                                                                let classSubjects = hierarchy.classSubjects?.filter(cs => cs._classId === cls.id) || [];
+                                                                classSubjects = classSubjects.filter(cs => pricingRules.find(pr => pr.classSubjectId === cs.id));
+                                                                
+                                                                if (classSubjects.length === 0) return null;
+                                                                
+                                                                const allClassSubjectIds = classSubjects.map(cs => cs.id);
+                                                                const allSelected = allClassSubjectIds.length > 0 && allClassSubjectIds.every(id => assignedSubjectIds.includes(id));
+
+                                                                return (
+                                                                    <div key={cls.id} className="border border-slate-100 rounded-lg p-4 bg-white shadow-sm hover:border-indigo-100 transition-colors">
+                                                                        <div className="flex flex-wrap md:flex-nowrap justify-between items-start md:items-center mb-3 pb-2 border-b border-slate-50 gap-3">
+                                                                            <div className="font-bold text-sm text-slate-700">{cls.name}</div>
+                                                                            <button 
+                                                                                type="button" 
+                                                                                onClick={() => {
+                                                                                    if (allSelected) {
+                                                                                        setAssignedSubjectIds(prev => prev.filter(id => !allClassSubjectIds.includes(id)));
+                                                                                    } else {
+                                                                                        setAssignedSubjectIds(prev => Array.from(new Set([...prev, ...allClassSubjectIds])));
+                                                                                    }
+                                                                                }}
+                                                                                className={`text-[10px] font-bold px-3 py-1.5 rounded transition-colors ${allSelected ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
+                                                                            >
+                                                                                {allSelected ? 'Deselect All' : 'Select All'}
+                                                                            </button>
+                                                                        </div>
+                                                                        <div className="flex flex-col gap-2.5">
+                                                                            {classSubjects.map(cs => {
+                                                                                const subject = hierarchy.subjects?.find(s => s.id === cs._subjectId);
+                                                                                if (!subject) return null;
+                                                                                const isSelected = assignedSubjectIds.includes(cs.id);
+                                                                                const rule = pricingRules.find(pr => pr.classSubjectId === cs.id);
+                                                                                const price = rule ? (Number(rule.price) || 0) : 0;
+                                                                                const versions = rule ? (rule.versions || []) : [];
+                                                                                
+                                                                                return (
+                                                                                    <label 
+                                                                                        key={cs.id} 
+                                                                                        className={`flex flex-col md:flex-row md:items-center justify-between gap-3 text-sm font-bold px-4 py-2.5 rounded-lg border cursor-pointer transition select-none ${
+                                                                                            isSelected 
+                                                                                                ? 'bg-indigo-50 border-indigo-400 text-indigo-900 shadow-sm'
+                                                                                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
+                                                                                        }`}
+                                                                                    >
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <input 
+                                                                                                type="checkbox" 
+                                                                                                checked={isSelected} 
+                                                                                                onChange={() => handleSubjectToggle(cs.id)}
+                                                                                                className="w-4 h-4 rounded text-indigo-600 border-slate-300"
+                                                                                            />
+                                                                                            <span>
+                                                                                                {subject.name} {subject.paper ? <span className="text-indigo-500 ml-1">({subject.paper})</span> : ''}
+                                                                                            </span>
+                                                                                            {versions.length > 0 && (
+                                                                                                <div className="flex gap-1 ml-2">
+                                                                                                    {versions.map(v => (
+                                                                                                        <span key={v} className={`text-[9px] uppercase tracking-wider bg-white border px-1.5 py-0.5 rounded ${isSelected ? 'border-indigo-200 text-indigo-600' : 'border-slate-200 text-slate-500'}`}>{v}</span>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        {price > 0 ? (
+                                                                                            <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100 self-start md:self-auto ml-7 md:ml-0">
+                                                                                                <span className="font-bold">৳</span>
+                                                                                                <span>{price}</span>
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            <div className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded border border-slate-200 self-start md:self-auto ml-7 md:ml-0">
+                                                                                                Included
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </label>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        );
+                                    })() : (
+                                        <div className="text-center py-10 text-slate-500">Loading subjects...</div>
+                                    )}
+                                    
+                                    <div className="flex justify-end pt-4">
+                                        <button 
+                                            onClick={handleSubmitWorkspaceRequest}
+                                            disabled={isSubmittingRequest || assignedSubjectIds.length === 0}
+                                            className="px-6 py-3 bg-primary text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition shadow-lg shadow-primary/30 flex items-center gap-2"
+                                        >
+                                            {isSubmittingRequest ? 'Submitting...' : (() => {
+                                                const pricingRules = selectedPackageForRequest.pricingRules?.subjects || [];
+                                                let totalPrice = Number(selectedPackageForRequest.price) || 0;
+                                                assignedSubjectIds.forEach(id => {
+                                                    const rule = pricingRules.find(pr => pr.classSubjectId === id);
+                                                    if (rule && rule.price) totalPrice += Number(rule.price);
+                                                });
+                                                return totalPrice > 0 ? `Pay ৳${totalPrice} & Activate` : 'Activate Workspace';
+                                            })()}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {availablePackages.map(pkg => (
+                                        <div key={pkg.id} className={`rounded-2xl border p-6 flex flex-col ${isDark ? 'border-[#2a2a3d] bg-[#1a1a28]' : 'border-slate-200 bg-slate-50'}`}>
+                                            <div className="mb-4">
+                                                <h3 className="text-xl font-bold">{pkg.name}</h3>
+                                                <div className="text-3xl font-black mt-2">${pkg.price} <span className="text-sm font-normal text-slate-500 uppercase">/{pkg.billingCycle}</span></div>
+                                            </div>
+                                            <div className="flex-1 space-y-3 mb-6">
+                                                <div className="flex items-center gap-2 text-sm"><CheckCircle size={16} className="text-emerald-500"/> {pkg.maxTeachers} Teachers</div>
+                                                <div className="flex items-center gap-2 text-sm"><CheckCircle size={16} className="text-emerald-500"/> {pkg.maxStudents} Students</div>
+                                                <div className="flex items-center gap-2 text-sm"><CheckCircle size={16} className="text-emerald-500"/> {pkg.maxQuestions} Questions/mo</div>
+                                                <div className="flex items-center gap-2 text-sm"><CheckCircle size={16} className="text-emerald-500"/> {pkg.aiLimitPerMonth} AI Credits</div>
+                                            </div>
+                                            <button 
+                                                onClick={() => setSelectedPackageForRequest(pkg)}
+                                                className="w-full py-3 rounded-xl bg-primary text-white font-bold hover:bg-blue-700 transition shadow-lg shadow-primary/30"
+                                            >
+                                                Select Plan
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {availablePackages.length === 0 && (
+                                        <div className="col-span-full text-center py-10 text-slate-500">
+                                            Loading packages...
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <button onClick={handleLogout} className="mt-8 mx-auto flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition">
+                                <LogOut size={16} /> Sign out for now
+                            </button>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
         </div>
     );
 };

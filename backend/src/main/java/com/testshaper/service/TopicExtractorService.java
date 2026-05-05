@@ -29,4 +29,9 @@ public interface TopicExtractorService {
     void updatePageStatus(java.util.List<com.testshaper.entity.KnowledgePage> pages);
     void processBatch(com.testshaper.entity.SourceBookIndex index, com.testshaper.entity.Chapter mappedChapter, java.util.List<com.testshaper.entity.KnowledgePage> batchPages, int batchIndex);
     void saveTopicsAndChunks(com.testshaper.entity.SourceBookIndex index, com.testshaper.entity.Chapter mappedChapter, com.fasterxml.jackson.databind.JsonNode rootArray, int batchIndex);
+    
+    // UI Tools
+    void renameTopicAndSync(UUID topicId, String newName);
+    void mergeTopicInto(UUID sourceTopicId, UUID targetTopicId);
+    int finalizeVectorsForIndex(UUID indexId);
 }

@@ -26,6 +26,10 @@ public interface QuestionService {
         org.springframework.data.domain.Pageable pageable
     );
 
+    List<UUID> getAllQuestionIds(java.util.Map<String, String> filters);
+
+    java.util.Map<String, Object> getOverviewStats(java.util.Map<String, String> filters);
+
     void deleteQuestion(UUID id);
 
     void deleteQuestionsBulk(List<UUID> ids);

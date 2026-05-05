@@ -10,7 +10,7 @@ import lombok.Setter;
 @Setter
 public class Institute extends BaseEntity {
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String name;
 
     @Column(name = "short_name")
@@ -127,7 +127,7 @@ public class Institute extends BaseEntity {
     }
 
     public enum InstituteStatus {
-        ACTIVE, INACTIVE, SUSPENDED
+        ACTIVE, INACTIVE, SUSPENDED, PENDING
     }
 
     public enum SubscriptionPlan {

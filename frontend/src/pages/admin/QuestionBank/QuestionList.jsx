@@ -28,7 +28,8 @@ const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) 
         qList.forEach((li, idx) => {
             const marks = parseFloat(li.getAttribute('data-marks')) || parseFloat(li.querySelector('.cq-marks')?.textContent?.replace(/[^\d.]/g, '')) || 1;
             const textSpan = li.querySelector('.cq-text');
-            const label = ['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(97 + idx);
+            const isEnglish = q.language && q.language.toLowerCase() === 'english';
+            const label = isEnglish ? String.fromCharCode(97 + idx) : (['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(97 + idx));
 
             let partAns = '';
             let partExp = '';
@@ -56,34 +57,30 @@ const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) 
     }
 
     return (
-        <div className="cq-questions">
-            <ol>
+        <div className="flex flex-col gap-3 mt-2">
             {parts.map((p, idx) => (
-                <div key={idx} className="flex flex-col gap-1.5 w-full relative mb-1.5">
-                    <li className={`flex items-center justify-between ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white border-slate-200'} border rounded-lg p-2.5 px-3 shadow-sm min-h-[44px]`}>
-                        <div className="flex items-start gap-2 flex-1 min-w-0 pr-4 z-10 font-[500]">
-                            <span className={`shrink-0 font-bold ${isDark ? 'text-slate-300 bg-slate-700 border-slate-600' : 'text-slate-700 bg-slate-50 border-slate-200'} border px-1.5 py-0.5 rounded text-[11px] leading-none mt-0.5`}>{p.label}.</span>
-                            <div className="flex-1 min-w-0">
-                                <MarkdownRenderer content={p.text} className={`!max-w-full prose-p:!m-0 prose-p:!p-0 ${isDark ? 'prose-invert' : ''}`} />
-                            </div>
+                <div key={idx} className="flex flex-col gap-1.5 w-full relative">
+                    <div className="flex items-start gap-2 w-full text-[14px] leading-relaxed">
+                        <span className={`shrink-0 font-bold ${isDark ? 'text-slate-300' : 'text-slate-800'} mt-0.5`}>{p.label}.</span>
+                        <div className="flex-1 min-w-0 font-medium">
+                            <MarkdownRenderer content={p.text} className={`!max-w-full prose-p:!m-0 prose-p:!p-0 ${isDark ? 'prose-invert' : ''}`} />
                         </div>
-                        <span className={`text-[10px] font-black ${isDark ? 'text-slate-400 bg-slate-800 border-slate-700' : 'text-slate-500 bg-slate-100 border-slate-200/50'} px-2 py-1 rounded shrink-0 z-10 w-8 text-center border`}>({p.marks.toFixed(1)})</span>
-                    </li>
+                        <span className={`text-[12px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'} shrink-0 ml-2`}>({Math.round(p.marks)})</span>
+                    </div>
                     {showAnswer && p.answer && (
-                        <div className={`ml-[1.5rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-emerald-900/10 border-emerald-800/30 text-emerald-300 border-l-[3px] border-l-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-900 border-l-[3px] border-l-emerald-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
+                        <div className={`ml-[1.25rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-emerald-900/10 border-emerald-800/30 text-emerald-300 border-l-[3px] border-l-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-900 border-l-[3px] border-l-emerald-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
                             <span className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-emerald-500' : 'text-emerald-600'} mb-1.5 uppercase tracking-wider`}><CheckCircle size={12}/> উত্তর ({p.label}):</span>
                             <MarkdownRenderer content={p.answer} className={`-mt-1 !max-w-full ${isDark ? 'prose-invert' : ''}`} />
                         </div>
                     )}
                     {showExplanation && p.explanation && (
-                        <div className={`ml-[1.5rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-amber-900/10 border-amber-800/30 text-amber-300 border-l-[3px] border-l-amber-600' : 'bg-amber-50 border-amber-200 text-amber-900 border-l-[3px] border-l-amber-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
+                        <div className={`ml-[1.25rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-amber-900/10 border-amber-800/30 text-amber-300 border-l-[3px] border-l-amber-600' : 'bg-amber-50 border-amber-200 text-amber-900 border-l-[3px] border-l-amber-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
                             <span className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-amber-500' : 'text-amber-600'} mb-1.5`}><Layers size={12}/> ব্যাখ্যা ({p.label}):</span>
                             <MarkdownRenderer content={p.explanation} className={`-mt-1 !max-w-full ${isDark ? 'prose-invert' : ''}`} />
                         </div>
                     )}
                 </div>
             ))}
-            </ol>
         </div>
     );
 };
@@ -181,7 +178,10 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             {/* ── MCQ Options 2x2 on desktop, stacked on mobile — highlights correct only after Show Answer click ── */}
             {q.type === 'MCQ' && q.options && q.options.length > 0 && (
                 <div className="mx-4 mb-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {q.options.map(opt => (
+                    {q.options.map((opt, idx) => {
+                        const isEnglish = q.language && q.language.toLowerCase() === 'english';
+                        const displayLabel = isEnglish ? String.fromCharCode(65 + idx) : (['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(65 + idx));
+                        return (
                         <div key={opt.id} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-all duration-300 ${
                             showAnswer && opt.isCorrect
                                 ? 'bg-emerald-50 border-emerald-400 text-emerald-800 shadow-sm'
@@ -192,12 +192,12 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                             <span className={`shrink-0 flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-black transition-all duration-300 ${
                                 showAnswer && opt.isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'
                             }`}>
-                                {opt.optionLabel}
+                                {displayLabel}
                             </span>
                             <span className="flex-1"><MarkdownRenderer content={opt.optionText} /></span>
                             {showAnswer && opt.isCorrect && <CheckCircle size={13} className="text-emerald-500 ml-auto shrink-0" />}
                         </div>
-                    ))}
+                    )})}
                 </div>
             )}
 
@@ -514,6 +514,29 @@ const QuestionList = () => {
         try { return JSON.parse(localStorage.getItem('savedQuestionIds') || '[]'); } catch { return []; }
     });
 
+    const [overviewStats, setOverviewStats] = useState(null);
+
+    const fetchOverviewStats = async () => {
+        try {
+            const params = {
+                filterStatus: filterStatus === 'ALL' ? '' : filterStatus,
+                filterType: filterType === 'ALL' ? '' : filterType,
+                language: filterLanguage === 'ALL' ? '' : filterLanguage,
+                search: searchQuery,
+                levelId: selectedLevelId,
+                streamId: selectedStreamId,
+                classId: selectedClassId,
+                subjectId: selectedSubjectId,
+                chapterId: selectedChapterId,
+                topicId: selectedTopicId
+            };
+            const data = await questionService.getOverviewStats(params);
+            setOverviewStats(data);
+        } catch (error) {
+            console.error("Failed to fetch overview stats", error);
+        }
+    };
+
     const handleSaveToggle = React.useCallback((id) => {
         setSavedIds(prev => {
             const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
@@ -535,6 +558,9 @@ const QuestionList = () => {
     const [subjects, setSubjects] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [topics, setTopics] = useState([]);
+    const [fullHierarchy, setFullHierarchy] = useState([]);
+    const [metadataSearchTerm, setMetadataSearchTerm] = useState('');
+    const [metadataSuggestions, setMetadataSuggestions] = useState([]);
 
     // Hierarchy filter selections
     const [selectedLevelId, setSelectedLevelId] = useState('');
@@ -590,9 +616,94 @@ const QuestionList = () => {
         try {
             const levelData = await academicService.getAllLevels();
             setLevels(levelData);
+            const hierarchyData = await academicService.getHierarchy();
+            setFullHierarchy(hierarchyData || []);
         } catch (error) {
-            console.error("Failed to fetch levels", error);
+            console.error("Failed to fetch initial filters", error);
         }
+    };
+
+    // Metadata Search Effect
+    useEffect(() => {
+        if (!metadataSearchTerm || metadataSearchTerm.trim().length < 2 || !fullHierarchy) {
+            setMetadataSuggestions([]);
+            return;
+        }
+
+        const term = metadataSearchTerm.toLowerCase();
+        const results = [];
+        
+        // Ensure fullHierarchy has the expected arrays before proceeding
+        if (fullHierarchy.classSubjects && Array.isArray(fullHierarchy.classSubjects)) {
+            fullHierarchy.classSubjects.forEach(cs => {
+                if (cs.name && cs.name.toLowerCase().includes(term)) {
+                    results.push({ 
+                        type: 'Subject', 
+                        id: cs.id, 
+                        name: cs.name, 
+                        classId: cs._classId, 
+                        subjectId: cs.id 
+                    });
+                }
+            });
+        }
+        
+        if (fullHierarchy.subjects && Array.isArray(fullHierarchy.subjects)) {
+            fullHierarchy.subjects.forEach(sub => {
+                if (sub.name && sub.name.toLowerCase().includes(term)) {
+                    // Prevent duplicate subject names if already added via classSubjects
+                    if (!results.find(r => r.name === sub.name && r.type === 'Subject')) {
+                        results.push({ 
+                            type: 'Subject (Global)', 
+                            id: sub.id, 
+                            name: sub.name, 
+                            subjectId: sub.id 
+                        });
+                    }
+                }
+            });
+        }
+        
+        if (fullHierarchy.classes && Array.isArray(fullHierarchy.classes)) {
+            fullHierarchy.classes.forEach(cls => {
+                if (cls.name && cls.name.toLowerCase().includes(term)) {
+                    results.push({ 
+                        type: 'Class', 
+                        id: cls.id, 
+                        name: cls.name, 
+                        streamId: cls._streamId, 
+                        classId: cls.id 
+                    });
+                }
+            });
+        }
+
+        setMetadataSuggestions(results.slice(0, 15)); // max 15 suggestions
+    }, [metadataSearchTerm, fullHierarchy]);
+
+    const handleSelectSuggestion = (suggestion) => {
+        if (suggestion.levelId) setSelectedLevelId(suggestion.levelId);
+        
+        // Use timeout to allow hierarchy dropdowns to populate from API
+        // since setting selectedLevelId triggers fetching streams, etc.
+        setTimeout(() => {
+            if (suggestion.streamId) setSelectedStreamId(suggestion.streamId);
+            setTimeout(() => {
+                if (suggestion.classId) setSelectedClassId(suggestion.classId);
+                setTimeout(() => {
+                    if (suggestion.subjectId) setSelectedSubjectId(suggestion.subjectId);
+                    setTimeout(() => {
+                        if (suggestion.chapterId) setSelectedChapterId(suggestion.chapterId);
+                        setTimeout(() => {
+                            if (suggestion.topicId) setSelectedTopicId(suggestion.topicId);
+                        }, 300);
+                    }, 300);
+                }, 300);
+            }, 300);
+        }, 300);
+
+        setMetadataSearchTerm('');
+        setMetadataSuggestions([]);
     };
 
     // Level → Streams
@@ -682,6 +793,7 @@ const QuestionList = () => {
     useEffect(() => {
         const timer = setTimeout(() => {
             fetchQuestions();
+            fetchOverviewStats();
         }, 300); // 300ms debounce for search query typing
         return () => clearTimeout(timer);
     }, [currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
@@ -817,11 +929,68 @@ const QuestionList = () => {
         setFilterLanguage('ALL');
     };
 
+    const [isSelectingAll, setIsSelectingAll] = useState(false);
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+    const handleSelectAllGlobal = async () => {
+        setIsSelectingAll(true);
+        try {
+            const params = {
+                filterStatus: filterStatus === 'ALL' ? '' : filterStatus,
+                filterType: filterType === 'ALL' ? '' : filterType,
+                language: filterLanguage === 'ALL' ? '' : filterLanguage,
+                search: searchQuery,
+                levelId: selectedLevelId,
+                streamId: selectedStreamId,
+                classId: selectedClassId,
+                subjectId: selectedSubjectId,
+                chapterId: selectedChapterId,
+                topicId: selectedTopicId
+            };
+            const ids = await questionService.getAllQuestionIds(params);
+            setSelectedIds(ids);
+        } catch (error) {
+            console.error("Failed to fetch all IDs", error);
+            alert("Failed to select all questions.");
+        } finally {
+            setIsSelectingAll(false);
+        }
+    };
+
     return (
         <>
-        <div className="flex flex-col min-h-full">
+        <div className="flex flex-col min-h-full bg-slate-50">
 
-            {/* STICKY COMPACT FILTER HEADER — flush with topbar */}
+            {/* OVERVIEW STATS BOARD */}
+            {overviewStats && (
+                <div className="px-4 md:px-6 pt-5 pb-3">
+                    <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-3 flex items-center gap-2"><Layers size={16} className="text-primary" /> Question Bank Overview</h2>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center relative overflow-hidden group">
+                            <div className="absolute -right-4 -top-4 w-16 h-16 bg-blue-50 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest relative z-10">Total Questions</span>
+                            <span className="text-3xl font-black text-slate-800 relative z-10">{overviewStats.totalQuestions}</span>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center relative overflow-hidden group">
+                            <div className="absolute -right-4 -top-4 w-16 h-16 bg-emerald-50 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+                            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest relative z-10">Total Approved</span>
+                            <span className="text-3xl font-black text-emerald-700 relative z-10">{overviewStats.totalApproved}</span>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center relative overflow-hidden group">
+                            <div className="absolute -right-4 -top-4 w-16 h-16 bg-amber-50 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest relative z-10">Drafts / Pending</span>
+                            <span className="text-3xl font-black text-amber-700 relative z-10">{overviewStats.totalPending}</span>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center relative overflow-hidden group">
+                            <div className="absolute -right-4 -top-4 w-16 h-16 bg-indigo-50 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+                            <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest relative z-10">Total Subjects</span>
+                            <span className="text-3xl font-black text-indigo-700 relative z-10">{overviewStats.totalSubjects}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* STICKY COMPACT FILTER HEADER */}
             <div className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 md:px-6 pt-3 pb-3 shadow-sm space-y-3">
                 
                 {/* Top Row: Navigation Tabs & Search */}
@@ -866,6 +1035,14 @@ const QuestionList = () => {
                             <GitCompare size={14} /> Review Mode
                         </button>
 
+                        <button
+                            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showAdvancedFilters ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                            title="Toggle Metadata Filters"
+                        >
+                            <Filter size={14} /> {showAdvancedFilters ? 'Hide Filters' : 'Metadata Filters'}
+                        </button>
+
                         <div className="relative w-full md:w-[300px] shrink-0">
                             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                             <input
@@ -880,52 +1057,104 @@ const QuestionList = () => {
                 </div>
 
                 {/* Second Row: Advanced Select Filters */}
-                <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
-                    <div className="flex items-center gap-1.5 text-slate-500 font-bold shrink-0 mr-1">
-                        <Filter size={14} className="text-primary" /> <span className="text-[10px] uppercase tracking-wider hidden sm:inline">Filters:</span>
+                {showAdvancedFilters && (
+                    <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 mt-2 shadow-inner animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="flex flex-col md:flex-row items-center justify-between mb-4 border-b border-slate-200/60 pb-3 gap-3">
+                            <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2 shrink-0">
+                                <ListFilter size={14} className="text-primary"/> Select Question Metadata
+                            </h3>
+                            
+                            <div className="relative w-full md:w-[400px] shrink-0 z-40">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/50" size={14} />
+                                <input
+                                    type="text"
+                                    value={metadataSearchTerm}
+                                    onChange={(e) => setMetadataSearchTerm(e.target.value)}
+                                    placeholder="Need suggestion? Type subject, chapter or topic name..."
+                                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-primary/20 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold text-slate-700 placeholder:text-slate-400 placeholder:font-medium shadow-sm"
+                                />
+                                {metadataSuggestions.length > 0 && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-[300px] overflow-y-auto custom-scrollbar">
+                                        {metadataSuggestions.map((s, idx) => (
+                                            <div
+                                                key={idx}
+                                                onClick={() => handleSelectSuggestion(s)}
+                                                className="px-3 py-2 border-b border-slate-50 last:border-0 hover:bg-indigo-50 cursor-pointer flex flex-col gap-0.5 transition-colors"
+                                            >
+                                                <span className="text-xs font-bold text-slate-700">{s.name}</span>
+                                                <span className="text-[9px] font-black text-primary/70 uppercase tracking-wider">{s.type}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <button onClick={resetFilters} className="text-[10px] font-bold text-rose-500 hover:bg-rose-50 px-3 py-1.5 rounded-lg border border-transparent hover:border-rose-200 transition-colors flex items-center gap-1.5 shrink-0">
+                                <X size={14} /> Reset Filters
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Language</label>
+                                <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-50">
+                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual') || user.instituteMedium.includes(',')) && <option value="ALL">সব ভার্সন</option>}
+                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
+                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
+                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
+                                </select>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Level</label>
+                                <select value={selectedLevelId} onChange={(e) => setSelectedLevelId(e.target.value)} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                                    <option value="">সব স্তর</option>
+                                    {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Stream</label>
+                                <select value={selectedStreamId} onChange={(e) => setSelectedStreamId(e.target.value)} disabled={!selectedLevelId} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                    <option value="">{selectedLevelId ? "সব বিভাগ" : "← Select Level"}</option>
+                                    {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Class</label>
+                                <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} disabled={!selectedStreamId} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                    <option value="">{selectedStreamId ? "সব শ্রেণি" : "← Select Stream"}</option>
+                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Subject</label>
+                                <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} disabled={!selectedClassId} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                    <option value="">{selectedClassId ? "সব বিষয়" : "← Select Class"}</option>
+                                    {subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Chapter</label>
+                                <select value={selectedChapterId} onChange={(e) => setSelectedChapterId(e.target.value)} disabled={!selectedSubjectId} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                    <option value="">{selectedSubjectId ? "সব অধ্যায়" : "← Select Subject"}</option>
+                                    {chapters.map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Topic</label>
+                                <select value={selectedTopicId} onChange={(e) => setSelectedTopicId(e.target.value)} disabled={!selectedChapterId} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                    <option value="">{selectedChapterId ? "সব টপিক" : "← Select Chapter"}</option>
+                                    {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
                     </div>
-
-                    <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer min-w-[90px] max-w-[110px] truncate disabled:opacity-50">
-                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual') || user.instituteMedium.includes(',')) && <option value="ALL">সব ভার্সন</option>}
-                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
-                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
-                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
-                    </select>
-                    
-                    <select value={selectedLevelId} onChange={(e) => setSelectedLevelId(e.target.value)} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer min-w-[90px] max-w-[130px] truncate">
-                        <option value="">সব স্তর</option>
-                        {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                    </select>
-
-                    <select value={selectedStreamId} onChange={(e) => setSelectedStreamId(e.target.value)} disabled={!selectedLevelId} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-w-[90px] max-w-[130px] truncate">
-                        <option value="">সব বিভাগ</option>
-                        {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-
-                    <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} disabled={!selectedStreamId} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-w-[90px] max-w-[130px] truncate">
-                        <option value="">সব শ্রেণি</option>
-                        {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-
-                    <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} disabled={!selectedClassId} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-w-[90px] max-w-[130px] truncate">
-                        <option value="">সব বিষয়</option>
-                        {subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
-                    </select>
-
-                    <select value={selectedChapterId} onChange={(e) => setSelectedChapterId(e.target.value)} disabled={!selectedSubjectId} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-w-[90px] max-w-[130px] truncate">
-                        <option value="">সব অধ্যায়</option>
-                        {chapters.map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
-                    </select>
-
-                    <select value={selectedTopicId} onChange={(e) => setSelectedTopicId(e.target.value)} disabled={!selectedChapterId} className="shrink-0 h-8 px-2 pl-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed min-w-[90px] max-w-[130px] truncate">
-                        <option value="">সব টপিক</option>
-                        {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-
-                    <button onClick={resetFilters} className="shrink-0 text-[10px] font-bold text-rose-500 hover:bg-rose-50 px-2.5 h-8 rounded-lg border border-transparent hover:border-rose-200 transition-colors flex items-center gap-1.5 ml-auto">
-                        <X size={14} /> <span className="hidden sm:inline">Reset</span>
-                    </button>
-                </div>
+                )}
 
                 {/* Third Row: Formats, Check All & Bulk Actions */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pt-2 border-t border-slate-100">
@@ -961,8 +1190,21 @@ const QuestionList = () => {
                                 }}
                                 className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary/20 m-0 cursor-pointer"
                             />
-                            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap select-none">Select All ({questions.length})</span>
+                            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap select-none">Select All Page ({questions.length})</span>
                         </label>
+
+                        {totalElements > questions.length && (
+                            <button
+                                onClick={handleSelectAllGlobal}
+                                disabled={isSelectingAll}
+                                className="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100 text-indigo-700 transition-colors shrink-0 disabled:opacity-50"
+                            >
+                                <CheckCircle size={14} />
+                                <span className="text-[10px] font-bold uppercase tracking-widest whitespace-nowrap select-none">
+                                    {isSelectingAll ? 'Selecting...' : `Select All ${totalElements}`}
+                                </span>
+                            </button>
+                        )}
 
                         {selectedIds.length > 0 && (
                             <div className="flex items-center gap-1.5 shrink-0">

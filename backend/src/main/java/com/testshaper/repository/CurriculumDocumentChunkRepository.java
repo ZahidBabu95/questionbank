@@ -11,6 +11,8 @@ import java.util.UUID;
 public interface CurriculumDocumentChunkRepository extends JpaRepository<CurriculumDocumentChunk, UUID> {
     
     List<CurriculumDocumentChunk> findByDocumentIdOrderByChunkIndexAsc(UUID documentId);
+    List<CurriculumDocumentChunk> findByMappedTopicId(UUID mappedTopicId);
+    List<CurriculumDocumentChunk> findBySourceBookIndexId(UUID sourceBookIndexId);
     
     // Fetch latest context for Chatbot (limit 200 chunks ~ 500k chars ~ 125k tokens)
     List<CurriculumDocumentChunk> findTop200ByDocumentIsActiveTrueOrderByIdDesc();

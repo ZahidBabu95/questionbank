@@ -20,6 +20,7 @@ public interface UserMapper {
             @Mapping(target = "instituteId", expression = "java(user.getInstitute() != null ? user.getInstitute().getId() : null)"),
             @Mapping(target = "instituteName", expression = "java(user.getInstitute() != null ? user.getInstitute().getName() : null)"),
             @Mapping(target = "instituteMedium", expression = "java(user.getInstitute() != null ? user.getInstitute().getMedium() : null)"),
+            @Mapping(target = "instituteStatus", expression = "java(user.getInstitute() != null && user.getInstitute().getStatus() != null ? user.getInstitute().getStatus().name() : null)"),
             @Mapping(source = "active", target = "active"),
             @Mapping(source = "roles", target = "roles", qualifiedByName = "mapRolesToStrings"),
             @Mapping(source = "roles", target = "permissions", qualifiedByName = "mapPermissionsToStrings")
@@ -44,7 +45,7 @@ public interface UserMapper {
             @Mapping(target = "institute", ignore = true), // Handled in service
             @Mapping(target = "version", ignore = true),
             @Mapping(target = "profileImageUrl", ignore = true),
-            @Mapping(target = "active", constant = "true"), // Default to active
+            @Mapping(target = "active", constant = "true"), // Active by default, restricted by Institute status
             @Mapping(target = "failedLoginAttempts", ignore = true),
             @Mapping(target = "accountLocked", ignore = true),
             @Mapping(target = "lockTime", ignore = true)

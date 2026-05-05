@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Plus, Search, Edit2, Trash2, Shield, Building, Lock, Unlock,
     RefreshCw, LogIn, Download, Users, UserCheck, UserX, AlertTriangle,
-    Key, ChevronLeft, ChevronRight, X, Check, CheckSquare,
+    Key, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, Check, CheckSquare,
     Square, Eye, BookOpen, GraduationCap, Calendar, Mail, Phone,
     Activity, Loader2, Upload, BarChart2
 } from 'lucide-react';
@@ -111,6 +111,12 @@ const UserDetailPanel = ({ user, onClose, onEdit, onStatusToggle, onResetPasswor
                         className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
                         <Edit2 size={14} /> Edit Profile
                     </button>
+                    {user.instituteId && (
+                        <button onClick={() => window.open(`/institutes/edit/${user.instituteId}`, '_blank')}
+                            className="w-full flex items-center justify-center gap-2 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded-xl font-bold text-xs transition-all mb-2">
+                            <Building size={12} /> Review Workspace Details
+                        </button>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                         <button onClick={() => onStatusToggle(user)}
                             className={`flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs transition-all border ${user.active ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}>
@@ -167,6 +173,9 @@ const UserList = () => {
     const [showImport,   setShowImport]   = useState(false);
     const [activeTab,    setActiveTab]    = useState('unverified');
     const [page,         setPage]         = useState(0);
+    const [filterRole,   setFilterRole]   = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
+    const [availableRoles, setAvailableRoles] = useState([]);
     const [totalPages,   setTotalPages]   = useState(0);
     const [selected,     setSelected]     = useState(new Set());
     const [bulkLoading,  setBulkLoading]  = useState(false);
@@ -182,11 +191,6 @@ const UserList = () => {
         if (pathname.includes('/users/students'))  return { filter: { role: 'STUDENT'  }, title: 'শিক্ষার্থী', subtitle: 'Manage registered students' };
         if (pathname.includes('/users/blocked'))   return { filter: { accountLocked: true }, title: 'Blocked Users', subtitle: 'Locked / blocked accounts' };
         if (pathname.includes('/users/roles'))     return { filter: {}, title: 'Roles & Permissions', subtitle: 'Manage system roles' };
-        if (pathname.includes('/users/pending')) {
-            return tab === 'verified'
-                ? { filter: { active: true  }, title: 'Pending Approvals', subtitle: 'Verified users' }
-                : { filter: { active: false }, title: 'Pending Approvals', subtitle: 'Users waiting for verification' };
-        }
         return { filter: {}, title: 'User Management', subtitle: 'Manage all platform users' };
     };
 
@@ -196,8 +200,11 @@ const UserList = () => {
         try {
             setLoading(true);
             const params = { page, size: pageSize, query: searchTerm, ...currentFilter };
+            if (filterRole) params.role = filterRole;
+            if (filterStatus) params.active = filterStatus === 'true';
+            
             if (!params.role) delete params.role;
-            if (params.active === null || params.active === undefined) delete params.active;
+            if (params.active === null || params.active === undefined || params.active === '') delete params.active;
             const response = await userService.getAllUsers(params);
             if (response.success && response.data) {
                 setUsers(response.data.content);
@@ -208,7 +215,7 @@ const UserList = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, searchTerm, location.pathname, activeTab]);
+    }, [page, searchTerm, location.pathname, activeTab, filterRole, filterStatus]);
 
     const fetchStats = async () => {
         try {
@@ -218,8 +225,15 @@ const UserList = () => {
         } catch (e) { console.error(e); } finally { setStatsLoading(false); }
     };
 
+    const fetchRoles = async () => {
+        try {
+            const res = await userService.getRoles();
+            if (res.success) setAvailableRoles(res.data);
+        } catch (e) { console.error('Failed to fetch roles', e); }
+    };
+
     useEffect(() => { fetchUsers(); }, [fetchUsers]);
-    useEffect(() => { fetchStats(); }, []);
+    useEffect(() => { fetchStats(); fetchRoles(); }, []);
     useEffect(() => { setPage(0); setSelected(new Set()); }, [location.pathname, activeTab]);
 
     // Selection helpers
@@ -302,8 +316,6 @@ const UserList = () => {
 
     if (location.pathname.includes('/users/roles')) return <RoleManagement />;
 
-    const isPending = location.pathname.includes('/users/pending');
-
     return (
         <div className="space-y-5 pb-8">
             {/* ── Toast ── */}
@@ -336,17 +348,15 @@ const UserList = () => {
             </div>
 
             {/* ── Stats Cards ── */}
-            {!isPending && (
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
-                    <StatCard icon={<Users size={20} className="text-indigo-600" />}     label="মোট Users"    value={stats?.total}    color="bg-indigo-50"  sub={stats?.newLast30Days ? `+${stats.newLast30Days} this month` : null} />
-                    <StatCard icon={<UserCheck size={20} className="text-emerald-600" />} label="Active"       value={stats?.active}   color="bg-emerald-50" />
-                    <StatCard icon={<UserX size={20} className="text-amber-600" />}       label="Inactive"     value={stats?.inactive} color="bg-amber-50"   />
-                    <StatCard icon={<Lock size={20} className="text-rose-600" />}          label="Locked"       value={stats?.locked}   color="bg-rose-50"    />
-                </div>
-            )}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
+                <StatCard icon={<Users size={20} className="text-indigo-600" />}     label="মোট Users"    value={stats?.total}    color="bg-indigo-50"  sub={stats?.newLast30Days ? `+${stats.newLast30Days} this month` : null} />
+                <StatCard icon={<UserCheck size={20} className="text-emerald-600" />} label="Active"       value={stats?.active}   color="bg-emerald-50" />
+                <StatCard icon={<UserX size={20} className="text-amber-600" />}       label="Inactive"     value={stats?.inactive} color="bg-amber-50"   />
+                <StatCard icon={<Lock size={20} className="text-rose-600" />}          label="Locked"       value={stats?.locked}   color="bg-rose-50"    />
+            </div>
 
             {/* Role breakdown cards */}
-            {!isPending && stats && (
+            {stats && (
                 <div className="grid grid-cols-3 gap-3">
                     <StatCard icon={<GraduationCap size={18} className="text-sky-600" />}    label="শিক্ষার্থী" value={stats.students} color="bg-sky-50"    />
                     <StatCard icon={<BookOpen size={18} className="text-violet-600" />}       label="শিক্ষক"    value={stats.teachers} color="bg-violet-50" />
@@ -354,17 +364,7 @@ const UserList = () => {
                 </div>
             )}
 
-            {/* ── Pending Tabs ── */}
-            {isPending && (
-                <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
-                    {['unverified', 'verified'].map(tab => (
-                        <button key={tab} onClick={() => setActiveTab(tab)}
-                            className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === tab ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>
-                            {tab === 'unverified' ? '⏳ Pending' : '✅ Verified'}
-                        </button>
-                    ))}
-                </div>
-            )}
+            {/* Removed Pending Tabs */}
 
             {/* ── Bulk action bar ── */}
             {selected.size > 0 && (
@@ -398,6 +398,29 @@ const UserList = () => {
                     <input type="text" placeholder="নাম বা ইমেইল দিয়ে খুঁজুন..."
                         value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(0); }}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-300" />
+                </div>
+                
+                <div className="flex gap-2">
+                    <select
+                        value={filterRole}
+                        onChange={(e) => { setFilterRole(e.target.value); setPage(0); }}
+                        className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all max-w-[150px] truncate"
+                    >
+                        <option value="">All Roles</option>
+                        {availableRoles.map(role => (
+                            <option key={role.id} value={role.name}>{role.name}</option>
+                        ))}
+                    </select>
+
+                    <select
+                        value={filterStatus}
+                        onChange={(e) => { setFilterStatus(e.target.value); setPage(0); }}
+                        className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+                    >
+                        <option value="">All Statuses</option>
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                    </select>
                 </div>
                 <button onClick={fetchUsers}
                     className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-all">
@@ -486,6 +509,11 @@ const UserList = () => {
                                     <td className="p-4 text-xs text-slate-400">{joinDate}</td>
                                     <td className="p-4" onClick={e => e.stopPropagation()}>
                                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            {user.instituteId && (
+                                                <button onClick={() => window.open(`/institutes/edit/${user.instituteId}`, '_blank')} className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all" title="Review Workspace">
+                                                    <Building size={14} />
+                                                </button>
+                                            )}
                                             <button onClick={() => navigate(`/users/profile/${user.id}`)} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="View Profile"><Eye size={14} /></button>
                                             <button onClick={() => handleImpersonate(user)} className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-all" title="Login as"><LogIn size={14} /></button>
                                             <button onClick={() => handleStatusToggle(user)} className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all" title={user.active ? 'Deactivate' : 'Activate'}>
@@ -580,27 +608,62 @@ const UserList = () => {
                 </div>
 
                 {/* ── Pagination ── */}
-                <div className="px-5 py-3.5 border-t border-slate-100 flex items-center justify-between">
+                <div className="px-5 py-3.5 border-t border-slate-100 flex items-center justify-between flex-wrap gap-3">
                     <p className="text-xs text-slate-400">
                         Page <span className="font-bold text-slate-600">{page + 1}</span> of <span className="font-bold text-slate-600">{totalPages || 1}</span>
                         {selected.size > 0 && <span className="ml-3 text-indigo-600 font-bold">{selected.size} selected</span>}
                     </p>
-                    <div className="flex gap-1">
-                        <button disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))}
-                            className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 disabled:opacity-40 hover:bg-slate-50 hover:text-indigo-600 transition-all">
-                            <ChevronLeft size={15} />
-                        </button>
-                        {[...Array(Math.min(totalPages, 5))].map((_, i) => (
-                            <button key={i} onClick={() => setPage(i)}
-                                className={`w-8 h-8 rounded-lg text-xs font-bold transition-all border ${page === i ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                                {i + 1}
-                            </button>
-                        ))}
-                        <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}
-                            className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 disabled:opacity-40 hover:bg-slate-50 hover:text-indigo-600 transition-all">
-                            <ChevronRight size={15} />
-                        </button>
-                    </div>
+                    {(() => {
+                        if (totalPages <= 1) return null;
+                        
+                        let pages = [];
+                        const maxVisiblePages = 5;
+                        
+                        if (totalPages <= maxVisiblePages) {
+                            for (let i = 0; i < totalPages; i++) pages.push(i);
+                        } else {
+                            if (page <= 2) {
+                                pages = [0, 1, 2, 3, 4];
+                            } else if (page >= totalPages - 3) {
+                                pages = [totalPages - 5, totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1];
+                            } else {
+                                pages = [page - 2, page - 1, page, page + 1, page + 2];
+                            }
+                        }
+
+                        return (
+                            <div className="flex gap-1.5">
+                                <button disabled={page === 0} onClick={() => setPage(0)}
+                                    className="w-8 h-8 rounded-lg bg-white border border-slate-200 hidden sm:flex items-center justify-center text-slate-500 disabled:opacity-40 hover:bg-slate-50 hover:text-indigo-600 transition-all">
+                                    <ChevronsLeft size={15} />
+                                </button>
+                                <button disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))}
+                                    className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 disabled:opacity-40 hover:bg-slate-50 hover:text-indigo-600 transition-all">
+                                    <ChevronLeft size={15} />
+                                </button>
+                                
+                                {pages[0] > 0 && <span className="px-1 text-slate-400 hidden sm:flex items-end pb-1">...</span>}
+                                
+                                {pages.map(i => (
+                                    <button key={i} onClick={() => setPage(i)}
+                                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all border ${page === i ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                        {i + 1}
+                                    </button>
+                                ))}
+                                
+                                {pages[pages.length - 1] < totalPages - 1 && <span className="px-1 text-slate-400 hidden sm:flex items-end pb-1">...</span>}
+
+                                <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}
+                                    className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 disabled:opacity-40 hover:bg-slate-50 hover:text-indigo-600 transition-all">
+                                    <ChevronRight size={15} />
+                                </button>
+                                <button disabled={page >= totalPages - 1} onClick={() => setPage(totalPages - 1)}
+                                    className="w-8 h-8 rounded-lg bg-white border border-slate-200 hidden sm:flex items-center justify-center text-slate-500 disabled:opacity-40 hover:bg-slate-50 hover:text-indigo-600 transition-all">
+                                    <ChevronsRight size={15} />
+                                </button>
+                            </div>
+                        );
+                    })()}
                 </div>
             </div>
 

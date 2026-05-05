@@ -1708,47 +1708,7 @@ const ProofreadingWorkspace = () => {
                         </button>
                     </Link>
 
-                    {/* AI Topic Extraction Job Viewer */}
-                    {aiTopicJob && (aiTopicJob.status === 'QUEUED' || aiTopicJob.status === 'IN_PROGRESS' || aiTopicJob.status === 'PAUSED') ? (
-                        <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg shadow-sm w-max ml-1 h-9">
-                            {aiTopicJob.status === 'PAUSED' ? (
-                                <Zap size={14} className="text-amber-500" />
-                            ) : (
-                                <Loader2 size={14} className="animate-spin text-teal-600 shrink-0" />
-                            )}
-                            <div className="flex flex-col justify-center">
-                                <span className="text-[10px] font-bold leading-tight hidden lg:flex items-center gap-1.5">
-                                    Topic Vectors Sync
-                                    {aiTopicJob.status === 'PAUSED' && <span className="text-[8px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded uppercase">Paused</span>}
-                                </span>
-                                <div className="hidden lg:block w-24 bg-white border border-teal-100 h-1.5 rounded-full overflow-hidden shrink-0 mt-0.5">
-                                  <div 
-                                      className={`h-full ${aiTopicJob.status === 'PAUSED' ? 'bg-amber-400' : 'bg-teal-500'} transition-all`} 
-                                      style={{ width: `${aiTopicJob.totalChaptersToProcess > 0 ? (aiTopicJob.processedChaptersCount / aiTopicJob.totalChaptersToProcess) * 100 : 0}%` }} 
-                                  />
-                                </div>
-                            </div>
-                            <span className="text-[10px] font-bold ml-1 text-teal-900 min-w-[24px]">
-                                {aiTopicJob.processedChaptersCount}/{aiTopicJob.totalChaptersToProcess}
-                            </span>
-                            
-                            {aiTopicJob.status === 'PAUSED' ? (
-                                <button onClick={handleResumeTopicJob} className="ml-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Resume Topic Sync">
-                                    <span className="hidden xl:inline">RESUME</span><span className="xl:hidden">▶</span>
-                                </button>
-                            ) : (
-                                <button onClick={handlePauseTopicJob} className="ml-1 bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Pause Topic Sync">
-                                    <span className="hidden xl:inline">PAUSE</span><span className="xl:hidden">⏸</span>
-                                </button>
-                            )}
-                        </div>
-                    ) : (
-                        pages.some(p => p.extractionStatus === 'PROOFREAD' || p.extractionStatus === 'GOLDEN_VECTORIZED') && (
-                            <button onClick={() => setIsTopicSyncModalOpen(true)} className="flex items-center gap-1.5 px-2 lg:px-3 py-1.5 bg-white border border-teal-200 text-teal-700 font-semibold rounded-lg hover:bg-teal-50 transition-all shadow-sm text-[11px] xl:text-xs ml-1 h-9">
-                                <Bot size={14} className="shrink-0 text-teal-500" /> <span className="hidden xl:inline">Extract Topics & Sync</span>
-                            </button>
-                        )
-                    )}
+                    {/* Removed AI Topic Extraction Job Viewer and Extract Topics & Sync button as it is moved to SyncCommandCenter */}
 
                     {/* AI Question Generation Job Viewer */}
                     {aiQuestionJob && (aiQuestionJob.status === 'QUEUED' || aiQuestionJob.status === 'IN_PROGRESS' || aiQuestionJob.status === 'PAUSED') ? (
@@ -2145,9 +2105,7 @@ const ProofreadingWorkspace = () => {
                                                                     {idx.pageCount > 0 && (
                                                                         <span className="px-1.5 py-0.5 bg-teal-50 text-teal-700 text-[9px] font-bold rounded border border-teal-100">{idx.pageCount}p</span>
                                                                     )}
-                                                                    <button title="Extract Topics & Sync Pinecone" onClick={(e) => { e.stopPropagation(); handleExtractTopics(idx.id); }} className="text-slate-300 hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                        <Bot size={13} />
-                                                                    </button>
+
                                                                     <button title="Delete Chapter Index" onClick={(e) => { e.stopPropagation(); handleDeleteIndex(idx.id); }} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                         <Trash2 size={13} />
                                                                     </button>

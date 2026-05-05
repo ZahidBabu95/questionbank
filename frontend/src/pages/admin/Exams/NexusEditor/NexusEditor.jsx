@@ -115,6 +115,19 @@ const NexusEditor = () => {
         };
     }, []);
 
+    // Dispatch Dynamic Title to MainLayout
+    useEffect(() => {
+        const docTitle = docSettings?.exam || examData?.title || 'Untitled Document';
+        window.dispatchEvent(new CustomEvent('setDynamicPageTitle', {
+            detail: { 
+                title: docTitle, 
+                subtitle: 'Nexus Paper Engine - /exams/generate/saved' 
+            }
+        }));
+        
+        return () => window.dispatchEvent(new CustomEvent('setDynamicPageTitle', { detail: null }));
+    }, [docSettings?.exam, examData?.title]);
+
     // Import from AI Workspace
     useEffect(() => {
         const importFromAi = async () => {

@@ -569,4 +569,37 @@ public class KnowledgeHubController {
                     .body(Map.of("error", "Failed to update chunk: " + e.getMessage()));
         }
     }
+    @PutMapping("/topics/{topicId}/rename-sync")
+    public ResponseEntity<Map<String, String>> renameTopicAndSync(@PathVariable UUID topicId, @RequestBody Map<String, String> body) {
+        try {
+            String newName = body.get("name");
+            topicExtractorService.renameTopicAndSync(topicId, newName);
+            return ResponseEntity.ok(Map.of("message", "Topic renamed and Pinecone synced successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to rename topic: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/topics/{sourceTopicId}/merge-into/{targetTopicId}")
+    public ResponseEntity<Map<String, String>> mergeTopicInto(@PathVariable UUID sourceTopicId, @PathVariable UUID targetTopicId) {
+        try {
+            topicExtractorService.mergeTopicInto(sourceTopicId, targetTopicId);
+            return ResponseEntity.ok(Map.of("message", "Topic merged successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to merge topic: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/indexes/{indexId}/finalize-vector")
+    public ResponseEntity<Map<String, Object>> finalizeVectorForIndex(@PathVariable UUID indexId) {
+        try {
+            int count = topicExtractorService.finalizeVectorsForIndex(indexId);
+            return ResponseEntity.ok(Map.of("message", "Finalized and pushed " + count + " chunks to Vector Database"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to finalize vectors: " + e.getMessage()));
+        }
+    }
 }

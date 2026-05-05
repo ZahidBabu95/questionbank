@@ -48,6 +48,7 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
+                .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()))
 
                 // ── Auth Entry Point ─────────────────────────────────────────────
                 // JSON response — prevents Tomcat Whitelabel Error Page on 401

@@ -162,6 +162,18 @@ public class QuestionController {
         return ResponseEntity.ok(questions);
     }
 
+    @GetMapping("/list-ids")
+    public ResponseEntity<List<UUID>> getAllQuestionIds(
+            @RequestParam java.util.Map<String, String> filters) {
+        return ResponseEntity.ok(questionService.getAllQuestionIds(filters));
+    }
+
+    @GetMapping("/overview-stats")
+    public ResponseEntity<Map<String, Object>> getOverviewStats(@RequestParam(required = false) Map<String, String> filters) {
+        if (filters == null) filters = new java.util.HashMap<>();
+        return ResponseEntity.ok(questionService.getOverviewStats(filters));
+    }
+
     // --- Revision / Contribution System ---
     @PostMapping("/{id}/revision")
     public ResponseEntity<Map<String, Object>> submitRevision(

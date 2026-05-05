@@ -102,9 +102,11 @@ public class BillingPackageServiceImpl implements BillingPackageService {
         entity.setAiLimitPerMonth(request.getAiLimitPerMonth());
         entity.setStorageLimitMb(request.getStorageLimitMb());
         entity.setFeatureFlags(request.getFeatureFlags());
+        entity.setPricingRules(request.getPricingRules());
         entity.setDisplayName(request.getDisplayName());
         entity.setHighlightBadge(request.getHighlightBadge());
         entity.setSortOrder(request.getSortOrder());
+        entity.setAssociatedRole(request.getAssociatedRole());
     }
 
     private BillingPackageDTO mapToDTO(BillingPackage entity) {
@@ -125,9 +127,11 @@ public class BillingPackageServiceImpl implements BillingPackageService {
         dto.setAiLimitPerMonth(entity.getAiLimitPerMonth());
         dto.setStorageLimitMb(entity.getStorageLimitMb());
         dto.setFeatureFlags(entity.getFeatureFlags());
+        dto.setPricingRules(entity.getPricingRules());
         dto.setDisplayName(entity.getDisplayName());
         dto.setHighlightBadge(entity.getHighlightBadge());
         dto.setSortOrder(entity.getSortOrder());
+        dto.setAssociatedRole(entity.getAssociatedRole());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
         return dto;

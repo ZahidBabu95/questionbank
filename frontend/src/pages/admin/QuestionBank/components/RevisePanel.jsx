@@ -222,7 +222,10 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                             <div className="space-y-1.5">
                                 <SectionHeader icon={CheckCircle} title="MCQ Options (Edit & Set Correct)" />
                                 <div className="space-y-2">
-                                    {form.options.map((opt, idx) => (
+                                    {form.options.map((opt, idx) => {
+                                        const isEnglish = q.language && q.language.toLowerCase() === 'english';
+                                        const displayLabel = isEnglish ? String.fromCharCode(65 + idx) : (['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(65 + idx));
+                                        return (
                                         <div key={opt.id || idx}
                                             className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
                                                 opt.correct ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-slate-200'
@@ -240,18 +243,18 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                                 }`}
                                                 title={opt.correct ? 'Correct answer' : 'Set as correct'}
                                             >
-                                                {opt.optionLabel}
+                                                {displayLabel}
                                             </button>
                                             <input
                                                 type="text"
                                                 value={opt.optionText}
                                                 onChange={e => updateOption(idx, 'optionText', e.target.value)}
                                                 className="flex-1 px-2 py-1 text-[12px] bg-transparent border-0 border-b border-transparent focus:border-primary/30 focus:outline-none text-slate-700 placeholder:text-slate-400"
-                                                placeholder={`Option ${opt.optionLabel}`}
+                                                placeholder={`Option ${displayLabel}`}
                                             />
                                             {opt.correct && <CheckCircle size={14} className="text-emerald-500 shrink-0" />}
                                         </div>
-                                    ))}
+                                    )})}
                                 </div>
                             </div>
                         )}

@@ -11,6 +11,8 @@ public interface InstituteService {
 
     Institute createInstitute(Institute institute, MultipartFile logo);
 
+    Institute requestWorkspace(String userEmail, com.testshaper.dto.WorkspaceRequestDTO request);
+
     Institute updateInstitute(UUID id, Institute institute, MultipartFile logo);
 
     Institute getInstitute(UUID id);

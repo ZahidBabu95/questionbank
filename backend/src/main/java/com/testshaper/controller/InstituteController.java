@@ -105,4 +105,12 @@ public class InstituteController {
         instituteService.assignAcademicSubjects(id, classSubjectIds);
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/request")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Institute> requestWorkspace(
+            @RequestBody com.testshaper.dto.WorkspaceRequestDTO request,
+            org.springframework.security.core.Authentication authentication) {
+        return ResponseEntity.ok(instituteService.requestWorkspace(authentication.getName(), request));
+    }
 }

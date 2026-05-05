@@ -49,9 +49,27 @@ const Signup = () => {
             // await new Promise(resolve => setTimeout(resolve, 1000));
 
             if (response.data.success) {
-                // Determine user role or redirect to login? 
-                // For now, let's redirect to login with a success message or better, auto-login.
-                navigate('/login');
+                // Auto-login after successful signup
+                const loginResponse = await axios.post('/v1/auth/login', {
+                    email: formData.email,
+                    password: formData.password
+                });
+                
+                if (loginResponse.data.success) {
+                    localStorage.setItem('token', loginResponse.data.data);
+                    localStorage.setItem('user', JSON.stringify(loginResponse.data.user));
+                    axios.defaults.headers.common['Authorization'] = `Bearer ${loginResponse.data.data}`;
+                    
+                    const user = loginResponse.data.user;
+                    if (user.roles?.includes('SUPER_ADMIN')) {
+                        navigate('/dashboard');
+                    } else {
+                        // Immediately navigate to AI Workspace for onboarding/overlay
+                        navigate('/ai-workspace');
+                    }
+                } else {
+                    navigate('/login');
+                }
             } else {
                 setError(response.data.message || 'Signup failed');
             }

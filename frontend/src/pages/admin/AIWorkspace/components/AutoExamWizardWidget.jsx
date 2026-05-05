@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Layers, ChevronRight, CheckCircle2, Settings2, FileText, CheckCircle, ChevronLeft, BookOpen, Target, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import academicService from '../../../../services/academicService';
+import examService from '../../../../services/examService';
 
 const AutoExamWizardWidget = ({ userSubjects, isDark, extractedConfig }) => {
     const navigate = useNavigate();
     const [step, setStep] = useState(1);
     const [loadingChapters, setLoadingChapters] = useState(false);
     const [chapters, setChapters] = useState([]);
+    const [generating, setGenerating] = useState(false);
     
     const [config, setConfig] = useState({
         subjectId: '',
@@ -67,8 +69,55 @@ const AutoExamWizardWidget = ({ userSubjects, isDark, extractedConfig }) => {
         setStep(3);
     };
 
-    const handleGenerate = () => {
-        navigate('/exams/generate/auto', { state: { prefill: config, rawExtracted: extractedConfig } });
+    const handleGenerate = async () => {
+        if (!config.subjectId) return alert("Please select a subject.");
+        
+        setGenerating(true);
+        try {
+            // Determine percentages based on selected difficulty
+            let easy = 30, medium = 50, hard = 20;
+            if (config.difficulty === 'Easy') { easy = 50; medium = 40; hard = 10; }
+            else if (config.difficulty === 'Medium') { easy = 30; medium = 50; hard = 20; }
+            else if (config.difficulty === 'Hard') { easy = 20; medium = 30; hard = 50; }
+
+            const userStr = localStorage.getItem('user');
+            const user = userStr ? JSON.parse(userStr) : {};
+            const language = (user?.instituteMedium && user.instituteMedium.includes(',')) ? 'Bangla' : (user?.instituteMedium || 'Bangla');
+
+            const res = await examService.generateExam({
+                title: config.title || 'Auto Exam',
+                examType: 'MODEL_TEST',
+                classSubjectId: config.subjectId,
+                totalMarks: config.qsCount, // Assuming 1 mark per MCQ by default
+                totalQuestions: config.qsCount,
+                durationMinutes: 60,
+                language: language,
+                instructions: "",
+                instituteName: user.instituteName || "",
+                headerText: "",
+                shuffleQuestions: true,
+                shuffleOptions: true,
+                chapterIds: config.chapterId ? [config.chapterId] : undefined,
+                easyPercent: easy,
+                mediumPercent: medium,
+                hardPercent: hard,
+                questionTypeRules: [
+                    { questionType: 'MCQ', count: config.qsCount, marksPerQuestion: 1 }
+                ]
+            });
+
+            if (res.success) {
+                navigate(`/exams/generate/nexus-editor/${res.data.id}`);
+            } else {
+                alert(res.message || "Failed to generate exam.");
+            }
+        } catch (e) {
+            console.error("Generate API Error:", e);
+            const errMsg = e.response?.data?.message || e.response?.data?.error || e.message || "Unknown API Error";
+            alert(`API Error: ${errMsg}`);
+        } finally {
+            setGenerating(false);
+        }
     };
 
     return (
@@ -249,9 +298,11 @@ const AutoExamWizardWidget = ({ userSubjects, isDark, extractedConfig }) => {
                             </button>
                             <button 
                                 onClick={handleGenerate}
-                                className={`flex-[3] py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${isDark ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-lg shadow-indigo-500/20'}`}
+                                disabled={generating}
+                                className={`flex-[3] py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${isDark ? 'bg-indigo-600 hover:bg-indigo-500 text-white' : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-lg shadow-indigo-500/20'} ${generating ? 'opacity-70 cursor-not-allowed' : ''}`}
                             >
-                                <Layers size={18} /> Generate Exam
+                                {generating ? <Loader2 size={18} className="animate-spin" /> : <Layers size={18} />}
+                                {generating ? 'Generating...' : 'Generate Exam'}
                             </button>
                         </div>
                     </div>

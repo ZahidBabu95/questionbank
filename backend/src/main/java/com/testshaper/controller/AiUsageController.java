@@ -246,6 +246,25 @@ public class AiUsageController {
     }
 
 
+    @GetMapping("/usage/my-usage")
+    public ResponseEntity<?> getMyUsage(org.springframework.security.core.Authentication authentication) {
+        String email = authentication != null ? authentication.getName() : "";
+        List<Map<String, Object>> userSummary = repo.getUserWiseSummary();
+        long myTokens = 0;
+        for (Map<String, Object> u : userSummary) {
+            if (email.equalsIgnoreCase((String) u.get("userEmail"))) {
+                Object tokensObj = u.get("totalTokens");
+                myTokens = tokensObj instanceof Number ? ((Number) tokensObj).longValue() : 0L;
+                break;
+            }
+        }
+        
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("used", myTokens);
+        data.put("limit", 100000);
+        return ResponseEntity.ok(ApiResponse.success(data, "My AI Usage"));
+    }
+
     // ─── Provider-aware resolve methods ─────────────────────────────────────
 
     private Map<String, String> getAiSettings() {

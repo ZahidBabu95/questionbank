@@ -250,6 +250,120 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
+    public List<UUID> getAllQuestionIds(java.util.Map<String, String> filters) {
+        String tenantId = com.testshaper.security.TenantContext.getTenantId();
+        
+        List<UUID> allowedSubjectIds = new java.util.ArrayList<>();
+        if (org.springframework.util.StringUtils.hasText(tenantId)) {
+            String currentUserEmail = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            userRepository.findByEmail(currentUserEmail).ifPresent(user -> {
+                if (user.getInstitute() != null && user.getInstitute().getAssignedSubjects() != null) {
+                    user.getInstitute().getAssignedSubjects().forEach(sub -> allowedSubjectIds.add(sub.getId()));
+                }
+            });
+        }
+
+        String globalTenantId = null;
+        try {
+            globalTenantId = (String) entityManager.createQuery("SELECT CAST(i.id AS string) FROM Institute i WHERE i.code = 'DEFAULT-001'")
+                    .setMaxResults(1)
+                    .getSingleResult();
+        } catch (Exception e) {
+            // ignore if not found
+        }
+        
+        org.springframework.data.jpa.domain.Specification<Question> spec = 
+            com.testshaper.specification.QuestionSpecification.filterQuestions(
+                tenantId,
+                filters.get("filterStatus"),
+                filters.get("filterType"),
+                filters.get("search"),
+                filters.get("language"),
+                filters.get("levelId"),
+                filters.get("streamId"),
+                filters.get("classId"),
+                filters.get("subjectId"),
+                filters.get("chapterId"),
+                filters.get("topicId"),
+                filters.get("className"),
+                filters.get("subjectName"),
+                allowedSubjectIds,
+                globalTenantId
+            );
+
+        return questionRepository.findAll(spec).stream().map(Question::getId).collect(java.util.stream.Collectors.toList());
+    }
+
+    @Override
+    public java.util.Map<String, Object> getOverviewStats(java.util.Map<String, String> filters) {
+        String tenantId = com.testshaper.security.TenantContext.getTenantId();
+        
+        List<UUID> allowedSubjectIds = new java.util.ArrayList<>();
+        if (org.springframework.util.StringUtils.hasText(tenantId)) {
+            String currentUserEmail = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            userRepository.findByEmail(currentUserEmail).ifPresent(user -> {
+                if (user.getInstitute() != null && user.getInstitute().getAssignedSubjects() != null) {
+                    user.getInstitute().getAssignedSubjects().forEach(sub -> allowedSubjectIds.add(sub.getId()));
+                }
+            });
+        }
+
+        String globalTenantId = null;
+        try {
+            globalTenantId = (String) entityManager.createQuery("SELECT CAST(i.id AS string) FROM Institute i WHERE i.code = 'DEFAULT-001'")
+                    .setMaxResults(1)
+                    .getSingleResult();
+        } catch (Exception e) {
+            // ignore if not found
+        }
+        
+        long totalQuestions = 0;
+        long totalApproved = 0;
+        long totalPending = 0;
+        long totalSubjects = 0;
+
+        org.springframework.data.jpa.domain.Specification<Question> baseSpec = 
+            com.testshaper.specification.QuestionSpecification.filterQuestions(
+                tenantId,
+                null,
+                filters != null ? filters.get("filterType") : null,
+                filters != null ? filters.get("search") : null,
+                filters != null ? filters.get("language") : null,
+                filters != null ? filters.get("levelId") : null,
+                filters != null ? filters.get("streamId") : null,
+                filters != null ? filters.get("classId") : null,
+                filters != null ? filters.get("subjectId") : null,
+                filters != null ? filters.get("chapterId") : null,
+                filters != null ? filters.get("topicId") : null,
+                filters != null ? filters.get("className") : null,
+                filters != null ? filters.get("subjectName") : null,
+                allowedSubjectIds,
+                globalTenantId
+            );
+
+        totalQuestions = questionRepository.count(baseSpec);
+
+        org.springframework.data.jpa.domain.Specification<Question> approvedSpec = baseSpec.and((root, query, cb) -> cb.equal(root.get("status"), Question.QuestionStatus.APPROVED));
+        totalApproved = questionRepository.count(approvedSpec);
+
+        org.springframework.data.jpa.domain.Specification<Question> pendingSpec = baseSpec.and((root, query, cb) -> cb.equal(root.get("status"), Question.QuestionStatus.PENDING));
+        totalPending = questionRepository.count(pendingSpec);
+
+        if (filters != null && filters.get("subjectId") != null && !filters.get("subjectId").isEmpty()) {
+            totalSubjects = 1;
+        } else {
+            totalSubjects = questionRepository.countDistinctClassSubjectIds(); 
+        }
+
+        java.util.Map<String, Object> stats = new java.util.HashMap<>();
+        stats.put("totalQuestions", totalQuestions);
+        stats.put("totalApproved", totalApproved);
+        stats.put("totalPending", totalPending);
+        stats.put("totalSubjects", totalSubjects);
+        return stats;
+    }
+
+    @Override
     @Transactional
     public void deleteQuestion(UUID id) {
         // Options cascade delete? Or manual?

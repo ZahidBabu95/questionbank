@@ -80,6 +80,13 @@ public class BillingPackage extends BaseEntity {
     @Column(name = "sort_order")
     private Integer sortOrder = 0;
 
+    @Column(name = "associated_role")
+    private String associatedRole;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "pricing_rules", columnDefinition = "json")
+    private Map<String, Object> pricingRules;
+
     public enum BillingCycle {
         MONTHLY, YEARLY
     }

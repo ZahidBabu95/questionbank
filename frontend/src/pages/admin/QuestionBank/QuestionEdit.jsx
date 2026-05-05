@@ -619,6 +619,7 @@ const QuestionEdit = () => {
                         <CQPartsEditor 
                             cqParts={cqParts}
                             setCqParts={setCqParts}
+                            language={formData.language}
                         />
                     )}
 
@@ -628,6 +629,7 @@ const QuestionEdit = () => {
                             options={options} 
                             handleOptionChange={handleOptionChange} 
                             handleCorrectOption={handleCorrectOption} 
+                            language={formData.language}
                         />
                     )}
 

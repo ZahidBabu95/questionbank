@@ -115,10 +115,14 @@ public class ExamGenerationController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_GEN_VIEW', 'EXAMS_VIEW', 'EXAM_PAPER_GENERATOR_VIEW', 'EXAM_PAPER_GENERATOR_AUTO_GENERATE_VIEW', 'EXAM_PAPER_GENERATOR_LEGACY_EDITOR_VIEW', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_VIEW', 'EXAM_PAPER_GENERATOR_NEXUS_PAPER_ENGINE_V2_VIEW', 'EXAM_PAPER_GENERATOR_PAPER_EDITOR_VIEW', 'EXAM_PAPER_GENERATOR_SAVED_EXAMS_VIEW')")
     public ResponseEntity<Map<String, Object>> listExams(
             @RequestParam(required = false) String title,
+            @RequestParam(required = false) com.testshaper.entity.Exam.ExamType examType,
+            @RequestParam(required = false) com.testshaper.entity.Exam.ExamStatus status,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            Authentication auth) {
+        boolean isSuperAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<ExamSummaryDTO> exams = examGenerationService.listExams(title, pageable);
+        Page<ExamSummaryDTO> exams = examGenerationService.listExams(title, examType, status, pageable, auth.getName(), isSuperAdmin);
         return ResponseEntity.ok(Map.of("success", true, "data", exams));
     }
 }

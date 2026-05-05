@@ -71,7 +71,7 @@ public class UserServiceImpl implements UserService {
             personalInstitute.setCode("PERS-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase());
             personalInstitute.setType(Institute.InstituteType.PERSONAL);
             personalInstitute.setPlanType(Institute.SubscriptionPlan.BETA);
-            personalInstitute.setStatus(Institute.InstituteStatus.ACTIVE);
+            personalInstitute.setStatus(Institute.InstituteStatus.INACTIVE);
             
             personalInstitute = instituteRepository.save(personalInstitute);
             instituteIdToUse = personalInstitute.getId();
@@ -98,6 +98,14 @@ public class UserServiceImpl implements UserService {
                 roles.add(role);
             }
             user.setRoles(roles);
+        } else {
+            // Default role for new signups
+            Role defaultRole = roleRepository.findByName("TEACHER").orElse(null);
+            if (defaultRole != null) {
+                Set<Role> roles = new HashSet<>();
+                roles.add(defaultRole);
+                user.setRoles(roles);
+            }
         }
 
         // Handle Institute
@@ -184,9 +192,7 @@ public class UserServiceImpl implements UserService {
     public void deleteUser(@NonNull UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-        user.setDeleted(true);
-        user.setActive(false);
-        userRepository.save(user);
+        userRepository.delete(user);
     }
 
     @Override
@@ -195,6 +201,10 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         user.setActive(true);
+        if (user.getInstitute() != null) {
+            user.getInstitute().setStatus(Institute.InstituteStatus.ACTIVE);
+            instituteRepository.save(user.getInstitute());
+        }
         userRepository.save(user);
     }
 
@@ -285,7 +295,14 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void bulkActivate(java.util.List<UUID> ids) {
         ids.forEach(id -> {
-            userRepository.findById(id).ifPresent(u -> { u.setActive(true); userRepository.save(u); });
+            userRepository.findById(id).ifPresent(u -> {
+                u.setActive(true);
+                if (u.getInstitute() != null) {
+                    u.getInstitute().setStatus(Institute.InstituteStatus.ACTIVE);
+                    instituteRepository.save(u.getInstitute());
+                }
+                userRepository.save(u);
+            });
         });
     }
 
@@ -301,7 +318,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void bulkDelete(java.util.List<UUID> ids) {
         ids.forEach(id -> {
-            userRepository.findById(id).ifPresent(u -> { u.setDeleted(true); u.setActive(false); userRepository.save(u); });
+            userRepository.findById(id).ifPresent(u -> userRepository.delete(u));
         });
     }
 

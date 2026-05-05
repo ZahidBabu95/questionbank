@@ -31,7 +31,14 @@ const Login = () => {
                 if (branding && branding.refreshBranding) {
                     await branding.refreshBranding();
                 }
-                navigate('/dashboard');
+                const user = response.data.user;
+                if (user && user.roles && user.roles.includes('SUPER_ADMIN')) {
+                    navigate('/dashboard');
+                } else if (user && user.instituteStatus !== 'ACTIVE') {
+                    navigate('/ai-workspace');
+                } else {
+                    navigate('/dashboard');
+                }
 
             } else {
 

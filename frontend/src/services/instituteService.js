@@ -48,6 +48,10 @@ export default {
     activateInstitute,
     suspendInstitute,
     upgradePlan,
+    requestWorkspace: async (data) => {
+        const response = await axios.post(`${API_URL}/request`, data);
+        return response.data;
+    },
     getAssignedSubjects: async (id) => {
         const response = await axios.get(`${API_URL}/${id}/assigned-subjects`);
         return response.data;

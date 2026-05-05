@@ -206,11 +206,34 @@ const KnowledgeMapWorkspace = () => {
     };
 
     const handleAutoAssignPages = async () => {
-        if (!window.confirm("Are you sure you want to auto-assign all matching PDF pages to these indices? This will calculate ending pages first.")) return;
+        if (!window.confirm("Are you sure you want to auto-assign all matching PDF pages to these indices? This will also auto-create any missing Target Chapters and calculate ending pages.")) return;
         try {
             setIsAutoAssigning(true);
+
+            // Auto-create and map Tree A chapters for unmapped indices
+            const unmappedIndices = indices.filter(idx => !idx.mappedChapterId);
+            if (unmappedIndices.length > 0 && bookDetails?.classSubjectId) {
+                let baseChapterNum = chapters.length;
+                for (const idx of unmappedIndices) {
+                    try {
+                        setSavingId(idx.id);
+                        baseChapterNum += 1;
+                        const newChData = { name: idx.indexName, chapterNumber: baseChapterNum };
+                        const newChapter = await academicService.createChapter(bookDetails.classSubjectId, newChData);
+                        
+                        const payload = { ...idx, mappedChapterId: newChapter.id, mappedTopicId: null };
+                        await axios.put(`/v1/knowledge-hub/source-books/${bookId}/indices/${idx.id}`, payload);
+                    } catch (err) {
+                        console.error("Failed to create/map chapter for index", idx.id, err);
+                    }
+                }
+                // Refresh chapters list
+                await fetchChapters(bookDetails.classSubjectId);
+                setSavingId(null);
+            }
+
             await axios.post(`/v1/knowledge-hub/source-books/${bookId}/auto-assign-indices`);
-            alert("Pages assigned successfully! They will now show up in Proofreading Workspace organized by Chapter.");
+            alert("Chapters generated and pages assigned successfully! They will now show up in Proofreading Workspace organized by Chapter.");
             await fetchIndicesData(); // refresh to show auto-calculated end pages
         } catch (err) {
             console.error("Auto-assign error:", err);

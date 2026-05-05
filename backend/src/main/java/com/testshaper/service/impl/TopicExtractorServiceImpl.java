@@ -38,7 +38,7 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
     private final VectorDatabaseService vectorDatabaseService;
     private final ObjectMapper objectMapper;
     private final com.testshaper.repository.AiTopicExtractionJobRepository aiTopicExtractionJobRepository;
-    
+    private final com.testshaper.repository.AiKnowledgeBaseRepository aiKnowledgeBaseRepository;
     private final ThreadPoolTaskExecutor topicExecutor = new ThreadPoolTaskExecutor();
     private final ThreadPoolTaskExecutor batchExecutor = new ThreadPoolTaskExecutor();
 
@@ -283,6 +283,13 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                     jsonResponse = jsonResponse.replace("```json", "").replace("```", "").trim();
                 } else if (jsonResponse.startsWith("```")) {
                     jsonResponse = jsonResponse.replace("```", "").trim();
+                } else if (jsonResponse.startsWith("json")) {
+                    jsonResponse = jsonResponse.substring(4).trim();
+                }
+                
+                // Just to be safe, if there's a trailing ``` remove it
+                if (jsonResponse.endsWith("```")) {
+                    jsonResponse = jsonResponse.substring(0, jsonResponse.length() - 3).trim();
                 }
                 
                 // Fix common invalid escapes produced by LLM for smart quotes
@@ -312,12 +319,23 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
 
             if (content.isBlank()) continue;
 
-            Topic topic = new Topic();
-            topic.setName(topicName);
+            Topic topic = null;
+            String normalizedTopicName = topicName.trim();
             if (mappedChapter != null) {
-                topic.setChapter(mappedChapter);
+                java.util.Optional<Topic> existing = topicRepository.findByChapterIdAndNameIgnoreCase(mappedChapter.getId(), normalizedTopicName);
+                if (existing.isPresent()) {
+                    topic = existing.get();
+                }
             }
-            topic = topicRepository.save(topic);
+            
+            if (topic == null) {
+                topic = new Topic();
+                topic.setName(normalizedTopicName);
+                if (mappedChapter != null) {
+                    topic.setChapter(mappedChapter);
+                }
+                topic = topicRepository.save(topic);
+            }
 
             CurriculumDocumentChunk chunk = new CurriculumDocumentChunk();
             chunk.setMappedTopic(topic);
@@ -334,23 +352,11 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
 
             chunk = chunkRepository.save(chunk);
 
-            Map<String, Object> metadata = new HashMap<>();
-            metadata.put("bookId", index.getSourceBook().getId().toString());
-            if (mappedChapter != null) {
-                metadata.put("chapterId", mappedChapter.getId().toString());
-            }
-            metadata.put("topicId", topic.getId().toString());
-            metadata.put("topicName", topicName);
-            
-            if (!imageUrls.isEmpty()) metadata.put("hasImage", true);
-
-            try {
-                vectorDatabaseService.upsertChunk(chunk.getId().toString(), chunk.getChunkText(), metadata);
-            } catch (Exception e) {
-                log.error("Pinecone Upsert failed for new Topic Chunk ID: {}", chunk.getId(), e);
-            }
+            // We DO NOT push to Pinecone here anymore. This is now a "Pre-Vector Draft" phase.
+            // The metadata maps are kept in code logic for when they hit finalize.
         }
     }
+
 
     private List<String> extractImageUrls(String markdown) {
         List<String> urls = new ArrayList<>();
@@ -403,6 +409,19 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 p.setExtractionStatus(KnowledgePage.ExtractionStatus.PROOFREAD);
             }
             knowledgePageRepository.saveAll(pages);
+
+            // 4. Delete Unused Topics (topics generated during auto-chunk that are now empty)
+            try {
+                if (mappedChapter != null) {
+                    List<Topic> unusedTopics = topicRepository.findUnusedTopicsByChapterId(mappedChapter.getId());
+                    if (!unusedTopics.isEmpty()) {
+                        topicRepository.deleteAll(unusedTopics);
+                        log.info("Cleaned up {} unused database topics for chapter: {}", unusedTopics.size(), mappedChapter.getId());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Topic cleanup failed for index {}: {}", indexId, e.getMessage());
+            }
         }
         log.info("Completed deletion of vector sync data.");
     }
@@ -425,6 +444,31 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
             }
             metadata.put("topicId", chunk.getMappedTopic().getId().toString());
             metadata.put("topicName", chunk.getMappedTopic().getName());
+            
+            // Zero-Click Metadata Injection
+            ClassSubject cs = chunk.getSourceBook().getClassSubject();
+            if (cs != null) {
+                if (cs.getAcademicClass() != null && cs.getAcademicClass().getName() != null) {
+                    metadata.put("className", cs.getAcademicClass().getName());
+                }
+                if (cs.getSubject() != null && cs.getSubject().getName() != null) {
+                    metadata.put("subjectName", cs.getSubject().getName());
+                }
+                if (cs.getAcademicClass() != null && cs.getAcademicClass().getStream() != null && 
+                    cs.getAcademicClass().getStream().getLevel() != null && 
+                    cs.getAcademicClass().getStream().getLevel().getName() != null) {
+                    metadata.put("levelName", cs.getAcademicClass().getStream().getLevel().getName());
+                }
+                
+                String subjectName = cs.getSubject() != null ? cs.getSubject().getName() : "";
+                if (!subjectName.isEmpty()) {
+                    List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(subjectName);
+                    if (!rules.isEmpty()) {
+                        metadata.put("curriculumRules", rules.get(0).getContent());
+                    }
+                }
+            }
+            
             if (chunk.getImageUrl() != null && !chunk.getImageUrl().isEmpty()) {
                 metadata.put("hasImage", true);
             }
@@ -434,5 +478,170 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
             log.error("Failed to update vector for chunk {}: {}", chunkId, e.getMessage());
             throw new RuntimeException("Failed to sync chunk update to Pinecone", e);
         }
+    }
+
+    @Transactional
+    public void renameTopicAndSync(UUID topicId, String newName) {
+        Topic topic = topicRepository.findById(topicId)
+            .orElseThrow(() -> new RuntimeException("Topic not found"));
+        topic.setName(newName);
+        topicRepository.save(topic);
+
+        List<CurriculumDocumentChunk> chunks = chunkRepository.findByMappedTopicId(topicId);
+        for (CurriculumDocumentChunk chunk : chunks) {
+            try {
+                Map<String, Object> metadata = new HashMap<>();
+                metadata.put("bookId", chunk.getSourceBook().getId().toString());
+                if (chunk.getSourceBookIndex() != null && chunk.getSourceBookIndex().getMappedChapter() != null) {
+                    metadata.put("chapterId", chunk.getSourceBookIndex().getMappedChapter().getId().toString());
+                }
+                metadata.put("topicId", topicId.toString());
+                metadata.put("topicName", newName);
+
+                ClassSubject cs = chunk.getSourceBook().getClassSubject();
+                if (cs != null) {
+                    if (cs.getAcademicClass() != null && cs.getAcademicClass().getName() != null) {
+                        metadata.put("className", cs.getAcademicClass().getName());
+                        if (cs.getAcademicClass().getStream() != null && cs.getAcademicClass().getStream().getLevel() != null) {
+                            metadata.put("levelName", cs.getAcademicClass().getStream().getLevel().getName());
+                        }
+                    }
+                    if (cs.getSubject() != null && cs.getSubject().getName() != null) {
+                        metadata.put("subjectName", cs.getSubject().getName());
+                        List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(cs.getSubject().getName());
+                        if (!rules.isEmpty()) {
+                            metadata.put("curriculumRules", rules.get(0).getContent());
+                        }
+                    }
+                }
+
+                if (chunk.getImageUrl() != null && !chunk.getImageUrl().isEmpty()) {
+                    metadata.put("hasImage", true);
+                }
+
+                vectorDatabaseService.upsertChunk(chunk.getId().toString(), chunk.getChunkText(), metadata);
+            } catch (Exception e) {
+                log.error("Failed to update Pinecone vector metadata for chunk {}: {}", chunk.getId(), e.getMessage());
+            }
+        }
+    }
+
+    @Transactional
+    public void mergeTopicInto(UUID sourceTopicId, UUID targetTopicId) {
+        Topic targetTopic = topicRepository.findById(targetTopicId)
+            .orElseThrow(() -> new RuntimeException("Target Topic not found"));
+        Topic sourceTopic = topicRepository.findById(sourceTopicId)
+            .orElseThrow(() -> new RuntimeException("Source Topic not found"));
+
+        List<CurriculumDocumentChunk> chunks = chunkRepository.findByMappedTopicId(sourceTopicId);
+        for (CurriculumDocumentChunk chunk : chunks) {
+            chunk.setMappedTopic(targetTopic);
+        }
+        chunkRepository.saveAll(chunks);
+
+        // Delete the old topic
+        topicRepository.delete(sourceTopic);
+
+        // Update Pinecone if they were finalized
+        for (CurriculumDocumentChunk chunk : chunks) {
+            try {
+                Map<String, Object> metadata = new HashMap<>();
+                metadata.put("bookId", chunk.getSourceBook().getId().toString());
+                if (chunk.getSourceBookIndex() != null && chunk.getSourceBookIndex().getMappedChapter() != null) {
+                    metadata.put("chapterId", chunk.getSourceBookIndex().getMappedChapter().getId().toString());
+                }
+                metadata.put("topicId", targetTopic.getId().toString());
+                metadata.put("topicName", targetTopic.getName());
+
+                ClassSubject cs = chunk.getSourceBook().getClassSubject();
+                if (cs != null) {
+                    if (cs.getAcademicClass() != null && cs.getAcademicClass().getName() != null) {
+                        metadata.put("className", cs.getAcademicClass().getName());
+                        if (cs.getAcademicClass().getStream() != null && cs.getAcademicClass().getStream().getLevel() != null) {
+                            metadata.put("levelName", cs.getAcademicClass().getStream().getLevel().getName());
+                        }
+                    }
+                    if (cs.getSubject() != null && cs.getSubject().getName() != null) {
+                        metadata.put("subjectName", cs.getSubject().getName());
+                        List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(cs.getSubject().getName());
+                        if (!rules.isEmpty()) {
+                            metadata.put("curriculumRules", rules.get(0).getContent());
+                        }
+                    }
+                }
+
+                if (chunk.getImageUrl() != null && !chunk.getImageUrl().isEmpty()) {
+                    metadata.put("hasImage", true);
+                }
+
+                vectorDatabaseService.upsertChunk(chunk.getId().toString(), chunk.getChunkText(), metadata);
+            } catch (Exception e) {
+                log.error("Failed to update Pinecone vector metadata for chunk {} during merge: {}", chunk.getId(), e.getMessage());
+            }
+        }
+    }
+    @Override
+    @Transactional
+    public int finalizeVectorsForIndex(UUID indexId) {
+        SourceBookIndex index = sourceBookIndexRepository.findById(indexId)
+                .orElseThrow(() -> new RuntimeException("Index not found"));
+
+        List<CurriculumDocumentChunk> chunks = chunkRepository.findBySourceBookIndexIdIn(
+                Collections.singletonList(indexId), org.springframework.data.domain.Pageable.unpaged()).getContent();
+
+        int pushedCount = 0;
+        for (CurriculumDocumentChunk chunk : chunks) {
+            if (chunk.getMappedTopic() == null) continue;
+            
+            try {
+                Topic topic = chunk.getMappedTopic();
+                Chapter chapter = topic.getChapter();
+                SourceBookMaster sourceBook = index.getSourceBook();
+                
+                Map<String, Object> metadata = new HashMap<>();
+                metadata.put("bookId", sourceBook.getId().toString());
+                if (chapter != null) {
+                    metadata.put("chapterId", chapter.getId().toString());
+                }
+                metadata.put("topicId", topic.getId().toString());
+                metadata.put("topicName", topic.getName());
+
+                ClassSubject cs = sourceBook.getClassSubject();
+                if (cs != null) {
+                    if (cs.getAcademicClass() != null && cs.getAcademicClass().getName() != null) {
+                        metadata.put("className", cs.getAcademicClass().getName());
+                        if (cs.getAcademicClass().getStream() != null && cs.getAcademicClass().getStream().getLevel() != null) {
+                            metadata.put("levelName", cs.getAcademicClass().getStream().getLevel().getName());
+                        }
+                    }
+                    if (cs.getSubject() != null && cs.getSubject().getName() != null) {
+                        metadata.put("subjectName", cs.getSubject().getName());
+                        List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(cs.getSubject().getName());
+                        if (!rules.isEmpty()) {
+                            metadata.put("curriculumRules", rules.get(0).getContent());
+                        }
+                    }
+                }
+
+                if (chunk.getImageUrl() != null && !chunk.getImageUrl().isEmpty()) {
+                    metadata.put("hasImage", true);
+                }
+                
+                vectorDatabaseService.upsertChunk(chunk.getId().toString(), chunk.getChunkText(), metadata);
+                pushedCount++;
+            } catch (Exception e) {
+                log.error("Failed to push chunk {} to Pinecone: {}", chunk.getId(), e.getMessage());
+            }
+        }
+        
+        List<KnowledgePage> pages = knowledgePageRepository.findBySourceBookIndexId(indexId);
+        for (KnowledgePage page : pages) {
+            if (page.getExtractionStatus() == KnowledgePage.ExtractionStatus.PROOFREAD) {
+                page.setExtractionStatus(KnowledgePage.ExtractionStatus.GOLDEN_VECTORIZED);
+            }
+        }
+        knowledgePageRepository.saveAll(pages);
+        
+        return pushedCount;
     }
 }

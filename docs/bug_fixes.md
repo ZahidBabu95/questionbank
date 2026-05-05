@@ -13,6 +13,24 @@ This document tracks identified bugs, their root causes, and how they were solve
 ## ✅ SOLVED BUGS
 *(Move bugs here after they are fixed and briefly describe the solution.)*
 
+### 15. Question Bank CQ Formatting & Language-Aware Option Rendering
+**Location:** `QuestionList.jsx`, `CQPartsEditor.jsx`, `RevisePanel.jsx`, and `KnowledgeHubServiceImpl.java`
+**Description:** CQ questions were showing ugly boxes with leftover markers (like "ক.", "(ক)") and multiple-choice options were strictly showing "A, B, C, D" regardless of the language of the subject. 
+**Root Cause:** The `KnowledgeHubServiceImpl` regex was not aggressive enough to strip bracketed or parenthesized markers during question saving. For the frontend, CQ question parts were rendered with legacy bordered box layouts, and MCQ option labels (as well as CQ labels) were hardcoded to English or relying on whatever fallback label was given without checking the target `language` of the question.
+**Solution Applied:** Upgraded the backend regex to effectively strip `[ক]`, `(ক)`, and `ক.` variations. Completely refactored `CQCombinedRenderer` in `QuestionList.jsx` to output sleek, plain text layouts. Implemented a dynamic language check (`q.language === 'English'`) across `QuestionList.jsx`, `QuestionEdit.jsx` (and its sub-components), and `RevisePanel.jsx` to dynamically assign "A, B, C, D" / "a, b, c, d" for English subjects, and "ক, খ, গ, ঘ" for Bengali subjects.
+
+### 14. Question Bank Advanced Filter Hierarchy Crash
+**Location:** `QuestionList.jsx` (`fetchInitialFilters`)
+**Description:** Opening the Question Bank page resulted in an immediate React crash with the error: `Uncaught TypeError: fullHierarchy.forEach is not a function`.
+**Root Cause:** The frontend assumed `academicService.getHierarchy()` returned an Array, but the API returned an Object containing multiple nested arrays (`levels`, `streams`, `classes`, `subjects`, `classSubjects`). Thus, invoking `.forEach()` directly on the object failed.
+**Solution Applied:** Updated the `useEffect` hook to parse and map over the specific properties of the `fullHierarchy` object (e.g., `fullHierarchy.classSubjects.forEach`, `fullHierarchy.subjects.forEach`) safely with `Array.isArray` checks.
+
+### 13. Question Bank Overview Stats 500 Internal Server Error
+**Location:** `QuestionServiceImpl.java` (`getOverviewStats`)
+**Description:** The new `/api/v1/questions/overview-stats` endpoint failed with a 500 status code because of a JPQL context exception.
+**Root Cause:** `entityManager.createQuery` was called inside `getOverviewStats` but without an active `@Transactional` read-only context, causing a persistence exception during runtime execution for calculating distinct subjects.
+**Solution Applied:** Bypassed direct `EntityManager` usage completely. Added a native/JPA query `@Query("SELECT COUNT(DISTINCT q.classSubject.id) FROM Question q")` named `countDistinctClassSubjectIds()` inside `QuestionRepository` and called it from the service.
+
 ### 12. Auto Exam Generator Pre-fill & State Hydration Failure
 **Location:** `AutoExamGenerator.jsx`
 **Description:** After selecting parameters (Subject, Chapter, Question Count) via the Conversational Auto Exam Widget and clicking "Generate", the user was redirected to the Auto Exam Generator page, but none of the parameters were applied. The page remained on Step 1 (Subject Selection) or ignored the specific question counts and loaded the default blueprint.
@@ -84,3 +102,9 @@ This document tracks identified bugs, their root causes, and how they were solve
 **Description:** Clicking the delete icon on an image node failed to delete the image, sometimes dropping cursor focus entirely.
 **Root Cause:** The `handleDelete` method invoked `deleteNode()` and then explicitly tried to restore focus by forcing `editor.chain().setTextSelection(pos).focus().run()`. Because the block was deleted, returning to the exact prior `pos` index threw an internal out-of-bounds error.
 **Solution Applied:** Removed the strict index selection logic. Now it just calls `deleteNode()` and safely runs a generic `editor.commands.focus()` inside a `requestAnimationFrame`.
+
+### 6. Auto-Assign Pages Failing to Create/Map Tree A Chapters
+**Location:** `KnowledgeMapWorkspace.jsx`
+**Description:** Clicking "Auto-Assign Pages" was failing to create canonical Target Chapters/Topics (Tree A) from the extracted Table of Contents (Tree B), causing a breakdown in the auto-mapping workflow.
+**Root Cause:** The backend API `auto-assign-indices` handles assigning PDF Pages to existing `SourceBookIndex` records, but it does NOT create `Chapters` in the syllabus tree. That logic existed only in the `Bulk Create` button in the frontend, requiring users to manually select indices first—breaking the one-click UX promise.
+**Solution Applied:** Upgraded `handleAutoAssignPages` to automatically scan for unmapped indices. If any exist, it dynamically iterates through them, creates the new canonical `Chapter` records via `academicService.createChapter()`, maps the indices locally via a `PUT` request, and finally triggers the backend `auto-assign-indices` to map the PDF pages.

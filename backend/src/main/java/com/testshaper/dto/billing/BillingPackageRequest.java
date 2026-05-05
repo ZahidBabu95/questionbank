@@ -35,8 +35,11 @@ public class BillingPackageRequest {
     private Integer storageLimitMb;
 
     private Map<String, Boolean> featureFlags;
+    
+    private Map<String, Object> pricingRules;
 
     private String displayName;
     private String highlightBadge;
     private Integer sortOrder = 0;
+    private String associatedRole;
 }

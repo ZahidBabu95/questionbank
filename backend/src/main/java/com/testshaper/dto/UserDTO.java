@@ -19,6 +19,7 @@ public class UserDTO {
     private UUID instituteId;
     private String instituteName;
     private String instituteMedium;
+    private String instituteStatus;
     private Set<String> roles;
     private Set<String> permissions;
     private LocalDateTime createdAt;

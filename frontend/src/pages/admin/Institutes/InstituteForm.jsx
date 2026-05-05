@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, X, Upload, Zap, Database, Users } from 'lucide-react';
+import { Save, X, Upload, Zap, Database, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import instituteService from '../../../services/instituteService';
 import billingService from '../../../services/billingService';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -40,6 +40,12 @@ const InstituteForm = () => {
 
     const [hierarchy, setHierarchy] = useState(null);
     const [assignedSubjectIds, setAssignedSubjectIds] = useState([]);
+    const [subjectConfigs, setSubjectConfigs] = useState({});
+    const [expandedStreams, setExpandedStreams] = useState({});
+    const [expandedClasses, setExpandedClasses] = useState({});
+
+    const toggleStream = (stream) => setExpandedStreams(prev => ({ ...prev, [stream]: !prev[stream] }));
+    const toggleClass = (classId) => setExpandedClasses(prev => ({ ...prev, [classId]: !prev[classId] }));
 
     useEffect(() => {
         fetchPackages();
@@ -69,11 +75,26 @@ const InstituteForm = () => {
     };
 
     const handleSubjectToggle = (classSubjectId) => {
-        setAssignedSubjectIds(prev => 
-            prev.includes(classSubjectId) 
-            ? prev.filter(i => i !== classSubjectId)
-            : [...prev, classSubjectId]
-        );
+        setAssignedSubjectIds(prev => {
+            if (prev.includes(classSubjectId)) {
+                // remove
+                return prev.filter(i => i !== classSubjectId);
+            } else {
+                // add with default config
+                setSubjectConfigs(c => ({...c, [classSubjectId]: { versions: ['Bangla', 'English', 'Bilingual'] }}));
+                return [...prev, classSubjectId];
+            }
+        });
+    };
+
+    const handleVersionToggle = (classSubjectId, version) => {
+        setSubjectConfigs(prev => {
+            const conf = prev[classSubjectId] || { versions: [] };
+            const newVersions = conf.versions.includes(version) 
+                ? conf.versions.filter(v => v !== version)
+                : [...conf.versions, version];
+            return { ...prev, [classSubjectId]: { ...conf, versions: newVersions } };
+        });
     };
 
     const fetchPackages = async () => {
@@ -194,36 +215,14 @@ const InstituteForm = () => {
                             <option value="COACHING">Coaching</option>
                         </select>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Version / Medium</label>
-                        <div className="flex flex-wrap gap-4 p-2 bg-indigo-50/30 border border-slate-300 rounded-lg">
-                            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
-                                <input type="checkbox" checked={formData.medium?.includes('Bangla')} onChange={(e) => {
-                                    let meds = formData.medium ? formData.medium.split(',').filter(Boolean) : [];
-                                    if(e.target.checked) { if(!meds.includes('Bangla')) meds.push('Bangla'); }
-                                    else meds = meds.filter(m => m !== 'Bangla');
-                                    handleChange({target: {name: 'medium', value: meds.join(',')}});
-                                }} className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" />
-                                Bangla
-                            </label>
-                            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
-                                <input type="checkbox" checked={formData.medium?.includes('English')} onChange={(e) => {
-                                    let meds = formData.medium ? formData.medium.split(',').filter(Boolean) : [];
-                                    if(e.target.checked) { if(!meds.includes('English')) meds.push('English'); }
-                                    else meds = meds.filter(m => m !== 'English');
-                                    handleChange({target: {name: 'medium', value: meds.join(',')}});
-                                }} className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" />
-                                English
-                            </label>
-                            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
-                                <input type="checkbox" checked={formData.medium?.includes('Bilingual')} onChange={(e) => {
-                                    let meds = formData.medium ? formData.medium.split(',').filter(Boolean) : [];
-                                    if(e.target.checked) { if(!meds.includes('Bilingual')) meds.push('Bilingual'); }
-                                    else meds = meds.filter(m => m !== 'Bilingual');
-                                    handleChange({target: {name: 'medium', value: meds.join(',')}});
-                                }} className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" />
-                                Bilingual
-                            </label>
+                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Contact Email</label>
+                            <input name="contactEmail" value={formData.contactEmail || ''} onChange={handleChange} className="w-full p-2 border border-slate-300 rounded-lg" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Contact Phone</label>
+                            <input name="contactPhone" value={formData.contactPhone || ''} onChange={handleChange} className="w-full p-2 border border-slate-300 rounded-lg" />
                         </div>
                     </div>
                 </div>
@@ -308,74 +307,120 @@ const InstituteForm = () => {
                                 
                                 return (
                                     <div key={streamName || 'General'} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm mb-4">
-                                        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex justify-between items-center sticky top-0 z-10">
+                                        <div 
+                                            className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center sticky top-0 z-10 cursor-pointer hover:bg-slate-100 transition-colors"
+                                            onClick={() => toggleStream(streamName || 'General')}
+                                        >
                                             <h3 className="font-bold text-slate-800 flex items-center gap-2">
                                                 <div className="w-2 h-4 bg-indigo-500 rounded-full"></div>
                                                 {streamName || 'General Stream'}
                                             </h3>
+                                            {expandedStreams[streamName || 'General'] ? <ChevronUp size={18} className="text-slate-500"/> : <ChevronDown size={18} className="text-slate-500"/>}
                                         </div>
                                         
-                                        <div className="p-4 space-y-6">
-                                            {streamClasses.map(cls => {
-                                                const classSubjects = hierarchy.classSubjects?.filter(cs => cs._classId === cls.id) || [];
-                                                if (classSubjects.length === 0) return null;
-                                                
-                                                const allClassSubjectIds = classSubjects.map(cs => cs.id);
-                                                const allSelected = allClassSubjectIds.length > 0 && allClassSubjectIds.every(id => assignedSubjectIds.includes(id));
+                                        {expandedStreams[streamName || 'General'] && (
+                                            <div className="p-4 space-y-4">
+                                                {streamClasses.map(cls => {
+                                                    const classSubjects = hierarchy.classSubjects?.filter(cs => cs._classId === cls.id) || [];
+                                                    if (classSubjects.length === 0) return null;
+                                                    
+                                                    const allClassSubjectIds = classSubjects.map(cs => cs.id);
+                                                    const allSelected = allClassSubjectIds.length > 0 && allClassSubjectIds.every(id => assignedSubjectIds.includes(id));
+                                                    const isClassExpanded = expandedClasses[cls.id];
 
-                                                return (
-                                                    <div key={cls.id} className="border border-slate-100 rounded-lg p-4 bg-white shadow-sm hover:border-indigo-100 transition-colors">
-                                                        <div className="flex flex-wrap md:flex-nowrap justify-between items-start md:items-center mb-3 pb-2 border-b border-slate-50 gap-3">
-                                                            <div className="font-bold text-sm text-slate-700">{cls.name}</div>
-                                                            <div className="flex gap-2">
-                                                                <button 
-                                                                    type="button" 
-                                                                    onClick={() => {
-                                                                        if (allSelected) {
-                                                                            setAssignedSubjectIds(prev => prev.filter(id => !allClassSubjectIds.includes(id)));
-                                                                        } else {
-                                                                            setAssignedSubjectIds(prev => Array.from(new Set([...prev, ...allClassSubjectIds])));
-                                                                        }
-                                                                    }}
-                                                                    className={`text-[10px] font-bold px-3 py-1.5 rounded transition-colors ${allSelected ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
-                                                                >
-                                                                    {allSelected ? 'Deselect All' : 'Select All Subjects'}
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex flex-wrap gap-2.5">
-                                                            {classSubjects.map(cs => {
-                                                                const subject = hierarchy.subjects?.find(s => s.id === cs._subjectId);
-                                                                if (!subject) return null;
-                                                                
-                                                                const isSelected = assignedSubjectIds.includes(cs.id);
-                                                                
-                                                                return (
-                                                                    <label 
-                                                                        key={cs.id} 
-                                                                        className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full border cursor-pointer transition select-none ${
-                                                                            isSelected 
-                                                                                ? 'bg-indigo-50 border-indigo-300 text-indigo-800 shadow-sm'
-                                                                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
-                                                                        }`}
+                                                    return (
+                                                        <div key={cls.id} className="border border-slate-100 rounded-lg bg-white shadow-sm hover:border-indigo-100 transition-colors">
+                                                            <div 
+                                                                className="flex flex-wrap md:flex-nowrap justify-between items-center p-3 cursor-pointer hover:bg-slate-50 transition-colors rounded-t-lg"
+                                                                onClick={() => toggleClass(cls.id)}
+                                                            >
+                                                                <div className="font-bold text-sm text-slate-700 flex items-center gap-2">
+                                                                    {isClassExpanded ? <ChevronUp size={16} className="text-slate-400"/> : <ChevronDown size={16} className="text-slate-400"/>}
+                                                                    {cls.name}
+                                                                </div>
+                                                                <div className="flex gap-2">
+                                                                    <button 
+                                                                        type="button" 
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            if (allSelected) {
+                                                                                setAssignedSubjectIds(prev => prev.filter(id => !allClassSubjectIds.includes(id)));
+                                                                            } else {
+                                                                                setAssignedSubjectIds(prev => Array.from(new Set([...prev, ...allClassSubjectIds])));
+                                                                            }
+                                                                        }}
+                                                                        className={`text-[10px] font-bold px-3 py-1.5 rounded transition-colors ${allSelected ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
                                                                     >
-                                                                        <input 
-                                                                            type="checkbox" 
-                                                                            checked={isSelected} 
-                                                                            onChange={() => handleSubjectToggle(cs.id)}
-                                                                            className="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300"
-                                                                        />
-                                                                        <span>
-                                                                            {subject.name} {subject.paper ? `(${subject.paper})` : ''}
-                                                                        </span>
-                                                                    </label>
-                                                                );
-                                                            })}
+                                                                        {allSelected ? 'Deselect All' : 'Select All Subjects'}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            {isClassExpanded && (
+                                                                <div className="flex flex-col gap-3 p-4 border-t border-slate-50 bg-slate-50/30">
+                                                                    {classSubjects.map(cs => {
+                                                                        const subject = hierarchy.subjects?.find(s => s.id === cs._subjectId);
+                                                                        if (!subject) return null;
+                                                                        
+                                                                        const isSelected = assignedSubjectIds.includes(cs.id);
+                                                                        const config = subjectConfigs[cs.id] || { versions: ['Bangla', 'English', 'Bilingual'] };
+                                                                        
+                                                                        return (
+                                                                            <div key={cs.id} className={`flex flex-col gap-2 p-3.5 rounded-xl border-2 transition-all shadow-sm ${isSelected ? 'bg-white border-indigo-400' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                                                                                <label className="flex items-center gap-3 cursor-pointer">
+                                                                                    <input 
+                                                                                        type="checkbox" 
+                                                                                        checked={isSelected} 
+                                                                                        onChange={() => handleSubjectToggle(cs.id)}
+                                                                                        className="w-5 h-5 rounded text-indigo-600 border-slate-300 cursor-pointer"
+                                                                                    />
+                                                                                    <span className={`text-sm font-black ${isSelected ? 'text-indigo-900' : 'text-slate-600'}`}>
+                                                                                        {subject.name} {subject.paper ? <span className="text-indigo-500 ml-1">({subject.paper})</span> : ''}
+                                                                                    </span>
+                                                                                    
+                                                                                    {isSelected && <span className="ml-auto text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold uppercase tracking-wider">Active in Workspace</span>}
+                                                                                </label>
+
+                                                                                {isSelected && (
+                                                                                    <div className="ml-8 mt-2 p-3 bg-slate-50 border border-slate-100 rounded-lg flex flex-wrap items-center gap-x-8 gap-y-4">
+                                                                                        <div className="flex items-center gap-4">
+                                                                                            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Allowed Versions</span>
+                                                                                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer hover:text-indigo-600 transition">
+                                                                                                <input 
+                                                                                                    type="checkbox" 
+                                                                                                    checked={config.versions.includes('Bangla')}
+                                                                                                    onChange={() => handleVersionToggle(cs.id, 'Bangla')}
+                                                                                                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                                                                                                /> Bangla
+                                                                                            </label>
+                                                                                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer hover:text-indigo-600 transition">
+                                                                                                <input 
+                                                                                                    type="checkbox" 
+                                                                                                    checked={config.versions.includes('English')}
+                                                                                                    onChange={() => handleVersionToggle(cs.id, 'English')}
+                                                                                                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                                                                                                /> English
+                                                                                            </label>
+                                                                                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer hover:text-indigo-600 transition">
+                                                                                                <input 
+                                                                                                    type="checkbox" 
+                                                                                                    checked={config.versions.includes('Bilingual')}
+                                                                                                    onChange={() => handleVersionToggle(cs.id, 'Bilingual')}
+                                                                                                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                                                                                                /> Bilingual
+                                                                                            </label>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}

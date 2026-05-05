@@ -1124,12 +1124,26 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             return Collections.emptyList();
         }
 
-        List<com.testshaper.entity.Topic> topics = topicRepository.findByChapterId(index.getMappedChapter().getId());
+        List<com.testshaper.entity.Topic> topics = new ArrayList<>(topicRepository.findByChapterId(index.getMappedChapter().getId()));
         
         // Fetch all chunks for this index
         List<com.testshaper.entity.CurriculumDocumentChunk> chunks = curriculumDocumentChunkRepository
                 .findBySourceBookIndexIdIn(Collections.singletonList(indexId), org.springframework.data.domain.Pageable.unpaged())
                 .getContent();
+
+        // 1. Sort chunks by chunkIndex (which is sequential based on pages)
+        List<com.testshaper.entity.CurriculumDocumentChunk> sortedChunks = chunks.stream()
+                .sorted(java.util.Comparator.comparing(c -> c.getChunkIndex() == null ? 0 : c.getChunkIndex()))
+                .collect(Collectors.toList());
+
+        // 2. Order topics based on the appearance of their chunks in the sequence
+        topics.sort(java.util.Comparator.comparingInt(t -> {
+            return sortedChunks.stream()
+                    .filter(c -> c.getMappedTopic() != null && c.getMappedTopic().getId().equals(t.getId()))
+                    .mapToInt(c -> c.getChunkIndex() == null ? Integer.MAX_VALUE : c.getChunkIndex())
+                    .min()
+                    .orElse(Integer.MAX_VALUE);
+        }));
 
         List<Map<String, Object>> result = new ArrayList<>();
 
@@ -1138,7 +1152,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             topicMap.put("id", topic.getId());
             topicMap.put("name", topic.getName());
 
-            List<Map<String, Object>> chunkList = chunks.stream()
+            List<Map<String, Object>> chunkList = sortedChunks.stream()
                     .filter(c -> c.getMappedTopic() != null && c.getMappedTopic().getId().equals(topic.getId()))
                     .map(c -> {
                         Map<String, Object> cMap = new java.util.HashMap<>();
@@ -1147,6 +1161,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                         cMap.put("pageNumber", c.getPageNumber());
                         cMap.put("tokenCount", c.getTokenCount());
                         cMap.put("isVisionExtracted", c.getIsVisionExtracted());
+                        cMap.put("chunkIndex", c.getChunkIndex());
                         return cMap;
                     })
                     .collect(Collectors.toList());
@@ -1859,7 +1874,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                             } else if (qText.isBlank()) {
                                 qText = "Generated Question";
                             }
-                            qText = qText.replaceFirst("^\\s*(?:[\\d০-৯]+|[a-zA-Zক-ষ])\\s*[\\.\\)\\-:]\\s*", "");
+                            qText = qText.replaceFirst("^\\s*(?:\\(|\\[)?\\s*(?:[\\d০-৯]+|[a-zA-Zক-ষ]+)\\s*(?:\\)|\\]|[\\.\\-:])\\s*", "");
                             
                             // Merge sub_parts for CQ into question text
                             StringBuilder explanationBuilder = new StringBuilder();
@@ -1888,6 +1903,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                                 for (com.fasterxml.jackson.databind.JsonNode sp : rootNode.get("sub_parts")) {
                                     String part = sp.hasNonNull("part_label") ? sp.get("part_label").asText() : sp.path("part").asText("");
                                     String sqText = sp.hasNonNull("question") ? sp.get("question").asText() : sp.path("questionText").asText("");
+                                    sqText = sqText.replaceFirst("^\\s*(?:\\(|\\[)?\\s*(?:[\\d০-৯]+|[a-zA-Zক-ষ]+)\\s*(?:\\)|\\]|[\\.\\-:])\\s*", "");
                                     String ans = sp.hasNonNull("answer") ? sp.get("answer").asText() : "";
                                     String hint = sp.path("answer_hint").asText(sp.path("explanation").asText(""));
                                     Double m = sp.hasNonNull("part_mark") ? sp.get("part_mark").asDouble() : sp.path("marks").asDouble(1.0);

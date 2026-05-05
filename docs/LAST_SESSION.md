@@ -3,27 +3,28 @@
 
 ---
 
-## 📅 চলমান সেশন: 2026-05-02
-**অবস্থান:** Epic 2 - Conversational Agentic Workflow (Conversational Slot-Filling for Auto Exam)
+## 📅 চলমান সেশন: 2026-05-05
+**অবস্থান:** Epic 4 - Admin Dashboard & Nexus Editor Analysis
 
 ---
 
 ## 🛠️ প্রগ্রেস রিপোর্ট (Progress Report)
 
-### 🤖 "Conversational Agent" for Auto Exam Generator
-| ✅ COMPLETED | **Conversational Tool Interception:** `+ Tools` থেকে `/exams/generate/auto` ক্লিক করলে এখন চ্যাটের ভেতরেই Interactive Widget ওপেন হয়। | `AiWorkspace.jsx` |
-| ✅ COMPLETED | **Zero-Token Agentic Widget:** LLM-এর বদলে সরাসরি API ও রুল-বেসড UI (Subject -> Chapter -> Count/Difficulty -> Summary) ব্যবহার করে 0 Token খরচে এক্সাম কনফিগার করা। | `AutoExamWizardWidget.jsx` |
-| ✅ COMPLETED | **State Hydration & Blueprint Override:** উইজেটের ডাটা (Subject, Chapter, Count) `AutoExamGenerator.jsx`-এ পাঠিয়ে রিভার্স হায়ারার্কি লুকআপ (`/hierarchy` endpoint) করে স্বয়ংক্রিয়ভাবে Step 2-তে অ্যালোকেশন সেট করা। | `AutoExamGenerator.jsx` |
+### 📊 Code Review: Nexus Editor (Nexus Paper Engine)
+| ✅ COMPLETED | **"Hot Swap" Mechanism:** `NexusEditor.jsx` এবং `PaperCanvasV2.jsx`-এ "Manual Swap" এবং "Auto Swap" সফলভাবে ইমপ্লিমেন্ট করা হয়েছে। Tiptap-এর `replaceWith` ট্রানজেকশন ব্যবহার করে ক্যানভাসে প্রশ্ন রিপ্লেস করা কাজ করছে। | `PaperCanvasV2.jsx` |
+| ✅ COMPLETED | **Schema Extraction:** সাবজেক্ট অনুযায়ী `editorConfig` এবং `generationBlueprint` ডাটাবেস থেকে রিসিভ করার লজিক তৈরি হয়েছে। | `NexusEditor.jsx` |
+| ⏳ PENDING | **Inline Editing (Free Mode):** `QuestionBlockNode.jsx`-এ লক করা প্রশ্নের ওপর ক্লিক করে `InlineGoldenEditor`-এর মাধ্যমে বানান ঠিক করার সুবিধা এখনো তৈরি করা হয়নি। | `QuestionBlockNode.jsx` |
+| ⏳ PENDING | **Real-time Allocation Validation:** ড্র্যাগ-অ্যান্ড-ড্রপের সময় ক্যানভাসে টোটাল মার্কস লিমিট চেক করার সিস্টেম এখনো নেই। | `PaperCanvasV2.jsx` |
 
 ---
 
 ## 🎯 পূর্ববর্তী কাজগুলো (Backlog)
-1. **Chat UI Cleanup:** AI এর রেসপন্সে থাকা কিছু অপ্রয়োজনীয় HTML টেক্সট চ্যাট উইন্ডোতে যেনো না আসে।
-2. **Context Window Size Adjustments:** বড় প্রশ্নের ক্ষেত্রে চাঙ্ক লিমিট বাড়ানো বা কমানো।
-3. **Billing Integration:** চ্যাটবটের প্রতিটি ইন্টারঅ্যাকশন অনুযায়ী ইউজারের API Credit বা Token Usage ট্র্যাক করা।
+1. **Subscription Invoice Generation:** মাল্টি-ভার্সন প্রাইসিং অনুযায়ী ইনভয়েস জেনারেট এবং পেমেন্ট গেটওয়ে ইন্টিগ্রেশন।
+2. **Institute Subject Verification:** ব্যাকএন্ডে রিকোয়েস্ট এক্সেপ্ট করার পর মাল্টি-ভার্সন ডাটা ঠিকমতো `Institute` মডেলে সেভ করার লজিক আপডেট।
+3. **Nexus Editor Inline Editing:** `STRICT_LINKED` মোডে থাকা প্রশ্নের ছোটখাটো বানান ঠিক করার জন্য ইনলাইন এডিটিং ফিচার চালু করা।
 
 ---
 
 ## 📞 পরের সেশনে প্রথম বার্তা
 
-> "আমরা AI Workspace-এর Conversational Auto Exam Workflow এবং Zero-Token Agentic UI সফলভাবে ইমপ্লিমেন্ট করেছি। এখন আমরা Backlog থেকে Chat UI Cleanup বা Billing Integration নিয়ে কাজ শুরু করতে পারি।"
+> "আমরা Nexus Editor-এর কোড অ্যানালাইসিস করে দেখেছি যে 'Hot Swap' ফিচারটি সফলভাবে সম্পন্ন হয়েছে। এখন আমরা অন্য একটি নতুন কাজ শুরু করার জন্য প্রস্তুত। আপনি কোন কাজটি দিয়ে শুরু করতে চান?"

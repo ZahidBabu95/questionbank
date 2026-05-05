@@ -12,6 +12,7 @@ import { useBranding } from '../context/BrandingContext';
 const LandingPage = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [cmsData, setCmsData] = useState([]);
+    const [packages, setPackages] = useState([]);
     const [loading, setLoading] = useState(true);
     const branding = useBranding();
 
@@ -19,8 +20,12 @@ const LandingPage = () => {
     useEffect(() => {
         const loadContent = async () => {
             try {
-                const data = await cmsService.getPublicLanding();
+                const [data, packagesData] = await Promise.all([
+                    cmsService.getPublicLanding(),
+                    cmsService.getPublicPackages()
+                ]);
                 setCmsData(data);
+                setPackages(packagesData);
             } catch (err) {
                 console.error('Failed to load CMS content');
             } finally {
@@ -269,55 +274,128 @@ const LandingPage = () => {
                         {/* Mobile: Horizontal scroll snapping, Desktop: Grid center */}
                         <div className="flex md:grid md:grid-cols-2 gap-6 px-4 md:px-0 w-full md:max-w-4xl overflow-x-auto md:overflow-visible snap-x snap-mandatory pb-8 md:pb-0 hide-scrollbar justify-start md:justify-center">
                             
-                            {/* Pro Plan Card */}
-                            <motion.div 
-                                variants={fadeInUp}
-                                className="min-w-[85vw] sm:min-w-[320px] max-w-sm w-full md:w-auto bg-white rounded-3xl p-8 shadow-sm border border-slate-200 snap-center shrink-0 flex flex-col"
-                            >
-                                <h3 className="text-2xl font-bold text-slate-900">Standard</h3>
-                                <div className="mt-4 flex items-baseline text-4xl font-extrabold text-slate-900">
-                                    ৳২৯৯ <span className="ml-1 text-xl font-medium text-slate-500">/mo</span>
-                                </div>
-                                <p className="mt-4 text-sm text-slate-500">Essential tools for individual teachers and small coaching centers.</p>
-                                <ul className="mt-8 space-y-4 flex-1">
-                                    {['Up to 500 Students', 'AI Question Generator', 'Basic OMR Scanning', 'Email Support'].map((feature, idx) => (
-                                        <li key={idx} className="flex items-center gap-3">
-                                            <CheckCircle className="text-emerald-500 w-5 h-5 shrink-0" />
-                                            <span className="text-slate-600 text-sm font-medium">{feature}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                                <Link to="/signup" className="mt-8 block w-full py-3 px-4 bg-slate-50 text-slate-900 font-bold text-center rounded-xl hover:bg-slate-100 transition-colors border border-slate-200">
-                                    Get Started
-                                </Link>
-                            </motion.div>
+                            {packages.length > 0 ? (
+                                packages.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map((pkg) => {
+                                    const isPremium = pkg.type === 'ENTERPRISE' || pkg.name.toUpperCase().includes('ENTERPRISE') || pkg.name.toUpperCase().includes('PREMIUM') || pkg.highlightBadge;
+                                    
+                                    const featuresList = [
+                                        pkg.maxStudents === 0 ? 'Unlimited Students' : `Up to ${pkg.maxStudents} Students`,
+                                        pkg.maxTeachers === 0 ? 'Unlimited Teachers' : `Up to ${pkg.maxTeachers} Teachers`,
+                                        pkg.aiLimitPerMonth === 0 ? 'Unlimited AI Limit' : `AI Limit: ${pkg.aiLimitPerMonth} /mo`,
+                                        ...(pkg.featureFlags ? Object.entries(pkg.featureFlags).filter(([_, v]) => v).map(([k, _]) => k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())) : [])
+                                    ];
 
-                            {/* Premium Plan Card */}
-                            <motion.div 
-                                variants={fadeInUp}
-                                className="min-w-[85vw] sm:min-w-[320px] max-w-sm w-full md:w-auto bg-[#0F172A] rounded-3xl p-8 shadow-xl shadow-primary/20 border border-slate-700 snap-center shrink-0 flex flex-col relative overflow-hidden"
-                            >
-                                <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-primary rounded-full blur-2xl opacity-50"></div>
-                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/20 text-blue-400 text-xs font-bold uppercase tracking-wider w-max mb-4">
-                                    <Star size={12} className="fill-current" /> Most Popular
-                                </div>
-                                <h3 className="text-2xl font-bold text-white">Enterprise</h3>
-                                <div className="mt-4 flex items-baseline text-4xl font-extrabold text-white">
-                                    ৳৯৯৯ <span className="ml-1 text-xl font-medium text-slate-400">/mo</span>
-                                </div>
-                                <p className="mt-4 text-sm text-slate-300">Complete suite for large schools and franchise institutions.</p>
-                                <ul className="mt-8 space-y-4 flex-1">
-                                    {['Unlimited Students', 'Advanced Neural Engine', 'White-labeling & Own Branding', 'Priority Phone Support', 'API Access'].map((feature, idx) => (
-                                        <li key={idx} className="flex items-center gap-3">
-                                            <CheckCircle className="text-primary w-5 h-5 shrink-0" />
-                                            <span className="text-slate-200 text-sm font-medium">{feature}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                                <Link to="/signup" className="mt-8 block w-full py-3 px-4 bg-primary text-white font-bold text-center rounded-xl hover:brightness-110 shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all">
-                                    Upgrade to Enterprise
-                                </Link>
-                            </motion.div>
+                                    if (isPremium) {
+                                        return (
+                                            <motion.div 
+                                                key={pkg.id}
+                                                variants={fadeInUp}
+                                                className="min-w-[85vw] sm:min-w-[320px] max-w-sm w-full md:w-auto bg-[#0F172A] rounded-3xl p-8 shadow-xl shadow-primary/20 border border-slate-700 snap-center shrink-0 flex flex-col relative overflow-hidden"
+                                            >
+                                                <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-primary rounded-full blur-2xl opacity-50"></div>
+                                                {pkg.highlightBadge && (
+                                                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/20 text-blue-400 text-xs font-bold uppercase tracking-wider w-max mb-4">
+                                                        <Star size={12} className="fill-current" /> {pkg.highlightBadge}
+                                                    </div>
+                                                )}
+                                                <h3 className="text-2xl font-bold text-white">{pkg.displayName || pkg.name}</h3>
+                                                <div className="mt-4 flex items-baseline text-4xl font-extrabold text-white">
+                                                    ৳{pkg.price} <span className="ml-1 text-xl font-medium text-slate-400">/{pkg.billingCycle === 'MONTHLY' ? 'mo' : pkg.billingCycle === 'YEARLY' ? 'yr' : pkg.billingCycle.toLowerCase()}</span>
+                                                </div>
+                                                <p className="mt-4 text-sm text-slate-300">{pkg.description}</p>
+                                                <ul className="mt-8 space-y-4 flex-1">
+                                                    {featuresList.map((feature, idx) => (
+                                                        <li key={idx} className="flex items-center gap-3">
+                                                            <CheckCircle className="text-primary w-5 h-5 shrink-0" />
+                                                            <span className="text-slate-200 text-sm font-medium">{feature}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                                <Link to="/signup" className="mt-8 block w-full py-3 px-4 bg-primary text-white font-bold text-center rounded-xl hover:brightness-110 shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all">
+                                                    Get Started
+                                                </Link>
+                                            </motion.div>
+                                        );
+                                    } else {
+                                        return (
+                                            <motion.div 
+                                                key={pkg.id}
+                                                variants={fadeInUp}
+                                                className="min-w-[85vw] sm:min-w-[320px] max-w-sm w-full md:w-auto bg-white rounded-3xl p-8 shadow-sm border border-slate-200 snap-center shrink-0 flex flex-col"
+                                            >
+                                                <h3 className="text-2xl font-bold text-slate-900">{pkg.displayName || pkg.name}</h3>
+                                                <div className="mt-4 flex items-baseline text-4xl font-extrabold text-slate-900">
+                                                    ৳{pkg.price} <span className="ml-1 text-xl font-medium text-slate-500">/{pkg.billingCycle === 'MONTHLY' ? 'mo' : pkg.billingCycle === 'YEARLY' ? 'yr' : pkg.billingCycle.toLowerCase()}</span>
+                                                </div>
+                                                <p className="mt-4 text-sm text-slate-500">{pkg.description}</p>
+                                                <ul className="mt-8 space-y-4 flex-1">
+                                                    {featuresList.map((feature, idx) => (
+                                                        <li key={idx} className="flex items-center gap-3">
+                                                            <CheckCircle className="text-emerald-500 w-5 h-5 shrink-0" />
+                                                            <span className="text-slate-600 text-sm font-medium">{feature}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                                <Link to="/signup" className="mt-8 block w-full py-3 px-4 bg-slate-50 text-slate-900 font-bold text-center rounded-xl hover:bg-slate-100 transition-colors border border-slate-200">
+                                                    Get Started
+                                                </Link>
+                                            </motion.div>
+                                        );
+                                    }
+                                })
+                            ) : (
+                                <>
+                                    {/* Pro Plan Card */}
+                                    <motion.div 
+                                        variants={fadeInUp}
+                                        className="min-w-[85vw] sm:min-w-[320px] max-w-sm w-full md:w-auto bg-white rounded-3xl p-8 shadow-sm border border-slate-200 snap-center shrink-0 flex flex-col"
+                                    >
+                                        <h3 className="text-2xl font-bold text-slate-900">Standard</h3>
+                                        <div className="mt-4 flex items-baseline text-4xl font-extrabold text-slate-900">
+                                            ৳২৯৯ <span className="ml-1 text-xl font-medium text-slate-500">/mo</span>
+                                        </div>
+                                        <p className="mt-4 text-sm text-slate-500">Essential tools for individual teachers and small coaching centers.</p>
+                                        <ul className="mt-8 space-y-4 flex-1">
+                                            {['Up to 500 Students', 'AI Question Generator', 'Basic OMR Scanning', 'Email Support'].map((feature, idx) => (
+                                                <li key={idx} className="flex items-center gap-3">
+                                                    <CheckCircle className="text-emerald-500 w-5 h-5 shrink-0" />
+                                                    <span className="text-slate-600 text-sm font-medium">{feature}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                        <Link to="/signup" className="mt-8 block w-full py-3 px-4 bg-slate-50 text-slate-900 font-bold text-center rounded-xl hover:bg-slate-100 transition-colors border border-slate-200">
+                                            Get Started
+                                        </Link>
+                                    </motion.div>
+
+                                    {/* Premium Plan Card */}
+                                    <motion.div 
+                                        variants={fadeInUp}
+                                        className="min-w-[85vw] sm:min-w-[320px] max-w-sm w-full md:w-auto bg-[#0F172A] rounded-3xl p-8 shadow-xl shadow-primary/20 border border-slate-700 snap-center shrink-0 flex flex-col relative overflow-hidden"
+                                    >
+                                        <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-primary rounded-full blur-2xl opacity-50"></div>
+                                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/20 text-blue-400 text-xs font-bold uppercase tracking-wider w-max mb-4">
+                                            <Star size={12} className="fill-current" /> Most Popular
+                                        </div>
+                                        <h3 className="text-2xl font-bold text-white">Enterprise</h3>
+                                        <div className="mt-4 flex items-baseline text-4xl font-extrabold text-white">
+                                            ৳৯৯৯ <span className="ml-1 text-xl font-medium text-slate-400">/mo</span>
+                                        </div>
+                                        <p className="mt-4 text-sm text-slate-300">Complete suite for large schools and franchise institutions.</p>
+                                        <ul className="mt-8 space-y-4 flex-1">
+                                            {['Unlimited Students', 'Advanced Neural Engine', 'White-labeling & Own Branding', 'Priority Phone Support', 'API Access'].map((feature, idx) => (
+                                                <li key={idx} className="flex items-center gap-3">
+                                                    <CheckCircle className="text-primary w-5 h-5 shrink-0" />
+                                                    <span className="text-slate-200 text-sm font-medium">{feature}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                        <Link to="/signup" className="mt-8 block w-full py-3 px-4 bg-primary text-white font-bold text-center rounded-xl hover:brightness-110 shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all">
+                                            Upgrade to Enterprise
+                                        </Link>
+                                    </motion.div>
+                                </>
+                            )}
 
                         </div>
                     </div>

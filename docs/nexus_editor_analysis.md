@@ -38,9 +38,8 @@ Enterprise Grade সিস্টেম হিসেবে এই এডিটর
 * **ইস্যু:** বর্তমানে `STRICT_LINKED` মোডে প্রশ্নগুলো পুরোপুরি লক করা। কিন্তু একজন শিক্ষক যদি কোনো প্রশ্নের বানানে ভুল দেখেন, তাকে সেটা এডিট করার সুযোগ দিতে হবে। 
 * **সমাধান:** `QuestionBlockNode.jsx`-এর ভেতরে `questionText` এবং `options`-এর জন্য **InlineGoldenEditor** বা একটি ছোট Tiptap ইন্সট্যান্স বসাতে হবে।
 
-### **C. "Hot Swap" বা Question Replacement (UX Enhancement)**
-* **ইস্যু:** `QuestionBlockNode.jsx`-এ হোভার করলে রিফ্রেশ (Swap) এবং ডিলিট আইকন আসে। ডিলিট কাজ করলেও Swap কাজ করছে না।
-* **সমাধান:** Swap বাটনে ক্লিক করলে বাম দিকের Question Bank প্যানেলটি হাইলাইট হবে এবং ইউজার অন্য একটি প্রশ্ন সিলেক্ট করলে সেটি আগের প্রশ্নটির ঠিক একই পজিশনে রিপ্লেস হয়ে যাবে।
+### ✅ **C. "Hot Swap" বা Question Replacement (UX Enhancement) - COMPLETED**
+* **স্ট্যাটাস:** সফলভাবে সম্পন্ন করা হয়েছে। `PaperCanvasV2.jsx`-এ `pendingSwapQuestion` এবং `replaceWith` ট্রানজেকশনের মাধ্যমে "Manual Swap" এবং "Auto Swap" দুটোই কাজ করছে।
 
 ### **D. Auto Generator Blueprint Integration**
 * **ইস্যু:** বাম দিকের "Auto Generator" ট্যাবটি শুধু একটি প্লেসহোল্ডার মেসেজ দেখাচ্ছে।

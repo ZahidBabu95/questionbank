@@ -86,11 +86,9 @@ public class CopilotService {
             }
         }
 
-        // 1. Build Search Query (enhanced for semantic search)
+        // 1. Build Search Query
+        // We use the raw query for semantic matching, as adding context strings degrades vector similarity.
         String searchQuery = query;
-        if (subjectClassLevelFilter != null && !subjectClassLevelFilter.isBlank()) {
-            searchQuery = "প্রসঙ্গ: " + subjectClassLevelFilter + ". প্রশ্ন: " + query;
-        }
 
         List<String> contextChunks = new ArrayList<>();
 
@@ -124,21 +122,34 @@ public class CopilotService {
             log.info("Namespace Resolution: Found {} documents for class '{}', subject '{}'", docs.size(), classN, subjN);
             
             // Query namespaces for up to 3 most relevant books in this subject
+            // Increased topK to 25 per document to ensure massive context coverage for Gemini 1.5 Pro
             int limit = Math.min(docs.size(), 3);
             for (int i = 0; i < limit; i++) {
                 Map<String, Object> filters = new HashMap<>();
                 filters.put("docId", docs.get(i).getId().toString());
-                contextChunks.addAll(vectorDatabaseService.similaritySearch(searchQuery, 2, filters));
+                contextChunks.addAll(vectorDatabaseService.similaritySearch(searchQuery, 25, filters));
             }
         } else {
             // Global search (if no namespace is targeted)
-            contextChunks.addAll(vectorDatabaseService.similaritySearch(searchQuery, 4, new HashMap<>()));
+            contextChunks.addAll(vectorDatabaseService.similaritySearch(searchQuery, 30, new HashMap<>()));
         }
 
         // If strict mode, and no context found, return error
         boolean isStrict = "strict".equalsIgnoreCase(mode);
         boolean isQuestionRequest = query.matches("(?i).*(প্রশ্ন|mcq|cq|সৃজনশীল|বহুনির্বাচনি|question|questions|জেনারেট|তৈরি).*");
-        boolean isParameterResponse = historyText.toString().contains("\"parameter_request\"") && query.length() < 20;
+        
+        boolean isParameterResponse = false;
+        if (history != null && !history.isEmpty()) {
+            for (int i = history.size() - 1; i >= 0; i--) {
+                com.testshaper.entity.AiChatMessage lastMsg = history.get(i);
+                if ("ai".equals(lastMsg.getRole())) {
+                    if (lastMsg.getActionableData() != null && lastMsg.getActionableData().contains("parameter_request")) {
+                        isParameterResponse = true;
+                    }
+                    break;
+                }
+            }
+        }
 
         // Hybrid Question Generation Context Injection
         if (isQuestionRequest && ((subjectClassLevelFilter != null && !subjectClassLevelFilter.isBlank()) || (filterId != null && !filterId.isBlank()))) {

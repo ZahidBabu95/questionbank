@@ -382,9 +382,10 @@ public class ExamGenerationServiceImpl {
         return toDTO(exam);
     }
 
-    public Page<ExamSummaryDTO> listExams(String title, Pageable pageable) {
+    public Page<ExamSummaryDTO> listExams(String title, Exam.ExamType examType, Exam.ExamStatus status, Pageable pageable, String username, boolean isSuperAdmin) {
         String tenantId = TenantContext.getTenantId();
-        return examRepository.findByTenant(tenantId, title, pageable).map(this::toSummaryDTO);
+        String createdBy = isSuperAdmin ? null : username;
+        return examRepository.findByTenantAndOptionalCreator(tenantId, title, createdBy, examType, status, pageable).map(this::toSummaryDTO);
     }
 
     private ExamSummaryDTO toSummaryDTO(Exam exam) {

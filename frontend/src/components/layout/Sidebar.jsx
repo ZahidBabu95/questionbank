@@ -41,7 +41,6 @@ export const MENU_ITEMS = [
             { title: 'All Users', path: '/users', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
             { title: 'Teachers', path: '/users/teachers', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
             { title: 'Students', path: '/users/students', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'Pending Approvals', path: '/users/pending', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
             { title: 'Roles & Permissions', path: '/users/roles', roles: ['SUPER_ADMIN'] },
             { title: 'Blocked Users', path: '/users/blocked', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
         ]
@@ -89,7 +88,7 @@ export const MENU_ITEMS = [
                     { title: 'All Questions', path: '/questions', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
                     { title: 'Drafts (AI Generated)', path: '/questions/drafts', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { title: 'Pending', path: '/questions/pending', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Approved', path: '/questions/approved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+                    { title: 'Question Bank', path: '/questions/approved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
                     { title: 'Rejected', path: '/questions/rejected', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                 ]
             },
@@ -480,7 +479,7 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
 
             <aside className={clsx(
                 "fixed md:static inset-y-0 left-0 z-50 bg-white flex flex-col transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] md:translate-x-0 border-r border-slate-100/80",
-                "shadow-[4px_0_24px_rgba(0,0,0,0.06)]",
+                "shadow-[4px_0_24px_rgba(0,0,0,0.06)] h-full",
                 isOpen ? "translate-x-0" : "-translate-x-full",
                 isCollapsed ? "w-[68px]" : "w-[270px]"
             )}>

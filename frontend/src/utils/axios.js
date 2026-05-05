@@ -25,6 +25,11 @@ instance.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response && error.response.status === 401) {
+            // Do not redirect if the request was a login attempt
+            if (error.config && error.config.url && error.config.url.includes('/auth/login')) {
+                return Promise.reject(error);
+            }
+            
             // Redirect to login and clear token and user data
             localStorage.removeItem('token');
             localStorage.removeItem('user');

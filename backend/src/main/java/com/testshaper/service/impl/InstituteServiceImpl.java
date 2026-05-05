@@ -23,6 +23,8 @@ public class InstituteServiceImpl implements InstituteService {
     private final InstituteRepository instituteRepository;
     private final BillingPackageRepository billingPackageRepository;
     private final com.testshaper.repository.ClassSubjectRepository classSubjectRepository;
+    private final com.testshaper.repository.UserRepository userRepository;
+    private final com.testshaper.repository.RoleRepository roleRepository;
     // In a real app, inject FileStorageService here
 
     @Override
@@ -62,6 +64,76 @@ public class InstituteServiceImpl implements InstituteService {
         }
 
         return instituteRepository.save(institute);
+    }
+
+    @Override
+    @Transactional
+    public Institute requestWorkspace(String userEmail, com.testshaper.dto.WorkspaceRequestDTO request) {
+        com.testshaper.entity.User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Institute institute = user.getInstitute();
+        if (institute == null) {
+            institute = new Institute();
+            institute.setName(user.getName() + "'s Workspace (" + UUID.randomUUID().toString().substring(0, 4).toUpperCase() + ")");
+            institute.setCode("REQ-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase());
+            institute.setType(Institute.InstituteType.PERSONAL);
+            institute.setContactEmail(user.getEmail());
+        }
+
+        if (request.getMedium() != null && !request.getMedium().isEmpty()) {
+            institute.setMedium(request.getMedium());
+        } else if (institute.getMedium() == null) {
+            institute.setMedium("Bangla"); // default
+        }
+        
+        institute.setStatus(Institute.InstituteStatus.ACTIVE);
+        institute.setPlanStartDate(LocalDate.now());
+
+        if (request.getPackageId() != null) {
+            BillingPackage pkg = billingPackageRepository.findById(request.getPackageId()).orElse(null);
+            if (pkg != null) {
+                institute.setSubscriptionPackage(pkg);
+                institute.setMaxTeachers(pkg.getMaxTeachers() != null ? pkg.getMaxTeachers() : 5);
+                institute.setMaxStudents(pkg.getMaxStudents() != null ? pkg.getMaxStudents() : 50);
+                institute.setAiLimitPerMonth(pkg.getAiLimitPerMonth() != null ? pkg.getAiLimitPerMonth() : 1000);
+                institute.setMaxQuestions(pkg.getMaxQuestions() != null ? pkg.getMaxQuestions() : 500);
+                institute.setStorageLimitMb(pkg.getStorageLimitMb() != null ? pkg.getStorageLimitMb() : 500);
+            }
+        }
+
+        institute = instituteRepository.save(institute);
+
+        if (request.getSubjectIds() != null && !request.getSubjectIds().isEmpty()) {
+            java.util.List<com.testshaper.entity.ClassSubject> subjects = classSubjectRepository.findAllById(request.getSubjectIds());
+            institute.setAssignedSubjects(new java.util.HashSet<>(subjects));
+            instituteRepository.save(institute);
+        }
+
+        user.setInstitute(institute);
+        
+        // Add dynamic role from package or default INSTITUTE_ADMIN
+        String roleToAssign = "INSTITUTE_ADMIN";
+        if (request.getPackageId() != null) {
+            com.testshaper.entity.BillingPackage pkg = billingPackageRepository.findById(request.getPackageId()).orElse(null);
+            if (pkg != null && pkg.getAssociatedRole() != null && !pkg.getAssociatedRole().isEmpty()) {
+                roleToAssign = pkg.getAssociatedRole();
+            }
+        }
+        
+        com.testshaper.entity.Role adminRole = roleRepository.findByName(roleToAssign).orElse(null);
+        if (adminRole != null) {
+            java.util.Set<com.testshaper.entity.Role> currentRoles = user.getRoles();
+            if (currentRoles == null) {
+                currentRoles = new java.util.HashSet<>();
+            }
+            currentRoles.add(adminRole);
+            user.setRoles(currentRoles);
+        }
+        
+        userRepository.save(user);
+
+        return institute;
     }
 
     @Override

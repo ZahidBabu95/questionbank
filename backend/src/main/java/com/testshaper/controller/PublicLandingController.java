@@ -27,10 +27,19 @@ public class PublicLandingController {
     private final GeneralSettingService generalSettingService;
     private final InstituteRepository instituteRepository;
     private final DynamicStorageService dynamicStorageService;
+    private final com.testshaper.service.BillingPackageService packageService;
 
     @GetMapping("/landing")
     public ResponseEntity<List<CmsSectionDTO>> getLandingData() {
         return ResponseEntity.ok(cmsService.getPublicLandingData());
+    }
+
+    @GetMapping("/packages")
+    public ResponseEntity<List<com.testshaper.dto.billing.BillingPackageDTO>> getPublicPackages() {
+        // Return active packages to the public landing page
+        return ResponseEntity.ok(packageService.getAllPackages().stream()
+                .filter(p -> "ACTIVE".equals(p.getStatus()))
+                .collect(java.util.stream.Collectors.toList()));
     }
 
     @GetMapping("/branding")

@@ -422,7 +422,10 @@ public class AIQuestionServiceImpl implements AIQuestionService {
             if (!lvl.isBlank()) ctxSection.append("  - classLevel: ").append(lvl).append("\n");
             if (!sub.isBlank()) ctxSection.append("  - subject: ").append(sub).append("\n");
             if (!ch.isBlank())  ctxSection.append("  - chapter: ").append(ch).append("\n");
-            if (!tp.isBlank())  ctxSection.append("  - topic: ").append(tp).append("\n");
+            if (!tp.isBlank()) {
+                ctxSection.append("  - topic: ").append(tp).append("\n");
+                ctxSection.append("\nCRITICAL RULE FOR TOPIC: You MUST use the exact 'topic' string provided above ('").append(tp).append("') for EVERY question's metadata. Do NOT invent, guess, or hallucinate any other topic name!\n");
+            }
             ctxSection.append("Use the above values directly in metadata JSON. Only detect fields NOT listed above.\n");
         }
 
@@ -550,6 +553,7 @@ public class AIQuestionServiceImpl implements AIQuestionService {
             9. Make questions factually accurate and educationally valuable
             10. Vary the questioning style (direct, negative, scenario-based)
             11. CRITICAL: If generating CQ/Descriptive questions, append the marks at the end of sub-questions using Bengali numerals WITHOUT brackets, e.g., ১, ২, ৩, ৪. Do NOT use English numerals or brackets like (১).
+            12. CRITICAL TOPIC SCOPE: You are generating questions for the exact topic: '%s'. DO NOT invent or assign questions to any other topics. Keep the scope strictly within this topic.
             %s
 
             RESPOND ONLY with a valid JSON array. No markdown, no explanation. Each element:
@@ -569,7 +573,7 @@ public class AIQuestionServiceImpl implements AIQuestionService {
               "difficulty": "EASY|MEDIUM|HARD",
               "explanation": "ব্যাখ্যা বাংলায় লিখুন"
             }
-            """.formatted(count, questionType, topic, difficultyInstruction, bloomInstruction, learningSection);
+            """.formatted(count, questionType, topic, difficultyInstruction, bloomInstruction, topic, learningSection);
     }
 
     // ═══════════════════ Gemini Native API ═══════════════════

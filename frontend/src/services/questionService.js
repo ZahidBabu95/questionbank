@@ -43,6 +43,22 @@ const getAllQuestionsPaginated = async (params) => {
     return response.data;
 };
 
+const getAllQuestionIds = async (params) => {
+    const cleanParams = Object.fromEntries(
+        Object.entries(params).filter(([_, v]) => v !== null && v !== undefined && v !== '')
+    );
+    const response = await axios.get(`${API_URL}/list-ids`, { params: cleanParams });
+    return response.data;
+};
+
+const getOverviewStats = async (params = {}) => {
+    const cleanParams = Object.fromEntries(
+        Object.entries(params).filter(([_, v]) => v !== null && v !== undefined && v !== '')
+    );
+    const response = await axios.get(`${API_URL}/overview-stats`, { params: cleanParams });
+    return response.data;
+};
+
 const deleteQuestion = async (id) => {
     await axios.delete(`${API_URL}/${id}`);
 };
@@ -161,6 +177,8 @@ export default {
     createCQ,
     getAllQuestions,
     getAllQuestionsPaginated,
+    getAllQuestionIds,
+    getOverviewStats,
     getQuestionById,
     getOptions,
     updateQuestion,

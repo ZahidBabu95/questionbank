@@ -12,7 +12,7 @@ import rehypeRaw from 'rehype-raw';
 import axios from '../../../utils/axios';
 
 /* ═══════════════════ Topic Extract Config Modal ═══════════════════ */
-const TopicExtractConfigModal = ({ indices, pages, onClose, onStartAll, onPreviewTopic }) => {
+const TopicExtractConfigModal = ({ book, indices, pages, onClose, onStartAll, onPreviewTopic }) => {
     const [mode, setMode] = useState('ALL');
     const [selectedIndexIds, setSelectedIndexIds] = useState([]);
 
@@ -79,6 +79,19 @@ const TopicExtractConfigModal = ({ indices, pages, onClose, onStartAll, onPrevie
                 </div>
                 
                 <div className="p-5 flex flex-col gap-4 overflow-hidden min-h-[300px]">
+                    {/* Zero-Click Metadata Verification */}
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3 shrink-0">
+                        <div className="bg-emerald-100 text-emerald-600 p-2 rounded-lg shrink-0">
+                            <ShieldCheck size={20} />
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-bold text-emerald-800">Metadata Auto-Resolved (Zero-Click)</h4>
+                            <p className="text-xs text-emerald-600 mt-1 leading-relaxed">
+                                System will automatically inject <strong>{book?.mappedClassName || 'Unknown Class'}</strong>, <strong>{book?.mappedSubjectName || 'Unknown Subject'}</strong>, and the latest active Curriculum Rules into the Pinecone Vector metadata. Graph-nodes will be auto-extracted.
+                            </p>
+                        </div>
+                    </div>
+
                     <div className="flex gap-4 p-1 bg-slate-100 rounded-xl shrink-0">
                         <button 
                             className={`flex-1 py-2.5 text-sm font-bold capitalize rounded-lg transition-all ${mode === 'ALL' ? 'bg-white text-indigo-700 shadow border border-indigo-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
@@ -327,6 +340,78 @@ const ChunkEditor = ({ chunk, idx, onSave }) => {
     );
 };
 
+/* ═══════════════════ Topic Name Editor Component ═══════════════════ */
+const TopicNameEditor = ({ topic, onSaved, theme = 'light' }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [name, setName] = useState(topic.name);
+    const [saving, setSaving] = useState(false);
+
+    const handleSave = async (e) => {
+        e.stopPropagation();
+        if (!name.trim() || name.trim() === topic.name) {
+            setIsEditing(false);
+            return;
+        }
+        try {
+            setSaving(true);
+            await axios.put(`/v1/knowledge-hub/topics/${topic.id}/rename-sync`, { name: name.trim() });
+            onSaved(name.trim());
+            setIsEditing(false);
+        } catch (err) {
+            alert('Failed to rename topic: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (isEditing) {
+        return (
+            <div className="flex-1 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                <input
+                    type="text"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    className="flex-1 px-3 py-1.5 text-sm font-bold border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900"
+                    autoFocus
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSave(e);
+                        if (e.key === 'Escape') { setIsEditing(false); setName(topic.name); }
+                    }}
+                />
+                <button 
+                    onClick={handleSave} 
+                    disabled={saving}
+                    className="bg-indigo-600 text-white px-3 py-1.5 rounded font-bold text-xs hover:bg-indigo-700 disabled:opacity-50"
+                >
+                    {saving ? '...' : 'Save'}
+                </button>
+                <button 
+                    onClick={() => { setIsEditing(false); setName(topic.name); }} 
+                    disabled={saving}
+                    className="bg-slate-200 text-slate-700 px-3 py-1.5 rounded font-bold text-xs hover:bg-slate-300"
+                >
+                    Cancel
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex-1 flex items-center justify-between group">
+            <div>
+                <h3 className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>{topic.name}</h3>
+                <p className={`text-xs ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>{topic.chunkCount || (topic.chunks ? topic.chunks.length : 0)} Vector Chunks</p>
+            </div>
+            <button 
+                onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+                className={`opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1 rounded text-xs font-bold mr-2 ${theme === 'dark' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30' : 'bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100'}`}
+            >
+                Rename
+            </button>
+        </div>
+    );
+};
+
 /* ═══════════════════ Preview Topics Modal ═══════════════════ */
 const PreviewTopicsModal = ({ indexId, indexName, onClose }) => {
     const [loading, setLoading] = useState(true);
@@ -390,18 +475,26 @@ const PreviewTopicsModal = ({ indexId, indexName, onClose }) => {
                                 <div key={topic.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                                     <div 
                                         className="p-4 bg-slate-50 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors"
-                                        onClick={() => setExpandedTopicId(expandedTopicId === topic.id ? null : topic.id)}
+                                        onClick={(e) => {
+                                            if (!e.target.closest('.topic-edit-area')) {
+                                                setExpandedTopicId(expandedTopicId === topic.id ? null : topic.id);
+                                            }
+                                        }}
                                     >
-                                        <div className="flex items-center gap-3">
-                                            <div className="bg-indigo-100 text-indigo-700 p-2 rounded-lg">
+                                        <div className="flex items-center gap-3 w-full topic-edit-area">
+                                            <div className="bg-indigo-100 text-indigo-700 p-2 rounded-lg shrink-0">
                                                 <Tag size={16} />
                                             </div>
-                                            <div>
-                                                <h3 className="font-bold text-slate-800">{topic.name}</h3>
-                                                <p className="text-xs text-slate-500">{topic.chunkCount} Vector Chunks</p>
+                                            <div className="flex-1 flex items-center gap-2">
+                                                <TopicNameEditor 
+                                                    topic={topic} 
+                                                    onSaved={(newTopicName) => {
+                                                        setTopics(prev => prev.map(t => t.id === topic.id ? { ...t, name: newTopicName } : t));
+                                                    }}
+                                                />
                                             </div>
                                         </div>
-                                        {expandedTopicId === topic.id ? <ChevronDown size={20} className="text-slate-400" /> : <ChevronRight size={20} className="text-slate-400" />}
+                                        {expandedTopicId === topic.id ? <ChevronDown size={20} className="text-slate-400 shrink-0" /> : <ChevronRight size={20} className="text-slate-400 shrink-0" />}
                                     </div>
                                     
                                     {expandedTopicId === topic.id && (
@@ -438,7 +531,9 @@ const SyncCommandCenter = () => {
     const [selectedChapter, setSelectedChapter] = useState(null);
     const [previewMarkdown, setPreviewMarkdown] = useState('');
     const [loadingPreview, setLoadingPreview] = useState(false);
+    const [chapterTopics, setChapterTopics] = useState([]);
     const [portalTarget, setPortalTarget] = useState(null);
+    const [viewingImageIndex, setViewingImageIndex] = useState(null);
 
     // Sync Controls State
     const [aiQueueJob, setAiQueueJob] = useState(null);
@@ -572,24 +667,52 @@ const SyncCommandCenter = () => {
         }
     };
 
+    const handleFinalizeVector = async (indexId) => {
+        if (!window.confirm("Are you sure you want to finalize and push these chunks to the Vector Database? This will overwrite existing vector data for this chapter.")) return;
+        try {
+            setLoadingPreview(true);
+            const res = await axios.post(`/v1/knowledge-hub/indexes/${indexId}/finalize-vector`);
+            alert(res.data.message);
+            fetchPagesSilent();
+        } catch (error) {
+            alert(error.response?.data?.error || "Failed to finalize vector");
+        } finally {
+            setLoadingPreview(false);
+        }
+    };
+
+    const handleMergeTopic = async (sourceTopicId, targetTopicId) => {
+        if (!window.confirm("Are you sure you want to merge this topic? This action cannot be undone.")) return;
+        try {
+            await axios.post(`/v1/knowledge-hub/topics/${sourceTopicId}/merge-into/${targetTopicId}`);
+            handleSelectChapter(selectedChapter, true);
+        } catch (err) {
+            alert(err.response?.data?.error || "Failed to merge topic");
+        }
+    };
+
     const handleSelectChapter = async (chapter, forceRefetch = false) => {
         setDisplayLimit(48);
         if (selectedChapter?.id === chapter?.id && !forceRefetch) {
             setSelectedChapter(null);
-            setPreviewMarkdown('');
+            setChapterTopics([]);
             return;
         }
         
         setSelectedChapter(chapter);
+        if (!chapter) {
+            setChapterTopics([]);
+            return;
+        }
+        
         setLoadingPreview(true);
-        if (!forceRefetch) setPreviewMarkdown('');
+        if (!forceRefetch) setChapterTopics([]);
         try {
-            const res = await axios.get(`/v1/knowledge-hub/source-books/${bookId}/indices/${chapter.id}/vector-preview?t=${Date.now()}`);
-            const markdownStr = typeof res.data === 'string' ? res.data : (res.data?.markdown || '');
-            setPreviewMarkdown(markdownStr);
+            const res = await axios.get(`/v1/knowledge-hub/indexes/${chapter.id}/topics-preview?t=${Date.now()}`);
+            setChapterTopics(res.data);
         } catch (error) {
             console.error('Failed to load vector preview', error);
-            setPreviewMarkdown('# No Synced Data\nVector data is not available for this chapter yet. Please sync it using the extraction tool.');
+            setChapterTopics([]);
         } finally {
             setLoadingPreview(false);
         }
@@ -641,7 +764,7 @@ const SyncCommandCenter = () => {
     const getStatusBadge = (status) => {
         switch (status) {
             case 'GOLDEN_VECTORIZED':
-                return <span className="absolute top-1 right-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10 flex items-center gap-0.5"><Sparkles size={8}/> SYNCED</span>;
+                return <span className="absolute top-1 right-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10 flex items-center gap-0.5"><Sparkles size={8}/> PRE-VECTOR</span>;
             case 'PROOFREAD':
                 return <span className="absolute top-1 right-1 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10">GOLDEN</span>;
             case 'EXTRACTED':
@@ -668,6 +791,7 @@ const SyncCommandCenter = () => {
             
             {isTopicModalOpen && (
                 <TopicExtractConfigModal 
+                    book={book}
                     indices={indices} 
                     pages={pages} 
                     onClose={() => setIsTopicModalOpen(false)}
@@ -755,7 +879,7 @@ const SyncCommandCenter = () => {
                     {(!aiQueueJob || aiQueueJob.status === 'COMPLETED' || aiQueueJob.status === 'FAILED') && (
                         <div className="flex gap-2">
                             <button onClick={() => setIsTopicModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 border border-indigo-700 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-all shadow-sm text-xs ml-1 h-9">
-                                <Bot size={14} className="shrink-0" /> <span className="hidden xl:inline">Vector Sync Tool</span>
+                                <Bot size={14} className="shrink-0" /> <span className="hidden xl:inline">Auto Chunk (Pre-Vector)</span>
                             </button>
                             <button onClick={handleDeleteSyncData} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-semibold rounded-lg transition-all shadow-sm text-xs ml-1 h-9">
                                 <Trash2 size={14} className="shrink-0" /> <span className="hidden xl:inline">Delete Sync</span>
@@ -836,7 +960,7 @@ const SyncCommandCenter = () => {
                                             />
                                         </div>
                                         <span className="text-[9px] font-bold text-slate-400 whitespace-nowrap">
-                                            {syncedPages.length}/{chPages.length} Sync
+                                            {syncedPages.length}/{chPages.length} Pre-Vector
                                         </span>
                                     </div>
                                 </button>
@@ -862,16 +986,73 @@ const SyncCommandCenter = () => {
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50/50">
-                            {chapterPages.length === 0 ? (
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50/50 relative">
+                            {viewingImageIndex !== null && chapterPages[viewingImageIndex] ? (
+                                <div className="absolute inset-0 flex flex-col bg-white z-20">
+                                    <div className="h-14 border-b border-slate-100 flex items-center justify-between px-4 shrink-0 bg-slate-50">
+                                        <button 
+                                            onClick={() => setViewingImageIndex(null)}
+                                            className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-colors"
+                                        >
+                                            <ArrowLeft size={16} /> Back to Grid
+                                        </button>
+                                        <div className="text-xs font-bold text-slate-400 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm">
+                                            Page {chapterPages[viewingImageIndex].sourcePageNo}
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 relative flex items-center justify-center bg-slate-100/50 overflow-hidden">
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                let prev = viewingImageIndex - 1;
+                                                while (prev >= 0 && (!chapterPages[prev].imageUrl || chapterPages[prev].imageUrl.endsWith('.pdf'))) {
+                                                    prev--;
+                                                }
+                                                if (prev >= 0) setViewingImageIndex(prev);
+                                            }}
+                                            disabled={viewingImageIndex <= 0 || !chapterPages.slice(0, viewingImageIndex).some(p => p.imageUrl && !p.imageUrl.endsWith('.pdf'))}
+                                            className="absolute left-4 p-3 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 text-slate-400 rounded-full shadow-md transition-all disabled:opacity-30 disabled:cursor-not-allowed z-10"
+                                        >
+                                            <ChevronRight size={24} className="rotate-180" />
+                                        </button>
+
+                                        <div className="w-full h-full flex items-center justify-center p-8">
+                                            <img 
+                                                src={chapterPages[viewingImageIndex].imageUrl} 
+                                                alt={`Page ${chapterPages[viewingImageIndex].sourcePageNo}`} 
+                                                className="max-w-full max-h-full object-contain drop-shadow-md rounded bg-white"
+                                            />
+                                        </div>
+
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                let next = viewingImageIndex + 1;
+                                                while (next < chapterPages.length && (!chapterPages[next].imageUrl || chapterPages[next].imageUrl.endsWith('.pdf'))) {
+                                                    next++;
+                                                }
+                                                if (next < chapterPages.length) setViewingImageIndex(next);
+                                            }}
+                                            disabled={viewingImageIndex >= chapterPages.length - 1 || !chapterPages.slice(viewingImageIndex + 1).some(p => p.imageUrl && !p.imageUrl.endsWith('.pdf'))}
+                                            className="absolute right-4 p-3 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 text-slate-400 rounded-full shadow-md transition-all disabled:opacity-30 disabled:cursor-not-allowed z-10"
+                                        >
+                                            <ChevronRight size={24} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : chapterPages.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-4">
                                     <FileText size={48} className="opacity-20" />
                                     <p className="font-bold">No pages assigned to this view.</p>
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                                    {chapterPages.slice(0, displayLimit).map((page) => (
-                                        <div key={page.id} className="group relative flex flex-col items-center bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-indigo-300 hover:shadow-md transition-all shadow-sm">
+                                    {chapterPages.slice(0, displayLimit).map((page, idx) => (
+                                        <div 
+                                            key={page.id} 
+                                            onClick={() => { if(page.imageUrl && !page.imageUrl.endsWith('.pdf')) setViewingImageIndex(idx); }}
+                                            className={`group relative flex flex-col items-center bg-white border border-slate-200 rounded-xl overflow-hidden transition-all shadow-sm ${page.imageUrl && !page.imageUrl.endsWith('.pdf') ? 'cursor-pointer hover:border-indigo-400 hover:shadow-md' : ''}`}
+                                        >
                                             {getStatusBadge(page.extractionStatus)}
                                             
                                             <div className="w-full aspect-[2/3] bg-slate-100 overflow-hidden relative">
@@ -934,11 +1115,16 @@ const SyncCommandCenter = () => {
                                     <div className="w-8 h-8 bg-indigo-500/20 text-indigo-400 rounded-lg flex items-center justify-center border border-indigo-500/30">
                                         <Bot size={16} />
                                     </div>
-                                    <span className="text-sm font-black text-white uppercase tracking-widest">Vector Knowledge</span>
+                                    <span className="text-sm font-black text-white uppercase tracking-widest">PRE-VECTOR DRAFT</span>
                                 </div>
-                                <button onClick={() => setPreviewTopicIndex(selectedChapter)} className="bg-white/10 hover:bg-white/20 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">
-                                    View Chunks
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => handleFinalizeVector(selectedChapter.id)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm">
+                                        Finalize Vector DB
+                                    </button>
+                                    <button onClick={() => setPreviewTopicIndex(selectedChapter)} className="bg-white/10 hover:bg-white/20 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">
+                                        View Chunks
+                                    </button>
+                                </div>
                             </div>
                             
                             <div className="flex-1 overflow-y-auto p-6 bg-slate-900 text-slate-300 custom-scrollbar relative">
@@ -948,10 +1134,56 @@ const SyncCommandCenter = () => {
                                         <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Querying Pinecone...</span>
                                     </div>
                                 ) : (
-                                    <div className="prose prose-invert prose-sm max-w-none prose-headings:font-black prose-h1:text-2xl prose-h3:text-indigo-300 prose-p:leading-relaxed prose-pre:bg-slate-800 prose-pre:border prose-pre:border-slate-700 prose-table:w-full prose-table:border-collapse prose-table:my-4 prose-td:border prose-td:border-slate-700 prose-td:p-2 prose-th:border prose-th:border-slate-600 prose-th:bg-slate-800 prose-th:p-2 prose-th:text-left prose-strong:text-indigo-200">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                                            {previewMarkdown}
-                                        </ReactMarkdown>
+                                    <div className="space-y-6">
+                                        {chapterTopics.map((topic, index) => (
+                                            <div key={topic.id} className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-sm relative group">
+                                                <div className="bg-slate-800/80 px-4 py-3 flex items-center justify-between border-b border-slate-700/50 sticky top-0 z-10">
+                                                    <TopicNameEditor 
+                                                        topic={topic} 
+                                                        theme="dark"
+                                                        onSaved={() => handleSelectChapter(selectedChapter, true)} 
+                                                    />
+                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {index > 0 && (
+                                                            <button 
+                                                                onClick={() => handleMergeTopic(topic.id, chapterTopics[index - 1].id)}
+                                                                className="p-1.5 hover:bg-slate-700 text-slate-400 hover:text-indigo-400 rounded transition-colors"
+                                                                title="Merge with Topic Above"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                                                            </button>
+                                                        )}
+                                                        {index < chapterTopics.length - 1 && (
+                                                            <button 
+                                                                onClick={() => handleMergeTopic(topic.id, chapterTopics[index + 1].id)}
+                                                                className="p-1.5 hover:bg-slate-700 text-slate-400 hover:text-indigo-400 rounded transition-colors"
+                                                                title="Merge with Topic Below"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="p-4 space-y-4">
+                                                    {topic.chunks?.map((chunk, cidx) => (
+                                                        <div key={chunk.id} className="bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Chunk {cidx + 1}</span>
+                                                                <span className="text-[10px] font-bold bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full">{chunk.tokenCount} tokens</span>
+                                                            </div>
+                                                            <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800">
+                                                                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                                                                    {chunk.chunkText}
+                                                                </ReactMarkdown>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {chapterTopics.length === 0 && !loadingPreview && (
+                                            <div className="text-center text-slate-500 font-bold p-10">No PRE-VECTOR chunks available.</div>
+                                        )}
                                     </div>
                                 )}
                             </div>

@@ -25,6 +25,9 @@ public interface AiUsageLogRepository extends JpaRepository<AiUsageLog, Long>, J
     @Query("SELECT COALESCE(SUM(a.totalTokens), 0) FROM AiUsageLog a WHERE a.success = true")
     long totalTokensUsed();
 
+    @Query("SELECT COALESCE(SUM(a.totalTokens), 0) FROM AiUsageLog a WHERE a.success = true AND a.userId = :userId")
+    long totalTokensUsedByUserId(@org.springframework.data.repository.query.Param("userId") Long userId);
+
     @Query("SELECT COALESCE(SUM(a.costUsd), 0.0) FROM AiUsageLog a WHERE a.success = true")
     double totalCostUsd();
 

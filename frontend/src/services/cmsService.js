@@ -16,6 +16,10 @@ const cmsService = {
     getPublicLanding: async () => {
         const res = await axios.get('/v1/public/landing');
         return res.data;
+    },
+    getPublicPackages: async () => {
+        const res = await axios.get('/v1/public/packages');
+        return res.data;
     }
 };
 

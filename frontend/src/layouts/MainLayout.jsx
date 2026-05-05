@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
     Menu, Search, Bell, ChevronDown, Box,
@@ -9,7 +9,7 @@ import NotificationDropdown from '../components/layout/NotificationDropdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useBranding } from '../context/BrandingContext';
-
+import WorkspaceStatusOverlay from '../components/common/WorkspaceStatusOverlay';
 
 const MainLayout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -145,7 +145,22 @@ const MainLayout = () => {
         return { title: 'Question Shaper', subtitle: 'Core System Platform' };
     };
 
-    const { title, subtitle } = getPageTitle(location.pathname);
+    const defaultTitleInfo = getPageTitle(location.pathname);
+
+    const [dynamicTitle, setDynamicTitle] = useState(null);
+
+    useEffect(() => {
+        const handleDynamicTitle = (e) => setDynamicTitle(e.detail);
+        window.addEventListener('setDynamicPageTitle', handleDynamicTitle);
+        return () => window.removeEventListener('setDynamicPageTitle', handleDynamicTitle);
+    }, []);
+
+    useEffect(() => {
+        setDynamicTitle(null);
+    }, [location.pathname]);
+
+    const title = dynamicTitle?.title || defaultTitleInfo.title;
+    const subtitle = dynamicTitle?.subtitle || defaultTitleInfo.subtitle;
 
     const isSuperAdmin = userData?.roles?.some(r => {
         const roleName = typeof r === 'string' ? r : (r.name || '');
@@ -163,6 +178,13 @@ const MainLayout = () => {
                                   isAiWorkspace;
     
     const isZeroPaddingRoute = isFullscreenWorkspace || location.pathname.startsWith('/questions');
+
+    const isPendingApproval = userData?.instituteStatus === 'INACTIVE' || userData?.instituteStatus === 'PENDING';
+    const isSuspended = userData?.instituteStatus === 'SUSPENDED';
+
+    if (!isSuperAdmin && !isDefaultInstitute && (isPendingApproval || isSuspended)) {
+        return <WorkspaceStatusOverlay user={userData} onLogout={handleLogout} />;
+    }
 
     return (
         <div className="flex h-screen bg-[#F8F9FC] font-sans text-slate-900 overflow-hidden print:block print:h-auto print:overflow-visible">

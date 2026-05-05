@@ -26,6 +26,11 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                "WHERE q.status = :status")
         List<Question> findByStatus(@Param("status") Question.QuestionStatus status);
 
+        long countByStatus(Question.QuestionStatus status);
+
+        @Query("SELECT COUNT(DISTINCT q.classSubject.id) FROM Question q")
+        long countDistinctClassSubjectIds();
+
         boolean existsBySourceReferenceAndStatus(String sourceReference, Question.QuestionStatus status);
 
         /**

@@ -57,7 +57,15 @@ public class UserSpecification {
 
             // 5. Active and Locked Filters
             if (active != null) {
-                predicates.add(cb.equal(root.get("active"), active));
+                if (active) {
+                    predicates.add(cb.equal(root.get("active"), true));
+                } else {
+                    Predicate isInactive = cb.equal(root.get("active"), false);
+                    Join<User, com.testshaper.entity.Institute> instituteJoin = root.join("institute", JoinType.LEFT);
+                    Predicate isInstPending = cb.equal(instituteJoin.get("status"), com.testshaper.entity.Institute.InstituteStatus.PENDING);
+                    Predicate isInstInactive = cb.equal(instituteJoin.get("status"), com.testshaper.entity.Institute.InstituteStatus.INACTIVE);
+                    predicates.add(cb.or(isInactive, isInstPending, isInstInactive));
+                }
             }
             if (accountLocked != null) {
                 predicates.add(cb.equal(root.get("accountLocked"), accountLocked));

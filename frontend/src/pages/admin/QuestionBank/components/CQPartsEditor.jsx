@@ -1,7 +1,7 @@
 import React from 'react';
 import { Book } from 'lucide-react';
 
-const CQPartsEditor = ({ cqParts, setCqParts }) => {
+const CQPartsEditor = ({ cqParts, setCqParts, language }) => {
     
     // Auto-detect structure type for visual labels based on part count/marks
     const getStructureLabel = () => {
@@ -31,11 +31,14 @@ const CQPartsEditor = ({ cqParts, setCqParts }) => {
                     ];
                     const theme = colors[index % colors.length];
 
+                    const isEnglish = language && language.toLowerCase() === 'english';
+                    const displayLabel = isEnglish ? String.fromCharCode(97 + index) : (['ক', 'খ', 'গ', 'ঘ', 'ঙ', 'চ'][index] || String.fromCharCode(97 + index));
+
                     return (
                         <div key={index} className={`flex items-start gap-3 p-4 rounded-xl border-2 ${theme.color} transition-all`}>
                             <div className="shrink-0 flex flex-col items-center gap-1">
                                 <span className={`w-10 h-10 rounded-xl ${theme.iconBg} text-white flex items-center justify-center font-bold text-lg shadow-sm`}>
-                                    {part.label}
+                                    {displayLabel}
                                 </span>
                                 <input 
                                     type="number"
@@ -62,7 +65,7 @@ const CQPartsEditor = ({ cqParts, setCqParts }) => {
                                             pts[index].text = e.target.value;
                                             setCqParts(pts);
                                         }}
-                                        placeholder={`${part.label} অংশের প্রশ্ন লিখুন...`}
+                                        placeholder={`${displayLabel} অংশের প্রশ্ন লিখুন...`}
                                     />
                                     <textarea 
                                         rows={2}
@@ -73,7 +76,7 @@ const CQPartsEditor = ({ cqParts, setCqParts }) => {
                                             pts[index].answer = e.target.value;
                                             setCqParts(pts);
                                         }}
-                                        placeholder={`${part.label} অংশের উত্তর লিখুন (ঐচ্ছিক)...`}
+                                        placeholder={`${displayLabel} অংশের উত্তর লিখুন (ঐচ্ছিক)...`}
                                     />
                                     <textarea 
                                         rows={2}
@@ -84,7 +87,7 @@ const CQPartsEditor = ({ cqParts, setCqParts }) => {
                                             pts[index].explanation = e.target.value;
                                             setCqParts(pts);
                                         }}
-                                        placeholder={`${part.label} অংশের ব্যাখ্যা লিখুন (ঐচ্ছিক)...`}
+                                        placeholder={`${displayLabel} অংশের ব্যাখ্যা লিখুন (ঐচ্ছিক)...`}
                                     />
                                 </div>
                             </div>
@@ -108,8 +111,9 @@ const CQPartsEditor = ({ cqParts, setCqParts }) => {
                 <button 
                     type="button"
                     onClick={() => {
+                        const isEng = language && language.toLowerCase() === 'english';
                         const nextLabels = ['ক', 'খ', 'গ', 'ঘ', 'ঙ', 'চ'];
-                        const newLabel = nextLabels[cqParts.length] || String.fromCharCode(97 + cqParts.length);
+                        const newLabel = isEng ? String.fromCharCode(97 + cqParts.length) : (nextLabels[cqParts.length] || String.fromCharCode(97 + cqParts.length));
                         setCqParts([...cqParts, { label: newLabel, text: '', marks: 1 }]);
                     }}
                     className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-lg transition-all border border-indigo-100"

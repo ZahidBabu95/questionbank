@@ -94,6 +94,7 @@ public class DataInitializer implements CommandLineRunner {
             Role instituteAdminRole = createRoleIfNotFound("INSTITUTE_ADMIN", Set.of(userRead, userWrite), false);
             Role teacherRole = createRoleIfNotFound("TEACHER", Set.of(userRead), false);
             Role studentRole = createRoleIfNotFound("STUDENT", Set.of(userRead), false);
+            Role betaUserRole = createRoleIfNotFound("BETA USER", Set.of(userRead, userWrite), false);
 
             // 4. Create Users
             createUserIfNotFound("zahid@questionshaper.com", "Zahid", "Z@hid95", superAdminRole, institute);
@@ -265,6 +266,7 @@ public class DataInitializer implements CommandLineRunner {
             pkg.setDisplayName("Beta User (Early Access)");
             pkg.setHighlightBadge("BETA TESTER");
             pkg.setSortOrder(1);
+            pkg.setAssociatedRole("BETA USER");
             
             billingPackageRepository.save(pkg);
             log.info("Created Beta User Package: {}", code);
