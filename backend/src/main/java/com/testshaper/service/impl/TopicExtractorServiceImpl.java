@@ -201,6 +201,10 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 } catch (Exception e) {
                     log.error("Failed to process batch {}/{} for Index {}. Error: {}", batchIndex + 1, totalBatches, indexName, e.getMessage());
                     // By not updating status, these pages remain PROOFREAD, allowing them to be retried later
+                    if (e.getMessage() != null && e.getMessage().contains("PROHIBITED_CONTENT")) {
+                        getSelf().updatePageStatusToFailed(batch);
+                        log.warn("Batch {}/{} marked as FAILED due to PROHIBITED_CONTENT", batchIndex + 1, totalBatches);
+                    }
                 }
                 
                 // Synchronize job updates PER BATCH
@@ -249,7 +253,16 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
     @Transactional
     public void updatePageStatus(List<KnowledgePage> pages) {
         for (KnowledgePage p : pages) {
-            p.setExtractionStatus(KnowledgePage.ExtractionStatus.GOLDEN_VECTORIZED);
+            p.setExtractionStatus(KnowledgePage.ExtractionStatus.PRE_VECTORIZED);
+        }
+        knowledgePageRepository.saveAll(pages);
+    }
+
+    @Override
+    @Transactional
+    public void updatePageStatusToFailed(List<KnowledgePage> pages) {
+        for (KnowledgePage p : pages) {
+            p.setExtractionStatus(KnowledgePage.ExtractionStatus.FAILED);
         }
         knowledgePageRepository.saveAll(pages);
     }
@@ -463,7 +476,7 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
             // 3. Reset Page Status
             List<KnowledgePage> pages = knowledgePageRepository.findBySourceBookIndexId(indexId)
                     .stream()
-                    .filter(p -> p.getExtractionStatus() == KnowledgePage.ExtractionStatus.GOLDEN_VECTORIZED)
+                    .filter(p -> p.getExtractionStatus() == KnowledgePage.ExtractionStatus.GOLDEN_VECTORIZED || p.getExtractionStatus() == KnowledgePage.ExtractionStatus.PRE_VECTORIZED)
                     .toList();
                     
             for (KnowledgePage p : pages) {
@@ -697,13 +710,16 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
             }
         }
         
-        List<KnowledgePage> pages = knowledgePageRepository.findBySourceBookIndexId(indexId);
-        for (KnowledgePage page : pages) {
-            if (page.getExtractionStatus() == KnowledgePage.ExtractionStatus.PROOFREAD) {
-                page.setExtractionStatus(KnowledgePage.ExtractionStatus.GOLDEN_VECTORIZED);
+        if (pushedCount > 0) {
+            List<KnowledgePage> pagesToFinalize = knowledgePageRepository.findBySourceBookIndexId(indexId)
+                    .stream()
+                    .filter(p -> p.getExtractionStatus() == KnowledgePage.ExtractionStatus.PRE_VECTORIZED)
+                    .toList();
+            for (KnowledgePage p : pagesToFinalize) {
+                p.setExtractionStatus(KnowledgePage.ExtractionStatus.GOLDEN_VECTORIZED);
             }
+            knowledgePageRepository.saveAll(pagesToFinalize);
         }
-        knowledgePageRepository.saveAll(pages);
         
         return pushedCount;
     }

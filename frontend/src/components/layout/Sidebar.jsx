@@ -88,7 +88,7 @@ export const MENU_ITEMS = [
                     { title: 'All Questions', path: '/questions', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
                     { title: 'Drafts (AI Generated)', path: '/questions/drafts', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { title: 'Pending', path: '/questions/pending', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Question Bank', path: '/questions/approved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+                    { id: 'QUESTION_BANK_REPOSITORY_APPROVED', title: 'Question Bank', path: '/questions/approved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
                     { title: 'Rejected', path: '/questions/rejected', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { title: 'Source Management', path: '/questions/sources', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
                 ]
@@ -333,7 +333,9 @@ const SidebarItem = ({ item, isExpanded, onToggle, expandedMenus, level = 0, isA
 
 
 // Helper for dynamic permission checking matching RoleManagement
-const generateMenuId = (title, parentId = '') => {
+const generateMenuId = (itemOrTitle, parentId = '') => {
+    if (typeof itemOrTitle === 'object' && itemOrTitle.id) return itemOrTitle.id;
+    const title = typeof itemOrTitle === 'object' ? itemOrTitle.title : itemOrTitle;
     let baseId = title.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/(^_|_$)/g, '');
     return parentId ? `${parentId}_${baseId}` : baseId;
 };
@@ -356,11 +358,11 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
     const userRoles = user?.roles || [];
     const userPermissions = user?.permissions || [];
 
-    const isAuthorized = (itemTitle, parentId = '') => {
+    const isAuthorized = (item, parentId = '') => {
         // SUPER_ADMIN has god-mode access to everything
         if (userRoles.includes('SUPER_ADMIN')) return true;
 
-        const generatedId = generateMenuId(itemTitle, parentId);
+        const generatedId = generateMenuId(item, parentId);
         const requiredPermission = `${generatedId}_VIEW`;
 
         return userPermissions.includes(requiredPermission);
@@ -369,8 +371,8 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
     const filterMenuItems = (items, parentId = '') => {
         return items
             .map(item => {
-                const currentId = generateMenuId(item.title, parentId);
-                const isAuth = isAuthorized(item.title, parentId);
+                const currentId = generateMenuId(item, parentId);
+                const isAuth = isAuthorized(item, parentId);
 
                 if (item.submenu) {
                     const filteredSubmenu = filterMenuItems(item.submenu, currentId);

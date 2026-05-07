@@ -272,7 +272,9 @@ const AiWorkspace = () => {
     const userPermissions = user?.permissions || [];
 
 
-    const generateMenuId = (title, parentId = '') => {
+    const generateMenuId = (itemOrTitle, parentId = '') => {
+        if (typeof itemOrTitle === 'object' && itemOrTitle.id) return itemOrTitle.id;
+        const title = typeof itemOrTitle === 'object' ? itemOrTitle.title : itemOrTitle;
         let baseId = title.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/(^_|_$)/g, '');
         return parentId ? `${parentId}_${baseId}` : baseId;
     };
@@ -280,7 +282,7 @@ const AiWorkspace = () => {
     const getDynamicTools = (items, parentId = '', parentTitle = '', parentIcon = null) => {
         let tools = [];
         items.forEach(item => {
-            const currentId = generateMenuId(item.title, parentId);
+            const currentId = generateMenuId(item, parentId);
             const permName = `${currentId}_AI_TOOL`;
             const currentIcon = item.icon || parentIcon;
             

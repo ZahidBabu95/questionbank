@@ -44,6 +44,6 @@ public class KnowledgePage extends BaseTenantEntity {
     private String pineconeVectorId;
 
     public enum ExtractionStatus {
-        PENDING, EXTRACTED, PROOFREAD, GOLDEN_VECTORIZED, FAILED
+        PENDING, EXTRACTED, PROOFREAD, PRE_VECTORIZED, GOLDEN_VECTORIZED, FAILED
     }
 }

@@ -22,8 +22,10 @@ const convertMarkdownImagesToHtml = (text) => {
     });
 };
 
-const QuestionEdit = () => {
-    const { id } = useParams();
+const QuestionEdit = ({ inlineId, onSaveComplete }) => {
+    const params = useParams();
+    const id = inlineId || params.id;
+    const isInline = !!inlineId;
     const navigate = useNavigate();
 
     // Data lists
@@ -503,9 +505,13 @@ const QuestionEdit = () => {
 
             clearSavedData(); // Clear auto-save data on successful submit
 
-            setTimeout(() => {
-                navigate(-1);
-            }, 1000);
+            if (isInline && onSaveComplete) {
+                onSaveComplete();
+            } else {
+                setTimeout(() => {
+                    navigate(-1);
+                }, 1000);
+            }
 
         } catch (error) {
             console.error("Failed to update question", error);
@@ -541,7 +547,7 @@ const QuestionEdit = () => {
     }
 
     return (
-        <div className="max-w-[1400px] mx-auto p-6 space-y-6">
+        <div className={isInline ? "w-full p-4 space-y-4 overflow-y-auto h-full custom-scrollbar" : "max-w-[1400px] mx-auto p-6 space-y-6"}>
             {/* ═══ AUTO-SAVE BANNER ═══ */}
             {hasSavedData && (
                 <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex flex-wrap items-center justify-between shadow-sm gap-4">
@@ -559,20 +565,22 @@ const QuestionEdit = () => {
                 </div>
             )}
 
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                    <button onClick={() => navigate(-1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 shadow-sm transition-all">
-                        <ArrowLeft size={18} />
-                    </button>
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{isRevision ? 'Suggest a Revision' : 'Advanced Question Editor'}</h1>
-                        <p className="text-sm text-slate-500 font-medium">
-                            {isRevision ? 'Your revision will be reviewed by a Super Admin to receive contribution points.' : `Modifying ${questionType} question details.`}
-                        </p>
+            {!isInline && (
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => navigate(-1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500 shadow-sm transition-all">
+                            <ArrowLeft size={18} />
+                        </button>
+                        <div>
+                            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{isRevision ? 'Suggest a Revision' : 'Advanced Question Editor'}</h1>
+                            <p className="text-sm text-slate-500 font-medium">
+                                {isRevision ? 'Your revision will be reviewed by a Super Admin to receive contribution points.' : `Modifying ${questionType} question details.`}
+                            </p>
+                        </div>
                     </div>
+                    {lastSavedTime && <span className="text-xs text-slate-400 flex items-center gap-1 font-medium"><Check size={14} className="text-emerald-500"/> Auto-saved at {lastSavedTime.toLocaleTimeString()}</span>}
                 </div>
-                {lastSavedTime && <span className="text-xs text-slate-400 flex items-center gap-1 font-medium"><Check size={14} className="text-emerald-500"/> Auto-saved at {lastSavedTime.toLocaleTimeString()}</span>}
-            </div>
+            )}
 
             {message && (
                 <div className={`px-4 py-3 rounded-xl flex items-center gap-3 shadow-sm border ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
@@ -581,7 +589,7 @@ const QuestionEdit = () => {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 items-start">
+            <form onSubmit={handleSubmit} className={`flex ${isInline ? 'flex-col' : 'flex-col lg:flex-row'} gap-6 items-start`}>
                 
                 {/* LEFT COLUMN: Main Editing Form */}
                 <div className="flex-1 w-full space-y-6">

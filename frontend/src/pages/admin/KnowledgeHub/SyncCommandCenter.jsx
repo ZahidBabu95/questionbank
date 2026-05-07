@@ -598,6 +598,10 @@ const SyncCommandCenter = () => {
     const [book, setBook] = useState(null);
     const [syncIntegrity, setSyncIntegrity] = useState(null);
     const [indices, setIndices] = useState([]);
+    
+    // Bulk Finalize State
+    const [isBulkFinalizing, setIsBulkFinalizing] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
     const [pages, setPages] = useState([]);
     const [loadingDetails, setLoadingDetails] = useState(true);
     
@@ -747,11 +751,49 @@ const SyncCommandCenter = () => {
             const res = await axios.post(`/v1/knowledge-hub/indexes/${indexId}/finalize-vector`);
             alert(res.data.message);
             fetchPagesSilent();
+            if (selectedChapter && selectedChapter.id === indexId) {
+                handleSelectChapter(selectedChapter, true);
+            }
         } catch (error) {
             alert(error.response?.data?.error || "Failed to finalize vector");
         } finally {
             setLoadingPreview(false);
         }
+    };
+
+    const handleBulkFinalize = async () => {
+        const chaptersToFinalize = indices.filter(idx => {
+            const chPages = pages.filter(p => p.sourceBookIndexId === idx.id);
+            return chPages.some(p => p.extractionStatus === 'PRE_VECTORIZED');
+        });
+
+        if (chaptersToFinalize.length === 0) {
+            alert("No chapters with PRE-VECTOR data are ready to be finalized.");
+            return;
+        }
+
+        if (!window.confirm(`You are about to finalize vectors for ${chaptersToFinalize.length} chapter(s).\nThis process will push all data to Pinecone and may take a while.\nDo you want to proceed?`)) return;
+
+        setIsBulkFinalizing(true);
+        setBulkProgress({ current: 0, total: chaptersToFinalize.length });
+
+        let successCount = 0;
+        for (let i = 0; i < chaptersToFinalize.length; i++) {
+            try {
+                await axios.post(`/v1/knowledge-hub/indexes/${chaptersToFinalize[i].id}/finalize-vector`);
+                successCount++;
+            } catch (err) {
+                console.error(`Failed to finalize ${chaptersToFinalize[i].indexName}`, err);
+            }
+            setBulkProgress({ current: i + 1, total: chaptersToFinalize.length });
+        }
+
+        setIsBulkFinalizing(false);
+        fetchPagesSilent();
+        if (selectedChapter) {
+            handleSelectChapter(selectedChapter, true);
+        }
+        alert(`Successfully finalized ${successCount} out of ${chaptersToFinalize.length} chapters.`);
     };
 
     const handleMergeTopic = async (sourceTopicId, targetTopicId) => {
@@ -838,8 +880,10 @@ const SyncCommandCenter = () => {
         switch (status) {
             case 'GOLDEN_VECTORIZED':
                 return <span className="absolute top-1 right-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10 flex items-center gap-0.5"><Sparkles size={8}/> VECTORIZED</span>;
-            case 'PROOFREAD':
+            case 'PRE_VECTORIZED':
                 return <span className="absolute top-1 right-1 bg-indigo-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10">PRE-VECTOR</span>;
+            case 'PROOFREAD':
+                return <span className="absolute top-1 right-1 bg-amber-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10">GOLDEN DATA</span>;
             case 'EXTRACTED':
             case 'REVIEWED':
                 return <span className="absolute top-1 right-1 bg-blue-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10">DRAFT</span>;
@@ -898,6 +942,11 @@ const SyncCommandCenter = () => {
                             <ArrowLeft className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Library</span>
                         </button>
                     </Link>
+                    <Link to={`/knowledge-hub/proofreading/${bookId}`}>
+                        <button className="px-2 lg:px-3 py-1.5 bg-white border border-slate-200 text-indigo-600 hover:bg-indigo-50 font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-xs mr-2">
+                            <BookOpen className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Proofreading</span>
+                        </button>
+                    </Link>
                     <div className="h-6 w-[1px] bg-slate-200 mx-1"></div>
                     
                     {/* Sync Job Status Indicator */}
@@ -949,14 +998,32 @@ const SyncCommandCenter = () => {
                         </div>
                     )}
                     
-                    {(!aiQueueJob || aiQueueJob.status === 'COMPLETED' || aiQueueJob.status === 'FAILED') && (
+                    {(!aiQueueJob || aiQueueJob.status === 'COMPLETED' || aiQueueJob.status === 'FAILED') && !isBulkFinalizing && (
                         <div className="flex gap-2">
                             <button onClick={() => setIsTopicModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 border border-indigo-700 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-all shadow-sm text-xs ml-1 h-9">
                                 <Bot size={14} className="shrink-0" /> <span className="hidden xl:inline">Auto Chunk (Pre-Vector)</span>
                             </button>
+                            <button onClick={handleBulkFinalize} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 border border-purple-700 text-white font-semibold rounded-lg hover:bg-purple-700 transition-all shadow-sm text-xs ml-1 h-9">
+                                <Database size={14} className="shrink-0" /> <span className="hidden xl:inline">Finalize All Vectors</span>
+                            </button>
                             <button onClick={handleDeleteSyncData} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-semibold rounded-lg transition-all shadow-sm text-xs ml-1 h-9">
                                 <Trash2 size={14} className="shrink-0" /> <span className="hidden xl:inline">Delete Sync</span>
                             </button>
+                        </div>
+                    )}
+
+                    {isBulkFinalizing && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 text-purple-800 rounded-lg shadow-sm ml-1 h-9">
+                            <Loader2 size={14} className="animate-spin shrink-0 text-purple-600" />
+                            <div className="flex flex-col justify-center">
+                                <span className="text-[10px] font-bold leading-tight hidden lg:block">Finalizing Vectors...</span>
+                                <div className="hidden lg:block w-24 bg-white border border-purple-100 h-1.5 rounded-full overflow-hidden mt-0.5">
+                                    <div className="h-full bg-purple-500 transition-all" style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }} />
+                                </div>
+                            </div>
+                            <span className="text-[10px] font-bold ml-1 min-w-[24px]">
+                                {bulkProgress.current}/{bulkProgress.total}
+                            </span>
                         </div>
                     )}
                     
@@ -1005,7 +1072,7 @@ const SyncCommandCenter = () => {
 
                         {indices.map((idx, i) => {
                             const chPages = pages.filter(p => p.sourceBookIndexId === idx.id);
-                            const syncedPages = chPages.filter(p => p.extractionStatus === 'GOLDEN_VECTORIZED');
+                            const syncedPages = chPages.filter(p => p.extractionStatus === 'PRE_VECTORIZED' || p.extractionStatus === 'GOLDEN_VECTORIZED');
                             
                             return (
                                 <button
@@ -1191,7 +1258,12 @@ const SyncCommandCenter = () => {
                                     <span className="text-sm font-black text-white uppercase tracking-widest">PRE-VECTOR DRAFT</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <button onClick={() => handleFinalizeVector(selectedChapter.id)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm">
+                                    <button 
+                                        onClick={() => handleFinalizeVector(selectedChapter.id)} 
+                                        disabled={loadingPreview}
+                                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {loadingPreview ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
                                         Finalize Vector DB
                                     </button>
                                     <button onClick={() => setPreviewTopicIndex(selectedChapter)} className="bg-white/10 hover:bg-white/20 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">

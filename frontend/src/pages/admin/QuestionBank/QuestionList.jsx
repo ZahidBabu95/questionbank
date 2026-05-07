@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare } from 'lucide-react';
+import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2 } from 'lucide-react';
 import questionService from '../../../services/questionService';
 import academicService from '../../../services/academicService';
 import RevisePanel from './components/RevisePanel';
 import RevisionReviewPanel from './components/RevisionReviewPanel';
 import MarkdownRenderer from '../../../components/MarkdownRenderer';
+import QuestionEdit from './QuestionEdit';
 
 const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) => {
     const parts = useMemo(() => {
@@ -899,31 +900,57 @@ const QuestionList = () => {
         });
     }, []);
 
+    const [bulkProgress, setBulkProgress] = useState(null); // { current, total, action }
+
     const handleBulkDelete = async () => {
         if (selectedIds.length === 0) return;
         if (window.confirm(`Are you sure you want to delete ${selectedIds.length} questions?`)) {
-            try {
-                await questionService.deleteQuestionsBulk(selectedIds);
-                setQuestions(prev => prev.filter(q => !selectedIds.includes(q.id)));
-                setSelectedIds([]);
-            } catch (error) {
-                console.error("Failed to bulk delete", error);
+            setBulkProgress({ current: 0, total: selectedIds.length, action: 'Deleting' });
+            
+            const CHUNK_SIZE = 20;
+            let successCount = 0;
+            for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
+                const chunk = selectedIds.slice(i, i + CHUNK_SIZE);
+                try {
+                    await questionService.deleteQuestionsBulk(chunk);
+                    successCount += chunk.length;
+                    setQuestions(prev => prev.filter(q => !chunk.includes(q.id)));
+                } catch (error) {
+                    console.error("Failed to bulk delete chunk", error);
+                }
+                setBulkProgress({ current: Math.min(i + CHUNK_SIZE, selectedIds.length), total: selectedIds.length, action: 'Deleting' });
             }
+            
+            setBulkProgress(null);
+            setSelectedIds([]);
+            fetchQuestions();
+            fetchOverviewStats();
         }
     };
 
     const handleUpdateStatusBulk = async (status) => {
         if (!selectedIds.length) return;
         if (window.confirm(`Update ${selectedIds.length} questions to ${status}?`)) {
-            try {
-                await questionService.updateStatusBulk(selectedIds, status);
-                setQuestions(prev => prev.map(q =>
-                    selectedIds.includes(q.id) ? { ...q, status } : q
-                ));
-                setSelectedIds([]);
-            } catch (error) {
-                alert("Status update failed.");
+            setBulkProgress({ current: 0, total: selectedIds.length, action: `Updating to ${status}` });
+            
+            const CHUNK_SIZE = 20;
+            let successCount = 0;
+            for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
+                const chunk = selectedIds.slice(i, i + CHUNK_SIZE);
+                try {
+                    await questionService.updateStatusBulk(chunk, status);
+                    successCount += chunk.length;
+                    setQuestions(prev => prev.map(q => chunk.includes(q.id) ? { ...q, status } : q));
+                } catch (error) {
+                    console.error("Failed to update status chunk", error);
+                }
+                setBulkProgress({ current: Math.min(i + CHUNK_SIZE, selectedIds.length), total: selectedIds.length, action: `Updating to ${status}` });
             }
+            
+            setBulkProgress(null);
+            setSelectedIds([]);
+            fetchQuestions();
+            fetchOverviewStats();
         }
     };
 
@@ -1021,6 +1048,22 @@ const QuestionList = () => {
 
     return (
         <>
+        {/* Bulk Action Progress Overlay */}
+        {bulkProgress && (
+            <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center">
+                <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 w-[320px]">
+                    <Loader2 className="animate-spin text-primary w-10 h-10" />
+                    <h3 className="font-bold text-slate-800">{bulkProgress.action}...</h3>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div className="bg-primary h-full transition-all duration-300" style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}></div>
+                    </div>
+                    <span className="text-xs font-bold text-slate-500">
+                        {bulkProgress.current} / {bulkProgress.total} Complete
+                    </span>
+                </div>
+            </div>
+        )}
+
         <div className={`flex flex-col min-h-full bg-slate-50 transition-all duration-300 ${showAdvancedFilters ? 'pr-[320px]' : ''}`}>
 
             {/* OVERVIEW STATS BOARD */}
@@ -1089,13 +1132,15 @@ const QuestionList = () => {
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                        <button
-                            onClick={() => setSplitScreenMode(!splitScreenMode)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                            title="Toggle Split-Screen Review Mode"
-                        >
-                            <GitCompare size={14} /> Review Mode
-                        </button>
+                        {hasFullLangAccess && (
+                            <button
+                                onClick={() => setSplitScreenMode(!splitScreenMode)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                title="Toggle Split-Screen Review Mode"
+                            >
+                                <GitCompare size={14} /> Review Mode
+                            </button>
+                        )}
 
                         <button
                             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
@@ -1488,21 +1533,32 @@ const QuestionList = () => {
                 </div>
 
                 {/* Split Screen Preview Side */}
-                {splitScreenMode && (
-                    <div className="w-full md:w-1/2 hidden md:flex flex-col bg-slate-900 border border-slate-800 rounded-2xl shadow-inner overflow-hidden h-full relative" style={{ backgroundImage: 'radial-gradient(#334155 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
+                {splitScreenMode && hasFullLangAccess && (
+                    <div className="w-full md:w-1/2 hidden md:flex flex-col bg-slate-50 border border-slate-200 rounded-2xl shadow-inner overflow-hidden h-full relative" style={{ backgroundImage: 'radial-gradient(#e2e8f0 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
                         {selectedQuestion ? (
                             <>
-                                <div className="bg-slate-900/90 backdrop-blur-sm m-4 rounded-xl shadow-lg border border-slate-700/60 overflow-hidden flex flex-col flex-1 relative">
-                                    <QuestionPreviewContent selectedQuestion={selectedQuestion} isDark={true} />
+                                <div className="bg-slate-50/90 backdrop-blur-sm m-2 rounded-xl shadow-lg border border-slate-200 overflow-hidden flex flex-col flex-1 relative">
+                                    <QuestionEdit 
+                                        inlineId={selectedQuestion.id} 
+                                        key={selectedQuestion.id} 
+                                        onSaveComplete={() => {
+                                            fetchQuestions();
+                                            // auto-select next question
+                                            const currentIndex = questions.findIndex(q => q.id === selectedQuestion.id);
+                                            if (currentIndex >= 0 && currentIndex < questions.length - 1) {
+                                                handleViewQuestion(questions[currentIndex + 1]);
+                                            }
+                                        }} 
+                                    />
                                 </div>
-                                <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.5)] z-10">
+                                <div className="p-3 bg-white border-t border-slate-200 flex items-center justify-between shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
                                     <div className="flex items-center gap-2">
                                         <button 
                                             onClick={() => {
                                                 const currentIndex = questions.findIndex(q => q.id === selectedQuestion.id);
                                                 if (currentIndex > 0) handleViewQuestion(questions[currentIndex - 1]);
                                             }}
-                                            className="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-black tracking-wide hover:bg-slate-700 hover:text-white transition-colors shadow-sm uppercase"
+                                            className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-600 rounded-lg text-xs font-black tracking-wide hover:bg-slate-200 hover:text-slate-800 transition-colors shadow-sm uppercase"
                                         >
                                             Prev
                                         </button>
@@ -1511,21 +1567,12 @@ const QuestionList = () => {
                                                 const currentIndex = questions.findIndex(q => q.id === selectedQuestion.id);
                                                 if (currentIndex < questions.length - 1) handleViewQuestion(questions[currentIndex + 1]);
                                             }}
-                                            className="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-black tracking-wide hover:bg-slate-700 hover:text-white transition-colors shadow-sm uppercase"
+                                            className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-600 rounded-lg text-xs font-black tracking-wide hover:bg-slate-200 hover:text-slate-800 transition-colors shadow-sm uppercase"
                                         >
                                             Next
                                         </button>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        {hasPerm && hasPerm('EDIT') && (
-                                            <button 
-                                                onClick={() => navigate(`/questions/edit/${selectedQuestion.id}`)}
-                                                className="flex items-center justify-center w-9 h-9 bg-slate-800 border-2 border-slate-700 text-slate-400 hover:text-blue-400 hover:border-blue-500 rounded-lg transition-colors"
-                                                title="Edit"
-                                            >
-                                                <Edit size={15} />
-                                            </button>
-                                        )}
                                         {isSuperAdmin && (
                                             <button 
                                                 onClick={async () => {
@@ -1537,7 +1584,7 @@ const QuestionList = () => {
                                                         setSelectedQuestion(null);
                                                     }
                                                 }}
-                                                className="flex items-center justify-center w-9 h-9 bg-slate-800 border-2 border-slate-700 text-slate-400 hover:text-rose-400 hover:border-rose-500 hover:bg-rose-900/30 rounded-lg transition-colors"
+                                                className="flex items-center justify-center w-9 h-9 bg-white border-2 border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 rounded-lg transition-colors"
                                                 title="Delete"
                                             >
                                                 <Trash2 size={15} />
@@ -1545,13 +1592,13 @@ const QuestionList = () => {
                                         )}
                                         <button 
                                             onClick={() => handleQuickAction(selectedQuestion.id, 'REJECTED')}
-                                            className="flex items-center gap-2 px-4 py-2 bg-slate-800 border-2 border-rose-500/30 text-rose-400 hover:bg-rose-500/10 hover:border-rose-500 rounded-lg text-xs font-black transition-colors uppercase tracking-wider"
+                                            className="flex items-center gap-2 px-4 py-2 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-black transition-colors uppercase tracking-wider"
                                         >
                                             <ThumbsDown size={14} strokeWidth={3} /> Reject
                                         </button>
                                         <button 
                                             onClick={() => handleQuickAction(selectedQuestion.id, 'APPROVED')}
-                                            className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-400 rounded-lg text-xs font-black transition-all shadow-md shadow-emerald-900/50 uppercase tracking-wider transform hover:scale-[1.02] active:scale-[0.98] border border-emerald-500/50"
+                                            className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-400 rounded-lg text-xs font-black transition-all shadow-sm uppercase tracking-wider transform hover:scale-[1.02] active:scale-[0.98]"
                                         >
                                             <ThumbsUp size={14} strokeWidth={3} /> Approve
                                         </button>
@@ -1559,10 +1606,10 @@ const QuestionList = () => {
                                 </div>
                             </>
                         ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-8 text-center m-4 bg-slate-800/50 backdrop-blur-sm rounded-xl border border-dashed border-slate-700">
-                                <GitCompare size={48} className="mb-4 text-slate-600" />
-                                <h3 className="text-lg font-bold text-slate-300 mb-2">Review Mode Active</h3>
-                                <p className="text-sm">Click "View" on any question from the list to preview it here side-by-side.</p>
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-8 text-center m-4 bg-white/50 backdrop-blur-sm rounded-xl border border-dashed border-slate-300">
+                                <GitCompare size={48} className="mb-4 text-slate-400" />
+                                <h3 className="text-lg font-bold text-slate-700 mb-2">Review Mode Active</h3>
+                                <p className="text-sm">Click "View" on any question from the list to preview and edit it here side-by-side.</p>
                             </div>
                         )}
                     </div>
