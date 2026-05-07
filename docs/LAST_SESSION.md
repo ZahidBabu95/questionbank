@@ -17,6 +17,8 @@
 ### 📊 Frontend Development
 | ✅ COMPLETED | **Source Management UI:** `Question Bank > Repository`-এ একটি নতুন সাব-মেনু যুক্ত করে সম্পূর্ণ "Source Management" পেজ ডিজাইন করা হয়েছে। এটিতে `antd` এর বদলে TailwindCSS এবং `lucide-react` ব্যবহার করা হয়েছে। | `SourceManagement.jsx` |
 | ✅ COMPLETED | **Filter & Actions:** Source Type অনুযায়ী ফিল্টার করার জন্য ড্রপডাউন এবং রিনেম/মার্জ করার জন্য কাস্টম মডাল লজিক তৈরি করে ফ্রন্টএন্ড থেকে API তে সংযুক্ত করা হয়েছে। | `SourceManagement.jsx` |
+| ✅ COMPLETED | **Question Bank Filters UI Refactoring:** অ্যাডভান্সড ফিল্টারগুলো ইনলাইন থেকে সরিয়ে ডানদিকের সাইডবারে "Filters & Tags" নামে একত্রিত করা হয়েছে। সাইডবারে "Academic" এবং "Source Tags" নামে দুটি প্রফেশনাল ট্যাব যোগ করা হয়েছে। | `QuestionList.jsx` |
+| ✅ COMPLETED | **Filter Persistence & Auto-Selection:** সুপার অ্যাডমিনদের সুবিধার জন্য অ্যাকাডেমিক ফিল্টার সিলেকশন (Level/Stream/Class/Subject) `localStorage`-এ সেভ করা হয়েছে, যাতে পেজ রিলোড করলেও অটোমেটিক সর্বশেষ ফিল্টারটি লোড হয়। সাধারণ ইউজারদের জন্য তাদের নিজস্ব ফিল্টারগুলো আগের মতই অটো-সিলেক্ট হয়ে থাকবে। ডিফল্টভাবে "Source Tags" ট্যাবটি ওপেন হবে। | `QuestionList.jsx` |
 
 ---
 
@@ -29,4 +31,4 @@
 
 ## 📞 পরের সেশনে প্রথম বার্তা
 
-> "আমরা Question Bank-এর মেটাডেটা ফিল্টারিং API এবং Source Management ফিচারটি সফলভাবে সম্পন্ন করেছি। এখন আমরা অন্য একটি নতুন কাজ শুরু করার জন্য প্রস্তুত। আপনি কোন কাজটি দিয়ে শুরু করতে চান?"
+> "আমরা Question Bank-এর মেটাডেটা ফিল্টারিং UI রিফ্যাক্টরিং সম্পন্ন করেছি এবং ফিল্টার সিলেকশনগুলো সেভ করে রাখার ব্যবস্থা করেছি। এখন আমরা অন্য একটি নতুন কাজ শুরু করার জন্য প্রস্তুত। আপনি কোন কাজটি দিয়ে শুরু করতে চান?"

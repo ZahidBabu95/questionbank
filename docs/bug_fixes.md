@@ -13,6 +13,12 @@ This document tracks identified bugs, their root causes, and how they were solve
 ## ✅ SOLVED BUGS
 *(Move bugs here after they are fixed and briefly describe the solution.)*
 
+### 17. Question Bank Filters Clutter & State Loss
+**Location:** `QuestionList.jsx`
+**Description:** The Question Bank dashboard was overly cluttered with advanced dropdowns at the top. Furthermore, Super Admins (and users) had to manually re-select the entire hierarchy (Level -> Stream -> Class -> Subject) every time the page was reloaded because the state was wiped out by cascading `useEffects`.
+**Root Cause:** Dropdowns were rendered inline. The 5 cascading `useEffects` aggressively reset downstream selections (`setSelectedStreamId('')`) unconditionally upon mount when hydrating from external sources.
+**Solution Applied:** Centralized all filters into a unified "Filters & Tags" right sidebar with professional tab navigation ("Academic" & "Source Tags"). Refactored the `useEffects` to conditionally clear downstream state only if the newly fetched options did NOT contain the currently selected ID. Wired `useState` initialization to `localStorage`, allowing the system to accurately persist and auto-reload the user's previously selected academic hierarchy without wiping it out.
+
 ### 16. Question Bank Metadata Filtering & Source Management Sync
 **Location:** `QuestionServiceImpl.java`, `QuestionSpecification.java`, `QuestionSourceManagementController.java`, `SourceManagement.jsx`
 **Description:** The Question Bank dashboard experienced a server-side compilation error (`HashMap cannot be resolved` and parameter mismatch) during the advanced filtering of Questions. The UI also lacked a way to resolve duplicate/similar Exam Sources (e.g. "দিনাজপুর বোর্ড" vs "দি.বো.").
