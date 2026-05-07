@@ -59,12 +59,20 @@ const getOverviewStats = async (params = {}) => {
     return response.data;
 };
 
+const getSourceTags = async (params = {}) => {
+    const cleanParams = Object.fromEntries(
+        Object.entries(params).filter(([_, v]) => v !== null && v !== undefined && v !== '')
+    );
+    const response = await axios.get(`${API_URL}/source-tags`, { params: cleanParams });
+    return response.data;
+};
+
 const deleteQuestion = async (id) => {
     await axios.delete(`${API_URL}/${id}`);
 };
 
 const deleteQuestionsBulk = async (ids) => {
-    await axios.delete(`${API_URL}/bulk`, { data: ids });
+    await axios.post(`${API_URL}/bulk/delete`, ids);
 };
 
 const approveQuestion = async (id) => {
@@ -179,6 +187,7 @@ export default {
     getAllQuestionsPaginated,
     getAllQuestionIds,
     getOverviewStats,
+    getSourceTags,
     getQuestionById,
     getOptions,
     updateQuestion,

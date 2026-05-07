@@ -28,6 +28,8 @@ public interface QuestionService {
 
     List<UUID> getAllQuestionIds(java.util.Map<String, String> filters);
 
+    java.util.Map<String, Object> getSourceTags(java.util.Map<String, String> filters);
+
     java.util.Map<String, Object> getOverviewStats(java.util.Map<String, String> filters);
 
     void deleteQuestion(UUID id);

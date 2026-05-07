@@ -516,26 +516,7 @@ const QuestionList = () => {
 
     const [overviewStats, setOverviewStats] = useState(null);
 
-    const fetchOverviewStats = async () => {
-        try {
-            const params = {
-                filterStatus: filterStatus === 'ALL' ? '' : filterStatus,
-                filterType: filterType === 'ALL' ? '' : filterType,
-                language: filterLanguage === 'ALL' ? '' : filterLanguage,
-                search: searchQuery,
-                levelId: selectedLevelId,
-                streamId: selectedStreamId,
-                classId: selectedClassId,
-                subjectId: selectedSubjectId,
-                chapterId: selectedChapterId,
-                topicId: selectedTopicId
-            };
-            const data = await questionService.getOverviewStats(params);
-            setOverviewStats(data);
-        } catch (error) {
-            console.error("Failed to fetch overview stats", error);
-        }
-    };
+
 
     const handleSaveToggle = React.useCallback((id) => {
         setSavedIds(prev => {
@@ -561,6 +542,7 @@ const QuestionList = () => {
     const [fullHierarchy, setFullHierarchy] = useState([]);
     const [metadataSearchTerm, setMetadataSearchTerm] = useState('');
     const [metadataSuggestions, setMetadataSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
 
     // Hierarchy filter selections
     const [selectedLevelId, setSelectedLevelId] = useState('');
@@ -569,6 +551,64 @@ const QuestionList = () => {
     const [selectedSubjectId, setSelectedSubjectId] = useState(''); // classSubjectId
     const [selectedChapterId, setSelectedChapterId] = useState('');
     const [selectedTopicId, setSelectedTopicId] = useState('');
+    
+    // Source Tag filters
+    const [selectedBoards, setSelectedBoards] = useState([]);
+    const [selectedYears, setSelectedYears] = useState([]);
+    const [selectedSchools, setSelectedSchools] = useState([]);
+    const [sourceTags, setSourceTags] = useState({ boards: [], years: [], schools: [] });
+
+    // Parameter builders
+    const getHierarchyParams = React.useCallback(() => {
+        return {
+            filterStatus: filterStatus === 'ALL' ? '' : filterStatus,
+            filterType: filterType === 'ALL' ? '' : filterType,
+            language: filterLanguage === 'ALL' ? '' : filterLanguage,
+            search: searchQuery,
+            levelId: selectedLevelId,
+            streamId: selectedStreamId,
+            classId: selectedClassId,
+            subjectId: selectedSubjectId,
+            chapterId: selectedChapterId,
+            topicId: selectedTopicId
+        };
+    }, [filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
+
+    const getFullParams = React.useCallback(() => {
+        return {
+            ...getHierarchyParams(),
+            sourceBoards: selectedBoards.join(','),
+            sourceYears: selectedYears.join(','),
+            sourceSchools: selectedSchools.join(',')
+        };
+    }, [getHierarchyParams, selectedBoards, selectedYears, selectedSchools]);
+
+    const fetchOverviewStats = async () => {
+        try {
+            const params = getFullParams();
+            const data = await questionService.getOverviewStats(params);
+            setOverviewStats(data);
+        } catch (error) {
+            console.error("Failed to fetch overview stats", error);
+        }
+    };
+
+    const fetchSourceTags = async () => {
+        try {
+            // Source tags are aggregated based purely on the hierarchy parameters
+            // to allow users to see all available tags for the selected subject
+            const params = getHierarchyParams();
+            const data = await questionService.getSourceTags(params);
+            setSourceTags(data || { boards: [], years: [], schools: [] });
+        } catch (error) {
+            console.error("Failed to fetch source tags", error);
+        }
+    };
+
+    // Load source tags whenever hierarchy filters change
+    useEffect(() => {
+        fetchSourceTags();
+    }, [getHierarchyParams]);
 
     useEffect(() => {
         if (location.pathname.includes('/approved')) setFilterStatus('APPROVED');
@@ -625,22 +665,27 @@ const QuestionList = () => {
 
     // Metadata Search Effect
     useEffect(() => {
-        if (!metadataSearchTerm || metadataSearchTerm.trim().length < 2 || !fullHierarchy) {
+        if (metadataSearchTerm === undefined || metadataSearchTerm === null || !fullHierarchy) {
             setMetadataSuggestions([]);
             return;
         }
 
-        const term = metadataSearchTerm.toLowerCase();
+        const term = metadataSearchTerm.trim().toLowerCase();
         const results = [];
         
         // Ensure fullHierarchy has the expected arrays before proceeding
         if (fullHierarchy.classSubjects && Array.isArray(fullHierarchy.classSubjects)) {
             fullHierarchy.classSubjects.forEach(cs => {
-                if (cs.name && cs.name.toLowerCase().includes(term)) {
+                if (!term || (cs.name && cs.name.toLowerCase().includes(term))) {
+                    let className = '';
+                    if (fullHierarchy.classes) {
+                        const cls = fullHierarchy.classes.find(c => c.id === cs._classId);
+                        if (cls) className = ` (${cls.name})`;
+                    }
                     results.push({ 
                         type: 'Subject', 
                         id: cs.id, 
-                        name: cs.name, 
+                        name: cs.name + className, 
                         classId: cs._classId, 
                         subjectId: cs.id 
                     });
@@ -650,7 +695,7 @@ const QuestionList = () => {
         
         if (fullHierarchy.subjects && Array.isArray(fullHierarchy.subjects)) {
             fullHierarchy.subjects.forEach(sub => {
-                if (sub.name && sub.name.toLowerCase().includes(term)) {
+                if (!term || (sub.name && sub.name.toLowerCase().includes(term))) {
                     // Prevent duplicate subject names if already added via classSubjects
                     if (!results.find(r => r.name === sub.name && r.type === 'Subject')) {
                         results.push({ 
@@ -666,7 +711,7 @@ const QuestionList = () => {
         
         if (fullHierarchy.classes && Array.isArray(fullHierarchy.classes)) {
             fullHierarchy.classes.forEach(cls => {
-                if (cls.name && cls.name.toLowerCase().includes(term)) {
+                if (!term || (cls.name && cls.name.toLowerCase().includes(term))) {
                     results.push({ 
                         type: 'Class', 
                         id: cls.id, 
@@ -682,20 +727,46 @@ const QuestionList = () => {
     }, [metadataSearchTerm, fullHierarchy]);
 
     const handleSelectSuggestion = (suggestion) => {
-        if (suggestion.levelId) setSelectedLevelId(suggestion.levelId);
+        let { levelId, streamId, classId, subjectId, chapterId, topicId } = suggestion;
+
+        // Auto-resolve missing parent IDs if we have fullHierarchy
+        if (fullHierarchy) {
+            if (topicId && !chapterId) {
+                const tp = fullHierarchy.topics?.find(t => t.id === topicId);
+                if (tp) chapterId = tp._chapterId;
+            }
+            if (chapterId && !subjectId) {
+                const ch = fullHierarchy.chapters?.find(c => c.id === chapterId);
+                if (ch) subjectId = ch._classSubjectId;
+            }
+            if (subjectId && !classId) {
+                const cs = fullHierarchy.classSubjects?.find(c => c.id === subjectId);
+                if (cs) classId = cs._classId;
+            }
+            if (classId && !streamId) {
+                const cls = fullHierarchy.classes?.find(c => c.id === classId);
+                if (cls) streamId = cls._streamId;
+            }
+            if (streamId && !levelId) {
+                const str = fullHierarchy.streams?.find(s => s.id === streamId);
+                if (str) levelId = str._levelId;
+            }
+        }
+
+        if (levelId) setSelectedLevelId(levelId);
         
         // Use timeout to allow hierarchy dropdowns to populate from API
         // since setting selectedLevelId triggers fetching streams, etc.
         setTimeout(() => {
-            if (suggestion.streamId) setSelectedStreamId(suggestion.streamId);
+            if (streamId) setSelectedStreamId(streamId);
             setTimeout(() => {
-                if (suggestion.classId) setSelectedClassId(suggestion.classId);
+                if (classId) setSelectedClassId(classId);
                 setTimeout(() => {
-                    if (suggestion.subjectId) setSelectedSubjectId(suggestion.subjectId);
+                    if (subjectId) setSelectedSubjectId(subjectId);
                     setTimeout(() => {
-                        if (suggestion.chapterId) setSelectedChapterId(suggestion.chapterId);
+                        if (chapterId) setSelectedChapterId(chapterId);
                         setTimeout(() => {
-                            if (suggestion.topicId) setSelectedTopicId(suggestion.topicId);
+                            if (topicId) setSelectedTopicId(topicId);
                         }, 300);
                     }, 300);
                 }, 300);
@@ -765,18 +836,9 @@ const QuestionList = () => {
         setLoading(true);
         try {
             const params = {
+                ...getFullParams(),
                 page: currentPage - 1,
-                size: itemsPerPage,
-                filterStatus: filterStatus === 'ALL' ? '' : filterStatus,
-                filterType: filterType === 'ALL' ? '' : filterType,
-                language: filterLanguage === 'ALL' ? '' : filterLanguage,
-                search: searchQuery,
-                levelId: selectedLevelId,
-                streamId: selectedStreamId,
-                classId: selectedClassId,
-                subjectId: selectedSubjectId,
-                chapterId: selectedChapterId,
-                topicId: selectedTopicId
+                size: itemsPerPage
             };
             const data = await questionService.getAllQuestionsPaginated(params);
             setQuestions(data.content || []);
@@ -930,7 +992,7 @@ const QuestionList = () => {
     };
 
     const [isSelectingAll, setIsSelectingAll] = useState(false);
-    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(true);
 
     const handleSelectAllGlobal = async () => {
         setIsSelectingAll(true);
@@ -959,7 +1021,7 @@ const QuestionList = () => {
 
     return (
         <>
-        <div className="flex flex-col min-h-full bg-slate-50">
+        <div className={`flex flex-col min-h-full bg-slate-50 transition-all duration-300 ${showAdvancedFilters ? 'pr-[320px]' : ''}`}>
 
             {/* OVERVIEW STATS BOARD */}
             {overviewStats && (
@@ -1038,9 +1100,9 @@ const QuestionList = () => {
                         <button
                             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showAdvancedFilters ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                            title="Toggle Metadata Filters"
+                            title="Toggle Source Filters"
                         >
-                            <Filter size={14} /> {showAdvancedFilters ? 'Hide Filters' : 'Metadata Filters'}
+                            <Filter size={14} /> {showAdvancedFilters ? 'Hide Source Filters' : 'Source Filters'}
                         </button>
 
                         <div className="relative w-full md:w-[300px] shrink-0">
@@ -1056,105 +1118,243 @@ const QuestionList = () => {
                     </div>
                 </div>
 
-                {/* Second Row: Advanced Select Filters */}
-                {showAdvancedFilters && (
-                    <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 mt-2 shadow-inner animate-in fade-in slide-in-from-top-2 duration-200">
-                        <div className="flex flex-col md:flex-row items-center justify-between mb-4 border-b border-slate-200/60 pb-3 gap-3">
-                            <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2 shrink-0">
-                                <ListFilter size={14} className="text-primary"/> Select Question Metadata
-                            </h3>
-                            
-                            <div className="relative w-full md:w-[400px] shrink-0 z-40">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/50" size={14} />
-                                <input
-                                    type="text"
-                                    value={metadataSearchTerm}
-                                    onChange={(e) => setMetadataSearchTerm(e.target.value)}
-                                    placeholder="Need suggestion? Type subject, chapter or topic name..."
-                                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-primary/20 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold text-slate-700 placeholder:text-slate-400 placeholder:font-medium shadow-sm"
-                                />
-                                {metadataSuggestions.length > 0 && (
-                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-[300px] overflow-y-auto custom-scrollbar">
-                                        {metadataSuggestions.map((s, idx) => (
-                                            <div
-                                                key={idx}
-                                                onClick={() => handleSelectSuggestion(s)}
-                                                className="px-3 py-2 border-b border-slate-50 last:border-0 hover:bg-indigo-50 cursor-pointer flex flex-col gap-0.5 transition-colors"
-                                            >
-                                                <span className="text-xs font-bold text-slate-700">{s.name}</span>
-                                                <span className="text-[9px] font-black text-primary/70 uppercase tracking-wider">{s.type}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                {/* Right Side Drawer for Source Metadata Filters */}
+                <div 
+                    className={`fixed top-[60px] right-0 h-[calc(100vh-60px)] w-[320px] bg-white border-l border-slate-200 shadow-xl z-30 flex flex-col transition-transform duration-300 ${showAdvancedFilters ? 'translate-x-0' : 'translate-x-full'}`}
+                >
+                    <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+                        <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                            <ListFilter size={14} className="text-primary"/> Source & Exam Tags
+                        </h3>
+                        <button onClick={() => setShowAdvancedFilters(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 p-1.5 rounded-lg transition-colors">
+                            <X size={16} />
+                        </button>
+                    </div>
+                    
+                    <div className="p-5 flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-6">
+                        
+                        {/* Selected Tags Bucket */}
+                        {(selectedBoards.length > 0 || selectedYears.length > 0 || selectedSchools.length > 0) && (
+                            <div className="flex flex-col gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl">
+                                <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-1.5">
+                                    <Filter size={12} /> Active Filters Bucket
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {selectedBoards.map(b => (
+                                        <span key={b} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
+                                            {b} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedBoards(prev => prev.filter(x => x !== b))} />
+                                        </span>
+                                    ))}
+                                    {selectedYears.map(y => (
+                                        <span key={y} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
+                                            {y} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedYears(prev => prev.filter(x => x !== y))} />
+                                        </span>
+                                    ))}
+                                    {selectedSchools.map(s => (
+                                        <span key={s} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
+                                            {s} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedSchools(prev => prev.filter(x => x !== s))} />
+                                        </span>
+                                    ))}
+                                </div>
                             </div>
+                        )}
 
-                            <button onClick={resetFilters} className="text-[10px] font-bold text-rose-500 hover:bg-rose-50 px-3 py-1.5 rounded-lg border border-transparent hover:border-rose-200 transition-colors flex items-center gap-1.5 shrink-0">
-                                <X size={14} /> Reset Filters
-                            </button>
+                        {/* Board / University List */}
+                        {sourceTags.boards && sourceTags.boards.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">Board / University</label>
+                                <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                    {sourceTags.boards.map(tag => (
+                                        <label key={tag.name} className="flex items-center justify-between group cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg transition-colors">
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedBoards.includes(tag.name)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) setSelectedBoards(prev => [...prev, tag.name]);
+                                                        else setSelectedBoards(prev => prev.filter(b => b !== tag.name));
+                                                    }}
+                                                    className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20" 
+                                                />
+                                                <span className="text-[11px] font-bold text-slate-700">{tag.name}</span>
+                                            </div>
+                                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">({tag.count})</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Year List */}
+                        {sourceTags.years && sourceTags.years.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">Year</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {sourceTags.years.map(tag => (
+                                        <label key={tag.name} className={`flex flex-col items-center justify-center p-2 rounded-lg border cursor-pointer transition-all ${selectedYears.includes(tag.name) ? 'bg-primary/5 border-primary text-primary' : 'bg-white border-slate-200 text-slate-600 hover:border-primary/50'}`}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={selectedYears.includes(tag.name)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setSelectedYears(prev => [...prev, tag.name]);
+                                                    else setSelectedYears(prev => prev.filter(y => y !== tag.name));
+                                                }}
+                                                className="hidden" 
+                                            />
+                                            <span className="text-xs font-black">{tag.name}</span>
+                                            <span className="text-[9px] font-bold opacity-70">({tag.count})</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* School / College List */}
+                        {sourceTags.schools && sourceTags.schools.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">School / College</label>
+                                <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                    {sourceTags.schools.map(tag => (
+                                        <label key={tag.name} className="flex items-center justify-between group cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg transition-colors">
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedSchools.includes(tag.name)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) setSelectedSchools(prev => [...prev, tag.name]);
+                                                        else setSelectedSchools(prev => prev.filter(s => s !== tag.name));
+                                                    }}
+                                                    className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20" 
+                                                />
+                                                <span className="text-[11px] font-bold text-slate-700 truncate max-w-[180px]" title={tag.name}>{tag.name}</span>
+                                            </div>
+                                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0">({tag.count})</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {(!sourceTags.boards?.length && !sourceTags.years?.length && !sourceTags.schools?.length) && (
+                            <div className="flex flex-col items-center justify-center py-10 opacity-50 text-center gap-2">
+                                <Search size={24} className="text-slate-400" />
+                                <p className="text-xs font-bold text-slate-500">No source tags found for the current subject.</p>
+                            </div>
+                        )}
+
+                    </div>
+                    
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+                        <button onClick={() => { setSelectedBoards([]); setSelectedYears([]); setSelectedSchools([]); }} className="px-4 py-2 bg-white text-slate-600 hover:text-rose-600 font-bold rounded-lg border border-slate-200 hover:border-rose-200 transition-colors flex items-center justify-center gap-1.5 text-xs uppercase tracking-wide">
+                            <X size={14} /> Clear
+                        </button>
+                        <button onClick={() => fetchQuestions()} className="px-6 py-2 bg-primary text-white font-bold rounded-lg border border-transparent hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5 text-xs uppercase tracking-wide shadow-sm">
+                            <CheckCircle size={14} /> Apply Filters
+                        </button>
+                    </div>
+                </div>
+
+                {/* Inline Academic Hierarchy Filters (Always active at top) */}
+                <div className="bg-white border border-slate-200 rounded-xl p-3 mt-2 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex flex-col md:flex-row items-center justify-between mb-3 border-b border-slate-100 pb-2 gap-3">
+                        <div className="relative w-full md:w-[400px] shrink-0 z-20">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/50" size={14} />
+                            <input
+                                type="text"
+                                value={metadataSearchTerm}
+                                onChange={(e) => {
+                                    setMetadataSearchTerm(e.target.value);
+                                    setShowSuggestions(true);
+                                }}
+                                onFocus={() => { 
+                                    if (!metadataSearchTerm) setMetadataSearchTerm(' ');
+                                    setShowSuggestions(true);
+                                }}
+                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                                placeholder="Need suggestion? Type subject, chapter or topic name..."
+                                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold text-slate-700 placeholder:text-slate-400 placeholder:font-medium shadow-sm"
+                            />
+                            {showSuggestions && metadataSuggestions.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-[300px] overflow-y-auto custom-scrollbar">
+                                    {metadataSuggestions.map((s, idx) => (
+                                        <div
+                                            key={idx}
+                                            onClick={() => handleSelectSuggestion(s)}
+                                            className="px-3 py-2 border-b border-slate-50 last:border-0 hover:bg-indigo-50 cursor-pointer flex flex-col gap-0.5 transition-colors"
+                                        >
+                                            <span className="text-xs font-bold text-slate-700">{s.name}</span>
+                                            <span className="text-[9px] font-black text-primary/70 uppercase tracking-wider">{s.type}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Language</label>
-                                <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-50">
-                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual') || user.instituteMedium.includes(',')) && <option value="ALL">সব ভার্সন</option>}
-                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
-                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
-                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
-                                </select>
-                            </div>
+                        <button onClick={resetFilters} className="text-[10px] font-bold text-rose-500 hover:bg-rose-50 px-3 py-1.5 rounded-lg border border-transparent hover:border-rose-200 transition-colors flex items-center gap-1.5 shrink-0">
+                            <X size={14} /> Reset Filters
+                        </button>
+                    </div>
 
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Level</label>
-                                <select value={selectedLevelId} onChange={(e) => setSelectedLevelId(e.target.value)} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
-                                    <option value="">সব স্তর</option>
-                                    {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                                </select>
-                            </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Language</label>
+                            <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-50">
+                                {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual') || user.instituteMedium.includes(',')) && <option value="ALL">সব ভার্সন</option>}
+                                {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
+                                {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
+                                {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
+                            </select>
+                        </div>
 
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Stream</label>
-                                <select value={selectedStreamId} onChange={(e) => setSelectedStreamId(e.target.value)} disabled={!selectedLevelId} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                                    <option value="">{selectedLevelId ? "সব বিভাগ" : "← Select Level"}</option>
-                                    {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                            </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Level</label>
+                            <select value={selectedLevelId} onChange={(e) => setSelectedLevelId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                                <option value="">সব স্তর</option>
+                                {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                            </select>
+                        </div>
 
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Class</label>
-                                <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} disabled={!selectedStreamId} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                                    <option value="">{selectedStreamId ? "সব শ্রেণি" : "← Select Stream"}</option>
-                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-                            </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Stream</label>
+                            <select value={selectedStreamId} onChange={(e) => setSelectedStreamId(e.target.value)} disabled={!selectedLevelId} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                <option value="">{selectedLevelId ? "সব বিভাগ" : "← Level"}</option>
+                                {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                        </div>
 
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Subject</label>
-                                <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} disabled={!selectedClassId} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                                    <option value="">{selectedClassId ? "সব বিষয়" : "← Select Class"}</option>
-                                    {subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
-                                </select>
-                            </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Class</label>
+                            <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} disabled={!selectedStreamId} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                <option value="">{selectedStreamId ? "সব শ্রেণি" : "← Stream"}</option>
+                                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
 
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Chapter</label>
-                                <select value={selectedChapterId} onChange={(e) => setSelectedChapterId(e.target.value)} disabled={!selectedSubjectId} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                                    <option value="">{selectedSubjectId ? "সব অধ্যায়" : "← Select Subject"}</option>
-                                    {chapters.map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
-                                </select>
-                            </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Subject</label>
+                            <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} disabled={!selectedClassId} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                <option value="">{selectedClassId ? "সব বিষয়" : "← Class"}</option>
+                                {subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
+                            </select>
+                        </div>
 
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Topic</label>
-                                <select value={selectedTopicId} onChange={(e) => setSelectedTopicId(e.target.value)} disabled={!selectedChapterId} className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-[12px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                                    <option value="">{selectedChapterId ? "সব টপিক" : "← Select Chapter"}</option>
-                                    {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                </select>
-                            </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Chapter</label>
+                            <select value={selectedChapterId} onChange={(e) => setSelectedChapterId(e.target.value)} disabled={!selectedSubjectId} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                <option value="">{selectedSubjectId ? "সব অধ্যায়" : "← Subject"}</option>
+                                {chapters.map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
+                            </select>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Topic</label>
+                            <select value={selectedTopicId} onChange={(e) => setSelectedTopicId(e.target.value)} disabled={!selectedChapterId} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                                <option value="">{selectedChapterId ? "সব টপিক" : "← Chapter"}</option>
+                                {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
                         </div>
                     </div>
-                )}
+                </div>
 
                 {/* Third Row: Formats, Check All & Bulk Actions */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pt-2 border-t border-slate-100">

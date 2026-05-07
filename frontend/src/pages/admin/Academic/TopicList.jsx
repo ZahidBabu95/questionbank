@@ -4,6 +4,7 @@ import academicService from '../../../services/academicService';
 
 const TopicList = () => {
     const [topics, setTopics] = useState([]);
+    const [selectedTopics, setSelectedTopics] = useState([]);
 
     // Dropdown Data
     const [classes, setClasses] = useState([]);
@@ -36,6 +37,7 @@ const TopicList = () => {
             setChapters([]);
             setSelectedChapter('');
         }
+        setSelectedTopics([]);
     }, [selectedClass]);
 
     useEffect(() => {
@@ -45,6 +47,7 @@ const TopicList = () => {
             setChapters([]);
             setSelectedChapter('');
         }
+        setSelectedTopics([]);
     }, [selectedSubject]);
 
     useEffect(() => {
@@ -53,6 +56,7 @@ const TopicList = () => {
         } else {
             if (!selectedChapter) fetchTopics();
         }
+        setSelectedTopics([]);
     }, [selectedChapter]);
 
     // Modal Logic (Cascading)
@@ -146,10 +150,47 @@ const TopicList = () => {
         if (!window.confirm("Delete this topic?")) return;
         try {
             await academicService.deleteTopic(id);
+            setSelectedTopics(prev => prev.filter(tId => tId !== id));
             if (selectedChapter) fetchTopicsByChapter(selectedChapter);
             else fetchTopics();
         } catch (error) {
             console.error("Failed to delete", error);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedTopics.length === 0) return;
+        if (!window.confirm(`Delete ${selectedTopics.length} selected topic(s)?`)) return;
+        
+        try {
+            // Delete multiple topics sequentially to avoid database deadlocks during force nullification
+            for (const id of selectedTopics) {
+                await academicService.deleteTopic(id);
+            }
+            setSelectedTopics([]);
+            if (selectedChapter) fetchTopicsByChapter(selectedChapter);
+            else fetchTopics();
+        } catch (error) {
+            console.error("Failed to bulk delete", error);
+            alert("Failed to delete some topics. They might be in use.");
+            if (selectedChapter) fetchTopicsByChapter(selectedChapter);
+            else fetchTopics();
+        }
+    };
+
+    const handleSelectAll = (e) => {
+        if (e.target.checked) {
+            setSelectedTopics(topics.map(t => t.id));
+        } else {
+            setSelectedTopics([]);
+        }
+    };
+
+    const handleSelectOne = (e, id) => {
+        if (e.target.checked) {
+            setSelectedTopics(prev => [...prev, id]);
+        } else {
+            setSelectedTopics(prev => prev.filter(tId => tId !== id));
         }
     };
 
@@ -202,34 +243,61 @@ const TopicList = () => {
                     </select>
                 </div>
 
-                <button
-                    onClick={() => { setFormData({ name: '', academicClassId: selectedClass, subjectId: selectedSubject, chapterId: selectedChapter }); setShowModal(true); }}
-                    className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 flex items-center gap-2 transition-all active:scale-95 shadow-sm"
-                    disabled={!selectedChapter}
-                    title={!selectedChapter ? "Select a chapter first" : "Add Topic"}
-                >
-                    <Plus size={18} /> Add Topic
-                </button>
+                <div className="flex items-center gap-3">
+                    {selectedTopics.length > 0 && (
+                        <button
+                            onClick={handleBulkDelete}
+                            className="bg-rose-100 text-rose-700 px-4 py-2 rounded-lg hover:bg-rose-200 transition-colors flex items-center gap-2 font-medium text-sm shadow-sm"
+                        >
+                            <Trash2 size={16} /> Delete Selected ({selectedTopics.length})
+                        </button>
+                    )}
+                    <button
+                        onClick={() => { setFormData({ name: '', academicClassId: selectedClass, subjectId: selectedSubject, chapterId: selectedChapter }); setShowModal(true); }}
+                        className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 flex items-center gap-2 transition-all active:scale-95 shadow-sm"
+                        disabled={!selectedChapter}
+                        title={!selectedChapter ? "Select a chapter first" : "Add Topic"}
+                    >
+                        <Plus size={18} /> Add Topic
+                    </button>
+                </div>
             </div>
 
             <div className="overflow-hidden rounded-lg border border-slate-200">
                 <table className="w-full text-left border-collapse">
                     <thead className="bg-slate-50">
                         <tr>
+                            <th className="w-12 px-6 py-3 border-b border-slate-200 text-left">
+                                <input 
+                                    type="checkbox" 
+                                    className="rounded border-slate-300 text-primary focus:ring-primary/20 w-4 h-4 cursor-pointer"
+                                    checked={topics.length > 0 && selectedTopics.length === topics.length}
+                                    onChange={handleSelectAll}
+                                    disabled={topics.length === 0}
+                                />
+                            </th>
                             <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Topic Name</th>
                             <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
                         {loading ? (
-                            <tr><td colSpan="2" className="p-8 text-center text-slate-500">Loading topics...</td></tr>
+                            <tr><td colSpan="3" className="p-8 text-center text-slate-500">Loading topics...</td></tr>
                         ) : !selectedChapter ? (
-                            <tr><td colSpan="2" className="p-8 text-center text-slate-500">Please select a class, subject, and chapter to view topics.</td></tr>
+                            <tr><td colSpan="3" className="p-8 text-center text-slate-500">Please select a class, subject, and chapter to view topics.</td></tr>
                         ) : topics.length === 0 ? (
-                            <tr><td colSpan="2" className="p-8 text-center text-slate-500">No topics found for this chapter.</td></tr>
+                            <tr><td colSpan="3" className="p-8 text-center text-slate-500">No topics found for this chapter.</td></tr>
                         ) : (
                             topics.map(topic => (
                                 <tr key={topic.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-6 py-3">
+                                        <input 
+                                            type="checkbox" 
+                                            className="rounded border-slate-300 text-primary focus:ring-primary/20 w-4 h-4 cursor-pointer"
+                                            checked={selectedTopics.includes(topic.id)}
+                                            onChange={(e) => handleSelectOne(e, topic.id)}
+                                        />
+                                    </td>
                                     <td className="px-6 py-3 text-sm font-medium text-slate-800">{topic.name}</td>
                                     <td className="px-6 py-3 text-right space-x-2">
                                         <button

@@ -27,7 +27,10 @@ public class QuestionSpecification {
             String className,
             String subjectName,
             List<UUID> allowedSubjectIds,
-            String globalTenantId) {
+            String globalTenantId,
+            String sourceBoards,
+            String sourceYears,
+            String sourceSchools) {
 
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -59,7 +62,7 @@ public class QuestionSpecification {
             predicates.add(cb.equal(root.get("deleted"), false));
 
             // Optional FETCH to avoid N+1 for academic hierarchy details normally needed in lists
-            if (Long.class != query.getResultType()) { // don't fetch on count query
+            if (Long.class != query.getResultType() && Object[].class != query.getResultType()) { // don't fetch on count or aggregation query
                 jakarta.persistence.criteria.Fetch<Object, Object> csFetch = root.fetch("classSubject", JoinType.LEFT);
                 csFetch.fetch("subject", JoinType.LEFT);
                 
@@ -131,6 +134,32 @@ public class QuestionSpecification {
             }
             if (StringUtils.hasText(subjectName)) {
                 predicates.add(cb.equal(root.get("classSubject").get("subject").get("name"), subjectName));
+            }
+
+            // Source Filters (Board, Year, School)
+            if (StringUtils.hasText(sourceBoards) || StringUtils.hasText(sourceYears) || StringUtils.hasText(sourceSchools)) {
+                jakarta.persistence.criteria.Join<Object, Object> sourceJoin = root.join("sources", JoinType.INNER);
+                
+                if (StringUtils.hasText(sourceBoards)) {
+                    List<String> boards = java.util.Arrays.asList(sourceBoards.split(","));
+                    predicates.add(sourceJoin.get("organizationName").in(boards));
+                }
+                
+                if (StringUtils.hasText(sourceYears)) {
+                    List<Integer> years = java.util.Arrays.stream(sourceYears.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .map(Integer::parseInt)
+                        .collect(java.util.stream.Collectors.toList());
+                    if (!years.isEmpty()) {
+                        predicates.add(sourceJoin.get("examYear").in(years));
+                    }
+                }
+                
+                if (StringUtils.hasText(sourceSchools)) {
+                    String likePattern = "%" + sourceSchools.toLowerCase() + "%";
+                    predicates.add(cb.like(cb.lower(sourceJoin.get("organizationName")), likePattern));
+                }
             }
 
             query.distinct(true);

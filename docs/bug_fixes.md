@@ -13,6 +13,12 @@ This document tracks identified bugs, their root causes, and how they were solve
 ## ✅ SOLVED BUGS
 *(Move bugs here after they are fixed and briefly describe the solution.)*
 
+### 16. Question Bank Metadata Filtering & Source Management Sync
+**Location:** `QuestionServiceImpl.java`, `QuestionSpecification.java`, `QuestionSourceManagementController.java`, `SourceManagement.jsx`
+**Description:** The Question Bank dashboard experienced a server-side compilation error (`HashMap cannot be resolved` and parameter mismatch) during the advanced filtering of Questions. The UI also lacked a way to resolve duplicate/similar Exam Sources (e.g. "দিনাজপুর বোর্ড" vs "দি.বো.").
+**Root Cause:** The `filterQuestions` method signature in `QuestionSpecification` was updated to accept 3 new filters (`sourceBoards`, `sourceYears`, `sourceSchools`), but `getOverviewStats` inside `QuestionServiceImpl` lacked these arguments, causing the `Unresolved compilation problem` crash.
+**Solution Applied:** Fixed the compilation errors by adding the missing arguments and correcting `HashMap` imports. Added a completely new `SourceManagement.jsx` module equipped with TailwindCSS and `lucide-react` under the "Repository" tab to summarize, rename, and merge question sources (e.g., dynamically resolving source duplication). Secured the backend with `@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")`.
+
 ### 15. Question Bank CQ Formatting & Language-Aware Option Rendering
 **Location:** `QuestionList.jsx`, `CQPartsEditor.jsx`, `RevisePanel.jsx`, and `KnowledgeHubServiceImpl.java`
 **Description:** CQ questions were showing ugly boxes with leftover markers (like "ক.", "(ক)") and multiple-choice options were strictly showing "A, B, C, D" regardless of the language of the subject. 

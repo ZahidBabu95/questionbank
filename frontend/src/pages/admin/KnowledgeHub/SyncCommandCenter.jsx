@@ -41,9 +41,9 @@ const TopicExtractConfigModal = ({ book, indices, pages, onClose, onStartAll, on
             if (targetIds.length === 0) return alert('দয়া করে অন্তত একটি অধ্যায় নির্বাচন করুন।');
         }
 
-        const hasAnyGoldenData = targetIds.some(id => (chapterStats[id]?.proofread + chapterStats[id]?.synced) > 0);
-        if (!hasAnyGoldenData) {
-            const proceed = window.confirm('আপনি এমন অধ্যায় নির্বাচন করেছেন যেখানে কোনো গোল্ডেন ডেটা (PROOFREAD) নেই। ভেক্টর সিঙ্ক শুধু গোল্ডেন ডেটা নিয়ে কাজ করে। আপনি কি নিশ্চিত যে আপনি চালিয়ে যেতে চান?');
+        const hasAnyProofreadData = targetIds.some(id => chapterStats[id]?.proofread > 0);
+        if (!hasAnyProofreadData) {
+            const proceed = window.confirm('আপনি এমন অধ্যায় নির্বাচন করেছেন যেখানে নতুন কোনো গোল্ডেন ডেটা (PROOFREAD) নেই। যে ডাটা গুলো আগে থেকেই সিঙ্ক করা (GOLDEN_VECTORIZED) আছে তা স্কিপ করা হবে। আপনি কি নিশ্চিত?');
             if (!proceed) return;
         }
 
@@ -518,6 +518,79 @@ const PreviewTopicsModal = ({ indexId, indexName, onClose }) => {
     );
 };
 
+/* ═══════════════════ Draft Chunk Editor ═══════════════════ */
+const DraftChunkEditor = ({ chunk, onSaved }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [text, setText] = useState(chunk.chunkText);
+    const [saving, setSaving] = useState(false);
+
+    const handleSave = async () => {
+        if (!text.trim() || text.trim() === chunk.chunkText) {
+            setIsEditing(false);
+            return;
+        }
+        try {
+            setSaving(true);
+            await axios.put(`/v1/knowledge-hub/chunks/${chunk.id}`, { chunkText: text });
+            onSaved(text);
+            setIsEditing(false);
+        } catch (err) {
+            alert('Failed to save chunk: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!isEditing) {
+        return (
+            <div className="relative group/chunk">
+                <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                        {chunk.chunkText}
+                    </ReactMarkdown>
+                </div>
+                <button 
+                    onClick={() => setIsEditing(true)}
+                    className="absolute top-0 right-0 p-1.5 bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded opacity-0 group-hover/chunk:opacity-100 transition-all shadow-sm"
+                    title="Edit Chunk"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-full relative">
+            <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                className="w-full min-h-[300px] bg-slate-950 text-slate-300 text-sm p-4 rounded border border-indigo-500/50 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none custom-scrollbar font-mono resize-y"
+            />
+            <div className="absolute top-2 right-2 flex items-center gap-1">
+                <button 
+                    onClick={handleSave} 
+                    disabled={saving}
+                    className="p-1.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded shadow-sm disabled:opacity-50"
+                    title="Save Changes"
+                >
+                    {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                </button>
+                <button 
+                    onClick={() => {
+                        setText(chunk.chunkText);
+                        setIsEditing(false);
+                    }}
+                    className="p-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded shadow-sm"
+                    title="Cancel"
+                >
+                    <X size={14} />
+                </button>
+            </div>
+        </div>
+    );
+};
+
 /* ═══════════════════ MAIN COMPONENT ═══════════════════ */
 const SyncCommandCenter = () => {
     const { bookId } = useParams();
@@ -764,9 +837,9 @@ const SyncCommandCenter = () => {
     const getStatusBadge = (status) => {
         switch (status) {
             case 'GOLDEN_VECTORIZED':
-                return <span className="absolute top-1 right-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10 flex items-center gap-0.5"><Sparkles size={8}/> PRE-VECTOR</span>;
+                return <span className="absolute top-1 right-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10 flex items-center gap-0.5"><Sparkles size={8}/> VECTORIZED</span>;
             case 'PROOFREAD':
-                return <span className="absolute top-1 right-1 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10">GOLDEN</span>;
+                return <span className="absolute top-1 right-1 bg-indigo-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10">PRE-VECTOR</span>;
             case 'EXTRACTED':
             case 'REVIEWED':
                 return <span className="absolute top-1 right-1 bg-blue-500 text-white text-[8px] font-black px-1.5 py-0.5 shadow-sm rounded-sm z-10">DRAFT</span>;
@@ -1128,13 +1201,21 @@ const SyncCommandCenter = () => {
                             </div>
                             
                             <div className="flex-1 overflow-y-auto p-6 bg-slate-900 text-slate-300 custom-scrollbar relative">
-                                {loadingPreview ? (
+                                {loadingPreview && chapterTopics.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500">
                                         <div className="w-8 h-8 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
                                         <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Querying Pinecone...</span>
                                     </div>
                                 ) : (
-                                    <div className="space-y-6">
+                                    <div className="space-y-6 relative">
+                                        {loadingPreview && (
+                                            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[1px] z-20 flex items-center justify-center rounded-xl">
+                                                <div className="bg-slate-800 p-3 rounded-lg shadow-xl border border-slate-700 flex items-center gap-3">
+                                                    <Loader2 className="animate-spin text-indigo-400" size={20} />
+                                                    <span className="text-xs font-bold text-slate-300">Refreshing...</span>
+                                                </div>
+                                            </div>
+                                        )}
                                         {chapterTopics.map((topic, index) => (
                                             <div key={topic.id} className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-sm relative group">
                                                 <div className="bg-slate-800/80 px-4 py-3 flex items-center justify-between border-b border-slate-700/50 sticky top-0 z-10">
@@ -1171,11 +1252,7 @@ const SyncCommandCenter = () => {
                                                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Chunk {cidx + 1}</span>
                                                                 <span className="text-[10px] font-bold bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full">{chunk.tokenCount} tokens</span>
                                                             </div>
-                                                            <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800">
-                                                                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                                                                    {chunk.chunkText}
-                                                                </ReactMarkdown>
-                                                            </div>
+                                                            <DraftChunkEditor chunk={chunk} onSaved={() => handleSelectChapter(selectedChapter, true)} />
                                                         </div>
                                                     ))}
                                                 </div>

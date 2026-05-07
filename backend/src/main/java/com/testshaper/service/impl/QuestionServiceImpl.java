@@ -56,6 +56,13 @@ public class QuestionServiceImpl implements QuestionService {
         // Save Question
         question.setType(Question.QuestionType.MCQ);
         question.setStatus(Question.QuestionStatus.PENDING); // Default status
+        
+        if (question.getSources() != null) {
+            for (com.testshaper.entity.QuestionSource source : question.getSources()) {
+                source.setQuestion(question);
+            }
+        }
+        
         Question savedQuestion = questionRepository.save(question);
 
         // Save Options
@@ -150,6 +157,12 @@ public class QuestionServiceImpl implements QuestionService {
                 question.setStatus(Question.QuestionStatus.PENDING); // Default status
             }
 
+            if (question.getSources() != null) {
+                for (com.testshaper.entity.QuestionSource source : question.getSources()) {
+                    source.setQuestion(question);
+                }
+            }
+
             validQuestions.add(question);
 
             for (QuestionOption option : options) {
@@ -170,6 +183,11 @@ public class QuestionServiceImpl implements QuestionService {
     public Question createShortQuestion(Question question) {
         question.setType(Question.QuestionType.SHORT);
         question.setStatus(Question.QuestionStatus.PENDING);
+        if (question.getSources() != null) {
+            for (com.testshaper.entity.QuestionSource source : question.getSources()) {
+                source.setQuestion(question);
+            }
+        }
         return questionRepository.save(question);
     }
 
@@ -178,6 +196,11 @@ public class QuestionServiceImpl implements QuestionService {
     public Question createCQ(Question question) {
         question.setType(Question.QuestionType.CQ);
         question.setStatus(Question.QuestionStatus.PENDING);
+        if (question.getSources() != null) {
+            for (com.testshaper.entity.QuestionSource source : question.getSources()) {
+                source.setQuestion(question);
+            }
+        }
         // Default marks for CQ is usually 10, but client can send it.
         // If questionText holds the formatted Stem+Questions, we just save it.
         return questionRepository.save(question);
@@ -243,7 +266,10 @@ public class QuestionServiceImpl implements QuestionService {
                 filters.get("className"),
                 filters.get("subjectName"),
                 allowedSubjectIds,
-                globalTenantId
+                globalTenantId,
+                filters.get("sourceBoards"),
+                filters.get("sourceYears"),
+                filters.get("sourceSchools")
             );
 
         return questionRepository.findAll(spec, pageable);
@@ -288,10 +314,73 @@ public class QuestionServiceImpl implements QuestionService {
                 filters.get("className"),
                 filters.get("subjectName"),
                 allowedSubjectIds,
-                globalTenantId
+                globalTenantId,
+                filters.get("sourceBoards"),
+                filters.get("sourceYears"),
+                filters.get("sourceSchools")
             );
 
         return questionRepository.findAll(spec).stream().map(Question::getId).collect(java.util.stream.Collectors.toList());
+    }
+
+    @Override
+    public java.util.Map<String, Object> getSourceTags(java.util.Map<String, String> filters) {
+        List<UUID> ids = getAllQuestionIds(filters);
+        if (ids == null || ids.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+
+        java.util.Map<String, Integer> boardCounts = new java.util.HashMap<>();
+        java.util.Map<String, Integer> yearCounts = new java.util.HashMap<>();
+        java.util.Map<String, Integer> schoolCounts = new java.util.HashMap<>();
+
+        int batchSize = 1000;
+        for (int i = 0; i < ids.size(); i += batchSize) {
+            List<UUID> batch = ids.subList(i, Math.min(i + batchSize, ids.size()));
+
+            String jpql = "SELECT qs.organizationName, qs.examYear, qs.sourceType, COUNT(DISTINCT qs.question.id) " +
+                          "FROM QuestionSource qs WHERE qs.question.id IN :batch " +
+                          "GROUP BY qs.organizationName, qs.examYear, qs.sourceType";
+            
+            List<Object[]> rows = entityManager.createQuery(jpql, Object[].class)
+                    .setParameter("batch", batch)
+                    .getResultList();
+
+            for (Object[] row : rows) {
+                String orgName = (String) row[0];
+                Integer year = (Integer) row[1];
+                com.testshaper.entity.QuestionSource.SourceType type = (com.testshaper.entity.QuestionSource.SourceType) row[2];
+                Long count = (Long) row[3];
+                int c = count != null ? count.intValue() : 0;
+
+                if (orgName != null && !orgName.isEmpty()) {
+                    if (type == com.testshaper.entity.QuestionSource.SourceType.BOARD_EXAM || type == com.testshaper.entity.QuestionSource.SourceType.UNIVERSITY_ADMISSION) {
+                        boardCounts.put(orgName, boardCounts.getOrDefault(orgName, 0) + c);
+                    } else {
+                        schoolCounts.put(orgName, schoolCounts.getOrDefault(orgName, 0) + c);
+                    }
+                }
+                if (year != null) {
+                    yearCounts.put(String.valueOf(year), yearCounts.getOrDefault(String.valueOf(year), 0) + c);
+                }
+            }
+        }
+
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("boards", boardCounts.entrySet().stream()
+                .map(e -> java.util.Map.of("name", e.getKey(), "count", e.getValue()))
+                .sorted((a, b) -> Integer.compare((Integer)b.get("count"), (Integer)a.get("count")))
+                .collect(java.util.stream.Collectors.toList()));
+        result.put("years", yearCounts.entrySet().stream()
+                .map(e -> java.util.Map.of("name", e.getKey(), "count", e.getValue()))
+                .sorted((a, b) -> Integer.compare((Integer)b.get("count"), (Integer)a.get("count")))
+                .collect(java.util.stream.Collectors.toList()));
+        result.put("schools", schoolCounts.entrySet().stream()
+                .map(e -> java.util.Map.of("name", e.getKey(), "count", e.getValue()))
+                .sorted((a, b) -> Integer.compare((Integer)b.get("count"), (Integer)a.get("count")))
+                .collect(java.util.stream.Collectors.toList()));
+
+        return result;
     }
 
     @Override
@@ -338,7 +427,10 @@ public class QuestionServiceImpl implements QuestionService {
                 filters != null ? filters.get("className") : null,
                 filters != null ? filters.get("subjectName") : null,
                 allowedSubjectIds,
-                globalTenantId
+                globalTenantId,
+                filters != null ? filters.get("sourceBoards") : null,
+                filters != null ? filters.get("sourceYears") : null,
+                filters != null ? filters.get("sourceSchools") : null
             );
 
         totalQuestions = questionRepository.count(baseSpec);
@@ -469,6 +561,16 @@ public class QuestionServiceImpl implements QuestionService {
 
         // Return status to PENDING on edit
         question.setStatus(Question.QuestionStatus.PENDING);
+
+        // Handle Sources
+        if (questionDetails.getSources() != null) {
+            // clear existing sources (due to orphanRemoval this deletes them)
+            question.getSources().clear();
+            for (com.testshaper.entity.QuestionSource source : questionDetails.getSources()) {
+                source.setQuestion(question);
+                question.getSources().add(source);
+            }
+        }
 
         Question savedQuestion = questionRepository.save(question);
 

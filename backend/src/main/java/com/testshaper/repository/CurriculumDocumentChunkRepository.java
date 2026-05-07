@@ -28,10 +28,12 @@ public interface CurriculumDocumentChunkRepository extends JpaRepository<Curricu
     org.springframework.data.domain.Page<CurriculumDocumentChunk> findBySourceBookIndexIdIn(List<UUID> indexIds, org.springframework.data.domain.Pageable pageable);
     
     @org.springframework.transaction.annotation.Transactional
-    @org.springframework.data.jpa.repository.Modifying
-    void deleteByDocumentId(UUID documentId);
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("DELETE FROM CurriculumDocumentChunk c WHERE c.document.id = :documentId")
+    void deleteByDocumentId(@org.springframework.data.repository.query.Param("documentId") UUID documentId);
     
     @org.springframework.transaction.annotation.Transactional
-    @org.springframework.data.jpa.repository.Modifying
-    void deleteBySourceBookIndexId(UUID sourceBookIndexId);
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("DELETE FROM CurriculumDocumentChunk c WHERE c.sourceBookIndex.id = :sourceBookIndexId")
+    void deleteBySourceBookIndexId(@org.springframework.data.repository.query.Param("sourceBookIndexId") UUID sourceBookIndexId);
 }

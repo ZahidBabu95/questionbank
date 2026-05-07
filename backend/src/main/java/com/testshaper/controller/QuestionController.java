@@ -168,6 +168,12 @@ public class QuestionController {
         return ResponseEntity.ok(questionService.getAllQuestionIds(filters));
     }
 
+    @GetMapping("/source-tags")
+    public ResponseEntity<Map<String, Object>> getSourceTags(@RequestParam(required = false) Map<String, String> filters) {
+        if (filters == null) filters = new java.util.HashMap<>();
+        return ResponseEntity.ok(questionService.getSourceTags(filters));
+    }
+
     @GetMapping("/overview-stats")
     public ResponseEntity<Map<String, Object>> getOverviewStats(@RequestParam(required = false) Map<String, String> filters) {
         if (filters == null) filters = new java.util.HashMap<>();
@@ -214,7 +220,7 @@ public class QuestionController {
         return ResponseEntity.noContent().build();
     }
 
-    @DeleteMapping("/bulk")
+    @PostMapping("/bulk/delete")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('QUESTION_BANK_REPOSITORY_ALL_QUESTIONS_DELETE', 'QUESTION_BANK_REPOSITORY_PENDING_DELETE', 'QUESTION_BANK_REPOSITORY_APPROVED_DELETE', 'QUESTION_BANK_REPOSITORY_REJECTED_DELETE')")
     public ResponseEntity<Void> deleteQuestionsBulk(@RequestBody List<UUID> ids) {
         questionService.deleteQuestionsBulk(ids);

@@ -8,6 +8,7 @@ import com.testshaper.repository.*;
 import com.testshaper.service.AIQuestionService;
 import com.testshaper.service.TopicExtractorService;
 import com.testshaper.service.VectorDatabaseService;
+import com.testshaper.service.AcademicService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -39,6 +40,8 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
     private final ObjectMapper objectMapper;
     private final com.testshaper.repository.AiTopicExtractionJobRepository aiTopicExtractionJobRepository;
     private final com.testshaper.repository.AiKnowledgeBaseRepository aiKnowledgeBaseRepository;
+    private final com.testshaper.repository.ChapterRepository chapterRepository;
+    private final AcademicService academicService;
     private final ThreadPoolTaskExecutor topicExecutor = new ThreadPoolTaskExecutor();
     private final ThreadPoolTaskExecutor batchExecutor = new ThreadPoolTaskExecutor();
 
@@ -81,6 +84,7 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
         
         // If there are no batches to process, just mark it as completed.
         if (totalBatches == 0) {
+            job.setTotalChaptersToProcess(0);
             job.setStatus(AiTopicExtractionJob.JobStatus.COMPLETED);
             aiTopicExtractionJobRepository.save(job);
             log.info("Completed Bulk Topic Extraction Job immediately (no new data to process): {}", jobId);
@@ -125,16 +129,19 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
     public void extractAndMapTopicsForChapter(UUID sourceBookIndexId, UUID jobId) {
         log.info("Starting Semantic Chunking & Topic Mapping for Index: {}", sourceBookIndexId);
         
-        SourceBookIndex index = sourceBookIndexRepository.findById(sourceBookIndexId).orElse(null);
-        if (index == null) {
+        IndexMetadata metadata = getSelf().getIndexMetadata(sourceBookIndexId);
+        if (metadata == null) {
             log.error("Could not find SourceBookIndex {}", sourceBookIndexId);
             return;
         }
 
-        Chapter mappedChapter = index.getMappedChapter();
-        if (mappedChapter == null) {
-            log.warn("SourceBookIndex '{}' is not mapped to any Chapter in the hierarchy. Topics will be standalone.", index.getIndexName());
+        UUID mappedChapterId = metadata.mappedChapterId();
+        if (mappedChapterId == null) {
+            log.warn("SourceBookIndex '{}' is not mapped to any Chapter in the hierarchy. Topics will be standalone.", metadata.indexName());
         }
+        
+        String indexName = metadata.indexName();
+        boolean isTextbook = metadata.isTextbook();
         
         // 1.5 IDEMPOTENCY (Removed for Retry Logic): Do NOT cleanup old vectors and chunks here.
         // We only want to process failed (PROOFREAD) pages and append them, without deleting already successful (GOLDEN_VECTORIZED) ones.
@@ -148,7 +155,7 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 .toList();
 
         if (pages.isEmpty()) {
-            log.info("No PROOFREAD pages found for Index {}. Skipping.", index.getIndexName());
+            log.info("No PROOFREAD pages found for Index {}. Skipping.", indexName);
             return;
         }
 
@@ -185,14 +192,14 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
 
                 boolean success = false;
                 try {
-                    log.info("Processing Batch {}/{} for Index {} (Concurrent)", batchIndex + 1, totalBatches, index.getIndexName());
-                    getSelf().processBatch(index, mappedChapter, batch, batchIndex);
+                    log.info("Processing Batch {}/{} for Index {} (Concurrent)", batchIndex + 1, totalBatches, indexName);
+                    getSelf().processBatch(sourceBookIndexId, mappedChapterId, batch, batchIndex, isTextbook);
                     
                     // Mark only these successfully processed pages as GOLDEN_VECTORIZED
                     getSelf().updatePageStatus(batch);
                     success = true;
                 } catch (Exception e) {
-                    log.error("Failed to process batch {}/{} for Index {}. Error: {}", batchIndex + 1, totalBatches, index.getIndexName(), e.getMessage());
+                    log.error("Failed to process batch {}/{} for Index {}. Error: {}", batchIndex + 1, totalBatches, indexName, e.getMessage());
                     // By not updating status, these pages remain PROOFREAD, allowing them to be retried later
                 }
                 
@@ -212,7 +219,7 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
         
         try {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-            log.info("Finished topic chunk extraction for all batches of Index {}", index.getIndexName());
+            log.info("Finished topic chunk extraction for all batches of Index {}", indexName);
         } catch (Exception e) {
             log.error("Parallel batch execution encountered errors: {}", e.getMessage());
         } finally {
@@ -248,7 +255,19 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
     }
 
     @Override
-    public void processBatch(SourceBookIndex index, Chapter mappedChapter, List<KnowledgePage> batchPages, int batchIndex) {
+    @Transactional(readOnly = true)
+    public IndexMetadata getIndexMetadata(UUID sourceBookIndexId) {
+        SourceBookIndex index = sourceBookIndexRepository.findById(sourceBookIndexId).orElse(null);
+        if (index == null) return null;
+        
+        UUID mappedChapterId = index.getMappedChapter() != null ? index.getMappedChapter().getId() : null;
+        boolean isTextbook = index.getSourceBook() == null || index.getSourceBook().getBookType() == SourceBookMaster.BookType.TEXTBOOK;
+        
+        return new IndexMetadata(mappedChapterId, index.getIndexName(), isTextbook);
+    }
+
+    @Override
+    public void processBatch(UUID sourceBookIndexId, UUID mappedChapterId, List<KnowledgePage> batchPages, int batchIndex, boolean isTextbook) {
         StringBuilder chapterContext = new StringBuilder();
         for(KnowledgePage page : batchPages) {
             String content = page.getGoldenMarkdown() != null ? page.getGoldenMarkdown() : page.getExtractedMarkdown();
@@ -261,20 +280,46 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
 
         if (chapterContext.length() < 10) return;
 
-        String prompt = "You are an expert curriculum structuring assistant. Your task is to process the following Golden Markdown text of a chapter from a textbook/guidebook. " +
-            "The text includes multiple sub-topics, theories, or mathematical derivations. Split the text sequentially into logical Topic chunks.\n\n" +
-            "CRITICAL INSTRUCTIONS:\n" +
-            "1. Output ONLY a valid JSON Array. Do not wrap in ```json markers. Pure JSON only.\n" +
-            "2. Preserve all image tags EXACTLY as they appear (e.g. ![alt](url)). Never delete an image link.\n" +
-            "3. If the text is from a question bank or guidebook, preserve meta texts such as [Dhaka Board 2023] or question references.\n" +
-            "4. Make sure NO meaningful text is thrown away. Your output chunks combined should theoretically contain 100% of the context.\n" +
-            "5. CRITICAL JSON ESCAPING: You MUST properly escape all double quotes (\\\") inside the `markdownContent` string values so that the JSON output is completely valid and parseable.\n\n" +
-            "SCHEMA FORMAT:\n[\n" +
-            "  {\n" +
-            "    \"topicName\": \"Heading or Name of the Sub-topic (Max 10 words)\",\n" +
-            "    \"markdownContent\": \"Full markdown content for this topic, preserving all original text, equations and images.\"\n" +
-            "  }\n]\n\n" +
-            "CHAPTER CONTEXT:\n" + chapterContext.toString();
+        String prompt;
+        if (isTextbook) {
+            prompt = "You are an expert curriculum structuring assistant. Your task is to process the following Golden Markdown text of a chapter from a textbook. " +
+                "The text includes multiple sub-topics, theories, or mathematical derivations. Split the text sequentially into logical Topic chunks.\n\n" +
+                "CRITICAL INSTRUCTIONS:\n" +
+                "1. Output ONLY a valid JSON Array. Do not wrap in ```json markers. Pure JSON only.\n" +
+                "2. Preserve all image tags EXACTLY as they appear (e.g. ![alt](url)). Never delete an image link.\n" +
+                "3. Make sure NO meaningful text is thrown away. Your output chunks combined should theoretically contain 100% of the context.\n" +
+                "4. CRITICAL JSON ESCAPING: You MUST properly escape all double quotes (\\\") inside the `markdownContent` string values.\n" +
+                "5. LANGUAGE MATCH: The `topicName` MUST be in the SAME language as the source text (e.g., if the text is Bengali, `topicName` MUST be Bengali).\n\n" +
+                "SCHEMA FORMAT:\n[\n" +
+                "  {\n" +
+                "    \"topicName\": \"Heading or Name of the Sub-topic (Max 10 words)\",\n" +
+                "    \"markdownContent\": \"Full markdown content for this topic, preserving all original text, equations and images.\",\n" +
+                "    \"metadata\": null\n" +
+                "  }\n]\n\n";
+        } else {
+            prompt = "You are an expert academic metadata extractor. Your task is to process the following Golden Markdown text of a chapter from a Guidebook or Question Bank. " +
+                "The text includes questions and answers from various board exams, school tests, or university admission tests. Split the text sequentially into logical chunks representing distinct questions or topics.\n\n" +
+                "CRITICAL INSTRUCTIONS:\n" +
+                "1. Output ONLY a valid JSON Array. Pure JSON only.\n" +
+                "2. Preserve all image tags EXACTLY as they appear (e.g. ![alt](url)). Never delete an image link.\n" +
+                "3. CRITICAL: Extract Academic Metadata (Board, School, Year) from the text (e.g., 'Dhaka Board 2023', 'Notre Dame College'). If found, output them in the 'metadata' object. If none found, return null for metadata.\n" +
+                "4. Make sure NO meaningful text is thrown away.\n" +
+                "5. CRITICAL JSON ESCAPING: You MUST properly escape all double quotes (\\\") inside the `markdownContent` string values.\n" +
+                "6. LANGUAGE MATCH: The `topicName` MUST be in the SAME language as the source text (e.g., if the text is Bengali, `topicName` MUST be Bengali).\n\n" +
+                "SCHEMA FORMAT:\n[\n" +
+                "  {\n" +
+                "    \"topicName\": \"Suggested Topic Name (Max 10 words, should relate to standard syllabus. Do NOT include board/year in this name)\",\n" +
+                "    \"markdownContent\": \"Full markdown content for this chunk.\",\n" +
+                "    \"metadata\": {\n" +
+                "       \"sourceType\": \"BOARD_EXAM\" | \"INSTITUTION_TEST\" | \"UNIVERSITY_ADMISSION\" | \"JOB_EXAM\" | \"MODEL_TEST\",\n" +
+                "       \"organizationName\": \"e.g. Dhaka Board or Notre Dame College\",\n" +
+                "       \"examYear\": 2023,\n" +
+                "       \"examName\": \"e.g. SSC or Test Exam\"\n" +
+                "    }\n" +
+                "  }\n]\n\n";
+        }
+
+        prompt += "CHAPTER CONTEXT:\n" + chapterContext.toString();
 
         try {
             String jsonResponse = aiQuestionService.generateRawCompletion(prompt, null);
@@ -301,21 +346,26 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 throw new Exception("AI returned empty or invalid JSON array");
             }
 
-            getSelf().saveTopicsAndChunks(index, mappedChapter, rootArray, batchIndex);
+            getSelf().saveTopicsAndChunks(sourceBookIndexId, mappedChapterId, rootArray, batchIndex, isTextbook);
 
         } catch (Exception e) {
-            log.error("AI Batch Extraction failed for Index {}: {}", index.getIndexName(), e.getMessage());
+            log.error("AI Batch Extraction failed for Index {}: {}", sourceBookIndexId, e.getMessage());
             throw new RuntimeException("AI Extraction failed: " + e.getMessage(), e);
         }
     }
 
     @Override
     @Transactional
-    public void saveTopicsAndChunks(SourceBookIndex index, Chapter mappedChapter, JsonNode rootArray, int batchIndex) {
+    public void saveTopicsAndChunks(UUID sourceBookIndexId, UUID mappedChapterId, JsonNode rootArray, int batchIndex, boolean isTextbook) {
+        SourceBookIndex index = sourceBookIndexRepository.findById(sourceBookIndexId).orElseThrow(() -> new RuntimeException("SourceBookIndex not found"));
+        Chapter mappedChapter = mappedChapterId != null ? chapterRepository.findById(mappedChapterId).orElse(null) : null;
+        
         int chunkIndex = batchIndex * 100;
+
         for (JsonNode node : rootArray) {
             String topicName = node.path("topicName").asText("Unknown Topic");
             String content = node.path("markdownContent").asText("");
+            JsonNode metadataNode = node.path("metadata");
 
             if (content.isBlank()) continue;
 
@@ -325,10 +375,18 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 java.util.Optional<Topic> existing = topicRepository.findByChapterIdAndNameIgnoreCase(mappedChapter.getId(), normalizedTopicName);
                 if (existing.isPresent()) {
                     topic = existing.get();
+                } else if (!isTextbook) {
+                    // For non-textbooks, try to find a semantic match or just pick the first topic to avoid creating thousands of duplicate topics
+                    List<Topic> chapterTopics = topicRepository.findByChapterId(mappedChapter.getId());
+                    if (!chapterTopics.isEmpty()) {
+                        // In a real app we'd do semantic similarity. Here we just fallback to the first topic or null.
+                        topic = chapterTopics.get(0); 
+                    }
                 }
             }
             
-            if (topic == null) {
+            // Only create NEW topics if it is a TEXTBOOK
+            if (topic == null && isTextbook) {
                 topic = new Topic();
                 topic.setName(normalizedTopicName);
                 if (mappedChapter != null) {
@@ -342,6 +400,9 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
             chunk.setSourceBook(index.getSourceBook());
             chunk.setSourceBookIndex(index);
             chunk.setChunkText(content);
+            if (!metadataNode.isMissingNode() && !metadataNode.isNull()) {
+                chunk.setMetadata(metadataNode.toString());
+            }
             chunk.setChunkIndex(chunkIndex++);
             chunk.setTokenCount(content.length() / 4);
             
@@ -415,7 +476,9 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 if (mappedChapter != null) {
                     List<Topic> unusedTopics = topicRepository.findUnusedTopicsByChapterId(mappedChapter.getId());
                     if (!unusedTopics.isEmpty()) {
-                        topicRepository.deleteAll(unusedTopics);
+                        for (Topic unusedTopic : unusedTopics) {
+                            academicService.deleteTopic(unusedTopic.getId());
+                        }
                         log.info("Cleaned up {} unused database topics for chapter: {}", unusedTopics.size(), mappedChapter.getId());
                     }
                 }

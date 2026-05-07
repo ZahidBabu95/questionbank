@@ -90,6 +90,7 @@ export const MENU_ITEMS = [
                     { title: 'Pending', path: '/questions/pending', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { title: 'Question Bank', path: '/questions/approved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
                     { title: 'Rejected', path: '/questions/rejected', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { title: 'Source Management', path: '/questions/sources', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
                 ]
             },
             {

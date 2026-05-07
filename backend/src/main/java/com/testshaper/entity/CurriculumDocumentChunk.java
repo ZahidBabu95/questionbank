@@ -48,4 +48,7 @@ public class CurriculumDocumentChunk extends BaseTenantEntity {
 
     @Column(name = "token_count")
     private Integer tokenCount;
+
+    @Column(name = "metadata", columnDefinition = "TEXT")
+    private String metadata; // Stores JSON string of extracted source metadata (e.g. board, year, school)
 }

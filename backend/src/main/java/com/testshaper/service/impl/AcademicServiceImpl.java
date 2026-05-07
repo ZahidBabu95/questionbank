@@ -33,6 +33,7 @@ public class AcademicServiceImpl implements AcademicService {
     private final TopicRepository topicRepository;
     private final AcademicSessionRepository sessionRepository;
     private final com.testshaper.repository.InstituteRepository instituteRepository;
+    private final jakarta.persistence.EntityManager entityManager;
 
     private String getTenant() {
         String tenant = TenantContext.getTenantId();
@@ -487,13 +488,31 @@ public class AcademicServiceImpl implements AcademicService {
     @CacheEvict(value = "academicHierarchy", allEntries = true)
     public void deleteChapter(UUID id) {
         try {
+            // FORCE DELETE: Nullify all references to topics in this chapter
+            List<Topic> topics = topicRepository.findByChapterIdOrderByNameAsc(id);
+            for (Topic t : topics) {
+                entityManager.createQuery("UPDATE Question q SET q.topic = null WHERE q.topic.id = :id")
+                             .setParameter("id", t.getId()).executeUpdate();
+                entityManager.createQuery("UPDATE CurriculumDocumentChunk c SET c.mappedTopic = null WHERE c.mappedTopic.id = :id")
+                             .setParameter("id", t.getId()).executeUpdate();
+                entityManager.createQuery("UPDATE SourceBookIndex s SET s.mappedTopic = null WHERE s.mappedTopic.id = :id")
+                             .setParameter("id", t.getId()).executeUpdate();
+                entityManager.createQuery("UPDATE Lecture l SET l.topic = null WHERE l.topic.id = :id")
+                             .setParameter("id", t.getId()).executeUpdate();
+            }
             topicRepository.deleteByChapterId(id);
+
+            // Nullify chapter references
+            entityManager.createQuery("UPDATE SourceBookIndex s SET s.mappedChapter = null WHERE s.mappedChapter.id = :id")
+                         .setParameter("id", id).executeUpdate();
+
             chapterRepository.deleteById(id);
             chapterRepository.flush();
-        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+        } catch (Exception e) {
+            log.error("Failed to force delete chapter", e);
             throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Cannot delete Chapter. It contains Topics that are referenced by existing Questions."
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Failed to delete Chapter. Please try again."
             );
         }
     }
@@ -526,12 +545,23 @@ public class AcademicServiceImpl implements AcademicService {
     @CacheEvict(value = "academicHierarchy", allEntries = true)
     public void deleteTopic(UUID id) {
         try {
+            // FORCE DELETE: Nullify foreign keys before deleting
+            entityManager.createQuery("UPDATE Question q SET q.topic = null WHERE q.topic.id = :id")
+                         .setParameter("id", id).executeUpdate();
+            entityManager.createQuery("UPDATE CurriculumDocumentChunk c SET c.mappedTopic = null WHERE c.mappedTopic.id = :id")
+                         .setParameter("id", id).executeUpdate();
+            entityManager.createQuery("UPDATE SourceBookIndex s SET s.mappedTopic = null WHERE s.mappedTopic.id = :id")
+                         .setParameter("id", id).executeUpdate();
+            entityManager.createQuery("UPDATE Lecture l SET l.topic = null WHERE l.topic.id = :id")
+                         .setParameter("id", id).executeUpdate();
+
             topicRepository.deleteById(id);
             topicRepository.flush();
-        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+        } catch (Exception e) {
+            log.error("Failed to force delete topic", e);
             throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Cannot delete Topic. It is currently assigned to one or more Questions."
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Failed to delete Topic. Please try again."
             );
         }
     }

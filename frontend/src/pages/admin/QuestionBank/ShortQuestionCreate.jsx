@@ -50,12 +50,9 @@ const ShortQuestionCreate = () => {
                 stimulus: formData.stimulus,
                 academicClass: { id: formData.academicClassId }, classSubject: { id: formData.subjectId },
                 chapter: { id: formData.chapterId }, topic: formData.topicId ? { id: formData.topicId } : null,
-                sourceReference: examSources.length > 0 ? JSON.stringify(examSources) : null
+                sources: examSources.length > 0 ? examSources : []
             };
             const savedQuestion = await questionService.createShortQuestion(payload);
-            if (examSources.length > 0 && savedQuestion?.id) {
-                for (const src of examSources) await questionService.addQuestionSource(savedQuestion.id, src);
-            }
             setMessage({ type: 'success', text: 'সংক্ষিপ্ত প্রশ্ন সফলভাবে তৈরি হয়েছে!' });
             setExamSources([]);
         } catch (error) {

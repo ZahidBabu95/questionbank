@@ -11,6 +11,8 @@ import ImageSidebar from './components/ImageSidebar';
 import MCQOptionsEditor from './components/MCQOptionsEditor';
 import QuestionContentEditor from './components/QuestionContentEditor';
 import CQPartsEditor from './components/CQPartsEditor';
+import QuestionSourceTagger from './components/QuestionSourceTagger';
+import { Tag } from 'lucide-react';
 
 // Helpher function to convert Markdown Images to HTML so RichTextEditor can render them visually!
 const convertMarkdownImagesToHtml = (text) => {
@@ -50,6 +52,7 @@ const QuestionEdit = () => {
 
     const [options, setOptions] = useState([]);
     const [cqParts, setCqParts] = useState([]);
+    const [examSources, setExamSources] = useState([]);
 
     // Image Upload & Crop States
     const [imageUploading, setImageUploading] = useState(false);
@@ -86,6 +89,16 @@ const QuestionEdit = () => {
                     mcqType: questionData.mcqType || 'SIMPLE',
                     statements: questionData.statements || []
                 });
+
+                if (questionData.sources && questionData.sources.length > 0) {
+                    setExamSources(questionData.sources.map(src => ({
+                        sourceType: src.sourceType,
+                        organizationName: src.organizationName,
+                        examName: src.examName,
+                        examYear: src.examYear,
+                        note: src.note
+                    })));
+                }
 
                 if (questionData.type === 'MCQ') {
                     // Normalize options
@@ -467,6 +480,7 @@ const QuestionEdit = () => {
                 classSubject: { id: formData.subjectId },
                 chapter: { id: formData.chapterId },
                 topic: formData.topicId ? { id: formData.topicId } : null,
+                sources: examSources.length > 0 ? examSources : [],
                 versionComment: isRevision ? versionComment : null
             };
 
@@ -502,7 +516,7 @@ const QuestionEdit = () => {
     };
 
     const { restoreData, clearSavedData, hasSavedData, lastSavedTime } = useAutoSave('qst_edit_draft_' + id, {
-        formData, options, cqParts, versionComment
+        formData, options, cqParts, examSources, versionComment
     });
 
     const handleRestoreDraft = () => {
@@ -511,6 +525,7 @@ const QuestionEdit = () => {
             if (saved.formData) setFormData(saved.formData);
             if (saved.options) setOptions(saved.options);
             if (saved.cqParts) setCqParts(saved.cqParts);
+            if (saved.examSources) setExamSources(saved.examSources);
             if (saved.versionComment) setVersionComment(saved.versionComment);
             setMessage({ type: 'success', text: 'অটো-সেভ করা ড্রাফট সফলভাবে রিস্টোর হয়েছে!' });
         }
@@ -632,6 +647,14 @@ const QuestionEdit = () => {
                             language={formData.language}
                         />
                     )}
+
+                    {/* Exam Sources */}
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                            <Tag size={18} className="text-orange-500" /> Exam Sources
+                        </h2>
+                        <QuestionSourceTagger sources={examSources} onChange={setExamSources} />
+                    </div>
 
                     {isRevision && (
                         <div className="bg-indigo-50/50 p-6 rounded-2xl shadow-sm border border-indigo-200">

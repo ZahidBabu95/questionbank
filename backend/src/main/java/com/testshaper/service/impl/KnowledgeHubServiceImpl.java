@@ -48,6 +48,41 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     private final com.testshaper.repository.ChapterRepository chapterRepository;
     private final com.testshaper.repository.TopicRepository topicRepository;
     private final com.testshaper.service.ApiKeyRotationService keyRotationService;
+    @org.springframework.beans.factory.annotation.Value("${pinecone.api.key:}")
+    private String pineconeApiKey;
+    
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    @org.springframework.transaction.annotation.Transactional
+    public void resetStuckJobs() {
+        log.info("Checking for stuck AI jobs from previous server run...");
+        
+        List<com.testshaper.entity.AiTopicExtractionJob> stuckTopicJobs = aiTopicExtractionJobRepository.findAll().stream()
+            .filter(j -> j.getStatus() == com.testshaper.entity.AiTopicExtractionJob.JobStatus.IN_PROGRESS)
+            .toList();
+        for (com.testshaper.entity.AiTopicExtractionJob job : stuckTopicJobs) {
+            log.warn("Found stuck Topic Extraction Job {}. Resetting to CANCELLED.", job.getId());
+            job.setStatus(com.testshaper.entity.AiTopicExtractionJob.JobStatus.CANCELLED);
+        }
+        aiTopicExtractionJobRepository.saveAll(stuckTopicJobs);
+        
+        List<com.testshaper.entity.AiQuestionGenerationJob> stuckQuestionJobs = aiQuestionGenerationJobRepository.findAll().stream()
+            .filter(j -> j.getStatus() == com.testshaper.entity.AiQuestionGenerationJob.JobStatus.IN_PROGRESS)
+            .toList();
+        for (com.testshaper.entity.AiQuestionGenerationJob job : stuckQuestionJobs) {
+            log.warn("Found stuck Question Generation Job {}. Resetting to CANCELLED.", job.getId());
+            job.setStatus(com.testshaper.entity.AiQuestionGenerationJob.JobStatus.CANCELLED);
+        }
+        aiQuestionGenerationJobRepository.saveAll(stuckQuestionJobs);
+        
+        List<com.testshaper.entity.AiBulkExtractionJob> stuckBulkJobs = aiBulkExtractionJobRepository.findAll().stream()
+            .filter(j -> j.getStatus() == com.testshaper.entity.AiBulkExtractionJob.JobStatus.IN_PROGRESS)
+            .toList();
+        for (com.testshaper.entity.AiBulkExtractionJob job : stuckBulkJobs) {
+            log.warn("Found stuck Bulk Extraction Job {}. Resetting to CANCELLED.", job.getId());
+            job.setStatus(com.testshaper.entity.AiBulkExtractionJob.JobStatus.CANCELLED);
+        }
+        aiBulkExtractionJobRepository.saveAll(stuckBulkJobs);
+    } 
     private final AiBillingService aiBillingService;
     private final com.testshaper.repository.AiBulkExtractionJobRepository aiBulkExtractionJobRepository;
     private final com.testshaper.repository.AiQuestionGenerationJobRepository aiQuestionGenerationJobRepository;
@@ -2015,6 +2050,29 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                                     
                                     questionSourceRepository.save(qs);
                                 }
+                            } else if (chunk.getMetadata() != null && !chunk.getMetadata().isBlank()) {
+                                // Fallback: Inject chunk metadata as QuestionSource if AI didn't provide sources
+                                try {
+                                    com.fasterxml.jackson.databind.JsonNode chunkMetadataNode = objectMapper.readTree(chunk.getMetadata());
+                                    if (chunkMetadataNode.isArray()) {
+                                        for (com.fasterxml.jackson.databind.JsonNode mNode : chunkMetadataNode) {
+                                            com.testshaper.entity.QuestionSource qs = new com.testshaper.entity.QuestionSource();
+                                            qs.setQuestion(q);
+                                            try {
+                                                if (mNode.hasNonNull("sourceType")) qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.valueOf(mNode.get("sourceType").asText().toUpperCase()));
+                                                else qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER);
+                                            } catch(Exception ignored) { qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER); }
+                                            
+                                            if(mNode.hasNonNull("examYear")) qs.setExamYear(mNode.get("examYear").asInt());
+                                            if(mNode.hasNonNull("organizationName") && !mNode.get("organizationName").asText().isBlank()) qs.setOrganizationName(mNode.get("organizationName").asText());
+                                            if(mNode.hasNonNull("examName") && !mNode.get("examName").asText().isBlank()) qs.setExamName(mNode.get("examName").asText());
+                                            if(mNode.hasNonNull("session") && !mNode.get("session").asText().isBlank()) qs.setSession(mNode.get("session").asText());
+                                            if(mNode.hasNonNull("note") && !mNode.get("note").asText().isBlank()) qs.setNote(mNode.get("note").asText());
+                                            
+                                            questionSourceRepository.save(qs);
+                                        }
+                                    }
+                                } catch (Exception ignored) {}
                             }
 
                             savedCount++;

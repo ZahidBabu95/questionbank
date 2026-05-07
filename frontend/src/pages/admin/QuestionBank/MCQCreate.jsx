@@ -207,14 +207,11 @@ const MCQCreate = () => {
                             stimulus: stimulusHtml,
                             academicClass: { id: formData.academicClassId }, classSubject: { id: formData.subjectId },
                             chapter: { id: formData.chapterId }, topic: formData.topicId ? { id: formData.topicId } : null,
-                            sourceReference: examSources.length > 0 ? JSON.stringify(examSources) : null
+                            sources: examSources.length > 0 ? examSources : []
                         },
                         options: qs.options
                     };
                     const saved = await questionService.createMCQ(payload.question, payload.options);
-                    if (examSources.length > 0 && saved?.id) {
-                        for (const src of examSources) await questionService.addQuestionSource(saved.id, src);
-                    }
                     savedCount++;
                 }
                 setMessage({ type: 'success', text: `${savedCount} টি অভিন্ন তথ্যভিত্তিক প্রশ্ন সফলভাবে তৈরি হয়েছে!` });
@@ -247,14 +244,11 @@ const MCQCreate = () => {
                     statements: formData.mcqType === 'MULTIPLE_COMPLETION' ? statements.map(s => `${s.label}. ${s.text}`) : [],
                     academicClass: { id: formData.academicClassId }, classSubject: { id: formData.subjectId },
                     chapter: { id: formData.chapterId }, topic: formData.topicId ? { id: formData.topicId } : null,
-                    sourceReference: examSources.length > 0 ? JSON.stringify(examSources) : null
+                    sources: examSources.length > 0 ? examSources : []
                 },
                 options: options
             };
             const savedQuestion = await questionService.createMCQ(payload.question, payload.options);
-            if (examSources.length > 0 && savedQuestion?.id) {
-                for (const src of examSources) await questionService.addQuestionSource(savedQuestion.id, src);
-            }
             setMessage({ type: 'success', text: 'বহুনির্বাচনি প্রশ্ন সফলভাবে তৈরি হয়েছে!' });
             setExamSources([]);
         } catch (error) {

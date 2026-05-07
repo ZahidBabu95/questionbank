@@ -13,6 +13,7 @@ const AcademicStructure = () => {
     // currentType: 'LEVEL', 'STREAM', 'CLASS', 'SUBJECT', 'CHAPTER', 'TOPIC'
     const [currentType, setCurrentType] = useState('LEVEL');
     const [items, setItems] = useState([]);
+    const [selectedItems, setSelectedItems] = useState([]);
 
     // Data Dependencies
     const [groups, setGroups] = useState([]);
@@ -60,6 +61,7 @@ const AcademicStructure = () => {
     // Advanced dynamic loader based on view type
     const loadItems = async (type, parentObj, groupIdOverride = selectedGroupId) => {
         try {
+            setSelectedItems([]);
             let data = [];
             if (type === 'LEVEL') {
                 data = await academicService.getAllLevels();
@@ -150,6 +152,35 @@ const AcademicStructure = () => {
         } catch (error) {
             console.error("Failed to delete", error);
             alert("Failed to delete. It might contain dependent items.");
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedItems.length === 0) return;
+        if (!window.confirm(`Delete ${selectedItems.length} selected item(s) permanently?`)) return;
+        
+        try {
+            // Bulk delete
+            const deletePromises = selectedItems.map(id => {
+                if (currentType === 'LEVEL') return academicService.deleteLevel(id);
+                if (currentType === 'STREAM') return academicService.deleteStream(id);
+                if (currentType === 'CLASS') return academicService.deleteClass(id);
+                if (currentType === 'SUBJECT') return academicService.deleteClassSubject(id);
+                if (currentType === 'CHAPTER') return academicService.deleteChapter(id);
+                if (currentType === 'TOPIC') return academicService.deleteTopic(id);
+                return Promise.resolve();
+            });
+
+            await Promise.all(deletePromises);
+            
+            setSelectedItems([]);
+            const parentObj = path.length > 0 ? path[path.length - 1].obj : null;
+            loadItems(currentType, parentObj);
+        } catch (error) {
+            console.error("Failed to bulk delete", error);
+            alert("Failed to delete some items. They might be in use.");
+            const parentObj = path.length > 0 ? path[path.length - 1].obj : null;
+            loadItems(currentType, parentObj);
         }
     };
 
@@ -318,7 +349,16 @@ const AcademicStructure = () => {
                         <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">{items.length} items</span>
                     </div>
 
-                    <form onSubmit={handleAdd} className="flex gap-2">
+                    <form onSubmit={handleAdd} className="flex gap-2 items-center">
+                        {currentType === 'TOPIC' && selectedItems.length > 0 && (
+                            <button 
+                                type="button"
+                                onClick={handleBulkDelete}
+                                className="bg-rose-100 text-rose-700 px-3 py-1.5 rounded-lg hover:bg-rose-200 transition-colors flex items-center gap-1 font-medium text-sm shadow-sm whitespace-nowrap"
+                            >
+                                <Trash2 size={16} /> Delete Selected ({selectedItems.length})
+                            </button>
+                        )}
                         <input
                             type="text"
                             placeholder={placeholder}
@@ -348,6 +388,20 @@ const AcademicStructure = () => {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-white sticky top-0 z-10">
+                                    {currentType === 'TOPIC' && (
+                                        <th className="py-3 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12">
+                                            <input 
+                                                type="checkbox" 
+                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                                checked={items.length > 0 && selectedItems.length === items.length}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setSelectedItems(items.map(i => i.id || i.classSubjectId));
+                                                    else setSelectedItems([]);
+                                                }}
+                                                disabled={items.length === 0}
+                                            />
+                                        </th>
+                                    )}
                                     <th className="py-3 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">Sr.</th>
                                     <th className="py-3 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Item Name </th>
                                     {currentType === 'SUBJECT' && <th className="py-3 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Group Category</th>}
@@ -379,6 +433,19 @@ const AcademicStructure = () => {
 
                                     return (
                                         <tr key={id} className="hover:bg-slate-50/50 transition-colors group">
+                                            {currentType === 'TOPIC' && (
+                                                <td className="py-3 px-6" onClick={(e) => e.stopPropagation()}>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                                        checked={selectedItems.includes(id)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) setSelectedItems(prev => [...prev, id]);
+                                                            else setSelectedItems(prev => prev.filter(i => i !== id));
+                                                        }}
+                                                    />
+                                                </td>
+                                            )}
                                             <td className="py-3 px-6 font-medium text-slate-400 text-sm whitespace-nowrap">
                                                 {orderVal}
                                             </td>

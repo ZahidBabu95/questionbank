@@ -27,8 +27,11 @@ public interface TopicExtractorService {
     // Internal batching methods exposed for proxy
     void cleanupOldData(UUID sourceBookIndexId, UUID bookId, com.testshaper.entity.Chapter mappedChapter);
     void updatePageStatus(java.util.List<com.testshaper.entity.KnowledgePage> pages);
-    void processBatch(com.testshaper.entity.SourceBookIndex index, com.testshaper.entity.Chapter mappedChapter, java.util.List<com.testshaper.entity.KnowledgePage> batchPages, int batchIndex);
-    void saveTopicsAndChunks(com.testshaper.entity.SourceBookIndex index, com.testshaper.entity.Chapter mappedChapter, com.fasterxml.jackson.databind.JsonNode rootArray, int batchIndex);
+    void processBatch(java.util.UUID sourceBookIndexId, java.util.UUID mappedChapterId, java.util.List<com.testshaper.entity.KnowledgePage> batchPages, int batchIndex, boolean isTextbook);
+    void saveTopicsAndChunks(java.util.UUID sourceBookIndexId, java.util.UUID mappedChapterId, com.fasterxml.jackson.databind.JsonNode rootArray, int batchIndex, boolean isTextbook);
+    
+    record IndexMetadata(java.util.UUID mappedChapterId, String indexName, boolean isTextbook) {}
+    IndexMetadata getIndexMetadata(java.util.UUID sourceBookIndexId);
     
     // UI Tools
     void renameTopicAndSync(UUID topicId, String newName);

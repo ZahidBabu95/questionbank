@@ -25,6 +25,7 @@ import ImportExcel from './pages/admin/QuestionBank/ImportExcel';
 import ImportAI from './pages/admin/QuestionBank/ImportAI';
 import ImportApi from './pages/admin/QuestionBank/ImportApi';
 import QuestionList from './pages/admin/QuestionBank/QuestionList';
+import SourceManagement from './pages/admin/QuestionBank/SourceManagement';
 import InstituteList from './pages/admin/Institutes/InstituteList';
 import InstituteForm from './pages/admin/Institutes/InstituteForm';
 import InstituteDetails from './pages/admin/Institutes/InstituteDetails';
@@ -213,6 +214,7 @@ function App() {
                         <Route path="/questions/pending" element={<QuestionList />} />
                         <Route path="/questions/approved" element={<QuestionList />} />
                         <Route path="/questions/rejected" element={<QuestionList />} />
+                        <Route path="/questions/sources" element={<SourceManagement />} />
                         <Route path="/questions/create/mcq" element={<MCQCreate />} />
                         <Route path="/questions/add/cq" element={<CQCreate />} />
                         <Route path="/questions/add/short" element={<ShortQuestionCreate />} />

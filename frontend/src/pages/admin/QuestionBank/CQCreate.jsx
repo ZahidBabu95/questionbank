@@ -147,13 +147,10 @@ const CQCreate = () => {
                 classSubject: { id: formData.subjectId },
                 chapter: { id: formData.chapterId }, 
                 topic: formData.topicId ? { id: formData.topicId } : null,
-                sourceReference: examSources.length > 0 ? JSON.stringify(examSources) : null
+                sources: examSources.length > 0 ? examSources : []
             };
 
             const savedQuestion = await questionService.createCQ(payload);
-            if (examSources.length > 0 && savedQuestion?.id) {
-                for (const src of examSources) await questionService.addQuestionSource(savedQuestion.id, src);
-            }
             setMessage({ type: 'success', text: 'সৃজনশীল প্রশ্ন সফলভাবে তৈরি হয়েছে!' });
             setFormData(prev => ({ ...prev, stem: '' }));
             setSubQuestions(activeStructure.parts.map(p => ({ label: p.label, text: '', answer: '', explanation: '', marks: p.marks })));
