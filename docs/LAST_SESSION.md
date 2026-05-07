@@ -3,28 +3,30 @@
 
 ---
 
-## 📅 চলমান সেশন: 2026-05-05
-**অবস্থান:** Epic 4 - Admin Dashboard & Nexus Editor Analysis
+## 📅 চলমান সেশন: 2026-05-07
+**অবস্থান:** Epic 2 - Question Bank Filtering & Source Management
 
 ---
 
 ## 🛠️ প্রগ্রেস রিপোর্ট (Progress Report)
 
-### 📊 Code Review: Nexus Editor (Nexus Paper Engine)
-| ✅ COMPLETED | **"Hot Swap" Mechanism:** `NexusEditor.jsx` এবং `PaperCanvasV2.jsx`-এ "Manual Swap" এবং "Auto Swap" সফলভাবে ইমপ্লিমেন্ট করা হয়েছে। Tiptap-এর `replaceWith` ট্রানজেকশন ব্যবহার করে ক্যানভাসে প্রশ্ন রিপ্লেস করা কাজ করছে। | `PaperCanvasV2.jsx` |
-| ✅ COMPLETED | **Schema Extraction:** সাবজেক্ট অনুযায়ী `editorConfig` এবং `generationBlueprint` ডাটাবেস থেকে রিসিভ করার লজিক তৈরি হয়েছে। | `NexusEditor.jsx` |
-| ⏳ PENDING | **Inline Editing (Free Mode):** `QuestionBlockNode.jsx`-এ লক করা প্রশ্নের ওপর ক্লিক করে `InlineGoldenEditor`-এর মাধ্যমে বানান ঠিক করার সুবিধা এখনো তৈরি করা হয়নি। | `QuestionBlockNode.jsx` |
-| ⏳ PENDING | **Real-time Allocation Validation:** ড্র্যাগ-অ্যান্ড-ড্রপের সময় ক্যানভাসে টোটাল মার্কস লিমিট চেক করার সিস্টেম এখনো নেই। | `PaperCanvasV2.jsx` |
+### 📊 Backend & API Updates
+| ✅ COMPLETED | **Filter API Compilation Fix:** `QuestionServiceImpl` এবং `QuestionSpecification`-এ `sourceBoards`, `sourceYears`, `sourceSchools` ফিল্টার যুক্ত করে 500/Unresolved Compilation Error সমাধান করা হয়েছে। | `QuestionServiceImpl.java` |
+| ✅ COMPLETED | **Source Management API:** Question Sources (যেমন বোর্ড, ইউনিভার্সিটি) গ্রুপ করে সামারি বের করা, রিনেম করা এবং মাল্টিপল সোর্স মার্জ (Merge) করার জন্য নতুন `QuestionSourceManagementController` এবং Repository Query তৈরি করা হয়েছে। 403 Forbidden এরর ঠিক করতে `@PreAuthorize` এ `hasAnyRole` ব্যবহার করা হয়েছে। | `QuestionSourceManagementController.java` |
+
+### 📊 Frontend Development
+| ✅ COMPLETED | **Source Management UI:** `Question Bank > Repository`-এ একটি নতুন সাব-মেনু যুক্ত করে সম্পূর্ণ "Source Management" পেজ ডিজাইন করা হয়েছে। এটিতে `antd` এর বদলে TailwindCSS এবং `lucide-react` ব্যবহার করা হয়েছে। | `SourceManagement.jsx` |
+| ✅ COMPLETED | **Filter & Actions:** Source Type অনুযায়ী ফিল্টার করার জন্য ড্রপডাউন এবং রিনেম/মার্জ করার জন্য কাস্টম মডাল লজিক তৈরি করে ফ্রন্টএন্ড থেকে API তে সংযুক্ত করা হয়েছে। | `SourceManagement.jsx` |
 
 ---
 
 ## 🎯 পূর্ববর্তী কাজগুলো (Backlog)
-1. **Subscription Invoice Generation:** মাল্টি-ভার্সন প্রাইসিং অনুযায়ী ইনভয়েস জেনারেট এবং পেমেন্ট গেটওয়ে ইন্টিগ্রেশন।
-2. **Institute Subject Verification:** ব্যাকএন্ডে রিকোয়েস্ট এক্সেপ্ট করার পর মাল্টি-ভার্সন ডাটা ঠিকমতো `Institute` মডেলে সেভ করার লজিক আপডেট।
-3. **Nexus Editor Inline Editing:** `STRICT_LINKED` মোডে থাকা প্রশ্নের ছোটখাটো বানান ঠিক করার জন্য ইনলাইন এডিটিং ফিচার চালু করা।
+1. **Nexus Editor Inline Editing:** `STRICT_LINKED` মোডে থাকা প্রশ্নের ছোটখাটো বানান ঠিক করার জন্য ইনলাইন এডিটিং ফিচার চালু করা।
+2. **Real-time Allocation Validation:** ড্র্যাগ-অ্যান্ড-ড্রপের সময় ক্যানভাসে টোটাল মার্কস লিমিট চেক করার সিস্টেম।
+3. **Subscription Invoice Generation:** মাল্টি-ভার্সন প্রাইসিং অনুযায়ী ইনভয়েস জেনারেট এবং পেমেন্ট গেটওয়ে ইন্টিগ্রেশন।
 
 ---
 
 ## 📞 পরের সেশনে প্রথম বার্তা
 
-> "আমরা Nexus Editor-এর কোড অ্যানালাইসিস করে দেখেছি যে 'Hot Swap' ফিচারটি সফলভাবে সম্পন্ন হয়েছে। এখন আমরা অন্য একটি নতুন কাজ শুরু করার জন্য প্রস্তুত। আপনি কোন কাজটি দিয়ে শুরু করতে চান?"
+> "আমরা Question Bank-এর মেটাডেটা ফিল্টারিং API এবং Source Management ফিচারটি সফলভাবে সম্পন্ন করেছি। এখন আমরা অন্য একটি নতুন কাজ শুরু করার জন্য প্রস্তুত। আপনি কোন কাজটি দিয়ে শুরু করতে চান?"
