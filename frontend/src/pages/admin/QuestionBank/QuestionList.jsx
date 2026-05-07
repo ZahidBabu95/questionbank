@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2 } from 'lucide-react';
+import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal } from 'lucide-react';
 import questionService from '../../../services/questionService';
 import academicService from '../../../services/academicService';
+import examService from '../../../services/examService';
 import RevisePanel from './components/RevisePanel';
 import RevisionReviewPanel from './components/RevisionReviewPanel';
 import MarkdownRenderer from '../../../components/MarkdownRenderer';
@@ -93,9 +94,9 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
     const [isLiked, setIsLiked] = useState(false);
 
     const difficultyStyle = {
-        EASY: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        MEDIUM: 'bg-amber-50 text-amber-700 border-amber-200',
-        HARD: 'bg-rose-50 text-rose-700 border-rose-200',
+        EASY: 'bg-emerald-50 text-emerald-700',
+        MEDIUM: 'bg-amber-50 text-amber-700',
+        HARD: 'bg-rose-50 text-rose-700',
     };
     const typeLabel = q.type === 'MCQ' ? 'Multiple Choice' : q.type === 'CQ' ? 'Creative' : q.type === 'SHORT' ? 'Short Answer' : q.type;
 
@@ -103,38 +104,52 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
         <div 
             id={`question-item-${q.id}`}
             onClick={(e) => {
-                if (splitScreenMode && !['BUTTON', 'INPUT', 'A'].includes(e.target.tagName)) {
-                    onView(q);
+                const isInteractive = e.target.closest('button') || e.target.closest('input') || e.target.closest('a') || e.target.closest('.group');
+                if (!isInteractive) {
+                    onSelect(q.id);
+                    if (splitScreenMode) {
+                        onView(q);
+                    }
                 }
             }}
-            className={`border-b border-slate-200 transition-all duration-200 ${splitScreenMode ? 'cursor-pointer hover:bg-slate-50' : ''} ${
-            isViewing ? 'bg-indigo-50 border-l-4 border-l-indigo-500' 
-            : q.status === 'REVISED' ? 'bg-rose-50/50 border-l-4 border-l-rose-400'
-            : isSelected ? 'bg-blue-50/40' : 'bg-white'
+            className={`border border-slate-200 rounded-xl transition-all duration-300 transform hover:-translate-y-[2px] hover:shadow-lg cursor-pointer relative hover:z-10 ${
+            isViewing ? 'bg-indigo-50 border-indigo-400 ring-1 ring-indigo-400' 
+            : q.status === 'REVISED' ? 'bg-rose-50/50 border-rose-300'
+            : isSelected ? 'bg-blue-50/40 border-blue-300 ring-1 ring-blue-200' : 'bg-white hover:border-indigo-200'
         }`}>
 
             {/* ── Header Row ── */}
-            <div className="flex items-center justify-between px-4 pt-3 pb-2 gap-3 flex-wrap">
-                <div className="flex items-center gap-2.5">
-                    <input type="checkbox" checked={isSelected} onChange={() => onSelect(q.id)}
-                        className="w-4 h-4 text-primary border-slate-300 rounded cursor-pointer shrink-0" />
-                    <span className="text-[12px] font-black text-slate-500 whitespace-nowrap">Question #{index}</span>
-                    <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[11px] font-bold border border-slate-200 whitespace-nowrap">{typeLabel}</span>
-                </div>
+            <div className="flex items-start justify-between px-4 pt-3 pb-2 gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                    {q.status === 'APPROVED' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-black uppercase"><CheckCircle size={9} /> Approved</span>}
-                    {q.status === 'REJECTED' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-[10px] font-black uppercase"><XCircle size={9} /> Rejected</span>}
-                    {q.status === 'PENDING' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-black uppercase"><Clock size={9} /> Pending</span>}
-                    {q.status === 'REVISED' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full text-[10px] font-black uppercase animate-pulse"><Edit size={9} /> Revised</span>}
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black border ${difficultyStyle[q.difficulty] || 'bg-slate-50 text-slate-600 border-slate-200'}`}>
-                        ⚡ {q.difficulty}
+                    <input type="checkbox" checked={isSelected} onChange={() => onSelect(q.id)}
+                        className="w-4 h-4 text-primary border-slate-300 rounded cursor-pointer shrink-0 mt-0.5" />
+                    <span className="text-[12px] font-black text-slate-600 whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">Q #{index}</span>
+                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold border border-slate-200 whitespace-nowrap">{typeLabel}</span>
+                    
+                    {/* Unified Status Badges */}
+                    {q.status === 'APPROVED' && <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Approved</span>}
+                    {q.status === 'REJECTED' && <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Rejected</span>}
+                    {q.status === 'PENDING' && <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Pending</span>}
+                    {q.status === 'REVISED' && <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-md text-[10px] font-bold uppercase whitespace-nowrap animate-pulse">Revised</span>}
+                    {q.aiGenerated && <span className="px-2 py-0.5 bg-violet-50 text-violet-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">AI Synced</span>}
+                    
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase whitespace-nowrap ${difficultyStyle[q.difficulty] || 'bg-slate-50 text-slate-600'}`}>
+                        {q.difficulty}
                     </span>
-                    <span className="text-[11px] font-semibold text-slate-400 whitespace-nowrap">{q.marks ?? 1} Marks</span>
-                    {hasPerm && hasPerm('EDIT') && (
-                        <button onClick={() => navigate(`/questions/edit/${q.id}`)} className="p-1 text-slate-400 hover:text-primary transition-colors" title="Edit">
-                            <Edit size={13} />
-                        </button>
-                    )}
+                    <span className="px-2 py-0.5 bg-slate-50 text-slate-600 rounded-md text-[10px] font-bold whitespace-nowrap">{q.marks ?? 1} Marks</span>
+                </div>
+
+                {/* Actions Menu (Three-Dot) */}
+                <div className="flex items-center gap-1 shrink-0 relative group">
+                    <button className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors">
+                        <MoreHorizontal size={16} />
+                    </button>
+                    <div className="absolute right-0 top-full w-36 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 py-1 flex flex-col">
+                        <button onClick={(e) => { e.stopPropagation(); onView(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Eye size={12}/> View Detail</button>
+                        {hasPerm && hasPerm('EDIT') && <button onClick={(e) => { e.stopPropagation(); navigate(`/questions/edit/${q.id}`); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Edit size={12}/> Edit Source</button>}
+                        {q.status === 'REVISED' && isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); onReview(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><GitCompare size={12}/> Review Changes</button>}
+                        {isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); onDelete(q.id); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><Trash2 size={12}/> Delete</button>}
+                    </div>
                 </div>
             </div>
 
@@ -150,7 +165,7 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
 
             {/* ── Stimulus ── */}
             {q.stimulus && (
-                <div className="mx-4 mb-2 px-3 py-2 bg-amber-50 border border-amber-200 border-l-4 border-l-amber-400 rounded-lg text-[12px] text-slate-600 italic leading-snug">
+                <div className="mx-4 mb-2 px-4 py-3 bg-slate-50 border border-slate-200 border-l-4 border-l-indigo-400 rounded-r-lg text-[13px] text-slate-700 font-medium leading-relaxed">
                     <MarkdownRenderer content={q.stimulus} />
                 </div>
             )}
@@ -252,95 +267,50 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             {/* ── Source / Action Footer ── */}
             <div className="flex items-center justify-between px-4 pb-3 pt-1.5 border-t border-slate-100 gap-2">
                 {/* Source — no truncation, allow wrapping */}
-                <div className="flex items-center gap-1.5 text-[10.5px] text-slate-500 font-medium flex-1 min-w-0 flex-wrap">
+                <div className="flex items-center gap-1.5 text-[10.5px] flex-1 min-w-0 flex-wrap">
                     {q.classSubject ? (
-                        <>
-                            <FileText size={11} className="text-slate-400 shrink-0" />
-                            <span className="bg-slate-100 text-slate-700 px-1.5 py-px rounded text-[10px] font-bold shrink-0">{q.classSubject?.subject?.name}</span>
-                            <span className="text-slate-300 shrink-0">›</span>
+                        <div className="flex flex-wrap items-center gap-1.5 px-2 py-1 bg-indigo-50/80 border border-indigo-100 rounded-md text-indigo-700 font-semibold">
+                            <FileText size={11} className="text-indigo-400 shrink-0" />
+                            <span className="bg-white text-indigo-800 px-1.5 py-px rounded border border-indigo-100 text-[10px] font-bold shrink-0 shadow-sm">{q.classSubject?.subject?.name}</span>
+                            <span className="text-indigo-300 shrink-0">›</span>
                             <span className="shrink-0">{q.classSubject?.academicClass?.name}</span>
-                            {q.chapter && <><span className="text-slate-300 shrink-0">›</span><span className="shrink-0">{q.chapter?.name}</span></>}
-                            {q.topic && <><span className="text-slate-300 shrink-0">›</span><span className="shrink-0">{q.topic?.name}</span></>}
-                        </>
+                            {q.chapter && <><span className="text-indigo-300 shrink-0">›</span><span className="shrink-0">{q.chapter?.name}</span></>}
+                            {q.topic && <><span className="text-indigo-300 shrink-0">›</span><span className="shrink-0">{q.topic?.name}</span></>}
+                        </div>
                     ) : q.sourceReference ? (
-                        <>
-                            <FileText size={11} className="text-slate-400 shrink-0" />
-                            <span>{q.sourceReference}</span>
-                            {q.aiGenerated && <span className="text-[9px] bg-violet-50 text-violet-600 border border-violet-200 px-1 py-px rounded font-bold uppercase shrink-0">AI</span>}
-                        </>
+                        <div className="flex flex-wrap items-center gap-1.5 px-2 py-1 bg-violet-50/80 border border-violet-100 rounded-md text-violet-700 font-semibold">
+                            <FileText size={11} className="text-violet-400 shrink-0" />
+                            <span className="font-bold">{q.sourceReference}</span>
+                            {q.aiGenerated && <span className="text-[9px] bg-violet-100 text-violet-800 border border-violet-200 px-1.5 py-px rounded font-black uppercase shrink-0">AI Synced</span>}
+                        </div>
                     ) : null}
                 </div>
 
-                {/* Action Buttons */}
+                {/* Action Buttons (Only Primary Footer Actions) */}
                 {!splitScreenMode && (
-                <div className="flex items-center gap-1.5 shrink-0">
-                    {/* Like */}
+                <div className="flex items-center gap-2 shrink-0">
                     <button
-                        onClick={() => setIsLiked(!isLiked)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all border ${isLiked ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:border-rose-200 hover:text-rose-400'}`}
+                        onClick={(e) => { e.stopPropagation(); onRevise(q); }}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10.5px] font-bold transition-all border bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:text-primary hover:border-primary/30`}
+                        title="Quick Revise"
+                    >
+                        <Edit size={12} /> <span>Revise</span>
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setIsLiked(!isLiked); }}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all border ${isLiked ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-rose-400'}`}
                         title="Like"
                     >
                         <ThumbsUp size={11} className={isLiked ? 'fill-current' : ''} />
-                        <span>{isLiked ? 'Liked' : 'Like'}</span>
                     </button>
-
-                    {/* Save */}
                     <button
-                        onClick={() => onSave(q.id)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all border ${isSaved ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-500 hover:border-amber-200 hover:text-amber-500'}`}
+                        onClick={(e) => { e.stopPropagation(); onSave(q.id); }}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all border ${isSaved ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-amber-500'}`}
                         title={isSaved ? 'Remove from Saved' : 'Save'}
                     >
                         {isSaved ? <BookmarkCheck size={11} className="fill-current" /> : <Bookmark size={11} />}
-                        <span>{isSaved ? 'Saved' : 'Save'}</span>
+                        <span>Save</span>
                     </button>
-
-                    {/* Revise */}
-                    <button
-                        onClick={() => onRevise(q)}
-                        className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 text-slate-500 hover:border-primary/40 hover:text-primary rounded-md text-[10px] font-bold transition-all"
-                        title="Revise / Edit"
-                    >
-                        <Edit size={11} /> Revise
-                    </button>
-
-                    {/* Review Revision (Super Admin only, REVISED questions only) */}
-                    {q.status === 'REVISED' && isSuperAdmin && (
-                        <button
-                            onClick={() => onReview(q)}
-                            className="flex items-center gap-1 px-3 py-1 text-white rounded-md text-[10px] font-black transition-all shadow-sm hover:shadow-md active:scale-[0.97]"
-                            style={{ background: 'linear-gradient(to right, #e11d48, #be123c)' }}
-                            title="Review & Approve/Reject"
-                        >
-                            <GitCompare size={11} /> Review Changes
-                        </button>
-                    )}
-
-                    {/* AI Synced */}
-                    {q.aiGenerated && (
-                        <span className="flex items-center gap-1 px-2 py-1 bg-violet-50 border border-violet-200 text-violet-600 rounded-md text-[10px] font-bold">
-                            AI SYNCED
-                        </span>
-                    )}
-
-                    {/* View (full detail modal) */}
-                    <button
-                        onClick={() => onView(q)}
-                        className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-600 rounded-md text-[10px] font-bold transition-all"
-                        title="View Full Detail"
-                    >
-                        <Eye size={11} /> View
-                    </button>
-
-                    {/* Delete — Super Admin only */}
-                    {isSuperAdmin && (
-                        <button
-                            onClick={() => onDelete(q.id)}
-                            className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 text-slate-400 hover:border-rose-300 hover:text-rose-600 hover:bg-rose-50 rounded-md text-[10px] font-bold transition-all"
-                            title="Delete"
-                        >
-                            <Trash2 size={11} /> Delete
-                        </button>
-                    )}
                 </div>
                 )}
             </div>
@@ -478,7 +448,7 @@ const QuestionList = () => {
         const roleName = typeof r === 'string' ? r : (r.name || '');
         return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
     }) || user?.email === 'admin' || user?.email?.includes('admin@');
-    const hasFullLangAccess = isSuperAdmin || user?.instituteName === 'DEFAULT';
+    const hasFullLangAccess = isSuperAdmin || user?.instituteName?.toUpperCase() === 'DEFAULT';
 
     const hasPerm = (action) => {
         if (isSuperAdmin) return true;
@@ -546,12 +516,22 @@ const QuestionList = () => {
     const [showSuggestions, setShowSuggestions] = useState(false);
 
     // Hierarchy filter selections
-    const [selectedLevelId, setSelectedLevelId] = useState('');
-    const [selectedStreamId, setSelectedStreamId] = useState('');
-    const [selectedClassId, setSelectedClassId] = useState('');
-    const [selectedSubjectId, setSelectedSubjectId] = useState(''); // classSubjectId
-    const [selectedChapterId, setSelectedChapterId] = useState('');
-    const [selectedTopicId, setSelectedTopicId] = useState('');
+    const [selectedLevelId, setSelectedLevelId] = useState(() => localStorage.getItem('qb_filter_level') || '');
+    const [selectedStreamId, setSelectedStreamId] = useState(() => localStorage.getItem('qb_filter_stream') || '');
+    const [selectedClassId, setSelectedClassId] = useState(() => localStorage.getItem('qb_filter_class') || '');
+    const [selectedSubjectId, setSelectedSubjectId] = useState(() => localStorage.getItem('qb_filter_subject') || ''); // classSubjectId
+    const [selectedChapterId, setSelectedChapterId] = useState(() => localStorage.getItem('qb_filter_chapter') || '');
+    const [selectedTopicId, setSelectedTopicId] = useState(() => localStorage.getItem('qb_filter_topic') || '');
+    
+    // Save filter selections to localStorage
+    useEffect(() => {
+        localStorage.setItem('qb_filter_level', selectedLevelId || '');
+        localStorage.setItem('qb_filter_stream', selectedStreamId || '');
+        localStorage.setItem('qb_filter_class', selectedClassId || '');
+        localStorage.setItem('qb_filter_subject', selectedSubjectId || '');
+        localStorage.setItem('qb_filter_chapter', selectedChapterId || '');
+        localStorage.setItem('qb_filter_topic', selectedTopicId || '');
+    }, [selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
     
     // Source Tag filters
     const [selectedBoards, setSelectedBoards] = useState([]);
@@ -657,6 +637,7 @@ const QuestionList = () => {
         try {
             const levelData = await academicService.getAllLevels();
             setLevels(levelData);
+            if (levelData.length === 1) setSelectedLevelId(levelData[0].id);
             const hierarchyData = await academicService.getHierarchy();
             setFullHierarchy(hierarchyData || []);
         } catch (error) {
@@ -781,56 +762,86 @@ const QuestionList = () => {
     // Level → Streams
     useEffect(() => {
         if (selectedLevelId) {
-            academicService.getStreamsByLevel(selectedLevelId).then(setStreams).catch(console.error);
+            academicService.getStreamsByLevel(selectedLevelId).then(data => {
+                setStreams(data);
+                if (data.length === 1) {
+                    setSelectedStreamId(data[0].id);
+                } else if (selectedStreamId && !data.find(s => s.id === selectedStreamId)) {
+                    setSelectedStreamId('');
+                }
+            }).catch(console.error);
         } else {
             setStreams([]);
+            setSelectedStreamId('');
         }
-        setSelectedStreamId(''); setSelectedClassId(''); setSelectedSubjectId('');
-        setSelectedChapterId(''); setSelectedTopicId('');
-        setClasses([]); setSubjects([]); setChapters([]); setTopics([]);
     }, [selectedLevelId]);
 
     // Stream → Classes
     useEffect(() => {
         if (selectedStreamId) {
-            academicService.getClassesByStream(selectedStreamId).then(setClasses).catch(console.error);
+            academicService.getClassesByStream(selectedStreamId).then(data => {
+                setClasses(data);
+                if (data.length === 1) {
+                    setSelectedClassId(data[0].id);
+                } else if (selectedClassId && !data.find(c => c.id === selectedClassId)) {
+                    setSelectedClassId('');
+                }
+            }).catch(console.error);
         } else {
             setClasses([]);
+            setSelectedClassId('');
         }
-        setSelectedClassId(''); setSelectedSubjectId('');
-        setSelectedChapterId(''); setSelectedTopicId('');
-        setSubjects([]); setChapters([]); setTopics([]);
     }, [selectedStreamId]);
 
     // Class → Subjects
     useEffect(() => {
         if (selectedClassId) {
-            academicService.getSubjectsByClass(selectedClassId).then(setSubjects).catch(console.error);
+            academicService.getSubjectsByClass(selectedClassId).then(data => {
+                setSubjects(data);
+                if (data.length === 1) {
+                    setSelectedSubjectId(data[0].classSubjectId);
+                } else if (selectedSubjectId && !data.find(s => s.classSubjectId === selectedSubjectId)) {
+                    setSelectedSubjectId('');
+                }
+            }).catch(console.error);
         } else {
             setSubjects([]);
+            setSelectedSubjectId('');
         }
-        setSelectedSubjectId(''); setSelectedChapterId(''); setSelectedTopicId('');
-        setChapters([]); setTopics([]);
     }, [selectedClassId]);
 
     // Subject → Chapters
     useEffect(() => {
         if (selectedSubjectId) {
-            academicService.getChaptersByClassSubject(selectedSubjectId).then(setChapters).catch(console.error);
+            academicService.getChaptersByClassSubject(selectedSubjectId).then(data => {
+                setChapters(data);
+                if (data.length === 1) {
+                    setSelectedChapterId(data[0].id);
+                } else if (selectedChapterId && !data.find(ch => ch.id === selectedChapterId)) {
+                    setSelectedChapterId('');
+                }
+            }).catch(console.error);
         } else {
             setChapters([]);
+            setSelectedChapterId('');
         }
-        setSelectedChapterId(''); setSelectedTopicId(''); setTopics([]);
     }, [selectedSubjectId]);
 
     // Chapter → Topics
     useEffect(() => {
         if (selectedChapterId) {
-            academicService.getTopicsByChapter(selectedChapterId).then(setTopics).catch(console.error);
+            academicService.getTopicsByChapter(selectedChapterId).then(data => {
+                setTopics(data);
+                if (data.length === 1) {
+                    setSelectedTopicId(data[0].id);
+                } else if (selectedTopicId && !data.find(t => t.id === selectedTopicId)) {
+                    setSelectedTopicId('');
+                }
+            }).catch(console.error);
         } else {
             setTopics([]);
+            setSelectedTopicId('');
         }
-        setSelectedTopicId('');
     }, [selectedChapterId]);
 
     const fetchQuestions = async () => {
@@ -859,7 +870,7 @@ const QuestionList = () => {
             fetchOverviewStats();
         }, 300); // 300ms debounce for search query typing
         return () => clearTimeout(timer);
-    }, [currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
+    }, [currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools]);
 
     const handleDelete = React.useCallback(async (id) => {
         if (window.confirm('Are you sure you want to delete this question?')) {
@@ -921,10 +932,11 @@ const QuestionList = () => {
                 setBulkProgress({ current: Math.min(i + CHUNK_SIZE, selectedIds.length), total: selectedIds.length, action: 'Deleting' });
             }
             
-            setBulkProgress(null);
+            setBulkProgress({ current: selectedIds.length, total: selectedIds.length, action: 'Refreshing Data' });
             setSelectedIds([]);
-            fetchQuestions();
-            fetchOverviewStats();
+            await fetchQuestions();
+            await fetchOverviewStats();
+            setBulkProgress(null);
         }
     };
 
@@ -947,10 +959,11 @@ const QuestionList = () => {
                 setBulkProgress({ current: Math.min(i + CHUNK_SIZE, selectedIds.length), total: selectedIds.length, action: `Updating to ${status}` });
             }
             
-            setBulkProgress(null);
+            setBulkProgress({ current: selectedIds.length, total: selectedIds.length, action: 'Refreshing Data' });
             setSelectedIds([]);
-            fetchQuestions();
-            fetchOverviewStats();
+            await fetchQuestions();
+            await fetchOverviewStats();
+            setBulkProgress(null);
         }
     };
 
@@ -974,6 +987,78 @@ const QuestionList = () => {
             }
         } catch (error) {
             alert("Action failed.");
+        }
+    };
+
+    const handleCreateExamFromSelection = async () => {
+        if (!selectedIds.length) return;
+        
+        const firstSelectedQ = questions.find(q => q.id === selectedIds[0]);
+        if (!firstSelectedQ) return;
+        
+        const sId = firstSelectedQ.classSubject?.id || firstSelectedQ.classSubjectId || selectedSubjectId;
+        const language = firstSelectedQ.language || 'Bangla';
+        const defaultMarksMap = { 'MCQ': 1, 'CQ': 10, 'SHORT': 2 };
+
+        if (!sId) {
+            alert("Could not determine the subject. Please filter questions by a specific subject first.");
+            return;
+        }
+        
+        const selectedQuestions = questions.filter(q => selectedIds.includes(q.id));
+        let totalMarks = 0;
+        for (const q of selectedQuestions) {
+            totalMarks += q.marks || defaultMarksMap[q.type] || 1;
+        }
+
+        if (window.confirm(`Create a new exam with these ${selectedIds.length} selected questions (${totalMarks} Marks)?`)) {
+            setBulkProgress({ current: 0, total: selectedIds.length + 2, action: 'Initializing Exam' });
+            try {
+                const examRes = await examService.createManualExam({
+                    title: 'Custom Exam ' + new Date().toLocaleDateString(),
+                    examType: 'MODEL_TEST',
+                    classSubjectId: sId,
+                    totalMarks: totalMarks,
+                    durationMinutes: 60,
+                    language: language,
+                    instructions: "",
+                    instituteName: user?.instituteName || "",
+                    headerText: "",
+                    shuffleQuestions: false,
+                    shuffleOptions: false,
+                    sections: []
+                });
+
+                if (examRes.success) {
+                    const examId = examRes.data.id;
+                    setBulkProgress({ current: 1, total: selectedIds.length + 2, action: 'Adding Questions' });
+                    
+                    let addedCount = 0;
+                    for (const q of selectedQuestions) {
+                        const marks = q.marks || defaultMarksMap[q.type] || 1;
+                        await examService.addQuestionToManualExam(examId, {
+                            questionId: q.id,
+                            marks: marks,
+                            sectionId: null
+                        });
+                        addedCount++;
+                        setBulkProgress({ current: 1 + addedCount, total: selectedIds.length + 2, action: 'Adding Questions' });
+                    }
+
+                    setBulkProgress({ current: selectedIds.length + 1, total: selectedIds.length + 2, action: 'Publishing Exam' });
+                    const publishRes = await examService.publishManualExam(examId);
+                    
+                    if (publishRes.success) {
+                        setBulkProgress({ current: selectedIds.length + 2, total: selectedIds.length + 2, action: 'Opening Editor' });
+                        navigate(`/exams/generate/nexus-editor/${examId}`);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to create exam from selection", error);
+                alert("Failed to create exam: " + (error.response?.data?.message || error.message || "Please try again."));
+            } finally {
+                setBulkProgress(null);
+            }
         }
     };
 
@@ -1016,10 +1101,14 @@ const QuestionList = () => {
         setSearchQuery('');
         setFilterType('ALL');
         setFilterLanguage('ALL');
+        setSelectedBoards([]);
+        setSelectedYears([]);
+        setSelectedSchools([]);
     };
 
     const [isSelectingAll, setIsSelectingAll] = useState(false);
-    const [showAdvancedFilters, setShowAdvancedFilters] = useState(true);
+    const [showSourceFilters, setShowSourceFilters] = useState(true);
+    const [activeSidebarTab, setActiveSidebarTab] = useState('source');
 
     const handleSelectAllGlobal = async () => {
         setIsSelectingAll(true);
@@ -1046,6 +1135,35 @@ const QuestionList = () => {
         }
     };
 
+    const getActiveFiltersBreadcrumb = () => {
+        const crumbs = [];
+        if (selectedLevelId) {
+            const l = levels.find(x => x.id === selectedLevelId);
+            if (l) crumbs.push(l.name);
+        }
+        if (selectedStreamId) {
+            const s = streams.find(x => x.id === selectedStreamId);
+            if (s) crumbs.push(s.name);
+        }
+        if (selectedClassId) {
+            const c = classes.find(x => x.id === selectedClassId);
+            if (c) crumbs.push(c.name);
+        }
+        if (selectedSubjectId) {
+            const sub = subjects.find(x => x.classSubjectId === selectedSubjectId);
+            if (sub) crumbs.push(sub.subjectName);
+        }
+        if (selectedChapterId) {
+            const ch = chapters.find(x => x.id === selectedChapterId);
+            if (ch) crumbs.push(ch.name);
+        }
+        if (selectedTopicId) {
+            const t = topics.find(x => x.id === selectedTopicId);
+            if (t) crumbs.push(t.name);
+        }
+        return crumbs;
+    };
+
     return (
         <>
         {/* Bulk Action Progress Overlay */}
@@ -1064,32 +1182,43 @@ const QuestionList = () => {
             </div>
         )}
 
-        <div className={`flex flex-col min-h-full bg-slate-50 transition-all duration-300 ${showAdvancedFilters ? 'pr-[320px]' : ''}`}>
+        <div className={`flex flex-col min-h-full bg-slate-50 transition-all duration-300 ${showSourceFilters ? 'pr-[320px]' : ''}`}>
 
-            {/* OVERVIEW STATS BOARD */}
+            {/* OVERVIEW STATS BOARD - COMPACT */}
             {overviewStats && (
-                <div className="px-4 md:px-6 pt-5 pb-3">
-                    <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-3 flex items-center gap-2"><Layers size={16} className="text-primary" /> Question Bank Overview</h2>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center relative overflow-hidden group">
-                            <div className="absolute -right-4 -top-4 w-16 h-16 bg-blue-50 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest relative z-10">Total Questions</span>
-                            <span className="text-3xl font-black text-slate-800 relative z-10">{overviewStats.totalQuestions}</span>
+                <div className="px-4 md:px-6 pt-3 pb-2 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-200 bg-white shadow-sm z-20 relative gap-2 md:gap-0">
+                    <div className="flex items-center gap-3 w-full md:w-auto overflow-hidden">
+                        <h2 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5 shrink-0"><Layers size={14} className="text-primary" /> Question Bank</h2>
+                        {getActiveFiltersBreadcrumb().length > 0 && (
+                            <div className="hidden sm:flex items-center gap-2 text-xs font-extrabold text-slate-500 overflow-x-auto text-ellipsis whitespace-nowrap bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 shadow-inner custom-scrollbar">
+                                {getActiveFiltersBreadcrumb().map((crumb, idx, arr) => (
+                                    <React.Fragment key={idx}>
+                                        <span className={idx === arr.length - 1 ? "text-primary tracking-wide" : "tracking-wide"}>{crumb}</span>
+                                        {idx < arr.length - 1 && <span className="text-slate-400 mx-0.5">/</span>}
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-4 shrink-0">
+                        <div className="flex flex-col items-end">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Total</span>
+                            <span className="text-sm font-black text-slate-800 leading-none">{overviewStats.totalQuestions}</span>
                         </div>
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center relative overflow-hidden group">
-                            <div className="absolute -right-4 -top-4 w-16 h-16 bg-emerald-50 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
-                            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest relative z-10">Total Approved</span>
-                            <span className="text-3xl font-black text-emerald-700 relative z-10">{overviewStats.totalApproved}</span>
+                        <div className="w-px h-6 bg-slate-200"></div>
+                        <div className="flex flex-col items-end">
+                            <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest leading-none mb-1">Approved</span>
+                            <span className="text-sm font-black text-emerald-700 leading-none">{overviewStats.totalApproved}</span>
                         </div>
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center relative overflow-hidden group">
-                            <div className="absolute -right-4 -top-4 w-16 h-16 bg-amber-50 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
-                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest relative z-10">Drafts / Pending</span>
-                            <span className="text-3xl font-black text-amber-700 relative z-10">{overviewStats.totalPending}</span>
+                        <div className="w-px h-6 bg-slate-200"></div>
+                        <div className="flex flex-col items-end">
+                            <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest leading-none mb-1">Pending</span>
+                            <span className="text-sm font-black text-amber-700 leading-none">{overviewStats.totalPending}</span>
                         </div>
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center relative overflow-hidden group">
-                            <div className="absolute -right-4 -top-4 w-16 h-16 bg-indigo-50 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
-                            <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest relative z-10">Total Subjects</span>
-                            <span className="text-3xl font-black text-indigo-700 relative z-10">{overviewStats.totalSubjects}</span>
+                        <div className="w-px h-6 bg-slate-200 hidden sm:block"></div>
+                        <div className="flex-col items-end hidden sm:flex">
+                            <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest leading-none mb-1">Subjects</span>
+                            <span className="text-sm font-black text-indigo-700 leading-none">{overviewStats.totalSubjects}</span>
                         </div>
                     </div>
                 </div>
@@ -1142,13 +1271,15 @@ const QuestionList = () => {
                             </button>
                         )}
 
-                        <button
-                            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showAdvancedFilters ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                            title="Toggle Source Filters"
-                        >
-                            <Filter size={14} /> {showAdvancedFilters ? 'Hide Source Filters' : 'Source Filters'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setShowSourceFilters(!showSourceFilters)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                title="Toggle Filters & Tags Sidebar"
+                            >
+                                <Filter size={14} /> Filters & Tags
+                            </button>
+                        </div>
 
                         <div className="relative w-full md:w-[300px] shrink-0">
                             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -1165,239 +1296,264 @@ const QuestionList = () => {
 
                 {/* Right Side Drawer for Source Metadata Filters */}
                 <div 
-                    className={`fixed top-[60px] right-0 h-[calc(100vh-60px)] w-[320px] bg-white border-l border-slate-200 shadow-xl z-30 flex flex-col transition-transform duration-300 ${showAdvancedFilters ? 'translate-x-0' : 'translate-x-full'}`}
+                    className={`fixed top-[60px] right-0 h-[calc(100vh-60px)] w-[320px] bg-white border-l border-slate-200 shadow-xl z-30 flex flex-col transition-transform duration-300 ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
                 >
-                    <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
-                        <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
-                            <ListFilter size={14} className="text-primary"/> Source & Exam Tags
-                        </h3>
-                        <button onClick={() => setShowAdvancedFilters(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 p-1.5 rounded-lg transition-colors">
-                            <X size={16} />
-                        </button>
+                    <div className="flex flex-col border-b border-slate-200 bg-slate-50 shrink-0">
+                        <div className="p-4 pb-2 flex items-center justify-between">
+                            <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                                <Filter size={14} className="text-primary"/> Filters & Tags
+                            </h3>
+                            <button onClick={() => setShowSourceFilters(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 p-1.5 rounded-lg transition-colors">
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="flex w-full mt-2 px-2">
+                            <button 
+                                onClick={() => setActiveSidebarTab('academic')}
+                                className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'academic' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                            >
+                                Academic
+                            </button>
+                            <button 
+                                onClick={() => setActiveSidebarTab('source')}
+                                className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'source' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                            >
+                                Source Tags
+                            </button>
+                        </div>
                     </div>
                     
                     <div className="p-5 flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-6">
                         
-                        {/* Selected Tags Bucket */}
-                        {(selectedBoards.length > 0 || selectedYears.length > 0 || selectedSchools.length > 0) && (
-                            <div className="flex flex-col gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl">
-                                <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-1.5">
-                                    <Filter size={12} /> Active Filters Bucket
-                                </span>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {selectedBoards.map(b => (
-                                        <span key={b} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
-                                            {b} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedBoards(prev => prev.filter(x => x !== b))} />
-                                        </span>
-                                    ))}
-                                    {selectedYears.map(y => (
-                                        <span key={y} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
-                                            {y} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedYears(prev => prev.filter(x => x !== y))} />
-                                        </span>
-                                    ))}
-                                    {selectedSchools.map(s => (
-                                        <span key={s} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
-                                            {s} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedSchools(prev => prev.filter(x => x !== s))} />
-                                        </span>
-                                    ))}
+                        {activeSidebarTab === 'academic' && (
+                            <div className="flex flex-col gap-4">
+                                <div className="relative w-full">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/50" size={14} />
+                                    <input
+                                        type="text"
+                                        value={metadataSearchTerm}
+                                        onChange={(e) => {
+                                            setMetadataSearchTerm(e.target.value);
+                                            setShowSuggestions(true);
+                                        }}
+                                        onFocus={() => { 
+                                            if (!metadataSearchTerm) setMetadataSearchTerm(' ');
+                                            setShowSuggestions(true);
+                                        }}
+                                        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                                        placeholder="Auto-select Subject/Topic..."
+                                        className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold text-slate-700 placeholder:text-slate-400 shadow-sm"
+                                    />
+                                    {showSuggestions && metadataSuggestions.length > 0 && (
+                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-[300px] overflow-y-auto custom-scrollbar z-50">
+                                            {metadataSuggestions.map((s, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    onClick={() => handleSelectSuggestion(s)}
+                                                    className="px-3 py-2 border-b border-slate-50 last:border-0 hover:bg-indigo-50 cursor-pointer flex flex-col gap-0.5 transition-colors"
+                                                >
+                                                    <span className="text-xs font-bold text-slate-700">{s.name}</span>
+                                                    <span className="text-[9px] font-black text-primary/70 uppercase tracking-wider">{s.type}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
+
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Language</label>
+                                    <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-50">
+                                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual') || user.instituteMedium.includes(',')) && <option value="ALL">সব ভার্সন</option>}
+                                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
+                                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
+                                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
+                                    </select>
+                                </div>
+
+                                {levels.length > 1 && (
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Level</label>
+                                        <select value={selectedLevelId} onChange={(e) => setSelectedLevelId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                                            <option value="">সব স্তর</option>
+                                            {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {streams.length > 1 && (
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Stream</label>
+                                        <select value={selectedStreamId} onChange={(e) => setSelectedStreamId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                                            <option value="">সব বিভাগ</option>
+                                            {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {classes.length > 1 && (
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Class</label>
+                                        <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                                            <option value="">সব শ্রেণি</option>
+                                            {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {subjects.length > 1 && (
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Subject</label>
+                                        <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                                            <option value="">সব বিষয়</option>
+                                            {subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {chapters.length > 1 && (
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Chapter</label>
+                                        <select value={selectedChapterId} onChange={(e) => setSelectedChapterId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                                            <option value="">সব অধ্যায়</option>
+                                            {chapters.map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {topics.length > 1 && (
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Topic</label>
+                                        <select value={selectedTopicId} onChange={(e) => setSelectedTopicId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                                            <option value="">সব টপিক</option>
+                                            {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
                             </div>
                         )}
 
-                        {/* Board / University List */}
-                        {sourceTags.boards && sourceTags.boards.length > 0 && (
-                            <div className="flex flex-col gap-2">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">Board / University</label>
-                                <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                                    {sourceTags.boards.map(tag => (
-                                        <label key={tag.name} className="flex items-center justify-between group cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg transition-colors">
-                                            <div className="flex items-center gap-2">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={selectedBoards.includes(tag.name)}
-                                                    onChange={(e) => {
-                                                        if (e.target.checked) setSelectedBoards(prev => [...prev, tag.name]);
-                                                        else setSelectedBoards(prev => prev.filter(b => b !== tag.name));
-                                                    }}
-                                                    className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20" 
-                                                />
-                                                <span className="text-[11px] font-bold text-slate-700">{tag.name}</span>
-                                            </div>
-                                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">({tag.count})</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                        {activeSidebarTab === 'source' && (
+                            <div className="flex flex-col gap-6">
+                                {/* Selected Tags Bucket */}
+                                {(selectedBoards.length > 0 || selectedYears.length > 0 || selectedSchools.length > 0) && (
+                                    <div className="flex flex-col gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl">
+                                        <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-1.5">
+                                            <Filter size={12} /> Active Filters Bucket
+                                        </span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {selectedBoards.map(b => (
+                                                <span key={b} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
+                                                    {b} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedBoards(prev => prev.filter(x => x !== b))} />
+                                                </span>
+                                            ))}
+                                            {selectedYears.map(y => (
+                                                <span key={y} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
+                                                    {y} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedYears(prev => prev.filter(x => x !== y))} />
+                                                </span>
+                                            ))}
+                                            {selectedSchools.map(s => (
+                                                <span key={s} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
+                                                    {s} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedSchools(prev => prev.filter(x => x !== s))} />
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
 
-                        {/* Year List */}
-                        {sourceTags.years && sourceTags.years.length > 0 && (
-                            <div className="flex flex-col gap-2">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">Year</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {sourceTags.years.map(tag => (
-                                        <label key={tag.name} className={`flex flex-col items-center justify-center p-2 rounded-lg border cursor-pointer transition-all ${selectedYears.includes(tag.name) ? 'bg-primary/5 border-primary text-primary' : 'bg-white border-slate-200 text-slate-600 hover:border-primary/50'}`}>
-                                            <input 
-                                                type="checkbox" 
-                                                checked={selectedYears.includes(tag.name)}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) setSelectedYears(prev => [...prev, tag.name]);
-                                                    else setSelectedYears(prev => prev.filter(y => y !== tag.name));
-                                                }}
-                                                className="hidden" 
-                                            />
-                                            <span className="text-xs font-black">{tag.name}</span>
-                                            <span className="text-[9px] font-bold opacity-70">({tag.count})</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                                {/* Board / University List */}
+                                {sourceTags.boards && sourceTags.boards.length > 0 && (
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">Board / University</label>
+                                        <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                            {sourceTags.boards.map(tag => (
+                                                <label key={tag.name} className="flex items-center justify-between group cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg transition-colors">
+                                                    <div className="flex items-center gap-2">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedBoards.includes(tag.name)}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) setSelectedBoards(prev => [...prev, tag.name]);
+                                                                else setSelectedBoards(prev => prev.filter(b => b !== tag.name));
+                                                            }}
+                                                            className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20" 
+                                                        />
+                                                        <span className="text-[11px] font-bold text-slate-700">{tag.name}</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">({tag.count})</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
 
-                        {/* School / College List */}
-                        {sourceTags.schools && sourceTags.schools.length > 0 && (
-                            <div className="flex flex-col gap-2">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">School / College</label>
-                                <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                                    {sourceTags.schools.map(tag => (
-                                        <label key={tag.name} className="flex items-center justify-between group cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg transition-colors">
-                                            <div className="flex items-center gap-2">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={selectedSchools.includes(tag.name)}
-                                                    onChange={(e) => {
-                                                        if (e.target.checked) setSelectedSchools(prev => [...prev, tag.name]);
-                                                        else setSelectedSchools(prev => prev.filter(s => s !== tag.name));
-                                                    }}
-                                                    className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20" 
-                                                />
-                                                <span className="text-[11px] font-bold text-slate-700 truncate max-w-[180px]" title={tag.name}>{tag.name}</span>
-                                            </div>
-                                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0">({tag.count})</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {(!sourceTags.boards?.length && !sourceTags.years?.length && !sourceTags.schools?.length) && (
-                            <div className="flex flex-col items-center justify-center py-10 opacity-50 text-center gap-2">
-                                <Search size={24} className="text-slate-400" />
-                                <p className="text-xs font-bold text-slate-500">No source tags found for the current subject.</p>
+                                {/* Year List */}
+                                {sourceTags.years && sourceTags.years.length > 0 && (
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">Year</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {sourceTags.years.map(tag => (
+                                                <label key={tag.name} className={`flex flex-col items-center justify-center p-2 rounded-lg border cursor-pointer transition-all ${selectedYears.includes(tag.name) ? 'bg-primary/5 border-primary text-primary' : 'bg-white border-slate-200 text-slate-600 hover:border-primary/50'}`}>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={selectedYears.includes(tag.name)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) setSelectedYears(prev => [...prev, tag.name]);
+                                                            else setSelectedYears(prev => prev.filter(y => y !== tag.name));
+                                                        }}
+                                                        className="hidden" 
+                                                    />
+                                                    <span className="text-xs font-black">{tag.name}</span>
+                                                    <span className="text-[9px] font-bold opacity-70">({tag.count})</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* School / College List */}
+                                {sourceTags.schools && sourceTags.schools.length > 0 && (
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">School / College</label>
+                                        <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                            {sourceTags.schools.map(tag => (
+                                                <label key={tag.name} className="flex items-center justify-between group cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg transition-colors">
+                                                    <div className="flex items-center gap-2">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedSchools.includes(tag.name)}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) setSelectedSchools(prev => [...prev, tag.name]);
+                                                                else setSelectedSchools(prev => prev.filter(s => s !== tag.name));
+                                                            }}
+                                                            className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20" 
+                                                        />
+                                                        <span className="text-[11px] font-bold text-slate-700 truncate max-w-[180px]" title={tag.name}>{tag.name}</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0">({tag.count})</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {(!sourceTags.boards?.length && !sourceTags.years?.length && !sourceTags.schools?.length) && (
+                                    <div className="flex flex-col items-center justify-center py-10 opacity-50 text-center gap-2">
+                                        <Search size={24} className="text-slate-400" />
+                                        <p className="text-xs font-bold text-slate-500">No source tags found for the current subject.</p>
+                                    </div>
+                                )}
                             </div>
                         )}
 
                     </div>
                     
                     <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
-                        <button onClick={() => { setSelectedBoards([]); setSelectedYears([]); setSelectedSchools([]); }} className="px-4 py-2 bg-white text-slate-600 hover:text-rose-600 font-bold rounded-lg border border-slate-200 hover:border-rose-200 transition-colors flex items-center justify-center gap-1.5 text-xs uppercase tracking-wide">
+                        <button onClick={resetFilters} className="px-4 py-2 bg-white text-slate-600 hover:text-rose-600 font-bold rounded-lg border border-slate-200 hover:border-rose-200 transition-colors flex items-center justify-center gap-1.5 text-xs uppercase tracking-wide">
                             <X size={14} /> Clear
                         </button>
                         <button onClick={() => fetchQuestions()} className="px-6 py-2 bg-primary text-white font-bold rounded-lg border border-transparent hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5 text-xs uppercase tracking-wide shadow-sm">
                             <CheckCircle size={14} /> Apply Filters
                         </button>
-                    </div>
-                </div>
-
-                {/* Inline Academic Hierarchy Filters (Always active at top) */}
-                <div className="bg-white border border-slate-200 rounded-xl p-3 mt-2 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="flex flex-col md:flex-row items-center justify-between mb-3 border-b border-slate-100 pb-2 gap-3">
-                        <div className="relative w-full md:w-[400px] shrink-0 z-20">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/50" size={14} />
-                            <input
-                                type="text"
-                                value={metadataSearchTerm}
-                                onChange={(e) => {
-                                    setMetadataSearchTerm(e.target.value);
-                                    setShowSuggestions(true);
-                                }}
-                                onFocus={() => { 
-                                    if (!metadataSearchTerm) setMetadataSearchTerm(' ');
-                                    setShowSuggestions(true);
-                                }}
-                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                                placeholder="Need suggestion? Type subject, chapter or topic name..."
-                                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold text-slate-700 placeholder:text-slate-400 placeholder:font-medium shadow-sm"
-                            />
-                            {showSuggestions && metadataSuggestions.length > 0 && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-[300px] overflow-y-auto custom-scrollbar">
-                                    {metadataSuggestions.map((s, idx) => (
-                                        <div
-                                            key={idx}
-                                            onClick={() => handleSelectSuggestion(s)}
-                                            className="px-3 py-2 border-b border-slate-50 last:border-0 hover:bg-indigo-50 cursor-pointer flex flex-col gap-0.5 transition-colors"
-                                        >
-                                            <span className="text-xs font-bold text-slate-700">{s.name}</span>
-                                            <span className="text-[9px] font-black text-primary/70 uppercase tracking-wider">{s.type}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        <button onClick={resetFilters} className="text-[10px] font-bold text-rose-500 hover:bg-rose-50 px-3 py-1.5 rounded-lg border border-transparent hover:border-rose-200 transition-colors flex items-center gap-1.5 shrink-0">
-                            <X size={14} /> Reset Filters
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Language</label>
-                            <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-50">
-                                {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual') || user.instituteMedium.includes(',')) && <option value="ALL">সব ভার্সন</option>}
-                                {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
-                                {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
-                                {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
-                            </select>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Level</label>
-                            <select value={selectedLevelId} onChange={(e) => setSelectedLevelId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
-                                <option value="">সব স্তর</option>
-                                {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                            </select>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Stream</label>
-                            <select value={selectedStreamId} onChange={(e) => setSelectedStreamId(e.target.value)} disabled={!selectedLevelId} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                                <option value="">{selectedLevelId ? "সব বিভাগ" : "← Level"}</option>
-                                {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Class</label>
-                            <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} disabled={!selectedStreamId} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                                <option value="">{selectedStreamId ? "সব শ্রেণি" : "← Stream"}</option>
-                                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Subject</label>
-                            <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} disabled={!selectedClassId} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                                <option value="">{selectedClassId ? "সব বিষয়" : "← Class"}</option>
-                                {subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
-                            </select>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Chapter</label>
-                            <select value={selectedChapterId} onChange={(e) => setSelectedChapterId(e.target.value)} disabled={!selectedSubjectId} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                                <option value="">{selectedSubjectId ? "সব অধ্যায়" : "← Subject"}</option>
-                                {chapters.map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
-                            </select>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Topic</label>
-                            <select value={selectedTopicId} onChange={(e) => setSelectedTopicId(e.target.value)} disabled={!selectedChapterId} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                                <option value="">{selectedChapterId ? "সব টপিক" : "← Chapter"}</option>
-                                {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </select>
-                        </div>
                     </div>
                 </div>
 
@@ -1453,6 +1609,39 @@ const QuestionList = () => {
 
                         {selectedIds.length > 0 && (
                             <div className="flex items-center gap-1.5 shrink-0">
+                                {(() => {
+                                    const selectedQs = questions.filter(q => selectedIds.includes(q.id));
+                                    const counts = { MCQ: 0, CQ: 0, SHORT: 0, OTHER: 0 };
+                                    selectedQs.forEach(q => {
+                                        if (q.type === 'MCQ') counts.MCQ++;
+                                        else if (q.type === 'CQ' || q.type === 'CREATIVE') counts.CQ++;
+                                        else if (q.type === 'SHORT' || q.type === 'SHORT_ANSWER') counts.SHORT++;
+                                        else counts.OTHER++;
+                                    });
+                                    const unseenCount = selectedIds.length - selectedQs.length;
+                                    
+                                    const textParts = [];
+                                    if (counts.MCQ > 0) textParts.push(`${counts.MCQ} MCQ`);
+                                    if (counts.CQ > 0) textParts.push(`${counts.CQ} CQ`);
+                                    if (counts.SHORT > 0) textParts.push(`${counts.SHORT} Short`);
+                                    if (counts.OTHER > 0) textParts.push(`${counts.OTHER} Other`);
+                                    if (unseenCount > 0) textParts.push(`+${unseenCount} off-page`);
+                                    
+                                    return (
+                                        <div className="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg flex items-center shrink-0">
+                                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                                                Selected: <span className="text-slate-800">{textParts.length > 0 ? textParts.join(', ') : selectedIds.length}</span>
+                                            </span>
+                                        </div>
+                                    );
+                                })()}
+                                <button 
+                                    onClick={handleCreateExamFromSelection}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 font-bold rounded-lg border border-violet-200 hover:bg-violet-100 transition-all text-[11px] uppercase tracking-wide shadow-sm"
+                                    title="Create Exam with Selected Questions"
+                                >
+                                    <FileText size={12} /> Create Exam
+                                </button>
                                 {isSuperAdmin && (
                                     <>
                                         <button onClick={() => handleUpdateStatusBulk('APPROVED')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 font-bold rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-all text-[11px] uppercase tracking-wide">
@@ -1508,7 +1697,7 @@ const QuestionList = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-0 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="flex flex-col gap-3 pb-2">
                             {(viewMode === 'FAVORITES' ? questions.filter(q => savedIds.includes(q.id)) : questions).map((q, index) => (
                                 <QuestionListItem 
                                     key={q.id}
