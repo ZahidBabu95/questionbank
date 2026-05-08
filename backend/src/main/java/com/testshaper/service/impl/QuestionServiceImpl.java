@@ -209,7 +209,7 @@ public class QuestionServiceImpl implements QuestionService {
     @Override
     public Question getQuestion(UUID id) {
         return questionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Question not found"));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Question not found"));
     }
 
     @Override

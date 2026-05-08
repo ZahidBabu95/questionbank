@@ -19,7 +19,7 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
      * Optimized for large question banks with indexed lookups.
      */
     @Query("SELECT q.id FROM Question q " +
-            "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId) " +
+            "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId OR q.tenantId = :globalTenantId OR q.tenantId IS NULL OR q.tenantId = '') " +
             "AND q.status = 'APPROVED' " +
             "AND q.classSubject.id = :classSubjectId " +
             "AND q.type = :type " +
@@ -30,6 +30,7 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             "AND q.deleted = false")
     List<UUID> findEligibleQuestionIds(
             @Param("tenantId") String tenantId,
+            @Param("globalTenantId") String globalTenantId,
             @Param("classSubjectId") UUID classSubjectId,
             @Param("type") Question.QuestionType type,
             @Param("difficulty") Question.DifficultyLevel difficulty,
@@ -37,8 +38,28 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             @Param("chapterIds") Set<UUID> chapterIds,
             @Param("excludedIds") Set<UUID> excludedIds);
 
+    @Query("SELECT q.id FROM Question q " +
+            "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId OR q.tenantId = :globalTenantId OR q.tenantId IS NULL OR q.tenantId = '') " +
+            "AND q.status = 'APPROVED' " +
+            "AND q.classSubject.id = :classSubjectId " +
+            "AND q.type = :type " +
+            "AND q.difficulty = :difficulty " +
+            "AND q.language = :language " +
+            "AND (:topicIds IS NULL OR q.topic.id IN :topicIds) " +
+            "AND (q.id NOT IN :excludedIds) " +
+            "AND q.deleted = false")
+    List<UUID> findEligibleQuestionIdsByTopic(
+            @Param("tenantId") String tenantId,
+            @Param("globalTenantId") String globalTenantId,
+            @Param("classSubjectId") UUID classSubjectId,
+            @Param("type") Question.QuestionType type,
+            @Param("difficulty") Question.DifficultyLevel difficulty,
+            @Param("language") String language,
+            @Param("topicIds") Set<UUID> topicIds,
+            @Param("excludedIds") Set<UUID> excludedIds);
+
     @Query("SELECT COUNT(q) FROM Question q " +
-            "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId) " +
+            "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId OR q.tenantId = :globalTenantId OR q.tenantId IS NULL OR q.tenantId = '') " +
             "AND q.status = 'APPROVED' " +
             "AND q.classSubject.id = :classSubjectId " +
             "AND q.deleted = false")

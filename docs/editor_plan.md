@@ -82,8 +82,50 @@
 1. ✅ **Phase A (Schema Update):** `CurriculumRules.jsx` এবং ডাটাবেস আপডেট করে নতুন JSON স্কিমা সেভ করার ব্যবস্থা করা। (সম্পন্ন)
 2. ✅ **Phase B (Backend Logic):** `ExamGenerationServiceImpl` এবং AI Prompting সিস্টেমে এই JSON স্কিমা ইনজেক্ট করা। (সম্পন্ন)
 3. ✅ **Phase D (Builder UI):** Auto এবং Manual এক্সাম বিল্ডারের ইন্টারফেস ডায়নামিক করা, ট্র্যাকার অ্যাড করা এবং এপিআই পেলোড ফিক্স করা। (সম্পন্ন)
-4. ⏳ **Phase C (Editor UI):** `PaperCanvasV2` (Nexus Paper Engine) কে ডায়নামিক করা যাতে সে স্কিমা রিসিভ করে টুলবার এবং ব্লক কন্ট্রোল করতে পারে, এবং এডিটরের আধুনিকায়ন। (পরবর্তী কাজ)
+4. ⏳ **Phase C1 (Editor Refactoring & State Management):**
+    - `NexusEditor.jsx` কে ছোট মডিউলে ভাগ করা।
+    - `NexusEditorContext` তৈরি করে গ্লোবাল স্টেট (docSettings, rawContent, zoom) ম্যানেজ করা।
+    - প্যানেল রিসাইজিং, ফিল্টারিং, এবং API কলগুলোকে কাস্টম হুকে রূপান্তর করা (`usePanelResizer`, `useAcademicFilters`, `useExamManager`)।
+5. ⏳ **Phase C2 (Editor UI Optimization):** `PaperCanvasV2` (Nexus Paper Engine) কে ডায়নামিক করা, CSS পারফরম্যান্স (Dynamic Style Tag) ইমপ্রুভ করা এবং রিয়েল-টাইম ভ্যালিডেশন যুক্ত করা।
 
 ---
 
-> **বর্তমান স্ট্যাটাস:** আমরা সফলভাবে Auto Exam Generator এবং Manual Exam Builder-এর ডায়নামিক উইজার্ড এবং সিলেবাস অ্যালোকেশন সম্পন্ন করেছি। পরবর্তী সেশনে আমরা **Phase C** অর্থাৎ Nexus Editor-এর আধুনিকায়ন, ড্র্যাগ-এন্ড-ড্রপ সাপোর্ট এবং ডায়নামিক টুলবার নিয়ে কাজ শুরু করবো।
+### 📌 টাস্ক ট্র্যাকার
+### Phase C1: Modularization & State Separation
+**Status:** 🟢 Complete
+
+**Tasks:**
+- [x] Create `context/NexusEditorContext.js` to hold `docSettings`, `rawContent`, `editorConfig`, and ui layout state.
+- [x] Extract hook `usePanelResizer.js` to manage sidebar dragging.
+- [x] Extract hook `useAcademicFilters.js` to handle all dropdowns, fetching chapters, and question search.
+- [x] Extract hook `useAiImporter.js` for checking `localStorage` and building HTML from AI responses.
+- [x] Extract hook `useExamManager.js` for loading/saving exam, loading templates, fetching config.
+- [x] Create `components/Layout/NexusHeader.jsx`
+- [x] Create `components/Layout/LeftSidebar.jsx`
+- [x] Create `components/Layout/RightSidebar.jsx`
+- [x] Refactor `NexusEditor.jsx` to just be the wrapper/provider invoking these components.
+
+---
+
+> **বর্তমান স্ট্যাটাস:** আমরা **Phase C2 (Editor UI Optimization)** শুরু করতে যাচ্ছি। `PaperCanvasV2` কে ডায়নামিক করার কাজ বাকি আছে।
+
+### Phase C2: Editor UI & Canvas Optimization
+**Status:** Planned
+
+**Tasks:**
+- [ ] Extract inline TipTap extensions (`CustomHeading`, `CustomParagraph`) from `PaperCanvasV2.jsx` into `extensions/CustomNodes.js`.
+- [ ] Extract the complex formatting sync loop (`useEffect` processing sections and node attributes) into a dedicated hook like `hooks/useCanvasSync.js`.
+- [ ] Move the massive dynamic `<style>` block out of the render return and into a memoized component or hook (e.g., `components/CanvasStyleInjector.jsx`) to stop layout thrashing.
+- [ ] Extract any floating toolbars (Math, Table, Image alignment) into `components/CanvasToolbar.jsx`.
+- [ ] Optimize the `ResizeObserver` for page count calculation by applying robust debouncing.
+- [ ] Verify that `Strict Mode` drag-and-drop and copy-paste behavior remains bug-free.
+
+### Phase C3: Answer Sheet Module
+**Status:** Completed
+
+**Tasks:**
+- [x] Add Phase C3 to the plan.
+- [x] Add `answerSheet` tab to `NexusHeader` and `translations.js`.
+- [x] Add Answer Sheet settings (Layout selection: Compact, Highlighted, Detailed) to `SettingsPanel.jsx`.
+- [x] Create `AnswerSheetPreview.jsx` to render a print-friendly modal with the answers extracted from `documentQuestions`.
+- [x] Integrate `AnswerSheetPreview` into `NexusEditor.jsx` and wire up the "Print Answer Sheet" button.

@@ -37,6 +37,9 @@ public class ExamGenerationServiceImpl {
     private final ClassSubjectRepository classSubjectRepository;
     private final ObjectMapper objectMapper;
 
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
     // =========================================================
     // AUTO GENERATION — Main Entry Point
     // =========================================================
@@ -197,22 +200,25 @@ public class ExamGenerationServiceImpl {
                 total, rule.getQuestionType(), easyCount, mediumCount, hardCount);
 
         String tenantId = TenantContext.getTenantId();
-        Set<UUID> chapterIds = request.getChapterIds() != null
+        Set<UUID> chapterIds = request.getChapterIds() != null && !request.getChapterIds().isEmpty()
                 ? new HashSet<>(request.getChapterIds())
+                : null;
+        Set<UUID> topicIds = request.getTopicIds() != null && !request.getTopicIds().isEmpty()
+                ? new HashSet<>(request.getTopicIds())
                 : null;
 
         List<Question> pool = new ArrayList<>();
         pool.addAll(fetchPool(tenantId, request.getClassSubjectId(),
                 rule.getQuestionType(), Question.DifficultyLevel.EASY,
-                request.getLanguage(), chapterIds, usedIds, easyCount));
+                request.getLanguage(), chapterIds, topicIds, usedIds, easyCount));
                 
         pool.addAll(fetchPool(tenantId, request.getClassSubjectId(),
                 rule.getQuestionType(), Question.DifficultyLevel.MEDIUM,
-                request.getLanguage(), chapterIds, usedIds, mediumCount));
+                request.getLanguage(), chapterIds, topicIds, usedIds, mediumCount));
                 
         pool.addAll(fetchPool(tenantId, request.getClassSubjectId(),
                 rule.getQuestionType(), Question.DifficultyLevel.HARD,
-                request.getLanguage(), chapterIds, usedIds, hardCount));
+                request.getLanguage(), chapterIds, topicIds, usedIds, hardCount));
 
         // Build ExamQuestion entries
         List<ExamQuestion> result = new ArrayList<>();
@@ -231,18 +237,42 @@ public class ExamGenerationServiceImpl {
             Question.DifficultyLevel difficulty,
             String language,
             Set<UUID> chapterIds,
+            Set<UUID> topicIds,
             Set<UUID> excludedIds,
             int needed) {
             
         if (needed <= 0) return new ArrayList<>();
 
+        String globalTenantId = null;
+        try {
+            globalTenantId = (String) entityManager.createQuery("SELECT CAST(i.id AS string) FROM Institute i WHERE i.code = 'DEFAULT-001'")
+                    .setMaxResults(1)
+                    .getSingleResult();
+        } catch (Exception e) {
+            // ignore if not found
+        }
+
         Set<UUID> safeExclusions = excludedIds.isEmpty()
                 ? Set.of(UUID.randomUUID()) // avoids empty IN clause issues
                 : excludedIds;
-        Set<UUID> safeChapters = (chapterIds == null || chapterIds.isEmpty()) ? null : chapterIds;
 
-        List<UUID> eligibleIds = questionPoolRepository.findEligibleQuestionIds(
-                tenantId, classSubjectId, type, difficulty, language, safeChapters, safeExclusions);
+        Set<UUID> eligibleIdsSet = new HashSet<>();
+
+        if (chapterIds == null && topicIds == null) {
+            eligibleIdsSet.addAll(questionPoolRepository.findEligibleQuestionIds(
+                    tenantId, globalTenantId, classSubjectId, type, difficulty, language, null, safeExclusions));
+        } else {
+            if (chapterIds != null && !chapterIds.isEmpty()) {
+                eligibleIdsSet.addAll(questionPoolRepository.findEligibleQuestionIds(
+                        tenantId, globalTenantId, classSubjectId, type, difficulty, language, chapterIds, safeExclusions));
+            }
+            if (topicIds != null && !topicIds.isEmpty()) {
+                eligibleIdsSet.addAll(questionPoolRepository.findEligibleQuestionIdsByTopic(
+                        tenantId, globalTenantId, classSubjectId, type, difficulty, language, topicIds, safeExclusions));
+            }
+        }
+
+        List<UUID> eligibleIds = new ArrayList<>(eligibleIdsSet);
                 
         if (eligibleIds.size() < needed) {
             log.warn("Insufficient questions: needed={} available={} type={} difficulty={}",
@@ -486,6 +516,8 @@ public class ExamGenerationServiceImpl {
             qDto.setDifficulty(q.getDifficulty());
             qDto.setBloomLevel(q.getBloomLevel());
             qDto.setLanguage(q.getLanguage());
+            qDto.setExplanation(q.getExplanation());
+            qDto.setCorrectAnswer(q.getCorrectAnswer());
 
             if (q.getType() == Question.QuestionType.MCQ) {
                 java.util.List<ExamDTO.OptionDTO> optionDTOs = null;

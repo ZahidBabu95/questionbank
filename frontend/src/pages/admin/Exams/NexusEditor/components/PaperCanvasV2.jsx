@@ -70,7 +70,8 @@ const PaperCanvasV2 = ({
     docSettings, zoom = 100,
     editorConfig = null, workspaceTools = null, onPageCountChange,
     pendingInsertQuestion, onQuestionInserted,
-    pendingSwapQuestion, onQuestionSwapped
+    pendingSwapQuestion, onQuestionSwapped,
+    setDocumentQuestions, documentQuestions = []
 }) => {
     const s = docSettings || {};
 
@@ -175,7 +176,7 @@ const PaperCanvasV2 = ({
                     qs.push({ pos, nodeSize: node.nodeSize, attrs: node.attrs });
                 }
             });
-            window.dispatchEvent(new CustomEvent('nexusDocumentQuestionsUpdate', { detail: qs }));
+            if (setDocumentQuestions) setDocumentQuestions(qs);
         };
         
         // Initial extraction
@@ -324,7 +325,7 @@ const PaperCanvasV2 = ({
                     
                     if (targetSec) {
                         let needsUpdate = false;
-                        const newAttrs = { ...node.attrs };
+                        const changes = {};
                         
                         const ns = targetSec.numberingStyle || 'bn';
                         const mc = targetSec.marksConfig || 'hide';
@@ -332,11 +333,11 @@ const PaperCanvasV2 = ({
                         const os = targetSec.optionStyle || 'bn';
                         const od = targetSec.optionDecoration || 'rightBracket';
 
-                        if (node.attrs.numberingStyle !== ns) { newAttrs.numberingStyle = ns; needsUpdate = true; }
-                        if (node.attrs.marksConfig !== mc) { newAttrs.marksConfig = mc; needsUpdate = true; }
-                        if (node.attrs.optionLayout !== ol) { newAttrs.optionLayout = ol; needsUpdate = true; }
-                        if (node.attrs.optionStyle !== os) { newAttrs.optionStyle = os; needsUpdate = true; }
-                        if (node.attrs.optionDecoration !== od) { newAttrs.optionDecoration = od; needsUpdate = true; }
+                        if (node.attrs.numberingStyle !== ns) { changes.numberingStyle = ns; needsUpdate = true; }
+                        if (node.attrs.marksConfig !== mc) { changes.marksConfig = mc; needsUpdate = true; }
+                        if (node.attrs.optionLayout !== ol) { changes.optionLayout = ol; needsUpdate = true; }
+                        if (node.attrs.optionStyle !== os) { changes.optionStyle = os; needsUpdate = true; }
+                        if (node.attrs.optionDecoration !== od) { changes.optionDecoration = od; needsUpdate = true; }
                         
                         // Layout & Typography sync
                         const fSize = targetSec.fontSize !== undefined && targetSec.fontSize !== '' ? targetSec.fontSize : s.bodyFontSize;
@@ -345,14 +346,14 @@ const PaperCanvasV2 = ({
                         const qGap = targetSec.questionGap !== undefined && targetSec.questionGap !== '' ? targetSec.questionGap : s.questionGap;
                         const tAlign = targetSec.textAlign || 'left';
                         
-                        if (node.attrs.fontSize != fSize) { newAttrs.fontSize = fSize; needsUpdate = true; }
-                        if (node.attrs.lineGap != lGap) { newAttrs.lineGap = lGap; needsUpdate = true; }
-                        if (node.attrs.optionGap != oGap) { newAttrs.optionGap = oGap; needsUpdate = true; }
-                        if (node.attrs.questionGap != qGap) { newAttrs.questionGap = qGap; needsUpdate = true; }
-                        if (node.attrs.textAlign != tAlign) { newAttrs.textAlign = tAlign; needsUpdate = true; }
+                        if (node.attrs.fontSize != fSize) { changes.fontSize = fSize; needsUpdate = true; }
+                        if (node.attrs.lineGap != lGap) { changes.lineGap = lGap; needsUpdate = true; }
+                        if (node.attrs.optionGap != oGap) { changes.optionGap = oGap; needsUpdate = true; }
+                        if (node.attrs.questionGap != qGap) { changes.questionGap = qGap; needsUpdate = true; }
+                        if (node.attrs.textAlign != tAlign) { changes.textAlign = tAlign; needsUpdate = true; }
                         
                         if (needsUpdate) {
-                            updates.push({ pos, type: 'attrs', attrs: newAttrs });
+                            updates.push({ pos, type: 'attrs', changes });
                         }
                     }
                     return false; // skip children of question block
@@ -405,7 +406,10 @@ const PaperCanvasV2 = ({
                     if (update.type === 'delete') {
                         tr = tr.delete(update.pos, update.pos + update.nodeSize);
                     } else if (update.type === 'attrs') {
-                        tr = tr.setNodeMarkup(update.pos, undefined, update.attrs);
+                        const currentNode = tr.doc.nodeAt(update.pos);
+                        if (currentNode) {
+                            tr = tr.setNodeMarkup(update.pos, undefined, { ...currentNode.attrs, ...update.changes });
+                        }
                     } else if (update.type === 'text') {
                         const newContent = update.text ? [editor.schema.text(update.text)] : [];
                         const newNode = editor.schema.nodes[update.node.type.name].create(update.node.attrs, newContent);
@@ -684,7 +688,58 @@ const PaperCanvasV2 = ({
                 )}
                 
                 {/* Tiptap Content */}
-                <EditorContent editor={editor} />
+                <div className={s.includeAnswerSheet ? `show-answers-${s.ansLayout || 'highlighted'}` : ''}>
+                    <EditorContent editor={editor} />
+                </div>
+
+                {/* Compact Answer Grid Inline */}
+                {s.includeAnswerSheet && s.ansLayout === 'compact' && documentQuestions && documentQuestions.length > 0 && (
+                    <div className="mt-12 pt-6 border-t-2 border-slate-800 break-inside-avoid print:break-before-page" style={{ fontFamily: s.fontFamily || 'Kalpurush' }}>
+                        <h4 className="text-center font-bold mb-4" style={{ fontSize: ptToPx(s.subHeaderFontSize || 14) }}>
+                            {s.language === 'ENGLISH' ? 'Answer Sheet' : 'উত্তরপত্র'}
+                        </h4>
+                        <div className="grid grid-cols-4 gap-x-4 gap-y-2 text-sm" style={{ fontSize: ptToPx(s.bodyFontSize || 12) }}>
+                            {documentQuestions.map((q, i) => {
+                                const qType = q.attrs?.type || 'MCQ';
+                                const options = q.attrs?.options || [];
+                                let ansText = '';
+
+                                if (qType === 'MCQ' && options && Array.isArray(options)) {
+                                    const correctOpts = [];
+                                    options.forEach((opt, oi) => {
+                                        if (opt.correct || opt.isCorrect) {
+                                            const optStyle = q.attrs?.optionStyle || 'bn';
+                                            const optLabel = optStyle === 'en' 
+                                                ? String.fromCharCode(97 + oi) 
+                                                : optStyle === 'roman'
+                                                ? ['i', 'ii', 'iii', 'iv', 'v'][oi]
+                                                : optStyle === 'num_en'
+                                                ? `${oi + 1}`
+                                                : optStyle === 'num_bn'
+                                                ? ['১', '২', '৩', '৪', '৫'][oi]
+                                                : ['ক', 'খ', 'গ', 'ঘ', 'ঙ'][oi] || String.fromCharCode(2453 + oi);
+                                            correctOpts.push(optLabel);
+                                        }
+                                    });
+                                    ansText = correctOpts.length > 0 ? correctOpts.join(', ') : 'N/A';
+                                } else {
+                                    ansText = q.attrs?.answer || 'N/A';
+                                }
+
+                                const qNumber = q.attrs?.numberingStyle === 'en' || s.language === 'ENGLISH' 
+                                    ? (i + 1) 
+                                    : convertDigits(i + 1, 'BANGLA');
+
+                                return (
+                                    <div key={i} className="flex items-start gap-1">
+                                        <span className="font-bold shrink-0">{qNumber}.</span>
+                                        <span className="font-bold" dangerouslySetInnerHTML={{ __html: ansText }} />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Custom CSS for Tiptap in Paper Engine */}
@@ -702,7 +757,7 @@ const PaperCanvasV2 = ({
                 }
                 
                 .ProseMirror {
-                    font-family: '${s.bnFont}', sans-serif;
+                    font-family: '${s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali')}', sans-serif;
                     font-size: ${ptToPx(s.bodyFontSize)}px;
                     line-height: ${s.lineHeight};
                     width: 100% !important;
@@ -726,6 +781,66 @@ const PaperCanvasV2 = ({
                     outline: none;
                 }
                 
+                /* Inline Answer Sheet Marking */
+                .show-answers-highlighted .nexus-correct-option {
+                    background-color: #f0fdf4 !important;
+                    outline: 1.5px solid #86efac;
+                    border-radius: 3px;
+                    position: relative;
+                    padding-right: 24px !important;
+                }
+                .show-answers-highlighted .nexus-correct-option::after {
+                    content: '✔';
+                    position: absolute;
+                    right: 6px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    color: #16a34a;
+                    font-size: 14px;
+                    font-weight: bold;
+                }
+                
+                .show-answers-detailed .nexus-detailed-answer-block {
+                    display: block !important;
+                }
+                
+                /* Compact Answer Sheet Marking */
+                .show-answers-compact .ProseMirror {
+                    column-count: 4 !important;
+                    column-gap: 20px !important;
+                }
+                .show-answers-compact [data-type="question-block"] {
+                    display: flex !important;
+                    align-items: center !important;
+                    gap: 8px !important;
+                    padding-left: 2.6em !important;
+                    margin-bottom: 12px !important;
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                }
+                .show-answers-compact [data-type="question-block"]::before {
+                    position: absolute;
+                    left: 0;
+                    top: 50%;
+                    transform: translateY(-50%);
+                }
+                .show-answers-compact [data-type="question-block"] > .relative.transition-all,
+                .show-answers-compact .nexus-question-wrapper > .nexus-question-content,
+                .show-answers-compact [data-type="question-block"] > .options-grid {
+                    display: none !important;
+                }
+                
+                .show-answers-compact .nexus-detailed-answer-block {
+                    display: block !important;
+                    margin-top: 0 !important;
+                }
+                .show-answers-compact .nexus-detailed-answer-block .explanation-block {
+                    display: none !important;
+                }
+                .show-answers-compact .nexus-detailed-answer-block .answer-label-text {
+                    display: none !important;
+                }
+
                 /* Dynamic Section Display Toggles & Styles */
                 ${(s.sections || []).map(sec => `
                     ${sec.showName === false ? `[data-section-id="${sec.id}"].section-name { display: none !important; }` : `

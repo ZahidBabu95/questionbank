@@ -310,14 +310,12 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                             <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest">{t.examDetails || 'Exam Properties'}</h3>
                         </div>
                         <div className="space-y-3">
-                            <G2>
-                                <FL label={t.subject} toggleKey="showSubject" toggleVal={s.showSubject!==false} onToggle={u}>
-                                    <FieldDisplay isEdit={isEditMode} value={s.subject} onChange={v=>u("subject",v)} disabled={s.showSubject===false} />
-                                </FL>
-                                <FL label={t.subjectCode || 'Subject Code'} toggleKey="showSubjectCode" toggleVal={s.showSubjectCode} onToggle={u}>
-                                    <FieldDisplay isEdit={isEditMode} value={s.subjectCode} onChange={v=>u("subjectCode",v)} disabled={!s.showSubjectCode} />
-                                </FL>
-                            </G2>
+                            <FL label={t.examType} toggleKey="showExamType" toggleVal={s.showExamType!==false} onToggle={u}>
+                                <FieldDisplay isEdit={isEditMode} value={s.exam} onChange={v=>u("exam",v)} disabled={s.showExamType===false} />
+                            </FL>
+                            <FL label={t.subject} toggleKey="showSubject" toggleVal={s.showSubject!==false} onToggle={u}>
+                                <FieldDisplay isEdit={isEditMode} value={s.subject} onChange={v=>u("subject",v)} disabled={s.showSubject===false} />
+                            </FL>
                             <G2>
                                 <FL label={t.class} toggleKey="showClass" toggleVal={s.showClass!==false} onToggle={u}>
                                     <FieldDisplay isEdit={isEditMode} value={s.className} onChange={v=>u("className",v)} disabled={s.showClass===false} />
@@ -327,24 +325,27 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                 </FL>
                             </G2>
                             <G2>
-                                <FL label={t.examType} toggleKey="showExamType" toggleVal={s.showExamType!==false} onToggle={u}>
-                                    <FieldDisplay isEdit={isEditMode} value={s.exam} onChange={v=>u("exam",v)} disabled={s.showExamType===false} />
+                                <FL label={t.subjectCode || 'Subject Code'} toggleKey="showSubjectCode" toggleVal={s.showSubjectCode} onToggle={u}>
+                                    <FieldDisplay isEdit={isEditMode} value={s.subjectCode} onChange={v=>u("subjectCode",v)} disabled={!s.showSubjectCode} />
                                 </FL>
-                                <FL label={t.year} toggleKey="showYear" toggleVal={s.showYear!==false} onToggle={u}>
-                                    <FieldDisplay isEdit={isEditMode} value={s.year} onChange={v=>u("year",v)} disabled={s.showYear===false} />
+                                <FL label={t.setCode || 'Set Code'} toggleKey="showSetCode" toggleVal={s.showSetCode} onToggle={u}>
+                                    <FieldDisplay isEdit={isEditMode} value={s.setCode} onChange={v=>u("setCode",v)} disabled={!s.showSetCode} />
                                 </FL>
                             </G2>
                             <G2>
+                                <FL label={t.year} toggleKey="showYear" toggleVal={s.showYear!==false} onToggle={u}>
+                                    <FieldDisplay isEdit={isEditMode} value={s.year} onChange={v=>u("year",v)} disabled={s.showYear===false} />
+                                </FL>
                                 <FL label={t.time} toggleKey="showTime" toggleVal={s.showTime!==false} onToggle={u}>
                                     <FieldDisplay isEdit={isEditMode} value={s.time} onChange={v=>u("time",v)} disabled={s.showTime===false} />
                                 </FL>
+                            </G2>
+                            <G2>
                                 <FL label={t.fullMarks} toggleKey="showTotalMarks" toggleVal={s.showTotalMarks!==false} onToggle={u}>
                                     <NumDisplay isEdit={isEditMode} value={s.totalMarks} onChange={v=>u("totalMarks",v)} min={10} max={300} disabled={s.showTotalMarks===false} />
                                 </FL>
+                                <div></div>
                             </G2>
-                            <FL label={t.setCode || 'Set Code'} toggleKey="showSetCode" toggleVal={s.showSetCode} onToggle={u}>
-                                <FieldDisplay isEdit={isEditMode} value={s.setCode} onChange={v=>u("setCode",v)} disabled={!s.showSetCode} />
-                            </FL>
                         </div>
                     </div>
 
@@ -500,6 +501,51 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                             opts={[{v:"left",l:t.left || 'Left'},{v:"center",l:t.center || 'Center'},{v:"right",l:t.right || 'Right'}]}/>
                     </FL>}
                 </CollapsibleBox>
+            </div>}
+
+            {activeTab === "answerSheet" && <div className="space-y-4">
+                <div className="bg-slate-50 rounded-xl border border-slate-100 p-4 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="w-1.5 h-4 bg-teal-500 rounded-full"></div>
+                        <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest">{t.ansLayout || 'Layout Style'}</h3>
+                    </div>
+                    
+                    <div className="flex flex-col gap-3">
+                        <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${s.ansLayout === 'compact' ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:border-indigo-300'}`}>
+                            <input type="radio" name="ansLayout" checked={s.ansLayout === 'compact'} onChange={() => u('ansLayout', 'compact')} className="w-4 h-4 text-indigo-600 focus:ring-indigo-500" />
+                            <div className="flex flex-col">
+                                <span className={`text-sm font-bold ${s.ansLayout === 'compact' ? 'text-indigo-900' : 'text-slate-700'}`}>{t.compactView || 'Compact View'}</span>
+                                <span className="text-[11px] text-slate-500 font-medium">১. ক | ২. গ | ৩. ঘ (For OMR / Quick checking)</span>
+                            </div>
+                        </label>
+
+                        <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${s.ansLayout === 'highlighted' ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:border-indigo-300'}`}>
+                            <input type="radio" name="ansLayout" checked={s.ansLayout === 'highlighted'} onChange={() => u('ansLayout', 'highlighted')} className="w-4 h-4 text-indigo-600 focus:ring-indigo-500" />
+                            <div className="flex flex-col">
+                                <span className={`text-sm font-bold ${s.ansLayout === 'highlighted' ? 'text-indigo-900' : 'text-slate-700'}`}>{t.highlightedView || 'Highlighted View'}</span>
+                                <span className="text-[11px] text-slate-500 font-medium">Shows options with correct answer highlighted</span>
+                            </div>
+                        </label>
+
+                        <label className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${s.ansLayout === 'detailed' ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:border-indigo-300'}`}>
+                            <input type="radio" name="ansLayout" checked={s.ansLayout === 'detailed'} onChange={() => u('ansLayout', 'detailed')} className="w-4 h-4 text-indigo-600 focus:ring-indigo-500" />
+                            <div className="flex flex-col">
+                                <span className={`text-sm font-bold ${s.ansLayout === 'detailed' ? 'text-indigo-900' : 'text-slate-700'}`}>{t.detailedView || 'Detailed View'}</span>
+                                <span className="text-[11px] text-slate-500 font-medium">Full question, answer text, and explanations</span>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div className="mt-6">
+                        <div className="flex items-center justify-between bg-indigo-50 border border-indigo-100 p-4 rounded-xl shadow-sm">
+                            <div className="flex flex-col">
+                                <span className="text-sm font-bold text-indigo-900">{uiLang === 'bn' ? 'প্রশ্নপত্রে উত্তর চিহ্নিত করুন' : 'Highlight Answers in Paper'}</span>
+                                <span className="text-[11px] text-indigo-700">{uiLang === 'bn' ? 'সঠিক উত্তরগুলো প্রশ্নপত্রের ভেতরেই চিহ্নিত হয়ে থাকবে' : 'Correct answers will be highlighted inside the question paper'}</span>
+                            </div>
+                            <Toggle checked={s.includeAnswerSheet} onChange={e => u("includeAnswerSheet", e.target.checked)}/>
+                        </div>
+                    </div>
+                </div>
             </div>}
         </div>
     );

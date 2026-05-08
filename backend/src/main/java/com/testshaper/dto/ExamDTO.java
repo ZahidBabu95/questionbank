@@ -60,6 +60,8 @@ public class ExamDTO {
         private Question.DifficultyLevel difficulty;
         private String bloomLevel;
         private String language;
+        private String explanation;
+        private String correctAnswer;
         private List<OptionDTO> options;
     }
 

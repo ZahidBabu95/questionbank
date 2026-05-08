@@ -2,6 +2,7 @@ import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
 import React from 'react';
 import { RefreshCw, Trash2, Edit3, RotateCcw } from 'lucide-react';
+import questionService from '../../../../../services/questionService';
 
 const parseMarkdownImages = (text) => {
     if (!text) return text;
@@ -55,6 +56,34 @@ const parseMarkdownImages = (text) => {
         React.useEffect(() => {
             attrsRef.current = node.attrs;
         }, [node.attrs]);
+
+        // Auto-sync missing fields from DB for old saved questions
+        React.useEffect(() => {
+            const attrs = node.attrs;
+            if (!attrs.questionId || attrs.syncedFromDb) return;
+            
+            // Check if we need to sync (missing explanation or missing correct flags in options)
+            const isMissingData = !attrs.explanation || 
+                                  (attrs.type === 'MCQ' && attrs.options && attrs.options.length > 0 && !attrs.options.some(o => o.isCorrect !== undefined || o.correct !== undefined));
+            
+            if (isMissingData) {
+                questionService.getQuestionById(attrs.questionId).then(q => {
+                    if (q) {
+                        updateAttributes({
+                            syncedFromDb: true,
+                            explanation: q.explanation || '',
+                            answer: q.correctAnswer || '',
+                            options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : attrs.options
+                        });
+                    }
+                }).catch(err => {
+                    console.error("Failed to sync question data for ID:", attrs.questionId, err);
+                    updateAttributes({ syncedFromDb: true }); // Prevent infinite retry
+                });
+            } else {
+                updateAttributes({ syncedFromDb: true });
+            }
+        }, [node.attrs.questionId, node.attrs.syncedFromDb, updateAttributes]);
 
         const handleImageMouseDown = (e) => {
             if (e.target.tagName === 'IMG' && e.target.hasAttribute('data-img-index')) {
@@ -267,7 +296,7 @@ const parseMarkdownImages = (text) => {
                                 : 'font-semibold text-slate-800 shrink-0';
                                 
                             return (
-                                <div key={idx} className="flex items-start gap-2">
+                                <div key={idx} className={`flex items-start gap-2 ${opt.isCorrect || opt.correct ? 'nexus-correct-option p-1' : 'p-1'}`}>
                                     <span className={bubbleClass} style={{
                                         width: dec === 'bubble' ? '1.2em' : 'auto',
                                         height: dec === 'bubble' ? '1.2em' : 'auto',
@@ -280,6 +309,42 @@ const parseMarkdownImages = (text) => {
                         })}
                     </div>
                 )}
+
+                {/* Inline Detailed Answer Block */}
+                <div className="nexus-detailed-answer-block mt-2 break-inside-avoid w-full hidden"
+                     style={{ fontSize: node.attrs.fontSize ? `${node.attrs.fontSize}pt` : 'inherit', fontFamily: 'inherit' }}>
+                    <div className="flex items-start gap-1 font-bold text-slate-800 nexus-answer-line">
+                        <span className="shrink-0 answer-label-text">উত্তর:</span>
+                        <div className="nexus-answer-content text-indigo-700" dangerouslySetInnerHTML={{ __html: (() => {
+                            if (node.attrs.type === 'CQ' || !node.attrs.options || node.attrs.options.length === 0) {
+                                return node.attrs.answer || 'N/A';
+                            }
+                            const correctOpts = [];
+                            node.attrs.options.forEach((opt, idx) => {
+                                if (opt.correct === true || opt.isCorrect === true || String(opt.correct) === 'true' || String(opt.isCorrect) === 'true') {
+                                    const optStyle = node.attrs.optionStyle || 'bn';
+                                    const optLabel = optStyle === 'en' 
+                                        ? String.fromCharCode(97 + idx) 
+                                        : optStyle === 'roman'
+                                        ? ['i', 'ii', 'iii', 'iv', 'v'][idx]
+                                        : optStyle === 'num_en'
+                                        ? `${idx + 1}`
+                                        : optStyle === 'num_bn'
+                                        ? ['১', '২', '৩', '৪', '৫'][idx]
+                                        : getBanglaOptionLabel(idx);
+                                    correctOpts.push(`${optLabel}. ${opt.optionText || opt.text || ''}`);
+                                }
+                            });
+                            return correctOpts.length > 0 ? correctOpts.join('<br/>') : (node.attrs.answer || 'N/A');
+                        })() }} />
+                    </div>
+                    {node.attrs.explanation && (
+                        <div className="explanation-block text-slate-800 mt-1 flex items-start gap-1 p-2 bg-slate-50 border border-slate-200 rounded">
+                            <span className="font-bold shrink-0 text-emerald-700">ব্যাখ্যা:</span>
+                            <div dangerouslySetInnerHTML={{ __html: node.attrs.explanation }} />
+                        </div>
+                    )}
+                </div>
 
                 {/* Free Edit Warning overlay (optional) */}
                 {!isStrict && (
@@ -310,6 +375,9 @@ export const QuestionBlockNode = Node.create({
             chapterName: { default: '' },
             marks: { default: 1 },
             options: { default: [] },
+            explanation: { default: '' },
+            answer: { default: '' },
+            syncedFromDb: { default: false },
             numberingStyle: { default: 'bn' },
             marksConfig: { default: 'hide' },
             optionLayout: { default: 'col1' },
@@ -349,6 +417,9 @@ export const QuestionBlockNode = Node.create({
                     statements: statements,
                     chapterName: dom.getAttribute('chaptername') || '',
                     marks: Number(dom.getAttribute('marks')) || 1,
+                    explanation: dom.getAttribute('explanation') || '',
+                    answer: dom.getAttribute('answer') || '',
+                    syncedFromDb: dom.getAttribute('syncedfromdb') === 'true',
                     numberingStyle: dom.getAttribute('numberingstyle') || 'bn',
                     marksConfig: dom.getAttribute('marksconfig') || 'hide',
                     optionLayout: dom.getAttribute('optionlayout') || 'col1',
@@ -369,10 +440,13 @@ export const QuestionBlockNode = Node.create({
         const { options, statements, ...restAttrs } = HTMLAttributes;
         return ['div', mergeAttributes(restAttrs, {
             'data-type': 'question-block',
-            'data-options': JSON.stringify(options),
+            'data-options': JSON.stringify(options || []),
             'data-statements': JSON.stringify(statements || []),
             'questionid': HTMLAttributes.questionId || null,
             'stimulus': HTMLAttributes.stimulus || '',
+            'explanation': HTMLAttributes.explanation || '',
+            'answer': HTMLAttributes.answer || '',
+            'syncedfromdb': HTMLAttributes.syncedFromDb ? 'true' : 'false',
             'fontsize': HTMLAttributes.fontSize || null,
             'linegap': HTMLAttributes.lineGap || null,
             'optiongap': HTMLAttributes.optionGap || null,

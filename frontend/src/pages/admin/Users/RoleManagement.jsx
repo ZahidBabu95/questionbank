@@ -4,7 +4,9 @@ import userService from '../../../services/userService';
 import { MENU_ITEMS } from '../../../components/layout/Sidebar';
 
 // Utility to generate a safe uppercase ID mapping for menus
-const generateMenuId = (title, parentId = '') => {
+const generateMenuId = (itemOrTitle, parentId = '') => {
+    if (typeof itemOrTitle === 'object' && itemOrTitle.id) return itemOrTitle.id;
+    const title = typeof itemOrTitle === 'object' ? itemOrTitle.title : itemOrTitle;
     let baseId = title.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/(^_|_$)/g, '');
     return parentId ? `${parentId}_${baseId}` : baseId;
 };
@@ -12,7 +14,7 @@ const generateMenuId = (title, parentId = '') => {
 // Recursively parse the Sidebar MENU_ITEMS into our Permission modules table structure
 const buildModulesList = (items, parentId = '') => {
     return items.map(item => {
-        let id = generateMenuId(item.title, parentId);
+        let id = generateMenuId(item, parentId);
         const moduleItem = { id, name: item.title };
         if (item.submenu && item.submenu.length > 0) {
             moduleItem.submenus = buildModulesList(item.submenu, id);

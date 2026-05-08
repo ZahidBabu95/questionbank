@@ -15,188 +15,207 @@ import { useBranding } from '../../context/BrandingContext';
 
 export const MENU_ITEMS = [
     {
+        id: 'DASHBOARD',
         title: 'Dashboard',
         icon: <LayoutDashboard size={20} strokeWidth={1.8} />,
         path: '/dashboard',
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT']
     },
     {
+        id: 'AI_WORKSPACE',
         title: 'AI Workspace',
         icon: <Sparkles size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
         submenu: [
-            { title: 'Chat Console', path: '/ai-workspace', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
-            { title: 'Tool & Widget Manager', path: '/ai-workspace/admin/tools', roles: ['SUPER_ADMIN'] },
-            { title: 'Command & Settings', path: '/ai-workspace/admin/settings', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'Prompt Rules', path: '/ai-workspace/admin/prompts', roles: ['SUPER_ADMIN'] },
-            { title: 'Personas Mapping', path: '/ai-workspace/admin/personas', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'Audit & Telemetry', path: '/ai-workspace/admin/audit', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] }
+            { id: 'AI_WORKSPACE_CHAT_CONSOLE', title: 'Chat Console', path: '/ai-workspace', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+            { id: 'AI_WORKSPACE_TOOL_WIDGET_MANAGER', title: 'Tool & Widget Manager', path: '/ai-workspace/admin/tools', roles: ['SUPER_ADMIN'] },
+            { id: 'AI_WORKSPACE_COMMAND_SETTINGS', title: 'Command & Settings', path: '/ai-workspace/admin/settings', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'AI_WORKSPACE_PROMPT_RULES', title: 'Prompt Rules', path: '/ai-workspace/admin/prompts', roles: ['SUPER_ADMIN'] },
+            { id: 'AI_WORKSPACE_PERSONAS_MAPPING', title: 'Personas Mapping', path: '/ai-workspace/admin/personas', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'AI_WORKSPACE_AUDIT_TELEMETRY', title: 'Audit & Telemetry', path: '/ai-workspace/admin/audit', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] }
         ]
     },
     {
+        id: 'USER_MANAGEMENT',
         title: 'User Management',
         icon: <Users size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'],
         submenu: [
-            { title: 'All Users', path: '/users', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'Teachers', path: '/users/teachers', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'Students', path: '/users/students', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'Roles & Permissions', path: '/users/roles', roles: ['SUPER_ADMIN'] },
-            { title: 'Blocked Users', path: '/users/blocked', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'USER_MANAGEMENT_ALL_USERS', title: 'All Users', path: '/users', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'USER_MANAGEMENT_TEACHERS', title: 'Teachers', path: '/users/teachers', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'USER_MANAGEMENT_STUDENTS', title: 'Students', path: '/users/students', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'USER_MANAGEMENT_ROLES_PERMISSIONS', title: 'Roles & Permissions', path: '/users/roles', roles: ['SUPER_ADMIN'] },
+            { id: 'USER_MANAGEMENT_BLOCKED_USERS', title: 'Blocked Users', path: '/users/blocked', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
         ]
     },
     {
+        id: 'INSTITUTE_MANAGEMENT',
         title: 'Institute Management',
         icon: <School size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN'],
         submenu: [
-            { title: 'All Institutes', path: '/institutes', roles: ['SUPER_ADMIN'] },
-            { title: 'Add Institute', path: '/institutes/add', roles: ['SUPER_ADMIN'] },
-            { title: 'Institute Admin List', path: '/institutes/admins', roles: ['SUPER_ADMIN'] },
-            { title: 'Subscription / Package', path: '/institutes/subscriptions', roles: ['SUPER_ADMIN'] },
+            { id: 'INSTITUTE_MANAGEMENT_ALL_INSTITUTES', title: 'All Institutes', path: '/institutes', roles: ['SUPER_ADMIN'] },
+            { id: 'INSTITUTE_MANAGEMENT_ADD_INSTITUTE', title: 'Add Institute', path: '/institutes/add', roles: ['SUPER_ADMIN'] },
+            { id: 'INSTITUTE_MANAGEMENT_INSTITUTE_ADMIN_LIST', title: 'Institute Admin List', path: '/institutes/admins', roles: ['SUPER_ADMIN'] },
+            { id: 'INSTITUTE_MANAGEMENT_SUBSCRIPTION_PACKAGE', title: 'Subscription / Package', path: '/institutes/subscriptions', roles: ['SUPER_ADMIN'] },
         ]
     },
     {
+        id: 'ACADEMIC_STRUCTURE',
         title: 'Academic Structure',
         icon: <BookOpen size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'],
         submenu: [
-            { title: 'Curriculum Hierarchy', path: '/admin/academic/structure', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-            { title: 'Academic Sessions', path: '/admin/academic/sessions', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'Curriculum Repository', path: '/admin/curriculum', roles: ['SUPER_ADMIN'] },
+            { id: 'ACADEMIC_STRUCTURE_CURRICULUM_HIERARCHY', title: 'Curriculum Hierarchy', path: '/admin/academic/structure', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+            { id: 'ACADEMIC_STRUCTURE_ACADEMIC_SESSIONS', title: 'Academic Sessions', path: '/admin/academic/sessions', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'ACADEMIC_STRUCTURE_CURRICULUM_REPOSITORY', title: 'Curriculum Repository', path: '/admin/curriculum', roles: ['SUPER_ADMIN'] },
         ]
     },
     {
+        id: 'KNOWLEDGE_HUB',
         title: 'Knowledge Hub',
         icon: <Brain size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'],
         submenu: [
-            { title: 'Resource Library', path: '/knowledge-hub/library', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-            { title: 'Synchronized Library', path: '/knowledge-hub/sync-library', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-            { title: 'Course Mapping', path: '/knowledge-hub/mapping', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] }
+            { id: 'KNOWLEDGE_HUB_RESOURCE_LIBRARY', title: 'Resource Library', path: '/knowledge-hub/library', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+            { id: 'KNOWLEDGE_HUB_SYNCHRONIZED_LIBRARY', title: 'Synchronized Library', path: '/knowledge-hub/sync-library', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+            { id: 'KNOWLEDGE_HUB_COURSE_MAPPING', title: 'Course Mapping', path: '/knowledge-hub/mapping', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] }
         ]
     },
     {
+        id: 'QUESTION_BANK',
         title: 'Question Bank',
         icon: <FileQuestion size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
         submenu: [
             {
+                id: 'QUESTION_BANK_REPOSITORY',
                 title: 'Repository',
                 roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
                 submenu: [
-                    { title: 'All Questions', path: '/questions', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
-                    { title: 'Drafts (AI Generated)', path: '/questions/drafts', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Pending', path: '/questions/pending', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'QUESTION_BANK_REPOSITORY_ALL_QUESTIONS', title: 'All Questions', path: '/questions', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+                    { id: 'QUESTION_BANK_REPOSITORY_DRAFTS_AI_GENERATED', title: 'Drafts (AI Generated)', path: '/questions/drafts', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'QUESTION_BANK_REPOSITORY_PENDING', title: 'Pending', path: '/questions/pending', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { id: 'QUESTION_BANK_REPOSITORY_APPROVED', title: 'Question Bank', path: '/questions/approved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
-                    { title: 'Rejected', path: '/questions/rejected', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Source Management', path: '/questions/sources', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+                    { id: 'QUESTION_BANK_REPOSITORY_REJECTED', title: 'Rejected', path: '/questions/rejected', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'QUESTION_BANK_REPOSITORY_SOURCE_MANAGEMENT', title: 'Source Management', path: '/questions/sources', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
                 ]
             },
             {
+                id: 'QUESTION_BANK_ADD_QUESTION',
                 title: 'Add Question',
                 roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'],
                 submenu: [
-                    { title: 'MCQ', path: '/questions/create/mcq', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'CQ (Creative)', path: '/questions/add/cq', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Short Question', path: '/questions/add/short', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'QUESTION_BANK_ADD_QUESTION_MCQ', title: 'MCQ', path: '/questions/create/mcq', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'QUESTION_BANK_ADD_QUESTION_CQ_CREATIVE', title: 'CQ (Creative)', path: '/questions/add/cq', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'QUESTION_BANK_ADD_QUESTION_SHORT_QUESTION', title: 'Short Question', path: '/questions/add/short', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                 ]
             },
             {
+                id: 'QUESTION_BANK_BULK_IMPORT',
                 title: 'Bulk Import',
                 roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'],
                 submenu: [
-                    { title: 'Import Excel', path: '/questions/import/excel', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Import With AI', path: '/questions/import/ai', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'AI Cost Manager', path: '/questions/import/api', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Upload History', path: '/ai/upload-history', roles: ['SUPER_ADMIN'] },
+                    { id: 'QUESTION_BANK_BULK_IMPORT_IMPORT_EXCEL', title: 'Import Excel', path: '/questions/import/excel', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'QUESTION_BANK_BULK_IMPORT_IMPORT_WITH_AI', title: 'Import With AI', path: '/questions/import/ai', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'QUESTION_BANK_BULK_IMPORT_AI_COST_MANAGER', title: 'AI Cost Manager', path: '/questions/import/api', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'QUESTION_BANK_BULK_IMPORT_UPLOAD_HISTORY', title: 'Upload History', path: '/ai/upload-history', roles: ['SUPER_ADMIN'] },
                 ]
             }
         ]
     },
     {
+        id: 'EXAM_PAPER',
         title: 'Exam & Paper',
         icon: <FileText size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
         submenu: [
             {
+                id: 'EXAM_PAPER_GENERATOR',
                 title: 'Generator',
                 roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'],
                 submenu: [
-                    { title: 'Auto Generate', path: '/exams/generate/auto', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Saved Exams', path: '/exams/generate/saved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Nexus Paper Engine (V2)', path: '/exams/generate/nexus-editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Legacy Editor', path: '/exams/generate/editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-                    { title: 'Manual Select', path: '/exams/generate/manual', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'EXAM_PAPER_GENERATOR_AUTO_GENERATE', title: 'Auto Generate', path: '/exams/generate/auto', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'EXAM_PAPER_GENERATOR_SAVED_EXAMS', title: 'Saved Exams', path: '/exams/generate/saved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'EXAM_PAPER_GENERATOR_NEXUS_PAPER_ENGINE_V2', title: 'Nexus Paper Engine (V2)', path: '/exams/generate/nexus-editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'EXAM_PAPER_GENERATOR_LEGACY_EDITOR', title: 'Legacy Editor', path: '/exams/generate/editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'EXAM_PAPER_GENERATOR_MANUAL_SELECT', title: 'Manual Select', path: '/exams/generate/manual', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                 ]
             },
             {
+                id: 'EXAM_PAPER_DOWNLOAD',
                 title: 'Download',
                 roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
                 submenu: [
-                    { title: 'PDF Format', path: '/exams/download/pdf', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
-                    { title: 'Word Format', path: '/exams/download/word', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+                    { id: 'EXAM_PAPER_DOWNLOAD_PDF_FORMAT', title: 'PDF Format', path: '/exams/download/pdf', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+                    { id: 'EXAM_PAPER_DOWNLOAD_WORD_FORMAT', title: 'Word Format', path: '/exams/download/word', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
                 ]
             }
         ]
     },
     {
+        id: 'LECTURES',
         title: 'Lectures',
         icon: <Layers size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
         submenu: [
-            { title: 'Create Sheet', path: '/lectures/create', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-            { title: 'Manage Attachments', path: '/lectures/attach', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+            { id: 'LECTURES_CREATE_SHEET', title: 'Create Sheet', path: '/lectures/create', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+            { id: 'LECTURES_MANAGE_ATTACHMENTS', title: 'Manage Attachments', path: '/lectures/attach', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
         ]
     },
     {
+        id: 'REPORTS',
         title: 'Reports',
         icon: <BarChart size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'],
         submenu: [
-            { title: 'Usage Summary', path: '/reports/usage', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'Performance Insights', path: '/reports/performance', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
-            { title: 'Knowledge Hub Report', path: '/reports/knowledge-hub', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'REPORTS_USAGE_SUMMARY', title: 'Usage Summary', path: '/reports/usage', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'REPORTS_PERFORMANCE_INSIGHTS', title: 'Performance Insights', path: '/reports/performance', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+            { id: 'REPORTS_KNOWLEDGE_HUB_REPORT', title: 'Knowledge Hub Report', path: '/reports/knowledge-hub', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
         ]
     },
     {
+        id: 'BILLING_AI_QUOTA',
         title: 'Billing & AI Quota',
         icon: <CreditCard size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'],
         submenu: [
-            { title: 'Overview', path: '/billing/overview', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'Subscription Packages', path: '/billing/packages', roles: ['SUPER_ADMIN'] },
-            { title: 'Manage Subscriptions', path: '/billing/subscriptions', roles: ['SUPER_ADMIN'] },
-            { title: 'Invoices', path: '/billing/invoices', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'AI Usage & Tracker', path: '/billing/ai-usage', roles: ['SUPER_ADMIN'] },
+            { id: 'BILLING_AI_QUOTA_OVERVIEW', title: 'Overview', path: '/billing/overview', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'BILLING_AI_QUOTA_SUBSCRIPTION_PACKAGES', title: 'Subscription Packages', path: '/billing/packages', roles: ['SUPER_ADMIN'] },
+            { id: 'BILLING_AI_QUOTA_MANAGE_SUBSCRIPTIONS', title: 'Manage Subscriptions', path: '/billing/subscriptions', roles: ['SUPER_ADMIN'] },
+            { id: 'BILLING_AI_QUOTA_INVOICES', title: 'Invoices', path: '/billing/invoices', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'BILLING_AI_QUOTA_AI_USAGE_TRACKER', title: 'AI Usage & Tracker', path: '/billing/ai-usage', roles: ['SUPER_ADMIN'] },
         ]
     },
     {
+        id: 'CMS',
         title: 'CMS',
         icon: <Globe size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN'],
         submenu: [
-            { title: 'Landing Page', path: '/cms/landing', roles: ['SUPER_ADMIN'] },
-            { title: 'Blog Repository', path: '/cms/blog/posts', roles: ['SUPER_ADMIN'] },
+            { id: 'CMS_LANDING_PAGE', title: 'Landing Page', path: '/cms/landing', roles: ['SUPER_ADMIN'] },
+            { id: 'CMS_BLOG_REPOSITORY', title: 'Blog Repository', path: '/cms/blog/posts', roles: ['SUPER_ADMIN'] },
         ]
     },
     {
+        id: 'SETTINGS',
         title: 'Settings',
         icon: <Settings size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'],
         submenu: [
-            { title: 'Security', path: '/settings/security', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'General', path: '/settings/general', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
-            { title: 'Backup', path: '/settings/backup', roles: ['SUPER_ADMIN'] },
+            { id: 'SETTINGS_SECURITY', title: 'Security', path: '/settings/security', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'SETTINGS_GENERAL', title: 'General', path: '/settings/general', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'SETTINGS_BACKUP', title: 'Backup', path: '/settings/backup', roles: ['SUPER_ADMIN'] },
         ]
     },
     {
+        id: 'SUPPORT',
         title: 'Support',
         icon: <MessageSquare size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
         submenu: [
-            { title: 'All Tickets', path: '/support/all', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
-            { title: 'AI Support Engine', path: '/support/knowledge', roles: ['SUPER_ADMIN'] },
+            { id: 'SUPPORT_ALL_TICKETS', title: 'All Tickets', path: '/support/all', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+            { id: 'SUPPORT_AI_SUPPORT_ENGINE', title: 'AI Support Engine', path: '/support/knowledge', roles: ['SUPER_ADMIN'] },
         ]
     }
 ];

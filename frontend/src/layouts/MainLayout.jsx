@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
     Menu, Search, Bell, ChevronDown, Box,
@@ -157,10 +157,44 @@ const MainLayout = () => {
 
     useEffect(() => {
         setDynamicTitle(null);
+        setIsEditingTitle(false);
     }, [location.pathname]);
 
     const title = dynamicTitle?.title || defaultTitleInfo.title;
     const subtitle = dynamicTitle?.subtitle || defaultTitleInfo.subtitle;
+
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const [tempTitle, setTempTitle] = useState('');
+    const titleInputRef = useRef(null);
+
+    const handleTitleClick = () => {
+        if (dynamicTitle?.isEditable) {
+            setTempTitle(title);
+            setIsEditingTitle(true);
+            setTimeout(() => {
+                if (titleInputRef.current) {
+                    titleInputRef.current.focus();
+                    titleInputRef.current.select();
+                }
+            }, 0);
+        }
+    };
+
+    const handleTitleBlur = () => {
+        setIsEditingTitle(false);
+        if (tempTitle.trim() !== '' && tempTitle !== title && dynamicTitle?.onTitleChange) {
+            dynamicTitle.onTitleChange(tempTitle);
+        }
+    };
+
+    const handleTitleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            handleTitleBlur();
+        } else if (e.key === 'Escape') {
+            setIsEditingTitle(false);
+            setTempTitle(title);
+        }
+    };
 
     const isSuperAdmin = userData?.roles?.some(r => {
         const roleName = typeof r === 'string' ? r : (r.name || '');
@@ -267,8 +301,29 @@ const MainLayout = () => {
                                 </div>
                             ) : (
                                 <div>
-                                    <h1 className="text-[17px] md:text-xl font-black text-slate-800 tracking-tight">{title}</h1>
-                                    <p className="text-[11px] md:text-sm font-medium text-slate-500 tracking-wide mt-0.5">{subtitle}</p>
+                                    {isEditingTitle ? (
+                                        <input
+                                            ref={titleInputRef}
+                                            type="text"
+                                            value={tempTitle}
+                                            onChange={(e) => setTempTitle(e.target.value)}
+                                            onBlur={handleTitleBlur}
+                                            onKeyDown={handleTitleKeyDown}
+                                            className="text-[17px] md:text-xl font-black text-slate-800 tracking-tight bg-transparent border-b-2 border-indigo-500 outline-none w-full max-w-[400px] px-1 -ml-1"
+                                        />
+                                    ) : (
+                                        <h1 
+                                            onClick={handleTitleClick}
+                                            className={clsx(
+                                                "text-[17px] md:text-xl font-black text-slate-800 tracking-tight transition-colors px-1 -ml-1 rounded",
+                                                dynamicTitle?.isEditable && "cursor-pointer hover:bg-slate-100"
+                                            )}
+                                            title={dynamicTitle?.isEditable ? "Click to edit" : ""}
+                                        >
+                                            {title}
+                                        </h1>
+                                    )}
+                                    <p className="text-[11px] md:text-sm font-medium text-slate-500 tracking-wide mt-0.5 px-1 -ml-1">{subtitle}</p>
                                 </div>
                             )}
                         </div>

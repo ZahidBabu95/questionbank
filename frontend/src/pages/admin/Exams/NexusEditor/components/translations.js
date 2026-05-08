@@ -9,6 +9,7 @@ export const UI_TEXT = {
         design: "Design",
         templates: "Templates",
         tools: "Tools",
+        answerSheet: "Answer Sheet",
 
         // Question Setup
         sections: "Sections",
@@ -46,7 +47,7 @@ export const UI_TEXT = {
         class: "Class",
         group: "Group",
         showGroup: "Show Group",
-        examType: "Exam Type",
+        examType: "Exam Name",
         year: "Year",
         setCode: "Set Code",
         time: "Time",
@@ -146,7 +147,14 @@ export const UI_TEXT = {
         wsTools: "Workspace Tools",
         mathEd: "Math Formula Editor",
         tableBld: "Table Builder",
-        imgUp: "Image Upload"
+        imgUp: "Image Upload",
+
+        // Answer Sheet
+        ansLayout: "Layout Style",
+        compactView: "Compact View (Grid)",
+        highlightedView: "Highlighted View",
+        detailedView: "Detailed View (With Explanations)",
+        genPrintAns: "Preview & Print Answer Sheet"
     },
     bn: {
         // Top Tabs
@@ -158,6 +166,7 @@ export const UI_TEXT = {
         design: "ডিজাইন",
         templates: "টেমপ্লেট",
         tools: "টুলস",
+        answerSheet: "উত্তরপত্র",
 
         // Question Setup
         sections: "বিভাগ সমূহ",
@@ -195,7 +204,7 @@ export const UI_TEXT = {
         class: "শ্রেণি",
         group: "গ্রুপ",
         showGroup: "গ্রুপ দেখাও",
-        examType: "পরীক্ষার ধরন",
+        examType: "পরীক্ষার নাম",
         year: "বছর",
         setCode: "সেট কোড",
         time: "সময়",
@@ -295,6 +304,13 @@ export const UI_TEXT = {
         wsTools: "ওয়ার্কস্পেস টুলস",
         mathEd: "গণিত ফর্মুলা এডিটর",
         tableBld: "টেবিল বিল্ডার",
-        imgUp: "ইমেজ আপলোড"
+        imgUp: "ইমেজ আপলোড",
+
+        // Answer Sheet
+        ansLayout: "লেআউট স্টাইল",
+        compactView: "সংক্ষিপ্ত ভিউ (গ্রিড)",
+        highlightedView: "হাইলাইটেড ভিউ",
+        detailedView: "বিস্তারিত ভিউ (ব্যাখ্যাসহ)",
+        genPrintAns: "উত্তরপত্র তৈরি ও প্রিন্ট করুন"
     }
 };
