@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { 
     Settings2, PanelRightClose, ImageIcon, 
-    AlignLeft, AlignCenter, AlignRight, Globe, Loader2 
+    AlignLeft, AlignCenter, AlignRight, Globe, Loader2, Crop
 } from 'lucide-react';
 import SettingsPanel from '../SettingsPanel';
 import { useNexusEditor } from '../../context/NexusEditorContext';
 import { useExamManager } from '../../hooks/useExamManager';
 import { DEFAULT_SETTINGS } from '../DocumentSettings';
+import ImageEditorModal from '../../../../../../components/ImageEditorModal';
+import questionService from '../../../../../../services/questionService';
 
 const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
     const { 
@@ -20,6 +22,28 @@ const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
     } = useNexusEditor();
 
     const { templates, loadingTemplates, applyTemplate } = useExamManager();
+
+    const [isCropperOpen, setIsCropperOpen] = useState(false);
+    const [isCroppingImageUpload, setIsCroppingImageUpload] = useState(false);
+
+    const handleCropSave = async (file, blobUrl) => {
+        setIsCroppingImageUpload(true);
+        try {
+            const res = await questionService.uploadStimulusImage(file);
+            const url = res.url;
+            
+            // Dispatch update to sync new URL and keep the current width/align
+            if (selectedImageConfig && selectedImageConfig.onUpdate) {
+                selectedImageConfig.onUpdate(selectedImageConfig.align, selectedImageConfig.width, url);
+                setSelectedImageConfig(prev => ({ ...prev, src: url }));
+            }
+        } catch (err) {
+            alert('Image upload failed: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setIsCroppingImageUpload(false);
+            setIsCropperOpen(false);
+        }
+    };
 
     return (
         <div style={{ width: isRightPanelOpen ? `${rightPanelWidth}px` : '0px' }}
@@ -82,6 +106,21 @@ const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
                                     </div>
                                 </div>
                             </div>
+                            
+                            {/* Crop / Edit Button */}
+                            <div>
+                                <button 
+                                    onClick={() => setIsCropperOpen(true)}
+                                    disabled={isCroppingImageUpload}
+                                    className="w-full flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+                                >
+                                    {isCroppingImageUpload ? (
+                                        <><Loader2 size={16} className="animate-spin" /> Uploading...</>
+                                    ) : (
+                                        <><Crop size={16} /> Crop / Edit Image</>
+                                    )}
+                                </button>
+                            </div>
 
                             <div>
                                 <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Alignment</label>
@@ -100,6 +139,14 @@ const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
                             </div>
                         </div>
                     )}
+
+                    {/* Image Editor Modal */}
+                    <ImageEditorModal 
+                        isOpen={isCropperOpen}
+                        src={selectedImageConfig?.src}
+                        onClose={() => setIsCropperOpen(false)}
+                        onSave={handleCropSave}
+                    />
 
                     {activeTab === 'templates' && (
                         <div className="p-4 space-y-4">

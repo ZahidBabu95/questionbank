@@ -36,4 +36,13 @@ public interface CurriculumDocumentChunkRepository extends JpaRepository<Curricu
     @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
     @org.springframework.data.jpa.repository.Query("DELETE FROM CurriculumDocumentChunk c WHERE c.sourceBookIndex.id = :sourceBookIndexId")
     void deleteBySourceBookIndexId(@org.springframework.data.repository.query.Param("sourceBookIndexId") UUID sourceBookIndexId);
+
+    public interface ChunkStatsProjection {
+        UUID getSourceBookId();
+        long getVectorizedChunks();
+    }
+
+    @org.springframework.data.jpa.repository.Query("SELECT c.sourceBook.id AS sourceBookId, COUNT(c.id) AS vectorizedChunks " +
+            "FROM CurriculumDocumentChunk c WHERE c.sourceBook.id IN :bookIds GROUP BY c.sourceBook.id")
+    List<ChunkStatsProjection> getChunkStatsForBooks(@org.springframework.data.repository.query.Param("bookIds") java.util.List<UUID> bookIds);
 }

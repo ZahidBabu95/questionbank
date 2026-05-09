@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal } from 'lucide-react';
 import questionService from '../../../services/questionService';
@@ -466,6 +466,8 @@ const QuestionList = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const [questions, setQuestions] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const observerTarget = useRef(null);
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [filterType, setFilterType] = useState('ALL');
     const [filterLanguage, setFilterLanguage] = useState(() => {
@@ -476,7 +478,7 @@ const QuestionList = () => {
     const [selectedQuestion, setSelectedQuestion] = useState(null);
     const [selectedIds, setSelectedIds] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(25);
+    const [itemsPerPage, setItemsPerPage] = useState(50);
     const [totalElements, setTotalElements] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [viewMode, setViewMode] = useState('ALL');
@@ -489,13 +491,61 @@ const QuestionList = () => {
 
 
 
-    const handleSaveToggle = React.useCallback((id) => {
+    const handleSaveToggle = React.useCallback(async (id) => {
         setSavedIds(prev => {
             const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
             localStorage.setItem('savedQuestionIds', JSON.stringify(next));
             return next;
         });
+        try {
+            await questionService.toggleFavorite(id);
+        } catch (error) {
+            console.error("Failed to toggle favorite on backend", error);
+        }
     }, []);
+
+    useEffect(() => {
+        const fetchFavoriteIds = async () => {
+            try {
+                const ids = await questionService.getMyFavoriteIds();
+                if (ids && Array.isArray(ids)) {
+                    setSavedIds(ids);
+                    localStorage.setItem('savedQuestionIds', JSON.stringify(ids));
+                }
+            } catch (error) {
+                console.error("Failed to fetch favorite IDs", error);
+            }
+        };
+        if (user) fetchFavoriteIds();
+    }, [user]);
+
+    // Sync filter status with URL path for sidebar menus
+    useEffect(() => {
+        const path = location.pathname;
+        if (path.includes('/drafts')) {
+            setFilterStatus('DRAFT');
+            setViewMode('ALL');
+        } else if (path.includes('/pending')) {
+            setFilterStatus('PENDING');
+            setViewMode('ALL');
+        } else if (path.includes('/rejected')) {
+            setFilterStatus('REJECTED');
+            setViewMode('ALL');
+        } else if (path.includes('/approved')) {
+            setFilterStatus('APPROVED');
+            setViewMode('ALL');
+        } else if (path.includes('/favorites')) {
+            setFilterStatus('ALL');
+            setViewMode('FAVORITES');
+        } else if (path.includes('/revised')) {
+            setFilterStatus('REVISED');
+            setViewMode('REVISED');
+        } else {
+            setFilterStatus('ALL');
+            setViewMode('ALL');
+        }
+        setCurrentPage(1);
+    }, [location.pathname]);
 
     const [reviseItem, setReviseItem] = useState(null); // question to revise
     const [reviewItem, setReviewItem] = useState(null); // revision to review (Super Admin)
@@ -845,21 +895,39 @@ const QuestionList = () => {
     }, [selectedChapterId]);
 
     const fetchQuestions = async () => {
-        setLoading(true);
+        if (currentPage === 1) setLoading(true);
+        else setLoadingMore(true);
         try {
             const params = {
                 ...getFullParams(),
                 page: currentPage - 1,
                 size: itemsPerPage
             };
-            const data = await questionService.getAllQuestionsPaginated(params);
-            setQuestions(data.content || []);
+            
+            let data;
+            if (viewMode === 'FAVORITES') {
+                data = await questionService.getMyFavorites(params);
+            } else {
+                data = await questionService.getAllQuestionsPaginated(params);
+            }
+            
+            if (currentPage === 1) {
+                setQuestions(data.content || []);
+            } else {
+                setQuestions(prev => {
+                    const newQs = data.content || [];
+                    const existingIds = new Set(prev.map(q => q.id));
+                    const uniqueNewQs = newQs.filter(q => !existingIds.has(q.id));
+                    return [...prev, ...uniqueNewQs];
+                });
+            }
             setTotalPages(data.totalPages || 0);
             setTotalElements(data.totalElements || 0);
         } catch (error) {
             console.error("Failed to fetch questions", error);
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
     };
 
@@ -870,7 +938,31 @@ const QuestionList = () => {
             fetchOverviewStats();
         }, 300); // 300ms debounce for search query typing
         return () => clearTimeout(timer);
-    }, [currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools]);
+    }, [viewMode, currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools]);
+
+    // Intersection Observer for Infinite Scrolling
+    useEffect(() => {
+        if (loading || loadingMore || questions.length === 0) return;
+
+        const observer = new IntersectionObserver(
+            entries => {
+                if (entries[0].isIntersecting && currentPage < totalPages) {
+                    setCurrentPage(prev => prev + 1);
+                }
+            },
+            { rootMargin: '1200px' }
+        );
+
+        const target = observerTarget.current;
+        if (target) {
+            observer.observe(target);
+        }
+
+        return () => {
+            if (target) observer.unobserve(target);
+            observer.disconnect();
+        };
+    }, [loading, loadingMore, currentPage, totalPages, questions.length]);
 
     const handleDelete = React.useCallback(async (id) => {
         if (window.confirm('Are you sure you want to delete this question?')) {
@@ -1576,23 +1668,7 @@ const QuestionList = () => {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 w-full md:w-auto overflow-x-auto justify-end shrink-0">
-                        <label className="flex items-center gap-2 cursor-pointer bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors shrink-0">
-                            <input
-                                type="checkbox"
-                                checked={questions.length > 0 && selectedIds.length > 0 && questions.every(q => selectedIds.includes(q.id))}
-                                onChange={(e) => {
-                                    if (e.target.checked) {
-                                        const newSelected = new Set([...selectedIds, ...questions.map(q => q.id)]);
-                                        setSelectedIds(Array.from(newSelected));
-                                    } else {
-                                        const pageIds = questions.map(q => q.id);
-                                        setSelectedIds(selectedIds.filter(id => !pageIds.includes(id)));
-                                    }
-                                }}
-                                className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary/20 m-0 cursor-pointer"
-                            />
-                            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest whitespace-nowrap select-none">Select All Page ({questions.length})</span>
-                        </label>
+
 
                         {totalElements > questions.length && (
                             <button
@@ -1679,7 +1755,7 @@ const QuestionList = () => {
             <div className={`flex gap-4 px-4 md:px-6 py-4 ${splitScreenMode ? 'flex-col md:flex-row h-[65vh] overflow-hidden' : 'flex-col'}`}>
                 {/* List Side */}
                 <div className={`${splitScreenMode ? 'w-full md:w-1/2 overflow-y-auto pr-1 md:pr-2 custom-scrollbar flex flex-col gap-4' : 'w-full flex flex-col gap-4'}`}>
-                    {loading ? (
+                    {loading && currentPage === 1 ? (
                         <div className="py-16 text-center bg-white rounded-3xl border border-slate-100 shadow-sm mt-4">
                             <div className="flex flex-col items-center justify-center gap-4">
                                 <div className="w-8 h-8 border-4 border-indigo-100 border-t-primary rounded-full animate-spin"></div>
@@ -1698,11 +1774,11 @@ const QuestionList = () => {
                         </div>
                     ) : (
                         <div className="flex flex-col gap-3 pb-2">
-                            {(viewMode === 'FAVORITES' ? questions.filter(q => savedIds.includes(q.id)) : questions).map((q, index) => (
+                            {questions.map((q, index) => (
                                 <QuestionListItem 
                                     key={q.id}
                                     q={q}
-                                    index={index + 1 + (currentPage - 1) * itemsPerPage}
+                                    index={index + 1}
                                     isSelected={selectedIds.includes(q.id)}
                                     onSelect={handleSelectItem}
                                     onSave={handleSaveToggle}
@@ -1717,6 +1793,16 @@ const QuestionList = () => {
                                     isViewing={selectedQuestion?.id === q.id}
                                 />
                             ))}
+                            
+                            {currentPage < totalPages && (
+                                <div ref={observerTarget} className="py-6 flex flex-col items-center justify-center opacity-70">
+                                    {loadingMore ? (
+                                        <div className="w-6 h-6 border-2 border-indigo-100 border-t-primary rounded-full animate-spin"></div>
+                                    ) : (
+                                        <span className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">Scroll for more</span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -1805,73 +1891,13 @@ const QuestionList = () => {
                 )}
             </div>
 
-            <div className="mt-4 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                {/* Pagination Controls */}
-                <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-slate-200 bg-slate-50/50 gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="text-sm text-slate-500 font-medium whitespace-nowrap">
-                            Showing <span className="text-slate-700 font-bold">{totalElements === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}</span> to <span className="text-slate-700 font-bold">{Math.min(currentPage * itemsPerPage, totalElements)}</span> of <span className="text-slate-700 font-bold">{totalElements}</span> questions
-                        </div>
-                        <div className="flex items-center gap-2 border-l border-slate-300 pl-4">
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Per Page:</span>
-                            <select
-                                value={itemsPerPage}
-                                onChange={(e) => {
-                                    setItemsPerPage(Number(e.target.value));
-                                    setCurrentPage(1);
-                                }}
-                                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer"
-                            >
-                                <option value={25}>25</option>
-                                <option value={100}>100</option>
-                                <option value={200}>200</option>
-                                <option value={500}>500</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    {totalPages > 1 && (
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
-                                className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed bg-slate-50 transition-all shadow-sm"
-                            >
-                                Prev
-                            </button>
-                            <div className="flex items-center gap-1">
-                                {[...Array(Math.min(5, totalPages))].map((_, i) => {
-                                    let pageNum;
-                                    if (totalPages <= 5) pageNum = i + 1;
-                                    else if (currentPage <= 3) pageNum = i + 1;
-                                    else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                                    else pageNum = currentPage - 2 + i;
-
-                                    return (
-                                        <button
-                                            key={pageNum}
-                                            onClick={() => setCurrentPage(pageNum)}
-                                            className={`w-9 h-9 flex items-center justify-center rounded-lg text-sm font-bold transition-all ${currentPage === pageNum
-                                                ? 'bg-primary text-white shadow-lg shadow-primary/30'
-                                                : 'text-slate-600 hover:bg-white hover:text-primary border border-transparent hover:border-slate-200'
-                                                }`}
-                                        >
-                                            {pageNum}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                            <button
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={currentPage === totalPages}
-                                className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed bg-slate-50 transition-all shadow-sm"
-                            >
-                                Next
-                            </button>
-                        </div>
-                    )}
+            {totalElements > 0 && (
+                <div className="mt-4 text-center pb-8">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        Showing {questions.length} of {totalElements} questions
+                    </span>
                 </div>
-            </div>
+            )}
 
             {selectedQuestion && !splitScreenMode && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">

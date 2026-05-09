@@ -15,9 +15,10 @@ const LandingPage = () => {
     const [packages, setPackages] = useState([]);
     const [loading, setLoading] = useState(true);
     const branding = useBranding();
-
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
 
     useEffect(() => {
+        setIsLoggedIn(!!localStorage.getItem('token'));
         const loadContent = async () => {
             try {
                 const [data, packagesData] = await Promise.all([
@@ -103,12 +104,20 @@ const LandingPage = () => {
                         </div>
 
                         <div className="hidden md:flex items-center gap-4">
-                            <Link to="/login" className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Log in</Link>
-                            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                <Link to="/signup" className="inline-flex items-center px-5 py-2.5 text-sm font-semibold rounded-xl text-white bg-primary hover:brightness-110 transition-all shadow-lg shadow-primary/30">
-                                    Get Started
+                            {isLoggedIn ? (
+                                <Link to="/dashboard" className="inline-flex items-center px-5 py-2.5 text-sm font-semibold rounded-xl text-white bg-primary hover:brightness-110 transition-all shadow-lg shadow-primary/30">
+                                    Go to Dashboard
                                 </Link>
-                            </motion.div>
+                            ) : (
+                                <>
+                                    <Link to="/login" className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Log in</Link>
+                                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                        <Link to="/signup" className="inline-flex items-center px-5 py-2.5 text-sm font-semibold rounded-xl text-white bg-primary hover:brightness-110 transition-all shadow-lg shadow-primary/30">
+                                            Get Started
+                                        </Link>
+                                    </motion.div>
+                                </>
+                            )}
                         </div>
 
                         {/* Mobile Menu Toggle Button */}
@@ -139,10 +148,18 @@ const LandingPage = () => {
                                 
                                 <div className="w-full h-px bg-slate-100 my-2"></div>
                                 
-                                <Link to="/login" onClick={toggleMenu} className="block w-full text-center text-base font-bold text-slate-700 hover:text-primary p-3 rounded-xl hover:bg-slate-50 transition-colors">Log in</Link>
-                                <Link to="/signup" onClick={toggleMenu} className="block w-full text-center px-5 py-4 text-base font-bold rounded-xl text-white bg-primary shadow-lg shadow-primary/30">
-                                    Get Started Free
-                                </Link>
+                                {isLoggedIn ? (
+                                    <Link to="/dashboard" onClick={toggleMenu} className="block w-full text-center px-5 py-4 text-base font-bold rounded-xl text-white bg-primary shadow-lg shadow-primary/30">
+                                        Go to Dashboard
+                                    </Link>
+                                ) : (
+                                    <>
+                                        <Link to="/login" onClick={toggleMenu} className="block w-full text-center text-base font-bold text-slate-700 hover:text-primary p-3 rounded-xl hover:bg-slate-50 transition-colors">Log in</Link>
+                                        <Link to="/signup" onClick={toggleMenu} className="block w-full text-center px-5 py-4 text-base font-bold rounded-xl text-white bg-primary shadow-lg shadow-primary/30">
+                                            Get Started Free
+                                        </Link>
+                                    </>
+                                )}
                             </div>
                         </motion.div>
                     )}

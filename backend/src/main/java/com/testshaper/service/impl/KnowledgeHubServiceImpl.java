@@ -972,17 +972,17 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
 
     @Override
     public List<SourceBookMasterDto> getAllSourceBooks() {
-        return sourceBookMasterRepository.findByTenantIdOrderByCreatedAtDesc(TenantContext.getTenantId())
-                .stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
+        List<SourceBookMaster> books = sourceBookMasterRepository.findByTenantIdOrderByCreatedAtDesc(TenantContext.getTenantId());
+        return mapToDtos(books);
     }
 
     @Override
     public org.springframework.data.domain.Page<SourceBookMasterDto> getPaginatedSourceBooks(String searchTerm, String bookType, java.util.List<UUID> classSubjectIds, int page, int size) {
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
-        return sourceBookMasterRepository.searchBooks(TenantContext.getTenantId(), searchTerm, bookType, classSubjectIds, pageable)
-                .map(this::mapToDto);
+        org.springframework.data.domain.Page<SourceBookMaster> pageResult = sourceBookMasterRepository.searchBooks(TenantContext.getTenantId(), searchTerm, bookType, classSubjectIds, pageable);
+        
+        List<SourceBookMasterDto> dtos = mapToDtos(pageResult.getContent());
+        return new org.springframework.data.domain.PageImpl<>(dtos, pageable, pageResult.getTotalElements());
     }
 
     @Override
@@ -1031,6 +1031,73 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         }
 
         return mapToDto(sourceBookMasterRepository.save(entity));
+    }
+
+    private List<SourceBookMasterDto> mapToDtos(List<SourceBookMaster> entities) {
+        if (entities.isEmpty()) return java.util.Collections.emptyList();
+
+        List<UUID> bookIds = entities.stream().map(SourceBookMaster::getId).collect(Collectors.toList());
+
+        // Batch fetch stats
+        java.util.Map<UUID, com.testshaper.repository.KnowledgePageRepository.KnowledgePageStatsProjection> pageStatsMap = knowledgePageRepository.getStatsForBooks(bookIds, com.testshaper.entity.KnowledgePage.ExtractionStatus.EXTRACTED)
+                .stream().collect(Collectors.toMap(p -> p.getSourceBookId(), p -> p));
+                
+        java.util.Map<UUID, com.testshaper.repository.CurriculumDocumentChunkRepository.ChunkStatsProjection> chunkStatsMap = curriculumDocumentChunkRepository.getChunkStatsForBooks(bookIds)
+                .stream().collect(Collectors.toMap(p -> p.getSourceBookId(), p -> p));
+                
+        java.util.Map<UUID, com.testshaper.entity.AiBulkExtractionJob> jobMap = aiBulkExtractionJobRepository.findLatestJobsForBooks(bookIds)
+                .stream().collect(Collectors.toMap(j -> j.getSourceBook().getId(), j -> j, (j1, j2) -> j1)); // In case of duplicate, pick first
+
+        return entities.stream().map(entity -> {
+            SourceBookMasterDto dto = new SourceBookMasterDto();
+            dto.setId(entity.getId());
+            dto.setTitle(entity.getTitle());
+            dto.setAuthorName(entity.getAuthorName());
+            dto.setPublisher(entity.getPublisher());
+            dto.setCoverImageUrl(entity.getCoverImageUrl());
+            dto.setFirstPublished(entity.getFirstPublished());
+            dto.setLatestEdition(entity.getLatestEdition());
+            dto.setPdfPageOffset(entity.getPdfPageOffset());
+            dto.setBookType(entity.getBookType());
+            dto.setLanguage(entity.getLanguage());
+            if (entity.getClassSubject() != null) {
+                dto.setClassSubjectId(entity.getClassSubject().getId());
+                dto.setMappedSubjectName(entity.getClassSubject().getSubject().getName());
+                dto.setMappedClassName(entity.getClassSubject().getAcademicClass().getName());
+            }
+
+            com.testshaper.entity.AiBulkExtractionJob job = jobMap.get(entity.getId());
+            if (job != null) {
+                boolean isProc = job.getStatus() == com.testshaper.entity.AiBulkExtractionJob.JobStatus.QUEUED || job.getStatus() == com.testshaper.entity.AiBulkExtractionJob.JobStatus.IN_PROGRESS;
+                dto.setIsProcessing(isProc);
+                dto.setTotalPagesToProcess(job.getTotalPagesToProcess());
+                dto.setProcessedPagesCount(job.getProcessedPagesCount());
+            } else {
+                dto.setIsProcessing(false);
+                dto.setTotalPagesToProcess(0);
+                dto.setProcessedPagesCount(0);
+            }
+
+            com.testshaper.repository.KnowledgePageRepository.KnowledgePageStatsProjection pStats = pageStatsMap.get(entity.getId());
+            if (pStats != null) {
+                dto.setTotalPages((int) pStats.getTotalPages());
+                dto.setExtractedPages((int) pStats.getExtractedPages());
+                dto.setGoldenPages((int) pStats.getGoldenPages());
+            } else {
+                dto.setTotalPages(0);
+                dto.setExtractedPages(0);
+                dto.setGoldenPages(0);
+            }
+
+            com.testshaper.repository.CurriculumDocumentChunkRepository.ChunkStatsProjection cStats = chunkStatsMap.get(entity.getId());
+            if (cStats != null) {
+                dto.setVectorizedChunks((int) cStats.getVectorizedChunks());
+            } else {
+                dto.setVectorizedChunks(0);
+            }
+
+            return dto;
+        }).collect(Collectors.toList());
     }
 
     private SourceBookMasterDto mapToDto(SourceBookMaster entity) {

@@ -223,7 +223,7 @@ const ImageEditorModal = ({ file, src: srcProp, isOpen, onClose, onSave, maxSize
         if (isRemote) {
             // Fetch via backend proxy with auth token → blob URL (no canvas taint)
             const token = localStorage.getItem('token') || '';
-            fetch(`/api/v1/questions/proxy-image?url=${encodeURIComponent(src)}`, {
+            fetch(`/api/v1/public/proxy-image?url=${encodeURIComponent(src)}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
                 .then(res => {

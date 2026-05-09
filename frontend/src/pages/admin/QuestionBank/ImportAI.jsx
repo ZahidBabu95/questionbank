@@ -1350,9 +1350,9 @@ const ImportAI = () => {
             <LiveImageCropperModal 
                 isOpen={!!cropperTarget}
                 onClose={() => setCropperTarget(null)}
-                sourceImage={isImage && hasFileSource ? (file ? URL.createObjectURL(file) : (remoteFileUrl ? (remoteFileUrl.startsWith('http') ? `/api/v1/questions/proxy-image?url=${encodeURIComponent(remoteFileUrl)}` : `/api/v1/storage?path=${encodeURIComponent(remoteFileUrl)}`) : null)) : null}
+                sourceImage={isImage && hasFileSource ? (file ? URL.createObjectURL(file) : (remoteFileUrl ? (remoteFileUrl.startsWith('http') ? `/api/v1/public/proxy-image?url=${encodeURIComponent(remoteFileUrl)}` : `/api/v1/storage?path=${encodeURIComponent(remoteFileUrl)}`) : null)) : null}
                 isPdf={isPdf && hasFileSource}
-                pdfUrl={isPdf && hasFileSource ? (file ? URL.createObjectURL(file) : (remoteFileUrl ? (remoteFileUrl.startsWith('http') ? `/api/v1/questions/proxy-image?url=${encodeURIComponent(remoteFileUrl)}` : `/api/v1/storage?path=${encodeURIComponent(remoteFileUrl)}`) : null)) : null}
+                pdfUrl={isPdf && hasFileSource ? (file ? URL.createObjectURL(file) : (remoteFileUrl ? (remoteFileUrl.startsWith('http') ? `/api/v1/public/proxy-image?url=${encodeURIComponent(remoteFileUrl)}` : `/api/v1/storage?path=${encodeURIComponent(remoteFileUrl)}`) : null)) : null}
                 pageNumber={cropperTarget ? (extractedQuestions.find(q => q.id === cropperTarget.questionId)?.sourcePage || activeSourcePage) : activeSourcePage}
                 onSave={(base64Img) => {
                     if (cropperTarget) {

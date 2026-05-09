@@ -59,4 +59,9 @@ public class QuestionFeedbackController {
         
         return ResponseEntity.ok(favorites);
     }
+
+    @GetMapping("/favorites/my/ids")
+    public ResponseEntity<java.util.List<UUID>> getMyFavoriteIds(Authentication authentication) {
+        return ResponseEntity.ok(feedbackService.getUserFavoriteIds(authentication.getName()));
+    }
 }

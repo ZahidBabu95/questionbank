@@ -30,7 +30,7 @@ const LiveImageCropperModal = ({ isOpen, onClose, sourceImage, pdfUrl, isPdf, pa
                             return;
                         }
                         // Route through backend proxy so R2 CORS is never an issue
-                        const proxyUrl = `/api/v1/knowledge-hub/proxy-image?url=${encodeURIComponent(sourceImage)}`;
+                        const proxyUrl = `/api/v1/public/proxy-image?url=${encodeURIComponent(sourceImage)}`;
                         const res = await fetch(proxyUrl, {
                             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
                         });
@@ -116,7 +116,7 @@ const LiveImageCropperModal = ({ isOpen, onClose, sourceImage, pdfUrl, isPdf, pa
     // We route them through /api/v1/knowledge-hub/proxy-image which adds CORS headers.
     const toProxiedUrl = (url) => {
         if (!url || url.startsWith('blob:') || url.startsWith('data:')) return url;
-        return `/api/v1/knowledge-hub/proxy-image?url=${encodeURIComponent(url)}`;
+        return `/api/v1/public/proxy-image?url=${encodeURIComponent(url)}`;
     };
 
     const fetchAsBlob = async (url) => {

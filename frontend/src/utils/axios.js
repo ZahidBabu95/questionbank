@@ -11,7 +11,9 @@ const instance = axios.create({
 instance.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('token');
-        if (token) {
+        // Do not attach token for public endpoints
+        const isPublicEndpoint = config.url && config.url.includes('/public/');
+        if (token && !isPublicEndpoint) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
         return config;
@@ -25,8 +27,11 @@ instance.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response && error.response.status === 401) {
-            // Do not redirect if the request was a login attempt
-            if (error.config && error.config.url && error.config.url.includes('/auth/login')) {
+            // Do not redirect if the request was a login attempt or a public endpoint
+            const isAuthOrPublic = error.config && error.config.url && 
+                (error.config.url.includes('/auth/') || error.config.url.includes('/public/'));
+            
+            if (isAuthOrPublic) {
                 return Promise.reject(error);
             }
             

@@ -638,29 +638,61 @@ public class QuestionServiceImpl implements QuestionService {
     public Question submitRevision(UUID originalQuestionId, Question revisionDraft, List<QuestionOption> options, String userEmail, String versionComment) {
         Question original = getQuestion(originalQuestionId);
         
+        boolean autoApprove = false;
+        java.util.Optional<com.testshaper.entity.User> userOpt = userRepository.findByEmail(userEmail);
+        if (userOpt.isPresent()) {
+            com.testshaper.entity.User user = userOpt.get();
+            boolean isSuperAdmin = user.getRoles().stream().anyMatch(r -> r.getName().equals("ROLE_SUPER_ADMIN"));
+            boolean isDefaultInstitute = user.getInstitute() != null && "DEFAULT-001".equals(user.getInstitute().getCode());
+            if (isSuperAdmin || isDefaultInstitute) {
+                autoApprove = true;
+            }
+        }
+
         // Ensure this is a child draft
         revisionDraft.setParentQuestionId(originalQuestionId);
         revisionDraft.setVersionComment(versionComment);
         revisionDraft.setCreatedBy(userEmail);
         
-        // Keep draft's status if already set (e.g. REVISED), otherwise default to PENDING
-        if (revisionDraft.getStatus() == null) {
-            revisionDraft.setStatus(Question.QuestionStatus.PENDING);
+        // Keep draft's status if already set, otherwise default to REVISED
+        if (revisionDraft.getStatus() == null || revisionDraft.getStatus() == Question.QuestionStatus.PENDING) {
+            revisionDraft.setStatus(Question.QuestionStatus.REVISED);
         }
         
-        // Copy relational mappings from original if not provided
-        if (revisionDraft.getClassSubject() == null) revisionDraft.setClassSubject(original.getClassSubject());
-        if (revisionDraft.getChapter() == null) revisionDraft.setChapter(original.getChapter());
-        if (revisionDraft.getTopic() == null) revisionDraft.setTopic(original.getTopic());
+        // Copy relational mappings from original if not provided or fetch managed references to avoid detached entity version errors
+        if (revisionDraft.getClassSubject() != null && revisionDraft.getClassSubject().getId() != null) {
+            revisionDraft.setClassSubject(entityManager.getReference(com.testshaper.entity.ClassSubject.class, revisionDraft.getClassSubject().getId()));
+        } else {
+            revisionDraft.setClassSubject(original.getClassSubject());
+        }
+
+        if (revisionDraft.getChapter() != null && revisionDraft.getChapter().getId() != null) {
+            revisionDraft.setChapter(entityManager.getReference(com.testshaper.entity.Chapter.class, revisionDraft.getChapter().getId()));
+        } else {
+            revisionDraft.setChapter(original.getChapter());
+        }
+
+        if (revisionDraft.getTopic() != null && revisionDraft.getTopic().getId() != null) {
+            revisionDraft.setTopic(entityManager.getReference(com.testshaper.entity.Topic.class, revisionDraft.getTopic().getId()));
+        } else {
+            revisionDraft.setTopic(original.getTopic());
+        }
+
         if (revisionDraft.getType() == null) revisionDraft.setType(original.getType());
 
         Question savedDraft = questionRepository.save(revisionDraft);
 
         if (options != null && !options.isEmpty()) {
+            java.util.List<QuestionOption> savedOptions = new java.util.ArrayList<>();
             for (QuestionOption opt : options) {
                 opt.setQuestion(savedDraft);
-                optionRepository.save(opt);
+                savedOptions.add(optionRepository.save(opt));
             }
+            savedDraft.setOptions(savedOptions);
+        }
+
+        if (autoApprove) {
+            return approveRevision(savedDraft.getId(), userEmail);
         }
 
         // Notify Admins
@@ -726,6 +758,7 @@ public class QuestionServiceImpl implements QuestionService {
             optionRepository.deleteAll(oldOptions);
 
             List<QuestionOption> newOptions = optionRepository.findByQuestionIdOrderByOptionLabelAsc(revision.getId());
+            List<QuestionOption> savedOptions = new java.util.ArrayList<>();
             for (QuestionOption opt : newOptions) {
                 // Duplicate the option to detach from revision
                 QuestionOption cl = new QuestionOption();
@@ -734,8 +767,9 @@ public class QuestionServiceImpl implements QuestionService {
                 cl.setOptionLabel(opt.getOptionLabel());
                 cl.setImagePath(opt.getImagePath());
                 cl.setQuestion(original);
-                optionRepository.save(cl);
+                savedOptions.add(optionRepository.save(cl));
             }
+            original.setOptions(savedOptions);
         }
 
         questionRepository.save(original);
@@ -765,16 +799,38 @@ public class QuestionServiceImpl implements QuestionService {
     @Override
     @Transactional
     public void updateOptionsInPlace(UUID questionId, List<QuestionOption> incomingOptions) {
-        List<QuestionOption> dbOptions = optionRepository.findByQuestionIdOrderByOptionLabelAsc(questionId);
-        for (QuestionOption incoming : incomingOptions) {
-            dbOptions.stream()
-                .filter(db -> db.getOptionLabel() != null && db.getOptionLabel().equals(incoming.getOptionLabel()))
-                .findFirst()
-                .ifPresent(db -> {
-                    db.setOptionText(incoming.getOptionText());
-                    db.setCorrect(incoming.isCorrect());
-                    optionRepository.save(db);
-                });
+        Question q = questionRepository.findById(questionId)
+            .orElseThrow(() -> new RuntimeException("Question not found"));
+
+        if (incomingOptions != null && !incomingOptions.isEmpty()) {
+            java.util.Map<UUID, QuestionOption> existingMap = q.getOptions().stream()
+                .filter(opt -> opt.getId() != null)
+                .collect(java.util.stream.Collectors.toMap(QuestionOption::getId, opt -> opt));
+
+            java.util.List<QuestionOption> updatedOptions = new java.util.ArrayList<>();
+            for (QuestionOption inc : incomingOptions) {
+                if (inc.getId() != null && existingMap.containsKey(inc.getId())) {
+                    QuestionOption ext = existingMap.get(inc.getId());
+                    ext.setOptionText(inc.getOptionText());
+                    ext.setCorrect(inc.isCorrect());
+                    updatedOptions.add(ext);
+                } else {
+                    inc.setQuestion(q);
+                    updatedOptions.add(inc);
+                }
+            }
+
+            q.getOptions().clear();
+            q.getOptions().addAll(updatedOptions);
         }
+        questionRepository.save(q);
+    }
+
+    @Override
+    public java.util.List<Question> getMyPendingRevisions(java.util.List<UUID> originalQuestionIds, String userEmail) {
+        if (originalQuestionIds == null || originalQuestionIds.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return questionRepository.findPendingRevisionsByParentIdsAndCreator(originalQuestionIds, userEmail);
     }
 }

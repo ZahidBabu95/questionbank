@@ -57,4 +57,6 @@ public interface QuestionService {
 
     // In-place option update (for revise — no delete/recreate, avoids detached entity errors)
     void updateOptionsInPlace(UUID questionId, List<QuestionOption> incomingOptions);
+
+    List<Question> getMyPendingRevisions(List<UUID> originalQuestionIds, String userEmail);
 }

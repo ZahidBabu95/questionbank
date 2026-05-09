@@ -36,6 +36,8 @@ public class ExamGenerationServiceImpl {
     private final QuestionRepository questionRepository;
     private final ClassSubjectRepository classSubjectRepository;
     private final ObjectMapper objectMapper;
+    private final com.testshaper.repository.QuestionFavoriteRepository favoriteRepository;
+    private final com.testshaper.repository.UserRepository userRepository;
 
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
@@ -100,6 +102,18 @@ public class ExamGenerationServiceImpl {
         // 9. Persist
         Exam saved = examRepository.save(exam);
         log.info("Exam generated successfully: id={}, questions={}", saved.getId(), saved.getExamQuestions().size());
+
+        // 10. Mark used questions as favorites for the user
+        userRepository.findByEmail(createdBy).ifPresent(user -> {
+            for (ExamQuestion eq : saved.getExamQuestions()) {
+                if (!favoriteRepository.existsByQuestionAndUser(eq.getQuestion(), user)) {
+                    QuestionFavorite fav = new QuestionFavorite();
+                    fav.setQuestion(eq.getQuestion());
+                    fav.setUser(user);
+                    favoriteRepository.save(fav);
+                }
+            }
+        });
 
         return toDTO(saved);
     }
@@ -452,6 +466,34 @@ public class ExamGenerationServiceImpl {
         
         exam.setDeleted(true);
         examRepository.save(exam);
+    }
+
+    // =========================================================
+    // RECYCLE BIN (SUPER ADMIN ONLY)
+    // =========================================================
+    
+    public Page<ExamSummaryDTO> listDeletedExams(String title, Pageable pageable) {
+        return examRepository.findDeletedExams(title, pageable).map(this::toSummaryDTO);
+    }
+
+    @Transactional
+    public void restoreExam(UUID examId) {
+        examRepository.restoreExam(examId.toString());
+    }
+
+    @Transactional
+    public void hardDeleteExam(UUID examId) {
+        String idStr = examId.toString();
+        examRepository.deleteExamRules(idStr);
+        examRepository.deleteExamQuestions(idStr);
+        examRepository.hardDeleteExam(idStr);
+    }
+
+    @Transactional
+    public void emptyRecycleBin() {
+        examRepository.deleteDeletedExamRules();
+        examRepository.deleteDeletedExamQuestions();
+        examRepository.emptyRecycleBin();
     }
 
     // =========================================================

@@ -28,6 +28,8 @@ public class ManualExamServiceImpl {
     private final ExamSectionRepository examSectionRepository;
     private final QuestionRepository questionRepository;
     private final ClassSubjectRepository classSubjectRepository;
+    private final QuestionFavoriteRepository favoriteRepository;
+    private final UserRepository userRepository;
 
     // ── Create Manual Exam (draft, no questions yet) ──────────────────────────
     @Transactional
@@ -73,6 +75,10 @@ public class ManualExamServiceImpl {
 
         Exam saved = examRepository.save(exam);
         log.info("Manual exam created: id={} by={}", saved.getId(), createdBy);
+        
+        // Mark used questions as favorites
+        saveFavoritesFromRawContent(req.getRawContent(), createdBy);
+        
         return toDTO(saved);
     }
 
@@ -103,6 +109,10 @@ public class ManualExamServiceImpl {
         if (req.getDocSettingsJson() != null) {
             exam.setDocSettingsJson(req.getDocSettingsJson());
         }
+
+        // Mark used questions as favorites for the currently authenticated user
+        String currentUser = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+        saveFavoritesFromRawContent(req.getRawContent(), currentUser);
 
         return toDTO(examRepository.save(exam));
     }
@@ -154,6 +164,17 @@ public class ManualExamServiceImpl {
         // Update totalQuestions on exam
         exam.setTotalQuestions(examQuestionRepository.countByExamId(examId));
         examRepository.save(exam);
+
+        // Mark as favorite for the currently authenticated user
+        String currentUser = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+        userRepository.findByEmail(currentUser).ifPresent(user -> {
+            if (!favoriteRepository.existsByQuestionAndUser(question, user)) {
+                QuestionFavorite fav = new QuestionFavorite();
+                fav.setQuestion(question);
+                fav.setUser(user);
+                favoriteRepository.save(fav);
+            }
+        });
 
         log.info("Question {} added to exam {}", question.getId(), examId);
         return toDTO(getExamOrThrow(examId));
@@ -279,6 +300,29 @@ public class ManualExamServiceImpl {
         Exam exam = getExamOrThrow(examId);
         exam.setDeleted(true);
         examRepository.save(exam);
+    }
+
+    private void saveFavoritesFromRawContent(String rawContent, String username) {
+        if (rawContent == null || rawContent.isEmpty()) return;
+        userRepository.findByEmail(username).ifPresent(user -> {
+            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("questionid=\"([a-fA-F0-9\\-]{36})\"");
+            java.util.regex.Matcher matcher = pattern.matcher(rawContent);
+            while (matcher.find()) {
+                try {
+                    UUID qId = UUID.fromString(matcher.group(1));
+                    questionRepository.findById(qId).ifPresent(q -> {
+                        if (!favoriteRepository.existsByQuestionAndUser(q, user)) {
+                            QuestionFavorite fav = new QuestionFavorite();
+                            fav.setQuestion(q);
+                            fav.setUser(user);
+                            favoriteRepository.save(fav);
+                        }
+                    });
+                } catch (Exception e) {
+                    log.error("Failed to parse question UUID for favorites", e);
+                }
+            }
+        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

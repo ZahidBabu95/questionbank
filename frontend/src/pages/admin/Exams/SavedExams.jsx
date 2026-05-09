@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Save, Search, Loader2, Eye, Trash2, Filter, FileText, CheckCircle2, Archive } from 'lucide-react';
+import { Save, Search, Loader2, Eye, Trash2, Filter, FileText, CheckCircle2, Archive, RefreshCw, AlertTriangle, ShieldAlert } from 'lucide-react';
 import examService from '../../../services/examService';
 import axiosInstance from '../../../utils/axios';
 
@@ -17,8 +17,14 @@ const SavedExams = () => {
     const [examType, setExamType] = useState('');
     const [status, setStatus] = useState('');
     
-    // For deleting
-    const [deletingId, setDeletingId] = useState(null);
+    // Tabs
+    const [activeTab, setActiveTab] = useState('active'); // 'active' or 'recycle'
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : null;
+    const isSuperAdmin = user && user.roles && user.roles.includes('SUPER_ADMIN');
+
+    // For deleting/restoring
+    const [actionId, setActionId] = useState(null);
 
     // Debounce search
     useEffect(() => {
@@ -36,7 +42,13 @@ const SavedExams = () => {
                 examType: examType || undefined,
                 status: status || undefined
             };
-            const res = await examService.listExams(params);
+            let res;
+            if (activeTab === 'recycle' && isSuperAdmin) {
+                res = await examService.listDeletedExams(params);
+            } else {
+                res = await examService.listExams(params);
+            }
+
             if (res.success) {
                 setExams(res.data.content);
                 setTotalPages(res.data.totalPages);
@@ -57,11 +69,11 @@ const SavedExams = () => {
     useEffect(() => {
         fetchExams();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, debouncedSearch, size, examType, status]);
+    }, [page, debouncedSearch, size, examType, status, activeTab]);
 
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this saved exam?")) return;
-        setDeletingId(id);
+        setActionId(id);
         try {
             await axiosInstance.delete(`/v1/exams/generate/${id}`);
             fetchExams();
@@ -69,7 +81,47 @@ const SavedExams = () => {
             console.error("Delete error", err);
             alert("Error deleting exam");
         } finally {
-            setDeletingId(null);
+            setActionId(null);
+        }
+    };
+
+    const handleRestore = async (id) => {
+        setActionId(id);
+        try {
+            await examService.restoreExam(id);
+            fetchExams();
+        } catch (err) {
+            console.error("Restore error", err);
+            alert("Error restoring exam");
+        } finally {
+            setActionId(null);
+        }
+    };
+
+    const handleHardDelete = async (id) => {
+        if (!window.confirm("This will permanently delete the exam. This action cannot be undone! Are you sure?")) return;
+        setActionId(id);
+        try {
+            await examService.hardDeleteExam(id);
+            fetchExams();
+        } catch (err) {
+            console.error("Hard delete error", err);
+            alert("Error permanently deleting exam");
+        } finally {
+            setActionId(null);
+        }
+    };
+
+    const handleEmptyRecycleBin = async () => {
+        if (!window.confirm("WARNING: This will permanently delete ALL exams in the recycle bin. Are you absolutely sure?")) return;
+        setLoading(true);
+        try {
+            await examService.emptyRecycleBin();
+            fetchExams();
+        } catch (err) {
+            console.error("Empty recycle bin error", err);
+            alert("Error emptying recycle bin");
+            setLoading(false);
         }
     };
 
@@ -106,6 +158,32 @@ const SavedExams = () => {
                     </Link>
                 </div>
 
+                {/* Tabs for Super Admin */}
+                {isSuperAdmin && (
+                    <div className="flex items-center gap-1 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm w-max">
+                        <button
+                            onClick={() => { setActiveTab('active'); setPage(0); }}
+                            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-lg transition-all ${
+                                activeTab === 'active'
+                                    ? 'bg-slate-800 text-white shadow-md'
+                                    : 'text-slate-600 hover:bg-slate-100'
+                            }`}
+                        >
+                            <FileText size={16} /> Active Exams
+                        </button>
+                        <button
+                            onClick={() => { setActiveTab('recycle'); setPage(0); }}
+                            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-lg transition-all ${
+                                activeTab === 'recycle'
+                                    ? 'bg-rose-600 text-white shadow-md'
+                                    : 'text-slate-600 hover:bg-slate-100 hover:text-rose-600'
+                            }`}
+                        >
+                            <Trash2 size={16} /> Recycle Bin
+                        </button>
+                    </div>
+                )}
+
                 {/* Filters & Controls */}
                 <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row gap-4 items-center justify-between">
                     
@@ -139,6 +217,7 @@ const SavedExams = () => {
                                 className="bg-slate-50 border border-slate-200 text-sm font-medium rounded-xl focus:ring-2 focus:ring-emerald-500/20 p-2.5 outline-none text-slate-600 flex-1 md:flex-none cursor-pointer"
                                 value={status}
                                 onChange={(e) => setStatus(e.target.value)}
+                                disabled={activeTab === 'recycle'}
                             >
                                 <option value="">All Status</option>
                                 <option value="DRAFT">Draft</option>
@@ -149,6 +228,14 @@ const SavedExams = () => {
                     </div>
 
                     <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
+                        {activeTab === 'recycle' && isSuperAdmin && (
+                            <button
+                                onClick={handleEmptyRecycleBin}
+                                className="flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 text-sm font-bold rounded-xl transition-colors border border-rose-200 mr-2"
+                            >
+                                <ShieldAlert size={16} /> Empty Bin
+                            </button>
+                        )}
                         <span className="text-sm font-medium text-slate-500">Items per page:</span>
                         <select 
                             className="bg-slate-50 border border-slate-200 text-sm font-bold rounded-xl focus:ring-2 focus:ring-emerald-500/20 p-2 outline-none text-slate-700 cursor-pointer"
@@ -228,29 +315,51 @@ const SavedExams = () => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                                                    <Link
-                                                        to={`/exams/generate/nexus-editor/${exam.id}`}
-                                                        className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-sm"
-                                                        title="Edit in Nexus Editor"
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                                                    </Link>
-                                                    {/* Temporarily pointing to /exams/download/pdf as requested */}
-                                                    <Link
-                                                        to={`/exams/download/pdf`} 
-                                                        className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 flex items-center justify-center transition-all shadow-sm"
-                                                        title="View / Print"
-                                                    >
-                                                        <Eye size={16} />
-                                                    </Link>
-                                                    <button
-                                                        onClick={() => handleDelete(exam.id)}
-                                                        disabled={deletingId === exam.id}
-                                                        className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center transition-all disabled:opacity-50 shadow-sm"
-                                                        title="Delete Exam"
-                                                    >
-                                                        {deletingId === exam.id ? <Loader2 size={15} className="animate-spin text-rose-500" /> : <Trash2 size={15} />}
-                                                    </button>
+                                                    {activeTab === 'active' ? (
+                                                        <>
+                                                            <Link
+                                                                to={`/exams/generate/nexus-editor/${exam.id}`}
+                                                                className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-sm"
+                                                                title="Edit in Nexus Editor"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                                                            </Link>
+                                                            <Link
+                                                                to={`/exams/download/pdf`} 
+                                                                className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 flex items-center justify-center transition-all shadow-sm"
+                                                                title="View / Print"
+                                                            >
+                                                                <Eye size={16} />
+                                                            </Link>
+                                                            <button
+                                                                onClick={() => handleDelete(exam.id)}
+                                                                disabled={actionId === exam.id}
+                                                                className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center transition-all disabled:opacity-50 shadow-sm"
+                                                                title="Delete Exam"
+                                                            >
+                                                                {actionId === exam.id ? <Loader2 size={15} className="animate-spin text-rose-500" /> : <Trash2 size={15} />}
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleRestore(exam.id)}
+                                                                disabled={actionId === exam.id}
+                                                                className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 flex items-center justify-center transition-all disabled:opacity-50 shadow-sm"
+                                                                title="Restore Exam"
+                                                            >
+                                                                {actionId === exam.id ? <Loader2 size={15} className="animate-spin text-emerald-500" /> : <RefreshCw size={15} />}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleHardDelete(exam.id)}
+                                                                disabled={actionId === exam.id}
+                                                                className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center transition-all disabled:opacity-50 shadow-sm"
+                                                                title="Hard Delete Forever"
+                                                            >
+                                                                {actionId === exam.id ? <Loader2 size={15} className="animate-spin text-rose-500" /> : <AlertTriangle size={15} />}
+                                                            </button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>

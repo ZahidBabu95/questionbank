@@ -125,7 +125,7 @@ const AnswerSheetPreview = () => {
                                docSettings?.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 'none',
                     borderLeft: docSettings?.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 'none',
                     borderRight: docSettings?.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 'none',
-                    padding: docSettings?.headerStyle === 'বক্স স্টাইল' ? '10px' : '0 0 10px 0',
+                    padding: docSettings?.headerStyle === 'বক্স স্টাইল' ? '10px' : '0 0 4px 0',
                     marginBottom: 20
                 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', minHeight: '28px', marginBottom: 4, width: '100%' }}>
@@ -141,7 +141,7 @@ const AnswerSheetPreview = () => {
                         {/* Center: Institute Name */}
                         <div style={{ flex: '0 1 auto', textAlign: 'center', maxWidth: '60%', padding: '0 10px' }}>
                             {docSettings?.showInstitute !== false && (
-                                <div style={{fontSize: ptToPx(docSettings?.headerFontSize), fontWeight: docSettings?.boldInstitute ? 'bold' : 'normal', wordBreak: 'break-word', lineHeight: 1.2}}>
+                                <div style={{fontSize: ptToPx(docSettings?.headerFontSize), fontWeight: docSettings?.boldInstitute ? 'bold' : 'normal', wordBreak: 'break-word', lineHeight: docSettings?.headerLineHeight || 1.2}}>
                                     {docSettings?.institute || 'প্রতিষ্ঠানের নাম'}
                                 </div>
                             )}
@@ -157,7 +157,7 @@ const AnswerSheetPreview = () => {
                         </div>
                     </div>
                     
-                    <div style={{textAlign: 'center', fontSize: ptToPx(docSettings?.subHeaderFontSize), fontWeight: docSettings?.boldSubject ? 'bold' : 'normal', marginBottom: 8}}>
+                    <div style={{textAlign: 'center', fontSize: ptToPx(docSettings?.subHeaderFontSize), fontWeight: docSettings?.boldSubject ? 'bold' : 'normal', marginBottom: 8, lineHeight: docSettings?.headerLineHeight || 1.2}}>
                         {(docSettings?.showBoard !== false && docSettings?.board) && (
                             <div style={{marginBottom: 2}}>
                                 {docSettings?.board} {docSettings?.language === 'ENGLISH' ? 'Board' : 'বোর্ড'}
@@ -180,7 +180,7 @@ const AnswerSheetPreview = () => {
                     </div>
                     
                     {(docSettings?.showTime !== false || docSettings?.showTotalMarks !== false) && (
-                        <div style={{display:'flex', justifyContent:'space-between', fontSize: ptToPx(docSettings?.bodyFontSize), fontWeight: 'bold'}}>
+                        <div style={{display:'flex', justifyContent:'space-between', fontSize: ptToPx((docSettings?.subHeaderFontSize || 14) * 0.85), fontWeight: 'bold', lineHeight: 1}}>
                             <span>{docSettings?.showTime !== false ? `${docSettings?.language === 'ENGLISH' ? 'Time' : 'সময়'}: ${convertDigits(docSettings?.time, docSettings?.language)}` : ''}</span>
                             <span>{docSettings?.showTotalMarks !== false ? `${docSettings?.language === 'ENGLISH' ? 'Full Marks' : 'পূর্ণমান'}: ${convertDigits(docSettings?.totalMarks, docSettings?.language)}` : ''}</span>
                         </div>

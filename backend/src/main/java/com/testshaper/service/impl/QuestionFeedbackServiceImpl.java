@@ -107,6 +107,13 @@ public class QuestionFeedbackServiceImpl implements QuestionFeedbackService {
     }
 
     @Override
+    public java.util.List<UUID> getUserFavoriteIds(String userEmail) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return favoriteRepository.findQuestionIdsByUserId(user.getId());
+    }
+
+    @Override
     @Transactional
     public void sendNotification(UUID userId, String title, String message, String type, String relatedEntityId) {
         User user = userRepository.findById(userId)

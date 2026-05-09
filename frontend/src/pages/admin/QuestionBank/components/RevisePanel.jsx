@@ -80,6 +80,13 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
         setSaving(true);
         setToast(null);
         try {
+            const stripOptionPrefix = (html) => {
+                if (!html) return '';
+                let stripped = html.replace(/^(<p[^>]*>)?\s*(?:(?:[কখগঘa-dA-D1-4]|i{1,3}|iv)\s*[\.\)])\s*/i, '$1');
+                stripped = stripped.replace(/^(<p[^>]*>)?\s*(?:(?:[কখগঘa-dA-D1-4]|i{1,3}|iv)\s*[\.\)])\s*/i, '$1');
+                return stripped;
+            };
+
             const payload = {
                 stimulus: form.stimulus,
                 questionText: form.questionText,
@@ -88,7 +95,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                 options: q.type === 'MCQ' ? form.options.map(o => ({
                     id: o.id,
                     optionLabel: o.optionLabel,
-                    optionText: o.optionText,
+                    optionText: stripOptionPrefix(o.optionText),
                     isCorrect: o.correct === true,
                     correct: o.correct === true,
                 })) : undefined,

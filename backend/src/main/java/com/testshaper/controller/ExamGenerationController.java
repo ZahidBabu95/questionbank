@@ -125,4 +125,40 @@ public class ExamGenerationController {
         Page<ExamSummaryDTO> exams = examGenerationService.listExams(title, examType, status, pageable, auth.getName(), isSuperAdmin);
         return ResponseEntity.ok(Map.of("success", true, "data", exams));
     }
+
+    // =========================================================
+    // RECYCLE BIN (SUPER ADMIN ONLY)
+    // =========================================================
+
+    @GetMapping("/recycle-bin")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<Map<String, Object>> listDeletedExams(
+            @RequestParam(required = false) String title,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "created_at"));
+        Page<ExamSummaryDTO> exams = examGenerationService.listDeletedExams(title, pageable);
+        return ResponseEntity.ok(Map.of("success", true, "data", exams));
+    }
+
+    @PostMapping("/recycle-bin/{examId}/restore")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<Map<String, Object>> restoreExam(@PathVariable UUID examId) {
+        examGenerationService.restoreExam(examId);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Exam restored successfully"));
+    }
+
+    @DeleteMapping("/recycle-bin/{examId}/hard")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<Map<String, Object>> hardDeleteExam(@PathVariable UUID examId) {
+        examGenerationService.hardDeleteExam(examId);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Exam permanently deleted"));
+    }
+
+    @DeleteMapping("/recycle-bin/empty")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<Map<String, Object>> emptyRecycleBin() {
+        examGenerationService.emptyRecycleBin();
+        return ResponseEntity.ok(Map.of("success", true, "message", "Recycle bin emptied successfully"));
+    }
 }

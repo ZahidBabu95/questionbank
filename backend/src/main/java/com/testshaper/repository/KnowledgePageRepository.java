@@ -29,4 +29,20 @@ public interface KnowledgePageRepository extends JpaRepository<KnowledgePage, UU
     long countBySourceBookIdAndExtractionStatusIn(UUID sourceBookId, java.util.Collection<KnowledgePage.ExtractionStatus> statuses);
     
     org.springframework.data.domain.Page<KnowledgePage> findBySourceBookIdAndExtractionStatusIn(UUID sourceBookId, java.util.Collection<KnowledgePage.ExtractionStatus> statuses, org.springframework.data.domain.Pageable pageable);
+
+    public interface KnowledgePageStatsProjection {
+        UUID getSourceBookId();
+        long getTotalPages();
+        long getExtractedPages();
+        long getGoldenPages();
+    }
+
+    @org.springframework.data.jpa.repository.Query("SELECT p.sourceBook.id AS sourceBookId, " +
+            "COUNT(p.id) AS totalPages, " +
+            "SUM(CASE WHEN p.extractionStatus = :extractedStatus THEN 1 ELSE 0 END) AS extractedPages, " +
+            "SUM(CASE WHEN p.goldenMarkdown IS NOT NULL AND TRIM(p.goldenMarkdown) != '' THEN 1 ELSE 0 END) AS goldenPages " +
+            "FROM KnowledgePage p WHERE p.sourceBook.id IN :bookIds GROUP BY p.sourceBook.id")
+    List<KnowledgePageStatsProjection> getStatsForBooks(
+            @org.springframework.data.repository.query.Param("bookIds") java.util.List<UUID> bookIds, 
+            @org.springframework.data.repository.query.Param("extractedStatus") KnowledgePage.ExtractionStatus extractedStatus);
 }

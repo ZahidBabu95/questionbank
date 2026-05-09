@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import examService from '../../../../../services/examService';
+import questionService from '../../../../../services/questionService';
 import axios from '../../../../../utils/axios';
 import { useNexusEditor } from '../context/NexusEditorContext';
 import { DEFAULT_SETTINGS } from '../components/DocumentSettings';
@@ -107,6 +108,34 @@ export const useExamManager = () => {
                             }
                         });
 
+                        // Apply pending revisions before setting raw content
+                        if (finalHtml) {
+                            try {
+                                const parser = new DOMParser();
+                                const doc = parser.parseFromString(finalHtml, 'text/html');
+                                const nodes = doc.querySelectorAll('div[data-type="question-block"]');
+                                const ids = Array.from(nodes).map(n => n.getAttribute('questionid')).filter(Boolean);
+                                if (ids.length > 0) {
+                                    const revisions = await questionService.getMyPendingRevisions(ids);
+                                    if (revisions && Object.keys(revisions).length > 0) {
+                                        nodes.forEach(node => {
+                                            const qid = node.getAttribute('questionid');
+                                            if (revisions[qid]) {
+                                                const rev = revisions[qid];
+                                                node.setAttribute('questiontext', rev.questionText ? rev.questionText.replace(/"/g, "&quot;") : "");
+                                                node.setAttribute('stimulus', rev.stimulus ? rev.stimulus.replace(/"/g, "&quot;") : "");
+                                                node.setAttribute('explanation', rev.explanation ? rev.explanation.replace(/"/g, "&quot;") : "");
+                                                node.setAttribute('answer', rev.correctAnswer ? rev.correctAnswer.replace(/"/g, "&quot;") : "");
+                                                if (rev.options) node.setAttribute('data-options', JSON.stringify(rev.options).replace(/'/g, "&#39;"));
+                                                if (rev.statements) node.setAttribute('data-statements', JSON.stringify(rev.statements).replace(/'/g, "&#39;"));
+                                            }
+                                        });
+                                        finalHtml = doc.body.innerHTML;
+                                    }
+                                }
+                            } catch (e) { console.error("Failed to fetch pending revisions", e); }
+                        }
+
                         setRawContent(finalHtml);
                         
                         if (res.data.docSettingsJson) {
@@ -130,6 +159,34 @@ export const useExamManager = () => {
                             }));
                         }
                     } else {
+                        // Apply pending revisions before setting raw content
+                        if (finalHtml) {
+                            try {
+                                const parser = new DOMParser();
+                                const doc = parser.parseFromString(finalHtml, 'text/html');
+                                const nodes = doc.querySelectorAll('div[data-type="question-block"]');
+                                const ids = Array.from(nodes).map(n => n.getAttribute('questionid')).filter(Boolean);
+                                if (ids.length > 0) {
+                                    const revisions = await questionService.getMyPendingRevisions(ids);
+                                    if (revisions && Object.keys(revisions).length > 0) {
+                                        nodes.forEach(node => {
+                                            const qid = node.getAttribute('questionid');
+                                            if (revisions[qid]) {
+                                                const rev = revisions[qid];
+                                                node.setAttribute('questiontext', rev.questionText ? rev.questionText.replace(/"/g, "&quot;") : "");
+                                                node.setAttribute('stimulus', rev.stimulus ? rev.stimulus.replace(/"/g, "&quot;") : "");
+                                                node.setAttribute('explanation', rev.explanation ? rev.explanation.replace(/"/g, "&quot;") : "");
+                                                node.setAttribute('answer', rev.correctAnswer ? rev.correctAnswer.replace(/"/g, "&quot;") : "");
+                                                if (rev.options) node.setAttribute('data-options', JSON.stringify(rev.options).replace(/'/g, "&#39;"));
+                                                if (rev.statements) node.setAttribute('data-statements', JSON.stringify(rev.statements).replace(/'/g, "&#39;"));
+                                            }
+                                        });
+                                        finalHtml = doc.body.innerHTML;
+                                    }
+                                }
+                            } catch (e) { console.error("Failed to fetch pending revisions", e); }
+                        }
+
                         setRawContent(finalHtml);
                         if (res.data.docSettingsJson) {
                             try { setDocSettings(JSON.parse(res.data.docSettingsJson)); } 

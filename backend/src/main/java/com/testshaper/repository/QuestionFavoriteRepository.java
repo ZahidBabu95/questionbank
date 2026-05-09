@@ -18,4 +18,7 @@ public interface QuestionFavoriteRepository extends JpaRepository<QuestionFavori
     long countByQuestionId(UUID questionId);
     Page<QuestionFavorite> findByUserId(UUID userId, Pageable pageable);
     void deleteByQuestionId(UUID questionId);
+    
+    @org.springframework.data.jpa.repository.Query("SELECT f.question.id FROM QuestionFavorite f WHERE f.user.id = :userId")
+    java.util.List<UUID> findQuestionIdsByUserId(@org.springframework.data.repository.query.Param("userId") UUID userId);
 }

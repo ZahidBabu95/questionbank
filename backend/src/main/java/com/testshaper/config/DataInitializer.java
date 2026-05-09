@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -31,10 +32,18 @@ public class DataInitializer implements CommandLineRunner {
     private final PasswordEncoder passwordEncoder;
     private final GeneralSettingRepository generalSettingRepository;
     private final BillingPackageRepository billingPackageRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     public void run(String... args) throws Exception {
         log.info("Starting Data Initialization...");
+
+        try {
+            jdbcTemplate.execute("ALTER TABLE questions MODIFY COLUMN status VARCHAR(50)");
+            log.info("Successfully altered 'questions.status' column to VARCHAR(50) to support new enum values.");
+        } catch (Exception e) {
+            log.warn("Failed to alter questions.status column, might already be correct or table doesn't exist yet: {}", e.getMessage());
+        }
 
             // 1. Create Default Institute
             Institute institute = createInstituteIfNotFound("Default Institute", "DEFAULT-001",

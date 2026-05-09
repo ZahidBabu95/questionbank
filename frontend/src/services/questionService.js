@@ -102,6 +102,12 @@ const getQuestionById = async (id) => {
     return response.data;
 };
 
+const getMyPendingRevisions = async (originalQuestionIds) => {
+    if (!originalQuestionIds || originalQuestionIds.length === 0) return {};
+    const response = await axios.post(`${API_URL}/my-revisions`, originalQuestionIds);
+    return response.data;
+};
+
 const getOptions = async (id) => {
     const response = await axios.get(`${API_URL}/${id}/options`);
     return response.data;
@@ -178,6 +184,11 @@ const getMyFavorites = async (params) => {
     return response.data;
 };
 
+const getMyFavoriteIds = async () => {
+    const response = await axios.get(`${API_URL}/favorites/my/ids`);
+    return response.data;
+};
+
 export default {
     createMCQ,
     createMCQBulk,
@@ -189,6 +200,7 @@ export default {
     getOverviewStats,
     getSourceTags,
     getQuestionById,
+    getMyPendingRevisions,
     getOptions,
     updateQuestion,
     deleteQuestion,
@@ -210,4 +222,5 @@ export default {
     toggleFavorite,
     hasFavorited,
     getMyFavorites,
+    getMyFavoriteIds,
 };

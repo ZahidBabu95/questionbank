@@ -38,7 +38,7 @@ export const NexusEditorProvider = ({ children }) => {
     // --- Panel States (Left) ---
     const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
     const [leftPanelWidth, setLeftPanelWidth] = useState(288);
-    const [leftPanelTab, setLeftPanelTab] = useState('auto'); // 'auto', 'manual', 'document'
+    const [leftPanelTab, setLeftPanelTab] = useState('document'); // 'auto', 'manual', 'document'
     
     // --- Panel States (Right) ---
     const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);

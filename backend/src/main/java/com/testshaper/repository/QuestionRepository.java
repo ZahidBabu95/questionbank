@@ -92,4 +92,9 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
         long countByCreatedAtBetween(java.time.LocalDateTime start, java.time.LocalDateTime end);
         long countByTenantIdAndCreatedAtBetween(String tenantId, java.time.LocalDateTime start, java.time.LocalDateTime end);
         long countByCreatedByAndCreatedAtBetween(String createdBy, java.time.LocalDateTime start, java.time.LocalDateTime end);
+
+        @Query("SELECT q FROM Question q " +
+               "LEFT JOIN FETCH q.options " +
+               "WHERE q.parentQuestionId IN :parentIds AND q.createdBy = :createdBy AND q.status = 'REVISED'")
+        List<Question> findPendingRevisionsByParentIdsAndCreator(@Param("parentIds") List<UUID> parentIds, @Param("createdBy") String createdBy);
 }

@@ -4,7 +4,7 @@ import React from 'react';
 import { RefreshCw, Trash2, Edit3, RotateCcw } from 'lucide-react';
 import questionService from '../../../../../services/questionService';
 
-const parseMarkdownImages = (text) => {
+const parseMarkdownImages = (text, contextId = 'unknown') => {
     if (!text) return text;
     let imgCount = 0;
     return text.toString().replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, rawAlt, url) => {
@@ -31,9 +31,16 @@ const parseMarkdownImages = (text) => {
             const isSelected = window.__NEXUS_SELECTED_IMAGE__ === imgId;
             const ringClasses = isSelected ? 'outline outline-2 outline-indigo-500 shadow-sm' : 'hover:outline hover:outline-2 hover:outline-indigo-300';
 
-            return `<img id="img-${imgId}" data-img-id="${imgId}" data-img-index="${imgCount++}" data-raw-alt="${rawAlt}" data-url="${url}" src="${finalUrl}" alt="${alt}" referrerPolicy="no-referrer" style="max-width: 100% !important; width: ${width} !important; border-radius: 0.5rem; margin: ${marginStyle} !important; display: block; cursor: pointer;" class="${ringClasses} transition-all print:outline-none" title="Click to resize or align image" />`;
+            return `<img id="img-${imgId}" data-img-id="${imgId}" data-img-index="${imgCount++}" data-context="${contextId}" data-raw-alt="${rawAlt}" data-url="${url}" src="${finalUrl}" alt="${alt}" referrerPolicy="no-referrer" style="max-width: 100% !important; width: ${width} !important; border-radius: 0.5rem; margin: ${marginStyle} !important; display: block; cursor: pointer;" class="${ringClasses} transition-all print:outline-none" title="Click to resize or align image" />`;
         });
     };
+
+const stripOptionPrefix = (html) => {
+    if (!html) return '';
+    let stripped = html.replace(/^(<p[^>]*>)?\s*(?:(?:[কখগঘa-dA-D1-4]|i{1,3}|iv)\s*[\.\)])\s*/i, '$1');
+    stripped = stripped.replace(/^(<p[^>]*>)?\s*(?:(?:[কখগঘa-dA-D1-4]|i{1,3}|iv)\s*[\.\)])\s*/i, '$1');
+    return stripped;
+};
 
     const QuestionComponent = ({ node, editor, deleteNode, updateAttributes, getPos, selected }) => {
         // Strict mode lock removed as per user request to make it fully usable
@@ -49,7 +56,7 @@ const parseMarkdownImages = (text) => {
         const fSize = ptToPx(node.attrs.fontSize);
         
         // Safety clamp for line gap to prevent collapsing
-        const safeLineGap = node.attrs.lineGap ? Math.max(1.0, Number(node.attrs.lineGap)) : 'inherit';
+        const safeLineGap = node.attrs.lineGap ? Number(node.attrs.lineGap) : 'inherit';
 
         // Track latest attributes to prevent stale closures in onUpdate
         const attrsRef = React.useRef(node.attrs);
@@ -111,10 +118,13 @@ const parseMarkdownImages = (text) => {
                 let align = parts[1] || 'center';
                 let width = parts[2] || 'auto';
 
+                const contextId = e.target.getAttribute('data-context');
+
                 // Dispatch global event to open properties panel in NexusEditor
-                const updateImageConfig = (newAlign, newWidth) => {
+                const updateImageConfig = (newAlign, newWidth, newUrl) => {
+                    const finalUrl = newUrl || url;
                     const newRawAlt = `${alt}|${newAlign}|${newWidth}`;
-                    const newMarkdown = `![${newRawAlt}](${url})`;
+                    const newMarkdown = `![${newRawAlt}](${finalUrl})`;
 
                     // Helper to safely replace the Nth occurrence of an image
                     const replaceNthImage = (text) => {
@@ -134,64 +144,50 @@ const parseMarkdownImages = (text) => {
                         return { replaced, text: newText };
                     };
 
-                    // 1. Try replacing in questionText using LATEST attrs
-                    const qtResult = replaceNthImage(attrsRef.current.questionText);
+                    if (!updateAttributes) return;
 
-                    if (qtResult.replaced && updateAttributes) {
-                        updateAttributes({ questionText: qtResult.text });
-                        window.dispatchEvent(new CustomEvent('nexusImageSelected', {
-                            detail: { width: newWidth, align: newAlign, onUpdate: updateImageConfig }
-                        }));
-                        return;
+                    if (contextId === 'stimulus') {
+                        const res = replaceNthImage(attrsRef.current.stimulus);
+                        if (res.replaced) updateAttributes({ stimulus: res.text });
+                    } 
+                    else if (contextId === 'questionText') {
+                        const res = replaceNthImage(attrsRef.current.questionText);
+                        if (res.replaced) updateAttributes({ questionText: res.text });
                     }
-
-                    // 2. Try replacing in options
-                    if (attrsRef.current.options && attrsRef.current.options.length > 0 && updateAttributes) {
-                        let anyReplaced = false;
-                        const newOptions = attrsRef.current.options.map(opt => {
-                            const optResult = replaceNthImage(opt.optionText || opt.text || '');
-                            if (optResult.replaced) anyReplaced = true;
-                            return { ...opt, optionText: optResult.text };
-                        });
-                        if (anyReplaced) {
-                            updateAttributes({ options: newOptions });
-                            window.dispatchEvent(new CustomEvent('nexusImageSelected', {
-                                detail: { width: newWidth, align: newAlign, onUpdate: updateImageConfig }
-                            }));
+                    else if (contextId && contextId.startsWith('stmt-')) {
+                        const idx = parseInt(contextId.split('-')[1]);
+                        const newStmts = [...attrsRef.current.statements];
+                        const res = replaceNthImage(newStmts[idx]);
+                        if (res.replaced) {
+                            newStmts[idx] = res.text;
+                            updateAttributes({ statements: newStmts });
                         }
                     }
+                    else if (contextId && contextId.startsWith('opt-')) {
+                        const idx = parseInt(contextId.split('-')[1]);
+                        const newOpts = [...attrsRef.current.options];
+                        const res = replaceNthImage(newOpts[idx].optionText || newOpts[idx].text || '');
+                        if (res.replaced) {
+                            newOpts[idx] = { ...newOpts[idx], optionText: res.text };
+                            updateAttributes({ options: newOpts });
+                        }
+                    }
+
+                    window.dispatchEvent(new CustomEvent('nexusImageSelected', {
+                        detail: { width: newWidth, align: newAlign, src: finalUrl, onUpdate: updateImageConfig }
+                    }));
                 };
+
+                // Initial dispatch to open the properties panel with current values
+                window.dispatchEvent(new CustomEvent('nexusImageSelected', {
+                    detail: { src: url, width: width, align: align, onUpdate: updateImageConfig }
+                }));
             }
         };
 
         const handleMouseDown = (e) => {
             if (e.target.tagName === 'IMG') {
-                const img = e.target;
-                window.dispatchEvent(new CustomEvent('nexusImageSelected', {
-                    detail: {
-                        src: img.src,
-                        width: img.style.width || img.width,
-                        height: img.style.height || img.height,
-                        align: img.style.float || img.style.display === 'block' ? 'center' : 'none',
-                        updateImage: (updates) => {
-                            img.style.width = updates.width + 'px';
-                            img.style.height = updates.height + 'px';
-                            if (updates.align === 'center') {
-                                img.style.display = 'block';
-                                img.style.margin = '0 auto';
-                                img.style.float = 'none';
-                            } else if (updates.align === 'none') {
-                                img.style.display = 'inline-block';
-                                img.style.margin = '0';
-                                img.style.float = 'none';
-                            } else {
-                                img.style.display = 'inline-block';
-                                img.style.float = updates.align;
-                            }
-                            setRawContent(editor.getHTML());
-                        }
-                    }
-                }));
+                handleImageMouseDown(e);
                 return;
             }
         };
@@ -205,17 +201,34 @@ const parseMarkdownImages = (text) => {
             }
         };
 
+        const cleanHtml = (html) => {
+            if (!html) return '';
+            let cleaned = html;
+            let prev;
+            do {
+                prev = cleaned;
+                cleaned = cleaned
+                    .replace(/<p[^>]*>\s*<\/p>/gi, '')
+                    .replace(/<p[^>]*>\s*<br[^>]*>\s*<\/p>/gi, '')
+                    .replace(/<p[^>]*>(?:\s|&nbsp;)*<\/p>/gi, '')
+                    .replace(/<br[^>]*>\s*$/gi, '')
+                    .replace(/^\s*<br[^>]*>/gi, '')
+                    .trim();
+            } while (cleaned !== prev);
+            return cleaned;
+        };
+
         return (
                         <NodeViewWrapper 
                 data-type="question-block" 
                 data-numberingstyle={node.attrs.numberingStyle || 'bn'}
-                className={`relative mb-0 transition-all duration-200 rounded-xl ${isStrict ? 'cursor-pointer hover:bg-slate-50' : 'cursor-text'} print:bg-transparent print:scale-100 print:shadow-none print:ring-0`}
+                className={`relative group mb-0 transition-all duration-200 rounded-xl ${isStrict ? 'cursor-pointer hover:bg-slate-50' : 'cursor-text'} print:bg-transparent print:scale-100 print:shadow-none print:ring-0`}
                 style={{ 
                     fontSize: fSize ? `${fSize}px` : 'inherit',
                     lineHeight: safeLineGap,
                     marginBottom: node.attrs.questionGap !== undefined && node.attrs.questionGap !== null ? `${node.attrs.questionGap}px` : undefined,
-                    paddingTop: '8px',
-                    paddingBottom: '8px'
+                    paddingTop: '0px',
+                    paddingBottom: '0px'
                 }}
                 onMouseDown={handleMouseDown}
                 onClick={handleClick}
@@ -226,16 +239,16 @@ const parseMarkdownImages = (text) => {
 
                 <div className="flex flex-col items-start gap-1 w-full">
                     {node.attrs.stimulus && (
-                        <div className="w-full mb-3 text-slate-800" 
+                        <div className="w-full mb-1 text-slate-800" 
                              style={{ textAlign: node.attrs.textAlign || 'left', lineHeight: safeLineGap }}
-                             dangerouslySetInnerHTML={{ __html: parseMarkdownImages(node.attrs.stimulus) }} 
+                             dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(node.attrs.stimulus, 'stimulus')) }} 
                         />
                     )}
                     
                     <div className="flex items-start justify-between gap-4 w-full">
                         <div className="text-slate-900 font-medium flex-1 w-full" 
                              style={{ textAlign: node.attrs.textAlign || 'left' }}
-                             dangerouslySetInnerHTML={{ __html: parseMarkdownImages(node.attrs.questionText) }} 
+                             dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(node.attrs.questionText, 'questionText')) }} 
                         />
                         {node.attrs.marksConfig !== 'hide' && node.attrs.marks && (
                             <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 mt-0.5 select-none"
@@ -246,8 +259,8 @@ const parseMarkdownImages = (text) => {
                     </div>
                     
                     {node.attrs.statements && Array.isArray(node.attrs.statements) && node.attrs.statements.length > 0 && (
-                        <div className="w-full mt-2 mb-2 flex justify-center">
-                            <div className="flex flex-wrap justify-center gap-x-8 gap-y-2">
+                        <div className="w-full mt-[0.2em] mb-[0.2em] pl-[1.5em]">
+                            <div className="flex flex-col gap-y-1">
                                 {node.attrs.statements.map((stmt, idx) => {
                                     const roman = ['i', 'ii', 'iii', 'iv', 'v'][idx] || (idx + 1);
                                     const safeStmt = typeof stmt === 'string' ? stmt : '';
@@ -256,7 +269,7 @@ const parseMarkdownImages = (text) => {
                                     return (
                                         <div key={idx} className="flex gap-2 items-start text-slate-800" style={{ fontSize: fSize ? `${fSize * 0.95}px` : '0.95em' }}>
                                             <span className="font-medium mt-[1px]">{roman}.</span>
-                                            <div dangerouslySetInnerHTML={{ __html: parseMarkdownImages(cleanStmt) }} />
+                                            <div dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(cleanStmt, `stmt-${idx}`)) }} />
                                         </div>
                                     );
                                 })}
@@ -266,14 +279,55 @@ const parseMarkdownImages = (text) => {
                 </div>
                 
                 {/* MCQ Options Rendering */}
-                {node.attrs.options && Array.isArray(node.attrs.options) && node.attrs.options.length > 0 && (
-                    <div className={`options-grid mt-[0.3em] grid gap-x-6 ${node.attrs.optionLayout === 'col4' ? 'grid-cols-4' : node.attrs.optionLayout === 'col2' ? 'grid-cols-2' : 'grid-cols-1'}`}
-                         style={{ 
-                             rowGap: node.attrs.optionGap ? `${node.attrs.optionGap}px` : '8px',
-                             fontSize: fSize ? `${fSize}px` : 'inherit'
-                         }}
-                    >
-                        {node.attrs.options.map((opt, idx) => {
+                {node.attrs.options && Array.isArray(node.attrs.options) && node.attrs.options.length > 0 && (() => {
+                    let computedLayout = node.attrs.optionLayout || 'col1';
+
+                    if (node.attrs.smartFit !== false) {
+                        const hasImage = node.attrs.options.some(o => (o.optionText || o.text || '').toLowerCase().includes('<img'));
+                        if (hasImage) {
+                            computedLayout = 'col1';
+                        } else {
+                            const getVisualLength = (html) => {
+                                const text = (html || '').replace(/<[^>]*>?/gm, '');
+                                let len = 0;
+                                for(let i=0; i<text.length; i++) {
+                                    const code = text.charCodeAt(i);
+                                    if (code >= 0x0980 && code <= 0x09FF) len += 1.3; // Bengali
+                                    else if (code >= 0x41 && code <= 0x5A) len += 1.2; // Uppercase EN
+                                    else if (text[i] === '\\' || text[i] === '$' || text[i] === '^' || text[i] === '_') len += 1.5; // Math
+                                    else len += 1.0;
+                                }
+                                return len;
+                            };
+                            
+                            const maxLen = Math.max(...node.attrs.options.map(o => getVisualLength(o.optionText || o.text)));
+                            
+                            let pageCols = node.attrs.pageCols || 1;
+                            
+                            const scale = (fSize || 14.66) / 14.66;
+                            
+                            // Improved thresholds for professional fit
+                            const threshold1Col = Math.floor((pageCols > 1 ? 22 : 45) / scale);
+                            const threshold2Col = Math.floor((pageCols > 1 ? 10 : 20) / scale);
+                            
+                            if (maxLen >= threshold1Col) {
+                                computedLayout = 'col1';
+                            } else if (maxLen >= threshold2Col) {
+                                computedLayout = 'col2';
+                            } else {
+                                computedLayout = 'col4';
+                            }
+                        }
+                    }
+                    
+                    return (
+                        <div className={`options-grid grid gap-x-6 ${computedLayout === 'col4' ? 'grid-cols-4' : computedLayout === 'col2' ? 'grid-cols-2' : 'grid-cols-1'}`}
+                             style={{ 
+                                 rowGap: (node.attrs.optionGap && node.attrs.optionGap < 0) ? '0px' : (node.attrs.optionGap ? `${node.attrs.optionGap}px` : '8px'),
+                                 fontSize: fSize ? `${fSize}px` : 'inherit'
+                             }}
+                        >
+                            {node.attrs.options.map((opt, idx) => {
                             const optStyle = node.attrs.optionStyle || 'bn';
                             const optLabel = optStyle === 'en' 
                                 ? String.fromCharCode(97 + idx) 
@@ -295,20 +349,22 @@ const parseMarkdownImages = (text) => {
                                 ? 'inline-flex items-center justify-center rounded-full border border-slate-700 font-medium shrink-0 mt-[3px] leading-none' 
                                 : 'font-semibold text-slate-800 shrink-0';
                                 
+                            const negativeMargin = (node.attrs.optionGap && node.attrs.optionGap < 0) ? `${node.attrs.optionGap}px` : '0px';
+
                             return (
-                                <div key={idx} className={`flex items-start gap-2 ${opt.isCorrect || opt.correct ? 'nexus-correct-option p-1' : 'p-1'}`}>
+                                <div key={idx} className={`flex items-start gap-2 ${opt.isCorrect || opt.correct ? 'nexus-correct-option p-1' : 'p-1'}`} style={{ marginBottom: negativeMargin }}>
                                     <span className={bubbleClass} style={{
                                         width: dec === 'bubble' ? '1.2em' : 'auto',
                                         height: dec === 'bubble' ? '1.2em' : 'auto',
                                         fontSize: dec === 'bubble' ? '0.8em' : 'inherit',
                                         paddingBottom: dec === 'bubble' ? '0.05em' : '0'
                                     }}>{formattedLabel}</span>
-                                    <div dangerouslySetInnerHTML={{ __html: parseMarkdownImages(opt.optionText || opt.text || '') }} className="text-slate-700" style={{ lineHeight: Math.max(1.2, Number(node.attrs.lineGap || 1.625)) }} />
+                                    <div dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(stripOptionPrefix(opt.optionText || opt.text || ''), `opt-${idx}`)) }} className="text-slate-700" style={{ lineHeight: 'inherit' }} />
                                 </div>
                             );
                         })}
                     </div>
-                )}
+                ); })()}
 
                 {/* Inline Detailed Answer Block */}
                 <div className="nexus-detailed-answer-block mt-2 break-inside-avoid w-full hidden"
@@ -332,7 +388,7 @@ const parseMarkdownImages = (text) => {
                                         : optStyle === 'num_bn'
                                         ? ['১', '২', '৩', '৪', '৫'][idx]
                                         : getBanglaOptionLabel(idx);
-                                    correctOpts.push(`${optLabel}. ${opt.optionText || opt.text || ''}`);
+                                    correctOpts.push(`${optLabel}. ${stripOptionPrefix(opt.optionText || opt.text || '')}`);
                                 }
                             });
                             return correctOpts.length > 0 ? correctOpts.join('<br/>') : (node.attrs.answer || 'N/A');
@@ -346,12 +402,22 @@ const parseMarkdownImages = (text) => {
                     )}
                 </div>
 
-                {/* Free Edit Warning overlay (optional) */}
+                {/* Revise Button for Revise Mode (formerly Free Edit) */}
                 {!isStrict && (
-                    <div className="absolute inset-0 bg-slate-100/50 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-xl opacity-0 group-hover:opacity-100 transition-opacity border-2 border-dashed border-slate-400">
-                        <span className="bg-white text-slate-700 px-4 py-2 rounded-lg text-sm font-bold shadow-md">
-                            Convert to Plain Text to Edit
-                        </span>
+                    <div className="absolute top-2 right-2 print:hidden flex gap-2 z-50">
+                        <button
+                            onPointerDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                window.dispatchEvent(new CustomEvent('nexusReviseRequested', { 
+                                    detail: { pos: getPos(), nodeSize: node.nodeSize, attrs: node.attrs } 
+                                }));
+                            }}
+                            className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-2 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-bold shadow-sm transition-colors border border-indigo-200"
+                            title="Revise this question inline"
+                        >
+                            <Edit3 size={14}/> Revise
+                        </button>
                     </div>
                 )}
         </NodeViewWrapper>
@@ -387,7 +453,9 @@ export const QuestionBlockNode = Node.create({
             lineGap: { default: null },
             optionGap: { default: null },
             questionGap: { default: null },
-            textAlign: { default: 'left' }
+            textAlign: { default: 'left' },
+            smartFit: { default: true },
+            pageCols: { default: 1 }
         };
     },
 
@@ -430,6 +498,8 @@ export const QuestionBlockNode = Node.create({
                     optionGap: dom.getAttribute('optiongap') || null,
                     questionGap: dom.getAttribute('questiongap') || null,
                     textAlign: dom.getAttribute('textalign') || 'left',
+                    smartFit: dom.getAttribute('smartfit') !== 'false',
+                    pageCols: Number(dom.getAttribute('pagecols')) || 1,
                     options
                 };
             }
@@ -451,7 +521,9 @@ export const QuestionBlockNode = Node.create({
             'linegap': HTMLAttributes.lineGap || null,
             'optiongap': HTMLAttributes.optionGap || null,
             'questiongap': HTMLAttributes.questionGap || null,
-            'textalign': HTMLAttributes.textAlign || 'left'
+            'textalign': HTMLAttributes.textAlign || 'left',
+            'smartfit': HTMLAttributes.smartFit !== false ? 'true' : 'false',
+            'pagecols': HTMLAttributes.pageCols || 1
         })];
     },
 

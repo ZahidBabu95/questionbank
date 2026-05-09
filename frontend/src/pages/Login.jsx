@@ -15,6 +15,11 @@ const Login = () => {
     const navigate = useNavigate();
     const branding = useBranding();
 
+    React.useEffect(() => {
+        if (localStorage.getItem('token')) {
+            navigate('/dashboard');
+        }
+    }, [navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();

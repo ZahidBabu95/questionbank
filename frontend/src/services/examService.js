@@ -25,6 +25,23 @@ const examService = {
         const res = await axios.get('/v1/exams/generate', { params });
         return res.data;
     },
+    // --- Recycle Bin ---
+    listDeletedExams: async (params) => {
+        const res = await axios.get('/v1/exams/generate/recycle-bin', { params });
+        return res.data;
+    },
+    restoreExam: async (examId) => {
+        const res = await axios.post(`/v1/exams/generate/recycle-bin/${examId}/restore`);
+        return res.data;
+    },
+    hardDeleteExam: async (examId) => {
+        const res = await axios.delete(`/v1/exams/generate/recycle-bin/${examId}/hard`);
+        return res.data;
+    },
+    emptyRecycleBin: async () => {
+        const res = await axios.delete('/v1/exams/generate/recycle-bin/empty');
+        return res.data;
+    },
     updateExam: async (examId, payload) => {
         const res = await axios.put(`/v1/exams/generate/${examId}`, payload);
         return res.data;

@@ -140,6 +140,18 @@ public class QuestionController {
         return ResponseEntity.ok(questionService.getQuestion(id));
     }
 
+    @PostMapping("/my-revisions")
+    public ResponseEntity<Map<UUID, Question>> getMyPendingRevisions(@RequestBody List<UUID> originalQuestionIds, Authentication auth) {
+        String email = auth.getName();
+        List<Question> revisions = questionService.getMyPendingRevisions(originalQuestionIds, email);
+        
+        Map<UUID, Question> revisionMap = new java.util.HashMap<>();
+        for (Question rev : revisions) {
+            revisionMap.put(rev.getParentQuestionId(), rev);
+        }
+        return ResponseEntity.ok(revisionMap);
+    }
+
     @GetMapping("/{id}/options")
     public ResponseEntity<List<QuestionOption>> getOptions(@PathVariable UUID id) {
         return ResponseEntity.ok(questionService.getOptions(id));
@@ -329,7 +341,8 @@ public class QuestionController {
             "success", true,
             "message", "Revision draft created. Original question is untouched. Awaiting Super Admin review.",
             "revisionId", savedRevision.getId(),
-            "originalId", id
+            "originalId", id,
+            "data", savedRevision
         ));
     }
 

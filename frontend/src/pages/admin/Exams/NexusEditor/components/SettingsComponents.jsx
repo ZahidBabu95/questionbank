@@ -115,11 +115,8 @@ export const CollapsibleBox = ({ title, children, defaultOpen = false, toggleKey
                 <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-700 text-[13px]">{title}</span>
                     {toggleKey && (
-                        <div onClick={e => {
-                            e.preventDefault();
-                            onToggle(toggleKey, !toggleVal);
-                        }}>
-                            <Toggle checked={toggleVal} onChange={() => {}} />
+                        <div onClick={e => e.stopPropagation()}>
+                            <Toggle checked={toggleVal} onChange={e => onToggle(toggleKey, e.target.checked)} />
                         </div>
                     )}
                 </div>
@@ -175,23 +172,36 @@ export const TypographyToolbar = ({ state, onChange, prefix }) => {
                 </div>
             </div>
 
-            <div className="flex items-center gap-4 text-xs text-slate-700 border-t border-slate-200 pt-2">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={state[`${prefix}Bg`] || false} onChange={e => onChange(`${prefix}Bg`, e.target.checked)} className="accent-indigo-600" />
-                    Background Box
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" checked={state[`${prefix}Divider`] || false} onChange={e => onChange(`${prefix}Divider`, e.target.checked)} className="accent-indigo-600" />
-                    Bottom Divider
-                </label>
-                <div className="flex items-center gap-1.5 ml-auto">
-                    <span className="text-slate-500">Gap:</span>
-                    <input 
-                        type="number" 
-                        value={state[`${prefix}Gap`] || ''} placeholder="px"
-                        onChange={e => onChange(`${prefix}Gap`, parseInt(e.target.value) || '')}
-                        className="w-12 border border-slate-200 rounded px-1 py-0.5 outline-none focus:border-indigo-400 text-center"
-                    />
+            <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-3 text-xs text-slate-700 border-t border-slate-200 pt-2 mt-2">
+                <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" checked={state[`${prefix}Bg`] || false} onChange={e => onChange(`${prefix}Bg`, e.target.checked)} className="accent-indigo-600" />
+                        <span className="whitespace-nowrap">Bg Box</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" checked={state[`${prefix}Divider`] || false} onChange={e => onChange(`${prefix}Divider`, e.target.checked)} className="accent-indigo-600" />
+                        <span className="whitespace-nowrap">Divider</span>
+                    </label>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1">
+                        <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Top:</span>
+                        <input 
+                            type="number" 
+                            value={state[`${prefix}TopGap`] !== undefined ? state[`${prefix}TopGap`] : ''} placeholder="px"
+                            onChange={e => onChange(`${prefix}TopGap`, e.target.value === '' ? '' : parseInt(e.target.value))}
+                            className="w-12 border border-slate-200 rounded px-1 py-0.5 outline-none focus:border-indigo-400 text-center font-mono"
+                        />
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Bot:</span>
+                        <input 
+                            type="number" 
+                            value={state[`${prefix}Gap`] !== undefined ? state[`${prefix}Gap`] : ''} placeholder="px"
+                            onChange={e => onChange(`${prefix}Gap`, e.target.value === '' ? '' : parseInt(e.target.value))}
+                            className="w-12 border border-slate-200 rounded px-1 py-0.5 outline-none focus:border-indigo-400 text-center font-mono"
+                        />
+                    </div>
                 </div>
             </div>
         </div>

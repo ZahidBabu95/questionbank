@@ -50,10 +50,8 @@ const NexusHeader = () => {
                             <ShieldCheck size={14} /> {t.strictMode}
                         </button>
                         <button 
-                            onClick={() => {
-                                alert(uiLang === 'bn' ? 'ফ্রি এডিট মোড ফিচারটি আন্ডার ডেভেলপমেন্ট।' : 'Free Edit Mode is under development.');
-                            }}
-                            className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all flex items-center gap-1 text-slate-500 hover:text-slate-700`}
+                            onClick={() => setEditorMode('FREE_EDIT')}
+                            className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all flex items-center gap-1 ${editorMode === 'FREE_EDIT' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <Unlock size={14} /> {t.freeMode}
                         </button>
@@ -123,7 +121,7 @@ const NexusHeader = () => {
 
             {/* Tabs / Ribbon Menus */}
             <div className="flex items-end gap-1 mt-2 overflow-x-auto custom-scrollbar pb-1">
-                {['questionSetup', 'examInfo', 'pageSetup', 'font', 'design', 'templates', 'answerSheet'].map(tab => (
+                {['questionSetup', 'examInfo', 'pageSetup', 'design', 'templates', 'answerSheet'].map(tab => (
                     <button key={tab} onClick={() => setActiveTab(tab)}
                         className={`px-4 py-2 text-[13px] font-bold border-b-2 transition-all ${activeTab === tab ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>
                         {t[tab]}

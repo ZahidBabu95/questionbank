@@ -22,10 +22,10 @@ const convertMarkdownImagesToHtml = (text) => {
     });
 };
 
-const QuestionEdit = ({ inlineId, onSaveComplete }) => {
+const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
     const params = useParams();
     const id = inlineId || params.id;
-    const isInline = !!inlineId;
+    const isInline = !!inlineId || !!onSaveComplete;
     const navigate = useNavigate();
 
     // Data lists
@@ -40,7 +40,7 @@ const QuestionEdit = ({ inlineId, onSaveComplete }) => {
     const [message, setMessage] = useState(null);
     const [searchParams] = useSearchParams();
     const mode = searchParams.get('mode');
-    const isRevision = mode === 'revise';
+    const isRevision = mode === 'revise' || forceMode === 'revise';
 
     const [questionType, setQuestionType] = useState('MCQ');
     const [versionComment, setVersionComment] = useState('');
@@ -413,31 +413,42 @@ const QuestionEdit = ({ inlineId, onSaveComplete }) => {
         // Validation
         if (questionType !== 'CQ' && isEmptyQuill(formData.questionText)) {
             setMessage({ type: 'error', text: 'Please fill all required context and question text fields.' });
+            document.querySelector('.question-edit-container')?.scrollTo({ top: 0, behavior: 'smooth' });
             return;
         }
         if (!formData.academicClassId || !formData.subjectId || !formData.chapterId) {
             setMessage({ type: 'error', text: 'Please select Class, Subject, and Chapter.' });
+            document.querySelector('.question-edit-container')?.scrollTo({ top: 0, behavior: 'smooth' });
             return;
         }
 
-        if (isRevision && !versionComment.trim()) {
-            setMessage({ type: 'error', text: 'Please provide a version comment explaining your changes.' });
-            return;
+        let finalVersionComment = versionComment.trim();
+        if (isRevision && !finalVersionComment) {
+            finalVersionComment = 'Minor revision and content update';
         }
 
         if (questionType === 'MCQ') {
             if (!options.some(opt => opt.isCorrect)) {
                 setMessage({ type: 'error', text: 'Please select a correct option.' });
+                document.querySelector('.question-edit-container')?.scrollTo({ top: 0, behavior: 'smooth' });
                 return;
             }
             if (options.some(opt => isEmptyQuill(opt.optionText))) {
                 setMessage({ type: 'error', text: 'All multiple choice options must have text or an image. Please click into any empty option to remove this error.' });
+                document.querySelector('.question-edit-container')?.scrollTo({ top: 0, behavior: 'smooth' });
                 return;
             }
         }
 
         setSaving(true);
         try {
+            const stripOptionPrefix = (html) => {
+                if (!html) return '';
+                let stripped = html.replace(/^(<p[^>]*>)?\s*(?:(?:[কখগঘa-dA-D1-4]|i{1,3}|iv)\s*[\.\)])\s*/i, '$1');
+                stripped = stripped.replace(/^(<p[^>]*>)?\s*(?:(?:[কখগঘa-dA-D1-4]|i{1,3}|iv)\s*[\.\)])\s*/i, '$1');
+                return stripped;
+            };
+
             let finalQuestionText = formData.questionText;
             let finalAnswerText = formData.correctAnswer;
             let finalExplanationText = formData.explanation;
@@ -483,17 +494,18 @@ const QuestionEdit = ({ inlineId, onSaveComplete }) => {
                 chapter: { id: formData.chapterId },
                 topic: formData.topicId ? { id: formData.topicId } : null,
                 sources: examSources.length > 0 ? examSources : [],
-                versionComment: isRevision ? versionComment : null
+                versionComment: isRevision ? finalVersionComment : null
             };
 
-            const optionsPayload = questionType === 'MCQ' ? options.map(o => ({
-                optionLabel: o.optionLabel,
-                optionText: o.optionText,
+            const optionsPayload = questionType === 'MCQ' ? options.map((o, idx) => ({
+                optionLabel: o.optionLabel || String.fromCharCode(65 + idx),
+                optionText: stripOptionPrefix(o.optionText),
                 isCorrect: o.isCorrect
             })) : null;
 
+            let revisionRes = null;
             if (isRevision) {
-                await questionService.submitRevision(id, {
+                revisionRes = await questionService.submitRevision(id, {
                     question: questionPayload,
                     options: optionsPayload
                 });
@@ -506,10 +518,18 @@ const QuestionEdit = ({ inlineId, onSaveComplete }) => {
             clearSavedData(); // Clear auto-save data on successful submit
 
             if (isInline && onSaveComplete) {
-                onSaveComplete();
+                onSaveComplete(isRevision ? revisionRes?.data : undefined);
             } else {
                 setTimeout(() => {
-                    navigate(-1);
+                    if (window.history.length <= 2) {
+                        if (window.opener) {
+                            window.close();
+                        }
+                        // Fallback if close fails or no opener
+                        navigate('/admin/questions');
+                    } else {
+                        navigate(-1);
+                    }
                 }, 1000);
             }
 
@@ -547,7 +567,7 @@ const QuestionEdit = ({ inlineId, onSaveComplete }) => {
     }
 
     return (
-        <div className={isInline ? "w-full p-4 space-y-4 overflow-y-auto h-full custom-scrollbar" : "max-w-[1400px] mx-auto p-6 space-y-6"}>
+        <div className={`question-edit-container ${isInline ? "w-full p-4 space-y-4 overflow-y-auto h-full custom-scrollbar" : "max-w-[1400px] mx-auto p-6 space-y-6"}`}>
             {/* ═══ AUTO-SAVE BANNER ═══ */}
             {hasSavedData && (
                 <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex flex-wrap items-center justify-between shadow-sm gap-4">
@@ -594,40 +614,85 @@ const QuestionEdit = ({ inlineId, onSaveComplete }) => {
                 {/* LEFT COLUMN: Main Editing Form */}
                 <div className="flex-1 w-full space-y-6">
                     {/* Academic Mapping */}
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                        <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                            <Book size={18} className="text-indigo-500" /> Core Context *
-                        </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Class</label>
-                                <select value={formData.academicClassId} onChange={handleClassChange} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm font-medium transition-all">
-                                    <option value="">Select Class</option>
-                                    {classes.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Subject</label>
-                                <select value={formData.subjectId} onChange={handleSubjectChange} disabled={!formData.academicClassId} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-sm font-medium transition-all">
-                                    <option value="">Select Subject</option>
-                                    {subjects.map(subj => <option key={subj.classSubjectId} value={subj.classSubjectId}>{subj.subjectName}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Chapter</label>
-                                <select value={formData.chapterId} onChange={handleChapterChange} disabled={!formData.subjectId} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-sm font-medium transition-all">
-                                    <option value="">Select Chapter</option>
-                                    {chapters.map(chap => <option key={chap.id} value={chap.id}>{chap.name}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Topic</label>
-                                <select value={formData.topicId} onChange={(e) => setFormData({ ...formData, topicId: e.target.value })} disabled={!formData.chapterId} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-sm font-medium transition-all">
-                                    <option value="">Select Topic</option>
-                                    {topics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
+                    {/* Academic Mapping */}
+                    <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 ${isInline ? '' : 'p-6'}`}>
+                        {isInline ? (
+                            <details className="group p-4">
+                                <summary className="text-sm font-semibold text-slate-700 flex items-center justify-between cursor-pointer list-none select-none">
+                                    <div className="flex items-center gap-2">
+                                        <Book size={16} className="text-indigo-500" /> 
+                                        <span>Academic Context (Class, Subject, Chapter)</span>
+                                    </div>
+                                    <span className="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                                </summary>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-100">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Class</label>
+                                        <select value={formData.academicClassId} onChange={handleClassChange} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-xs font-medium transition-all">
+                                            <option value="">Select Class</option>
+                                            {classes.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Subject</label>
+                                        <select value={formData.subjectId} onChange={handleSubjectChange} disabled={!formData.academicClassId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-xs font-medium transition-all">
+                                            <option value="">Select Subject</option>
+                                            {subjects.map(subj => <option key={subj.classSubjectId} value={subj.classSubjectId}>{subj.subjectName}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Chapter</label>
+                                        <select value={formData.chapterId} onChange={handleChapterChange} disabled={!formData.subjectId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-xs font-medium transition-all">
+                                            <option value="">Select Chapter</option>
+                                            {chapters.map(chap => <option key={chap.id} value={chap.id}>{chap.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Topic</label>
+                                        <select value={formData.topicId} onChange={(e) => setFormData({ ...formData, topicId: e.target.value })} disabled={!formData.chapterId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-xs font-medium transition-all">
+                                            <option value="">Select Topic</option>
+                                            {topics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            </details>
+                        ) : (
+                            <>
+                                <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                                    <Book size={18} className="text-indigo-500" /> Core Context *
+                                </h2>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Class</label>
+                                        <select value={formData.academicClassId} onChange={handleClassChange} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm font-medium transition-all">
+                                            <option value="">Select Class</option>
+                                            {classes.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Subject</label>
+                                        <select value={formData.subjectId} onChange={handleSubjectChange} disabled={!formData.academicClassId} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-sm font-medium transition-all">
+                                            <option value="">Select Subject</option>
+                                            {subjects.map(subj => <option key={subj.classSubjectId} value={subj.classSubjectId}>{subj.subjectName}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Chapter</label>
+                                        <select value={formData.chapterId} onChange={handleChapterChange} disabled={!formData.subjectId} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-sm font-medium transition-all">
+                                            <option value="">Select Chapter</option>
+                                            {chapters.map(chap => <option key={chap.id} value={chap.id}>{chap.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Topic</label>
+                                        <select value={formData.topicId} onChange={(e) => setFormData({ ...formData, topicId: e.target.value })} disabled={!formData.chapterId} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-sm font-medium transition-all">
+                                            <option value="">Select Topic</option>
+                                            {topics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     {/* Question Info */}
@@ -665,19 +730,42 @@ const QuestionEdit = ({ inlineId, onSaveComplete }) => {
                     </div>
 
                     {isRevision && (
-                        <div className="bg-indigo-50/50 p-6 rounded-2xl shadow-sm border border-indigo-200">
-                            <h2 className="text-lg font-semibold text-indigo-900 mb-4 flex items-center gap-2">
-                                <AlertTriangle size={18} className="text-indigo-600" /> Revision Details *
-                            </h2>
-                            <div>
-                                <label className="block text-sm font-semibold text-indigo-800 mb-2">What did you change? (Required)</label>
-                                <textarea
-                                    value={versionComment}
-                                    onChange={(e) => setVersionComment(e.target.value)}
-                                    placeholder="E.g., Fixed typos in option A and updated the stimulus grammar."
-                                    className="w-full p-4 bg-white border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm transition-all resize-y min-h-[100px] shadow-sm"
-                                />
-                            </div>
+                        <div className={`bg-indigo-50/50 rounded-2xl shadow-sm border border-indigo-200 ${isInline ? 'p-4' : 'p-6'}`}>
+                            {isInline ? (
+                                <details className="group">
+                                    <summary className="text-sm font-semibold text-indigo-900 flex items-center justify-between cursor-pointer list-none select-none">
+                                        <div className="flex items-center gap-2">
+                                            <AlertTriangle size={16} className="text-indigo-600" /> 
+                                            <span>Revision Details (Optional)</span>
+                                        </div>
+                                        <span className="text-indigo-400 group-open:rotate-180 transition-transform">▼</span>
+                                    </summary>
+                                    <div className="mt-3 pt-3 border-t border-indigo-100/50">
+                                        <input
+                                            type="text"
+                                            value={versionComment}
+                                            onChange={(e) => setVersionComment(e.target.value)}
+                                            placeholder="E.g., Fixed typos in option A."
+                                            className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-xs transition-all shadow-sm"
+                                        />
+                                    </div>
+                                </details>
+                            ) : (
+                                <>
+                                    <h2 className="text-lg font-semibold text-indigo-900 mb-4 flex items-center gap-2">
+                                        <AlertTriangle size={18} className="text-indigo-600" /> Revision Details *
+                                    </h2>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-indigo-800 mb-2">What did you change? (Required)</label>
+                                        <textarea
+                                            value={versionComment}
+                                            onChange={(e) => setVersionComment(e.target.value)}
+                                            placeholder="E.g., Fixed typos in option A and updated the stimulus grammar."
+                                            className="w-full p-4 bg-white border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm transition-all resize-y min-h-[100px] shadow-sm"
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
 

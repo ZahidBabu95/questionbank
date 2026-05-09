@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { 
-    PanelLeftClose, Layers, Loader2, RefreshCw, Edit3, RotateCcw, Trash2
+    PanelLeftClose, Layers, Loader2, RefreshCw, Edit3, RotateCcw, Trash2, X
 } from 'lucide-react';
 import { useNexusEditor } from '../../context/NexusEditorContext';
 import { useAcademicFilters } from '../../hooks/useAcademicFilters';
 import questionService from '../../../../../../services/questionService';
+import QuestionEdit from '../../../../QuestionBank/QuestionEdit';
 
 const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
     const navigate = useNavigate();
@@ -19,6 +21,8 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
         setPendingInsertQuestion, setPendingSwapQuestion,
         documentQuestions
     } = useNexusEditor();
+
+    const [revisingQuestionNode, setRevisingQuestionNode] = useState(null);
 
     const filters = useAcademicFilters();
     const userStr = localStorage.getItem('user');
@@ -55,6 +59,14 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
             }
         }));
     };
+
+    React.useEffect(() => {
+        const handleReviseRequested = (e) => {
+            setRevisingQuestionNode(e.detail);
+        };
+        window.addEventListener('nexusReviseRequested', handleReviseRequested);
+        return () => window.removeEventListener('nexusReviseRequested', handleReviseRequested);
+    }, []);
 
     const handleAddToCanvas = (q) => {
         const targetSec = docSettings.sections?.find(s => s.isMCQ === (q.type === 'MCQ')) || {};
@@ -366,8 +378,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                                             <div className="text-xs font-medium text-slate-700 line-clamp-2 leading-relaxed" dangerouslySetInnerHTML={{__html: (q.attrs.questionText || '').replace(/<[^>]*>?/gm, '')}} />
                                         </div>
                                         <div className="flex items-center justify-end gap-1.5 mt-2 pt-2 border-t border-slate-100 opacity-50 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => alert('Edit feature coming soon')} className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded" title="Edit Question"><Edit3 size={14} /></button>
-                                            <button onClick={() => alert('Revise feature coming soon')} className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded" title="Revise Options"><RotateCcw size={14} /></button>
+                                            <button onClick={() => setRevisingQuestionNode(q)} className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded" title="Revise Options"><RotateCcw size={14} /></button>
                                             <button onClick={() => handleAutoSwap(q)} className="p-1.5 px-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded flex items-center gap-1 border border-transparent hover:border-indigo-100" title="Auto Swap"><RefreshCw size={12} /> <span className="text-[10px] font-bold uppercase tracking-wider">Auto</span></button>
                                             <button onClick={() => {
                                                 window.dispatchEvent(new CustomEvent('nexusSwapRequested', { detail: { pos: q.pos, nodeSize: q.nodeSize, attrs: q.attrs } }));
@@ -385,6 +396,54 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                     )}
                 </div>
             </div>
+
+            {revisingQuestionNode && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col relative border border-slate-200">
+                        <div className="flex justify-between items-center p-6 border-b border-slate-200 bg-white shadow-sm z-10">
+                            <div className="flex items-center gap-4">
+                                <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-xl shadow-md">
+                                    <RotateCcw size={22} strokeWidth={2.5} />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-black text-slate-800 tracking-tight">Suggest a Revision</h2>
+                                    <p className="text-sm text-slate-500 font-medium mt-0.5">Your changes will update the canvas instantly and await admin approval.</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setRevisingQuestionNode(null)} className="p-2.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all active:scale-95 border border-transparent hover:border-slate-200">
+                                <X size={20} strokeWidth={2.5} />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-auto custom-scrollbar bg-slate-50 relative">
+                            <QuestionEdit 
+                                inlineId={revisingQuestionNode.attrs.questionId} 
+                                forceMode="revise" 
+                                onSaveComplete={(revisedData) => {
+                                    setRevisingQuestionNode(null);
+                                    if (revisedData) {
+                                        setPendingSwapQuestion({
+                                            pos: revisingQuestionNode.pos,
+                                            nodeSize: revisingQuestionNode.nodeSize,
+                                            attrs: {
+                                                ...revisingQuestionNode.attrs,
+                                                questionId: revisingQuestionNode.attrs.questionId,
+                                                questionText: revisedData.questionText,
+                                                stimulus: revisedData.stimulus || '',
+                                                explanation: revisedData.explanation || '',
+                                                answer: revisedData.correctAnswer || '',
+                                                statements: revisedData.statements || [],
+                                                options: revisedData.options ? revisedData.options.map(opt => ({ ...opt, optionText: opt.optionText })) : []
+                                            }
+                                        });
+                                    }
+                                }} 
+                                onCancel={() => setRevisingQuestionNode(null)} 
+                            />
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

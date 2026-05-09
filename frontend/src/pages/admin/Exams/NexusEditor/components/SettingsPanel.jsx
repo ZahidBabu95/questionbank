@@ -45,18 +45,22 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                     defaultOpen={true}
                                     toggleKey="showName"
                                     toggleVal={sec.showName !== false}
-                                    onToggle={(k, v) => { const ns = [...s.sections]; ns[idx][k] = v; u("sections", ns); }}
+                                    onToggle={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }}
                                 >
                                     <Inp 
                                         value={sec.name} 
                                         disabled={sec.showName === false}
-                                        onChange={v => { const ns = [...s.sections]; ns[idx].name = v; u("sections", ns); }} 
+                                        onChange={v => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], name: v }; u("sections", ns); }} 
                                     />
                                     {sec.showName !== false && (
                                         <TypographyToolbar 
-                                            state={sec} 
+                                            state={{
+                                                ...sec,
+                                                nameBg: sec.nameBg !== undefined ? sec.nameBg : s.sectionStyle === 'কালো ব্যাকগ্রাউন্ড',
+                                                nameDivider: sec.nameDivider !== undefined ? sec.nameDivider : ['বর্ডার বক্স', 'আন্ডারলাইন', 'ডটেড লাইন'].includes(s.sectionStyle)
+                                            }} 
                                             prefix="name" 
-                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx][k] = v; u("sections", ns); }} 
+                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }} 
                                         />
                                     )}
                                 </CollapsibleBox>
@@ -66,18 +70,18 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                     defaultOpen={false}
                                     toggleKey="showConditions"
                                     toggleVal={sec.showConditions !== false}
-                                    onToggle={(k, v) => { const ns = [...s.sections]; ns[idx][k] = v; u("sections", ns); }}
+                                    onToggle={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }}
                                 >
                                     <Inp 
                                         value={sec.conditions || ''} 
                                         disabled={sec.showConditions === false}
-                                        onChange={v => { const ns = [...s.sections]; ns[idx].conditions = v; u("sections", ns); }} 
+                                        onChange={v => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], conditions: v }; u("sections", ns); }} 
                                     />
                                     {sec.showConditions !== false && (
                                         <TypographyToolbar 
                                             state={sec} 
                                             prefix="cond" 
-                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx][k] = v; u("sections", ns); }} 
+                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }} 
                                         />
                                     )}
                                 </CollapsibleBox>
@@ -87,19 +91,19 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                     defaultOpen={false}
                                     toggleKey="showInstructions"
                                     toggleVal={sec.showInstructions !== false}
-                                    onToggle={(k, v) => { const ns = [...s.sections]; ns[idx][k] = v; u("sections", ns); }}
+                                    onToggle={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }}
                                 >
                                     <textarea 
                                         className="w-full text-[13px] p-2 border border-slate-200 rounded-md outline-none focus:border-indigo-400 min-h-[50px] resize-y disabled:opacity-50"
                                         value={sec.instructions || ''}
                                         disabled={sec.showInstructions === false}
-                                        onChange={e => { const ns = [...s.sections]; ns[idx].instructions = e.target.value; u("sections", ns); }}
+                                        onChange={e => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], instructions: e.target.value }; u("sections", ns); }}
                                     />
                                     {sec.showInstructions !== false && (
                                         <TypographyToolbar 
                                             state={sec} 
                                             prefix="inst" 
-                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx][k] = v; u("sections", ns); }} 
+                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }} 
                                         />
                                     )}
                                 </CollapsibleBox>
@@ -113,7 +117,7 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                         <div className="grid grid-cols-2 gap-2 mb-2">
                                             <FL label={t.numberingStyle || 'Numbering'}>
                                                 <Sel value={sec.numberingStyle} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx].numberingStyle = v; u("sections", ns);
+                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], numberingStyle: v }; u("sections", ns);
                                                 }} opts={[
                                                     {v: 'bn', l: '১, ২, ৩'},
                                                     {v: 'en', l: '1, 2, 3'},
@@ -124,7 +128,7 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                             </FL>
                                             <FL label={t.marksConfig || 'Marks'}>
                                                 <Sel value={sec.marksConfig} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx].marksConfig = v; u("sections", ns);
+                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], marksConfig: v }; u("sections", ns);
                                                 }} opts={[
                                                     {v: 'hide', l: 'Hide'},
                                                     {v: 'showRight', l: 'Right Align'},
@@ -135,7 +139,7 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                         <div className="grid grid-cols-2 gap-2 mb-2">
                                             <FL label={uiLang === 'bn' ? 'অপশন স্টাইল' : 'Option Style'}>
                                                 <Sel value={sec.optionStyle || 'bn'} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx].optionStyle = v; u("sections", ns);
+                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionStyle: v }; u("sections", ns);
                                                 }} opts={[
                                                     {v: 'bn', l: t.optBn || 'ক, খ, গ, ঘ'},
                                                     {v: 'en', l: t.optEn || 'a, b, c, d'},
@@ -145,19 +149,34 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                                 ]} />
                                             </FL>
                                             <FL label={uiLang === 'bn' ? 'অপশন লেআউট' : 'Option Layout'}>
-                                                <Sel value={sec.optionLayout} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx].optionLayout = v; u("sections", ns);
-                                                }} opts={[
-                                                    {v: 'col1', l: t.col1 || '1 Col'},
-                                                    {v: 'col2', l: t.col2 || '2 Cols'},
-                                                    {v: 'col4', l: t.col4 || '4 Cols'}
-                                                ]} />
+                                                <div className="flex flex-col gap-1 w-full">
+                                                    <Sel value={sec.optionLayout} onChange={v => {
+                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionLayout: v }; u("sections", ns);
+                                                    }} opts={[
+                                                        {v: 'col1', l: t.col1 || '1 Col'},
+                                                        {v: 'col2', l: t.col2 || '2 Cols'},
+                                                        {v: 'col4', l: t.col4 || '4 Cols'}
+                                                    ]} />
+                                                    <label className="flex items-center gap-1.5 mt-1 ml-1 cursor-pointer group w-max">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={sec.smartFit !== false} 
+                                                            onChange={e => {
+                                                                const ns = [...s.sections]; ns[idx] = { ...ns[idx], smartFit: e.target.checked }; u("sections", ns);
+                                                            }} 
+                                                            className="rounded border-slate-300 text-indigo-500 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 w-3 h-3 cursor-pointer"
+                                                        />
+                                                        <span className="text-[10px] text-slate-500 font-bold group-hover:text-indigo-600 transition-colors select-none">
+                                                            {t.smartFit || 'Smart Fit'}
+                                                        </span>
+                                                    </label>
+                                                </div>
                                             </FL>
                                         </div>
                                         <div>
                                             <FL label={uiLang === 'bn' ? 'অপশন মার্কার' : 'Option Marker'}>
                                                 <Sel value={sec.optionDecoration || 'rightBracket'} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx].optionDecoration = v; u("sections", ns);
+                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionDecoration: v }; u("sections", ns);
                                                 }} opts={[
                                                     {v: 'rightBracket', l: t.rightBracket || 'ক)'},
                                                     {v: 'dot', l: t.dot || 'ক.'},
@@ -174,7 +193,7 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                         <div className="grid grid-cols-3 gap-2 mb-2">
                                             <FL label={uiLang === 'bn' ? 'কলাম' : 'Columns'}>
                                                 <Sel value={sec.columns || 1} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx].columns = Number(v); u("sections", ns);
+                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], columns: Number(v) }; u("sections", ns);
                                                 }} opts={[
                                                     {v: 1, l: uiLang === 'bn' ? '১ কলাম' : '1 Column'},
                                                     {v: 2, l: uiLang === 'bn' ? '২ কলাম' : '2 Columns'},
@@ -185,7 +204,7 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                                 <Seg 
                                                     value={sec.columnBorder === true ? 'yes' : 'no'} 
                                                     onChange={v => {
-                                                        const ns = [...s.sections]; ns[idx].columnBorder = (v === 'yes'); u("sections", ns);
+                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], columnBorder: (v === 'yes') }; u("sections", ns);
                                                     }}
                                                     opts={[
                                                         {v: 'yes', l: uiLang === 'bn' ? 'হ্যাঁ' : 'Yes'},
@@ -198,7 +217,7 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                                     type="number" 
                                                     value={sec.colGap !== undefined ? sec.colGap : (s.colGap || 10)} 
                                                     onChange={e => {
-                                                        const ns = [...s.sections]; ns[idx].colGap = e.target.value; u("sections", ns);
+                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], colGap: e.target.value }; u("sections", ns);
                                                     }}
                                                     className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
                                                 />
@@ -211,7 +230,7 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                                     type="number" 
                                                     value={sec.fontSize !== undefined ? sec.fontSize : (s.bodyFontSize || 14)} 
                                                     onChange={e => {
-                                                        const ns = [...s.sections]; ns[idx].fontSize = e.target.value; u("sections", ns);
+                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], fontSize: e.target.value }; u("sections", ns);
                                                     }}
                                                     className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
                                                 />
@@ -221,7 +240,7 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                                     {['left', 'center', 'right', 'justify'].map(align => (
                                                         <button 
                                                             key={align}
-                                                            onClick={() => { const ns = [...s.sections]; ns[idx].textAlign = align; u("sections", ns); }}
+                                                            onClick={() => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], textAlign: align }; u("sections", ns); }}
                                                             className={`flex-1 py-1.5 px-0 rounded border transition-colors flex justify-center items-center ${sec.textAlign === align || (!sec.textAlign && align === 'left') ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                                                             title={align.charAt(0).toUpperCase() + align.slice(1)}
                                                         >
@@ -235,33 +254,33 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                             </FL>
                                         </div>
 
-                                        <div className="grid grid-cols-3 gap-2">
+                                        <div className="grid grid-cols-3 gap-2 mt-2">
                                             <FL label={uiLang === 'bn' ? 'লাইন গ্যাপ' : 'Line Gap'}>
                                                 <input 
-                                                    type="number" step="0.1" 
+                                                    type="number" step="0.1" min="0.1" max="5.0"
                                                     value={sec.lineGap !== undefined ? sec.lineGap : (s.lineHeight || 1.5)} 
                                                     onChange={e => {
-                                                        const ns = [...s.sections]; ns[idx].lineGap = e.target.value; u("sections", ns);
+                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], lineGap: e.target.value }; u("sections", ns);
                                                     }}
                                                     className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
                                                 />
                                             </FL>
                                             <FL label={uiLang === 'bn' ? 'অপশন (px)' : 'Option (px)'}>
                                                 <input 
-                                                    type="number" 
+                                                    type="number" min="-50" max="100"
                                                     value={sec.optionGap !== undefined ? sec.optionGap : 8} 
                                                     onChange={e => {
-                                                        const ns = [...s.sections]; ns[idx].optionGap = e.target.value; u("sections", ns);
+                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionGap: e.target.value }; u("sections", ns);
                                                     }}
                                                     className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
                                                 />
                                             </FL>
                                             <FL label={uiLang === 'bn' ? 'প্রশ্ন (px)' : 'Question (px)'}>
                                                 <input 
-                                                    type="number" 
+                                                    type="number" min="-100" max="150"
                                                     value={sec.questionGap !== undefined ? sec.questionGap : (s.questionGap || 15)} 
                                                     onChange={e => {
-                                                        const ns = [...s.sections]; ns[idx].questionGap = e.target.value; u("sections", ns);
+                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], questionGap: e.target.value }; u("sections", ns);
                                                     }}
                                                     className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
                                                 />
@@ -344,7 +363,9 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                 <FL label={t.fullMarks} toggleKey="showTotalMarks" toggleVal={s.showTotalMarks!==false} onToggle={u}>
                                     <NumDisplay isEdit={isEditMode} value={s.totalMarks} onChange={v=>u("totalMarks",v)} min={10} max={300} disabled={s.showTotalMarks===false} />
                                 </FL>
-                                <div></div>
+                                <FL label={t.footer || 'Footer'} toggleKey="showFooter" toggleVal={s.showFooter} onToggle={u}>
+                                    <FieldDisplay isEdit={isEditMode} value={s.footerText || ''} onChange={v=>u("footerText",v)} disabled={!s.showFooter} />
+                                </FL>
                             </G2>
                         </div>
                     </div>
@@ -432,31 +453,52 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                     {p.n} — ↑{p.t} ↓{p.b} ←{p.l} →{p.r}
                 </button>
                 ))}
-            </>}
-
-            {activeTab === "font" && <>
-                <ST>{t.bnFont}</ST>
-                <FL label={t.fontFamily}><Sel value={s.bnFont} onChange={v=>u("bnFont",v)} opts={BN_FONTS}/></FL>
-                <ST>{t.enFont}</ST>
-                <FL label={t.fontFamily}><Sel value={s.enFont} onChange={v=>u("enFont",v)} opts={EN_FONTS}/></FL>
-                <ST>{t.fontSizePt}</ST>
-                <FL label={t.instHeader}><Slide value={s.headerFontSize} onChange={v=>u("headerFontSize",v)} min={12} max={36}/></FL>
-                <FL label={t.subHeader}><Slide value={s.subHeaderFontSize} onChange={v=>u("subHeaderFontSize",v)} min={10} max={22}/></FL>
-                <ST>{t.bold}</ST>
-                {[[t.instBold,"boldInstitute"],[t.subBold,"boldSubject"]].map(([l,k])=>(
-                <div key={k} className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-slate-500 font-bold">{l}</span>
-                    <Toggle checked={s[k]} onChange={e=>u(k,e.target.checked)}/>
+                
+                <div className="w-full h-px bg-slate-200 my-4"></div>
+                <ST>{uiLang === 'bn' ? 'প্রিন্ট ফিট (Print Fit)' : 'Print Fit'}</ST>
+                <div className="bg-indigo-50/50 p-3 rounded-lg border border-indigo-100 mb-2">
+                    <p className="text-[10px] text-indigo-600 mb-2 font-medium leading-relaxed">
+                        {uiLang === 'bn' 
+                            ? 'প্রিন্ট করার সময় পেজ বেড়ে গেলে এটি কমিয়ে ফিট করতে পারেন।' 
+                            : 'Reduce scale to fit contents into fewer printed pages.'}
+                    </p>
+                    <FL label={uiLang === 'bn' ? 'প্রিন্ট স্কেল (%)' : 'Print Scale (%)'}>
+                        <Sel value={s.printScale || 100} onChange={v=>u("printScale", Number(v))} opts={[
+                            {v: 100, l: '100% (Normal)'},
+                            {v: 98, l: '98% (Slight Shrink)'},
+                            {v: 96, l: '96% (Fit More)'},
+                            {v: 94, l: '94% (Compact)'},
+                            {v: 90, l: '90% (Maximum Shrink)'}
+                        ]} />
+                    </FL>
                 </div>
-                ))}
             </>}
 
 
-            {activeTab === "design" && <div className="space-y-3">
-                <CollapsibleBox title={uiLang === 'bn' ? 'হেডার ডিজাইন (Header)' : 'Header Design'} defaultOpen={true}>
-                    <FL label={t.headerBorder || 'Header Style'}><Sel value={s.headerStyle} onChange={v=>u("headerStyle",v)} opts={HEADER_STYLES}/></FL>
+            {activeTab === "design" && <div className="space-y-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 border-b border-slate-200 bg-indigo-50/30">
+                        <span className="text-xs font-bold text-indigo-900 uppercase tracking-widest">{uiLang === 'bn' ? 'হেডার ডিজাইন (Header)' : 'Header Design'}</span>
+                    </div>
+                    <div className="p-4 bg-white">
+                        <FL label={t.headerBorder || 'Header Style'}><Sel value={s.headerStyle} onChange={v=>u("headerStyle",v)} opts={HEADER_STYLES}/></FL>
                     
-                    <div className="flex items-center justify-between mb-3 mt-4">
+                    <div className="w-full h-px bg-slate-200 my-4"></div>
+                    <div className="w-full h-px bg-slate-200 my-4"></div>
+                    <ST>{t.fontSizePt}</ST>
+                    <FL label={t.instHeader}><Slide value={s.headerFontSize} onChange={v=>u("headerFontSize",v)} min={12} max={36}/></FL>
+                    <FL label={uiLang === 'bn' ? 'সাব হেডার, সময় ও পূর্ণমান' : 'Sub-header, Time & Marks'}><Slide value={s.subHeaderFontSize} onChange={v=>u("subHeaderFontSize",v)} min={10} max={22}/></FL>
+                    <FL label={uiLang === 'bn' ? 'হেডার লাইন গ্যাপ' : 'Header Line Gap'}><Slide value={s.headerLineHeight || 1.2} onChange={v=>u("headerLineHeight",v)} min={1.0} max={3.0} step={0.1}/></FL>
+                    <ST>{t.bold}</ST>
+                    {[[t.instBold,"boldInstitute"],[t.subBold,"boldSubject"]].map(([l,k])=>(
+                    <div key={k} className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-slate-500 font-bold">{l}</span>
+                        <Toggle checked={s[k]} onChange={e=>u(k,e.target.checked)}/>
+                    </div>
+                    ))}
+                    
+                    <div className="w-full h-px bg-slate-200 my-4"></div>
+                    <div className="flex items-center justify-between mb-3">
                         <span className="text-xs text-slate-600 font-bold">{t.dividerLine || 'Show Header Divider'}</span>
                         <Toggle checked={s.showDivider} onChange={e=>u("showDivider",e.target.checked)}/>
                     </div>
@@ -466,19 +508,35 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                 opts={[{v:"solid",l:t.solid || 'Solid'},{v:"double",l:t.double || 'Double'},{v:"dashed",l:t.dashed || 'Dashed'}]}/>
                         </FL>
                     )}
-                </CollapsibleBox>
+                    </div>
+                </div>
                 
-                <CollapsibleBox title={uiLang === 'bn' ? 'বডি ডিজাইন (Body)' : 'Body Design'} defaultOpen={false}>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 border-b border-slate-200 bg-indigo-50/30">
+                        <span className="text-xs font-bold text-indigo-900 uppercase tracking-widest">{uiLang === 'bn' ? 'বডি ডিজাইন (Body)' : 'Body Design'}</span>
+                    </div>
+                    <div className="p-4 bg-white">
+                        <ST>{t.bnFont}</ST>
+                    <FL label={t.fontFamily}><Sel value={s.bnFont} onChange={v=>u("bnFont",v)} opts={BN_FONTS}/></FL>
+                    <ST>{t.enFont}</ST>
+                    <FL label={t.fontFamily}><Sel value={s.enFont} onChange={v=>u("enFont",v)} opts={EN_FONTS}/></FL>
+                    
+                    <div className="w-full h-px bg-slate-200 my-4"></div>
                     <FL label={t.style || 'Section Header Style'}><Sel value={s.sectionStyle} onChange={v=>u("sectionStyle",v)} opts={SECTION_STYLES}/></FL>
                     
                     <div className="w-full h-px bg-slate-200 my-4"></div>
                     <FL label={t.lineHeight || 'Line Spacing'}><Slide value={s.lineHeight || 1.5} onChange={v=>u("lineHeight",v)} min={1.0} max={3.0} step={0.1}/></FL>
                     <FL label={t.qGap || 'Question Gap'}><Slide value={s.questionGap || 14} onChange={v=>u("questionGap",v)} min={4} max={40}/></FL>
                     <FL label={t.secGap || 'Section Gap'}><Slide value={s.sectionGap || 16} onChange={v=>u("sectionGap",v)} min={8} max={50}/></FL>
-                </CollapsibleBox>
+                    </div>
+                </div>
                 
-                <CollapsibleBox title={uiLang === 'bn' ? 'সম্পূর্ণ পেজ (Page)' : 'Page Design'} defaultOpen={false}>
-                    <div className="flex items-center justify-between mb-3">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 border-b border-slate-200 bg-indigo-50/30">
+                        <span className="text-xs font-bold text-indigo-900 uppercase tracking-widest">{uiLang === 'bn' ? 'সম্পূর্ণ পেজ (Page)' : 'Page Design'}</span>
+                    </div>
+                    <div className="p-4 bg-white">
+                        <div className="flex items-center justify-between mb-3">
                         <span className="text-xs text-slate-500 font-bold">{t.outerBorder || 'Outer Border'}</span>
                         <Toggle checked={s.outerBorder} onChange={e=>u("outerBorder",e.target.checked)}/>
                     </div>
@@ -489,10 +547,15 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                     <FL label={t.type || 'Watermark'}><Sel value={s.watermark} onChange={v=>u("watermark",v)} opts={WATERMARK_OPT}/></FL>
                     {s.watermark==="কাস্টম" && <FL label={t.customText || 'Custom Text'}><Inp value={s.watermarkCustom} onChange={v=>u("watermarkCustom",v)}/></FL>}
                     {s.watermark!=="কোনোটি নয়" && <FL label={t.opacity || 'Opacity'}><Slide value={s.watermarkOpacity} onChange={v=>u("watermarkOpacity",v)} min={3} max={30}/></FL>}
-                </CollapsibleBox>
+                    </div>
+                </div>
 
-                <CollapsibleBox title={uiLang === 'bn' ? 'ফুটার ডিজাইন (Footer)' : 'Footer Design'} defaultOpen={false}>
-                    <div className="flex items-center justify-between mb-3">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 border-b border-slate-200 bg-indigo-50/30">
+                        <span className="text-xs font-bold text-indigo-900 uppercase tracking-widest">{uiLang === 'bn' ? 'ফুটার ডিজাইন (Footer)' : 'Footer Design'}</span>
+                    </div>
+                    <div className="p-4 bg-white">
+                        <div className="flex items-center justify-between mb-3">
                         <span className="text-xs text-slate-500 font-bold">{t.showPageNo || 'Show Page No'}</span>
                         <Toggle checked={s.showPageNumber} onChange={e=>u("showPageNumber",e.target.checked)}/>
                     </div>
@@ -500,7 +563,8 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                         <Seg value={s.pageNumberPos} onChange={v=>u("pageNumberPos",v)}
                             opts={[{v:"left",l:t.left || 'Left'},{v:"center",l:t.center || 'Center'},{v:"right",l:t.right || 'Right'}]}/>
                     </FL>}
-                </CollapsibleBox>
+                    </div>
+                </div>
             </div>}
 
             {activeTab === "answerSheet" && <div className="space-y-4">
