@@ -1,4 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import os
+
+file_path = r'c:\questionshaper\frontend\src\pages\admin\QuestionBank\SourceManagement.jsx'
+
+with open(file_path, 'r', encoding='utf-8') as f:
+    content = f.read()
+
+new_content = """import React, { useState, useEffect } from 'react';
 import { Merge, Edit2, RefreshCw, X, Building, Calendar } from 'lucide-react';
 import questionSourceManagementService from '../../../services/questionSourceManagementService';
 import clsx from 'clsx';
@@ -401,3 +408,7 @@ const SourceManagement = () => {
 };
 
 export default SourceManagement;
+"""
+
+with open(file_path, 'w', encoding='utf-8') as f:
+    f.write(new_content)

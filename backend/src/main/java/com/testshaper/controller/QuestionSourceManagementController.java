@@ -24,6 +24,12 @@ public class QuestionSourceManagementController {
         return ResponseEntity.ok(questionSourceRepository.getSourceSummary());
     }
 
+    @GetMapping("/year-summary")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+    public ResponseEntity<List<QuestionSourceRepository.YearSummaryProjection>> getYearSummary() {
+        return ResponseEntity.ok(questionSourceRepository.getYearSummary());
+    }
+
     @PostMapping("/rename")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
     public ResponseEntity<?> renameSource(@RequestBody RenameRequest request) {
@@ -38,6 +44,20 @@ public class QuestionSourceManagementController {
         return ResponseEntity.ok(Map.of("message", "Merged successfully", "updatedRecords", updated));
     }
 
+    @PostMapping("/rename-year")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+    public ResponseEntity<?> renameYear(@RequestBody RenameYearRequest request) {
+        int updated = questionSourceRepository.renameExamYear(request.getOldYear(), request.getNewYear(), request.getSourceType());
+        return ResponseEntity.ok(Map.of("message", "Year renamed successfully", "updatedRecords", updated));
+    }
+
+    @PostMapping("/merge-years")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+    public ResponseEntity<?> mergeYears(@RequestBody MergeYearRequest request) {
+        int updated = questionSourceRepository.mergeExamYears(request.getOldYears(), request.getTargetYear(), request.getSourceType());
+        return ResponseEntity.ok(Map.of("message", "Years merged successfully", "updatedRecords", updated));
+    }
+
     @Data
     public static class RenameRequest {
         private String oldName;
@@ -49,6 +69,20 @@ public class QuestionSourceManagementController {
     public static class MergeRequest {
         private List<String> oldNames;
         private String targetName;
+        private QuestionSource.SourceType sourceType;
+    }
+
+    @Data
+    public static class RenameYearRequest {
+        private Integer oldYear;
+        private Integer newYear;
+        private QuestionSource.SourceType sourceType;
+    }
+
+    @Data
+    public static class MergeYearRequest {
+        private List<Integer> oldYears;
+        private Integer targetYear;
         private QuestionSource.SourceType sourceType;
     }
 }

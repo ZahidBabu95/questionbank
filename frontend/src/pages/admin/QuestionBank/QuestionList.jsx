@@ -8,437 +8,9 @@ import RevisePanel from './components/RevisePanel';
 import RevisionReviewPanel from './components/RevisionReviewPanel';
 import MarkdownRenderer from '../../../components/MarkdownRenderer';
 import QuestionEdit from './QuestionEdit';
-
-const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) => {
-    const parts = useMemo(() => {
-        const questionText = q.questionText || '';
-        const correctAnswer = q.correctAnswer || '';
-        const explanation = q.explanation || '';
-        
-        if (!questionText.includes('<div class="cq-questions">')) return null;
-
-        const strippedQText = '<div class="cq-questions">' + questionText.split('<div class="cq-questions">')[1];
-
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(strippedQText, 'text/html');
-        const ansDoc = parser.parseFromString(correctAnswer, 'text/html');
-        const expDoc = parser.parseFromString(explanation, 'text/html');
-
-        const qList = doc.querySelectorAll('.cq-questions ol li');
-        const parsedParts = [];
-        
-        qList.forEach((li, idx) => {
-            const marks = parseFloat(li.getAttribute('data-marks')) || parseFloat(li.querySelector('.cq-marks')?.textContent?.replace(/[^\d.]/g, '')) || 1;
-            const textSpan = li.querySelector('.cq-text');
-            const isEnglish = q.language && q.language.toLowerCase() === 'english';
-            const label = isEnglish ? String.fromCharCode(97 + idx) : (['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(97 + idx));
-
-            let partAns = '';
-            let partExp = '';
-
-            const ansNode = ansDoc.querySelector(`.cq-ans-part[data-label="${label}"] .cq-ans-content`) || ansDoc.querySelector(`.cq-ans-part[data-label="${label}"]`);
-            if (ansNode) partAns = ansNode.innerHTML;
-
-            const expNode = expDoc.querySelector(`.cq-exp-part[data-label="${label}"] .cq-exp-content`) || expDoc.querySelector(`.cq-exp-part[data-label="${label}"]`);
-            if (expNode) partExp = expNode.innerHTML;
-
-            parsedParts.push({
-                label,
-                text: textSpan ? textSpan.innerHTML : li.innerHTML,
-                marks,
-                answer: partAns,
-                explanation: partExp
-            });
-        });
-        
-        return parsedParts;
-    }, [q, showAnswer, showExplanation]);
-
-    if (!parts || parts.length === 0) {
-        return <MarkdownRenderer content={q.type === 'CQ' && q.questionText && q.questionText.includes('<div class="cq-questions">') ? '<div class="cq-questions">' + q.questionText.split('<div class="cq-questions">')[1] : q.questionText} className={isDark ? 'prose-invert' : ''} />;
-    }
-
-    return (
-        <div className="flex flex-col gap-3 mt-2">
-            {parts.map((p, idx) => (
-                <div key={idx} className="flex flex-col gap-1.5 w-full relative">
-                    <div className="flex items-start gap-2 w-full text-[14px] leading-relaxed">
-                        <span className={`shrink-0 font-bold ${isDark ? 'text-slate-300' : 'text-slate-800'} mt-0.5`}>{p.label}.</span>
-                        <div className="flex-1 min-w-0 font-medium">
-                            <MarkdownRenderer content={p.text} className={`!max-w-full prose-p:!m-0 prose-p:!p-0 ${isDark ? 'prose-invert' : ''}`} />
-                        </div>
-                        <span className={`text-[12px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'} shrink-0 ml-2`}>({Math.round(p.marks)})</span>
-                    </div>
-                    {showAnswer && p.answer && (
-                        <div className={`ml-[1.25rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-emerald-900/10 border-emerald-800/30 text-emerald-300 border-l-[3px] border-l-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-900 border-l-[3px] border-l-emerald-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
-                            <span className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-emerald-500' : 'text-emerald-600'} mb-1.5 uppercase tracking-wider`}><CheckCircle size={12}/> উত্তর ({p.label}):</span>
-                            <MarkdownRenderer content={p.answer} className={`-mt-1 !max-w-full ${isDark ? 'prose-invert' : ''}`} />
-                        </div>
-                    )}
-                    {showExplanation && p.explanation && (
-                        <div className={`ml-[1.25rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-amber-900/10 border-amber-800/30 text-amber-300 border-l-[3px] border-l-amber-600' : 'bg-amber-50 border-amber-200 text-amber-900 border-l-[3px] border-l-amber-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
-                            <span className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-amber-500' : 'text-amber-600'} mb-1.5`}><Layers size={12}/> ব্যাখ্যা ({p.label}):</span>
-                            <MarkdownRenderer content={p.explanation} className={`-mt-1 !max-w-full ${isDark ? 'prose-invert' : ''}`} />
-                        </div>
-                    )}
-                </div>
-            ))}
-        </div>
-    );
-};
-
-const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, isSaved, onView, onDelete, onRevise, onReview, isSuperAdmin, hasPerm, splitScreenMode, isViewing }) => {
-    const navigate = useNavigate();
-    const [showAnswer, setShowAnswer] = useState(false);
-    const [showExplanation, setShowExplanation] = useState(false);
-    const [isLiked, setIsLiked] = useState(false);
-
-    const difficultyStyle = {
-        EASY: 'bg-emerald-50 text-emerald-700',
-        MEDIUM: 'bg-amber-50 text-amber-700',
-        HARD: 'bg-rose-50 text-rose-700',
-    };
-    const typeLabel = q.type === 'MCQ' ? 'Multiple Choice' : q.type === 'CQ' ? 'Creative' : q.type === 'SHORT' ? 'Short Answer' : q.type;
-
-    return (
-        <div 
-            id={`question-item-${q.id}`}
-            onClick={(e) => {
-                const isInteractive = e.target.closest('button') || e.target.closest('input') || e.target.closest('a') || e.target.closest('.group');
-                if (!isInteractive) {
-                    onSelect(q.id);
-                    if (splitScreenMode) {
-                        onView(q);
-                    }
-                }
-            }}
-            className={`border border-slate-200 rounded-xl transition-all duration-300 transform hover:-translate-y-[2px] hover:shadow-lg cursor-pointer relative hover:z-10 ${
-            isViewing ? 'bg-indigo-50 border-indigo-400 ring-1 ring-indigo-400' 
-            : q.status === 'REVISED' ? 'bg-rose-50/50 border-rose-300'
-            : isSelected ? 'bg-blue-50/40 border-blue-300 ring-1 ring-blue-200' : 'bg-white hover:border-indigo-200'
-        }`}>
-
-            {/* ── Header Row ── */}
-            <div className="flex items-start justify-between px-4 pt-3 pb-2 gap-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                    <input type="checkbox" checked={isSelected} onChange={() => onSelect(q.id)}
-                        className="w-4 h-4 text-primary border-slate-300 rounded cursor-pointer shrink-0 mt-0.5" />
-                    <span className="text-[12px] font-black text-slate-600 whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">Q #{index}</span>
-                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold border border-slate-200 whitespace-nowrap">{typeLabel}</span>
-                    
-                    {/* Unified Status Badges */}
-                    {q.status === 'APPROVED' && <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Approved</span>}
-                    {q.status === 'REJECTED' && <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Rejected</span>}
-                    {q.status === 'PENDING' && <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Pending</span>}
-                    {q.status === 'REVISED' && <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-md text-[10px] font-bold uppercase whitespace-nowrap animate-pulse">Revised</span>}
-                    {q.aiGenerated && <span className="px-2 py-0.5 bg-violet-50 text-violet-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">AI Synced</span>}
-                    
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase whitespace-nowrap ${difficultyStyle[q.difficulty] || 'bg-slate-50 text-slate-600'}`}>
-                        {q.difficulty}
-                    </span>
-                    <span className="px-2 py-0.5 bg-slate-50 text-slate-600 rounded-md text-[10px] font-bold whitespace-nowrap">{q.marks ?? 1} Marks</span>
-                </div>
-
-                {/* Actions Menu (Three-Dot) */}
-                <div className="flex items-center gap-1 shrink-0 relative group">
-                    <button className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors">
-                        <MoreHorizontal size={16} />
-                    </button>
-                    <div className="absolute right-0 top-full w-36 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 py-1 flex flex-col">
-                        <button onClick={(e) => { e.stopPropagation(); onView(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Eye size={12}/> View Detail</button>
-                        {hasPerm && hasPerm('EDIT') && <button onClick={(e) => { e.stopPropagation(); navigate(`/questions/edit/${q.id}`); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Edit size={12}/> Edit Source</button>}
-                        {q.status === 'REVISED' && isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); onReview(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><GitCompare size={12}/> Review Changes</button>}
-                        {isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); onDelete(q.id); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><Trash2 size={12}/> Delete</button>}
-                    </div>
-                </div>
-            </div>
-
-            {/* ── Revision Info Banner (visible for REVISED questions) ── */}
-            {q.status === 'REVISED' && (
-                <div className="mx-4 mb-2 px-3 py-2 bg-rose-100 border border-rose-200 rounded-lg flex flex-wrap items-center gap-3 text-[11px]">
-                    <span className="font-bold text-rose-800">✏️ Revised by: <span className="text-rose-900">{q.revisedBy || q.createdBy || 'Unknown'}</span></span>
-                    {q.revisedAt && <span className="text-rose-600">📅 {new Date(q.revisedAt).toLocaleString('bn-BD', { dateStyle: 'medium', timeStyle: 'short' })}</span>}
-                    {q.revisionCount > 0 && <span className="px-1.5 py-0.5 bg-rose-200 text-rose-800 rounded font-black">🔄 ×{q.revisionCount}</span>}
-                    {q.versionComment && <span className="text-rose-700 italic">📝 "{q.versionComment}"</span>}
-                </div>
-            )}
-
-            {/* ── Stimulus ── */}
-            {q.stimulus && (
-                <div className="mx-4 mb-2 px-4 py-3 bg-slate-50 border border-slate-200 border-l-4 border-l-indigo-400 rounded-r-lg text-[13px] text-slate-700 font-medium leading-relaxed">
-                    <MarkdownRenderer content={q.stimulus} />
-                </div>
-            )}
-
-            {/* ── Question Text ── */}
-            <div className="mx-4 mb-2 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
-                <div className="text-[13px] font-semibold text-slate-800 leading-snug">
-                    {q.type === 'CQ' ? (
-                        <CQCombinedRenderer q={q} showAnswer={showAnswer} showExplanation={showExplanation} />
-                    ) : (
-                        <MarkdownRenderer content={q.questionText} />
-                    )}
-                </div>
-                
-                {q.mcqType === 'MULTIPLE_COMPLETION' && q.statements && q.statements.length > 0 && (
-                    <div className="mt-2 pl-4 border-l-2 border-primary/20 space-y-1">
-                        {q.statements.map((stmt, sIdx) => (
-                            <div key={sIdx} className="text-[12px] text-slate-600 font-medium leading-snug">
-                                <MarkdownRenderer content={stmt} />
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* ── MCQ Options 2x2 on desktop, stacked on mobile — highlights correct only after Show Answer click ── */}
-            {q.type === 'MCQ' && q.options && q.options.length > 0 && (
-                <div className="mx-4 mb-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {q.options.map((opt, idx) => {
-                        const isEnglish = q.language && q.language.toLowerCase() === 'english';
-                        const displayLabel = isEnglish ? String.fromCharCode(65 + idx) : (['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(65 + idx));
-                        return (
-                        <div key={opt.id} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-all duration-300 ${
-                            showAnswer && opt.isCorrect
-                                ? 'bg-emerald-50 border-emerald-400 text-emerald-800 shadow-sm'
-                                : showAnswer && !opt.isCorrect
-                                ? 'bg-white border-slate-200 text-slate-400 opacity-60'
-                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}>
-                            <span className={`shrink-0 flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-black transition-all duration-300 ${
-                                showAnswer && opt.isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'
-                            }`}>
-                                {displayLabel}
-                            </span>
-                            <span className="flex-1"><MarkdownRenderer content={opt.optionText} /></span>
-                            {showAnswer && opt.isCorrect && <CheckCircle size={13} className="text-emerald-500 ml-auto shrink-0" />}
-                        </div>
-                    )})}
-                </div>
-            )}
-
-            {/* Non-MCQ: show correct answer block after Show Answer click */}
-            {showAnswer && q.type !== 'MCQ' && q.type !== 'CQ' && q.correctAnswer && (
-                <div className="mx-4 mb-2 px-3 py-2.5 bg-emerald-50 border border-emerald-300 rounded-lg text-[12px] text-emerald-900 font-semibold leading-snug flex items-start gap-2">
-                    <CheckCircle size={14} className="text-emerald-500 mt-0.5 shrink-0" />
-                    <span><MarkdownRenderer content={q.correctAnswer} /></span>
-                </div>
-            )}
-
-            {/* ── Show Answer + Explanation Buttons ── */}
-            <div className="mx-4 mb-2 grid grid-cols-2 gap-2">
-                {/* Show Answer — always gradient, green when active */}
-                <button
-                    onClick={() => setShowAnswer(!showAnswer)}
-                    className="flex items-center justify-center gap-2 py-2 text-[12px] font-bold text-white rounded-lg transition-all duration-300 shadow-sm hover:shadow-md active:scale-[0.98]"
-                    style={{ background: showAnswer
-                        ? '#10b981'
-                        : 'linear-gradient(to right, var(--primary-color, #e91e8c), var(--secondary-color, #a855f7))'
-                    }}
-                >
-                    <Eye size={14} /> {showAnswer ? 'Hide Answer' : 'Show Answer'}
-                </button>
-
-                {/* Explanation — plain when inactive, reverse gradient when active */}
-                <button
-                    onClick={() => setShowExplanation(!showExplanation)}
-                    className="flex items-center justify-center gap-2 py-2 text-[12px] font-bold rounded-lg transition-all duration-300 shadow-sm hover:shadow-md active:scale-[0.98]"
-                    style={{ background: showExplanation
-                        ? 'linear-gradient(to left, var(--primary-color, #e91e8c), var(--secondary-color, #a855f7))'
-                        : '#f1f5f9'
-                    }}
-                >
-                    <FileText size={14} className={showExplanation ? 'text-white' : 'text-slate-600'} />
-                    <span className={showExplanation ? 'text-white' : 'text-slate-600'}>Explanation</span>
-                </button>
-            </div>
-
-
-            {/* ── Explanation Block ── */}
-            {showExplanation && q.type !== 'CQ' && q.explanation && (
-                <div className="mx-4 mb-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-[12px] text-blue-900 leading-snug">
-                    <MarkdownRenderer content={q.explanation} />
-                </div>
-            )}
-            {showExplanation && q.type !== 'CQ' && !q.explanation && (
-                <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No explanation available.</div>
-            )}
-
-            {/* ── Source / Action Footer ── */}
-            <div className="flex items-center justify-between px-4 pb-3 pt-1.5 border-t border-slate-100 gap-2">
-                {/* Source — no truncation, allow wrapping */}
-                <div className="flex items-center gap-1.5 text-[10.5px] flex-1 min-w-0 flex-wrap">
-                    {q.classSubject ? (
-                        <div className="flex flex-wrap items-center gap-1.5 px-2 py-1 bg-indigo-50/80 border border-indigo-100 rounded-md text-indigo-700 font-semibold">
-                            <FileText size={11} className="text-indigo-400 shrink-0" />
-                            <span className="bg-white text-indigo-800 px-1.5 py-px rounded border border-indigo-100 text-[10px] font-bold shrink-0 shadow-sm">{q.classSubject?.subject?.name}</span>
-                            <span className="text-indigo-300 shrink-0">›</span>
-                            <span className="shrink-0">{q.classSubject?.academicClass?.name}</span>
-                            {q.chapter && <><span className="text-indigo-300 shrink-0">›</span><span className="shrink-0">{q.chapter?.name}</span></>}
-                            {q.topic && <><span className="text-indigo-300 shrink-0">›</span><span className="shrink-0">{q.topic?.name}</span></>}
-                        </div>
-                    ) : q.sourceReference ? (
-                        <div className="flex flex-wrap items-center gap-1.5 px-2 py-1 bg-violet-50/80 border border-violet-100 rounded-md text-violet-700 font-semibold">
-                            <FileText size={11} className="text-violet-400 shrink-0" />
-                            <span className="font-bold">{q.sourceReference}</span>
-                            {q.aiGenerated && <span className="text-[9px] bg-violet-100 text-violet-800 border border-violet-200 px-1.5 py-px rounded font-black uppercase shrink-0">AI Synced</span>}
-                        </div>
-                    ) : null}
-                </div>
-
-                {/* Action Buttons (Only Primary Footer Actions) */}
-                {!splitScreenMode && (
-                <div className="flex items-center gap-2 shrink-0">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onRevise(q); }}
-                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10.5px] font-bold transition-all border bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:text-primary hover:border-primary/30`}
-                        title="Quick Revise"
-                    >
-                        <Edit size={12} /> <span>Revise</span>
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setIsLiked(!isLiked); }}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all border ${isLiked ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-rose-400'}`}
-                        title="Like"
-                    >
-                        <ThumbsUp size={11} className={isLiked ? 'fill-current' : ''} />
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onSave(q.id); }}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all border ${isSaved ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-amber-500'}`}
-                        title={isSaved ? 'Remove from Saved' : 'Save'}
-                    >
-                        {isSaved ? <BookmarkCheck size={11} className="fill-current" /> : <Bookmark size={11} />}
-                        <span>Save</span>
-                    </button>
-                </div>
-                )}
-            </div>
-        </div>
-    );
-});
-
-
-const QuestionPreviewContent = ({ selectedQuestion, isDark = false }) => {
-    const getStatusBadge = (status) => {
-        switch (status) {
-            case 'APPROVED': return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/50' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max`}><CheckCircle size={14} /> Approved</span>;
-            case 'REJECTED': return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-rose-900/30 text-rose-400 border-rose-800/50' : 'bg-rose-50 text-rose-700 border-rose-200'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max`}><XCircle size={14} /> Rejected</span>;
-            case 'PENDING': return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-amber-900/30 text-amber-400 border-amber-800/50' : 'bg-amber-50 text-amber-700 border-amber-200'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max`}><Clock size={14} /> Pending</span>;
-            case 'REVISED': return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-rose-900/50 text-rose-300 border-rose-800/50' : 'bg-rose-100 text-rose-800 border-rose-300'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max`}><Edit size={14} /> Revised</span>;
-            case 'DRAFT': return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-slate-50 text-slate-600 border-slate-200'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max`}><FileText size={14} /> Draft</span>;
-            default: return <span className={`px-2.5 py-1.5 ${isDark ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-slate-50 text-slate-600 border-slate-200'} border rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center w-max`}>Draft</span>;
-        }
-    };
-
-    return (
-        <div className={`p-6 overflow-y-auto flex-1 custom-scrollbar ${isDark ? 'text-slate-300' : ''}`}>
-            <div className="flex items-center gap-3 mb-6">
-                <span className={`px-3 py-1 ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'} rounded-md text-xs font-bold tracking-widest uppercase`}>{selectedQuestion.type}</span>
-                <span className={`px-3 py-1 rounded-md text-xs font-bold tracking-widest uppercase ${selectedQuestion.difficulty === 'EASY' ? (isDark ? 'bg-emerald-900/30 text-emerald-400' : 'bg-emerald-50 text-emerald-700') : selectedQuestion.difficulty === 'MEDIUM' ? (isDark ? 'bg-amber-900/30 text-amber-400' : 'bg-amber-50 text-amber-700') : (isDark ? 'bg-rose-900/30 text-rose-400' : 'bg-rose-50 text-rose-700')}`}>{selectedQuestion.difficulty}</span>
-                {getStatusBadge(selectedQuestion.status)}
-            </div>
-
-            <div className="space-y-6">
-                {selectedQuestion.classSubject && (
-                    <div>
-                        <h3 className={`text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'} uppercase tracking-wider mb-2`}>Subject Context</h3>
-                        <div className={`p-4 ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50/80 border-slate-100'} rounded-xl border`}>
-                            <p className={`${isDark ? 'text-slate-200' : 'text-slate-800'} font-semibold`}>{selectedQuestion.classSubject.academicClass?.name} • {selectedQuestion.classSubject.subject?.name}</p>
-                            {(selectedQuestion.chapter || selectedQuestion.topic) && (
-                                <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'} mt-1.5 flex items-center gap-2`}>
-                                    {selectedQuestion.chapter?.name}
-                                    {selectedQuestion.topic && <span className={isDark ? 'text-slate-600' : 'text-slate-300'}>/</span>}
-                                    {selectedQuestion.topic?.name}
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {!selectedQuestion.classSubject && selectedQuestion.sourceReference && (
-                    <div>
-                        <h3 className={`text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'} uppercase tracking-wider mb-2`}>Source / Context</h3>
-                        <div className={`p-4 ${isDark ? 'bg-violet-900/20 border-violet-800/50' : 'bg-violet-50/80 border-violet-100'} rounded-xl border flex items-center gap-3`}>
-                            <p className={`${isDark ? 'text-slate-200' : 'text-slate-800'} font-semibold flex-1`}>{selectedQuestion.sourceReference}</p>
-                            {selectedQuestion.aiGenerated && <span className={`text-[10px] ${isDark ? 'bg-violet-900/50 text-violet-300 border-violet-800' : 'bg-violet-100 text-violet-600 border-violet-200'} border px-2 py-0.5 rounded-md font-bold whitespace-nowrap`}>AI Imported</span>}
-                        </div>
-                    </div>
-                )}
-
-                {selectedQuestion.stimulus && (
-                    <div>
-                        <h3 className={`text-sm font-bold ${isDark ? 'text-amber-500' : 'text-amber-600'} uppercase tracking-wider mb-2`}>Stimulus (উদ্দীপক)</h3>
-                        <div className={`p-4 ${isDark ? 'bg-amber-900/10 border-amber-800/30 text-slate-200' : 'bg-amber-50 border-amber-100 text-slate-800'} rounded-xl border font-medium leading-relaxed`}>
-                            <MarkdownRenderer content={selectedQuestion.stimulus} className={isDark ? 'prose-invert' : ''} />
-                        </div>
-                    </div>
-                )}
-
-                <div>
-                    <h3 className={`text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'} uppercase tracking-wider mb-2`}>Question</h3>
-                    <div className={`text-lg font-medium ${isDark ? 'text-white' : 'text-slate-900'} leading-relaxed`}>
-                        {selectedQuestion.type === 'CQ' ? (
-                            <CQCombinedRenderer q={selectedQuestion} showAnswer={true} showExplanation={true} isDark={isDark} />
-                        ) : (
-                            <MarkdownRenderer content={selectedQuestion.questionText} className={isDark ? 'prose-invert' : ''} />
-                        )}
-                    </div>
-                    {selectedQuestion.mcqType === 'MULTIPLE_COMPLETION' && selectedQuestion.statements && selectedQuestion.statements.length > 0 && (
-                        <div className={`mt-3 pl-4 border-l-2 ${isDark ? 'border-indigo-500/50 text-slate-300' : 'border-indigo-200 text-slate-700'} space-y-2`}>
-                            {selectedQuestion.statements.map((stmt, sIdx) => (
-                                <div key={sIdx} className="text-sm font-medium leading-relaxed">
-                                    <MarkdownRenderer content={stmt} className={isDark ? 'prose-invert' : ''} />
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {selectedQuestion.type === 'MCQ' && selectedQuestion.options && selectedQuestion.options.length > 0 && (
-                    <div>
-                        <h3 className={`text-sm font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'} uppercase tracking-wider mb-3`}>Answers / Options</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {selectedQuestion.options.map((opt, idx) => {
-                                const enLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
-                                const bnLabels = ['ক', 'খ', 'গ', 'ঘ', 'ঙ', 'চ'];
-                                const isEnglish = selectedQuestion.language === 'English';
-                                const displayLabel = isEnglish ? enLabels[idx] : bnLabels[idx];
-                                return (
-                                <div key={opt.id} className={`p-3 rounded-xl border-2 flex items-center gap-3 ${opt.isCorrect ? (isDark ? 'border-emerald-600/50 bg-emerald-900/20' : 'border-emerald-500 bg-emerald-50') : (isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-100 bg-white')}`}>
-                                    <span className={`flex shadow-sm items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${opt.isCorrect ? (isDark ? 'bg-emerald-600 text-white' : 'bg-emerald-500 text-white') : (isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-200 text-slate-600')}`}>{displayLabel}</span>
-                                    <span className={`text-sm flex-1 ${opt.isCorrect ? (isDark ? 'text-emerald-400 font-bold' : 'text-emerald-900 font-bold') : (isDark ? 'text-slate-300 font-medium' : 'text-slate-700 font-medium')}`}>
-                                        <MarkdownRenderer content={opt.optionText} className={isDark ? 'prose-invert' : ''} />
-                                    </span>
-                                    {opt.isCorrect && <CheckCircle size={18} className={`${isDark ? 'text-emerald-500' : 'text-emerald-500'} ml-auto`} />}
-                                </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {selectedQuestion.correctAnswer && selectedQuestion.type !== 'MCQ' && selectedQuestion.type !== 'CQ' && (
-                    <div>
-                        <h3 className={`text-sm font-bold ${isDark ? 'text-emerald-500' : 'text-emerald-600'} uppercase tracking-wider mb-2 flex items-center gap-2`}><CheckCircle size={16} /> Correct Answer</h3>
-                        <div className={`p-4 ${isDark ? 'bg-emerald-900/10 text-emerald-300 border-emerald-800/30' : 'bg-emerald-50 text-emerald-900 border-emerald-200'} font-medium leading-relaxed rounded-xl border`}>
-                            <MarkdownRenderer content={selectedQuestion.correctAnswer} className={isDark ? 'prose-invert' : ''} />
-                        </div>
-                    </div>
-                )}
-
-                {selectedQuestion.explanation && selectedQuestion.type !== 'CQ' && (
-                    <div>
-                        <h3 className={`text-sm font-bold ${isDark ? 'text-blue-500' : 'text-blue-600'} uppercase tracking-wider mb-2`}>Explanation (ব্যাখ্যা)</h3>
-                        <div className={`p-4 ${isDark ? 'bg-blue-900/10 text-blue-300 border-blue-800/30' : 'bg-blue-50 text-blue-900 border-blue-200'} font-medium leading-relaxed rounded-xl border`}>
-                            <MarkdownRenderer content={selectedQuestion.explanation} className={isDark ? 'prose-invert' : ''} />
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
+import CQCombinedRenderer from './components/CQCombinedRenderer';
+import QuestionListItem from './components/QuestionListItem';
+import QuestionPreviewContent from './components/QuestionPreviewContent';
 
 
 const QuestionList = () => {
@@ -516,8 +88,8 @@ const QuestionList = () => {
                 console.error("Failed to fetch favorite IDs", error);
             }
         };
-        if (user) fetchFavoriteIds();
-    }, [user]);
+        if (user && user.id) fetchFavoriteIds();
+    }, [user?.id]);
 
     // Sync filter status with URL path for sidebar menus
     useEffect(() => {
@@ -931,13 +503,24 @@ const QuestionList = () => {
         }
     };
 
+    const prevSearchRef = useRef(searchQuery);
+
     // Refetch whenever filters or pagination change
     useEffect(() => {
-        const timer = setTimeout(() => {
+        const isSearchChange = prevSearchRef.current !== searchQuery;
+        prevSearchRef.current = searchQuery;
+
+        if (isSearchChange) {
+            const timer = setTimeout(() => {
+                fetchQuestions();
+                fetchOverviewStats();
+            }, 300); // 300ms debounce only for search query typing
+            return () => clearTimeout(timer);
+        } else {
+            // Pagination and other filters trigger instantly
             fetchQuestions();
-            fetchOverviewStats();
-        }, 300); // 300ms debounce for search query typing
-        return () => clearTimeout(timer);
+            if (currentPage === 1) fetchOverviewStats();
+        }
     }, [viewMode, currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools]);
 
     // Intersection Observer for Infinite Scrolling
@@ -946,11 +529,12 @@ const QuestionList = () => {
 
         const observer = new IntersectionObserver(
             entries => {
-                if (entries[0].isIntersecting && currentPage < totalPages) {
+                const entry = entries[0];
+                if (entry.isIntersecting && currentPage < totalPages) {
                     setCurrentPage(prev => prev + 1);
                 }
             },
-            { rootMargin: '1200px' }
+            { rootMargin: '0px' }
         );
 
         const target = observerTarget.current;
@@ -963,6 +547,8 @@ const QuestionList = () => {
             observer.disconnect();
         };
     }, [loading, loadingMore, currentPage, totalPages, questions.length]);
+
+
 
     const handleDelete = React.useCallback(async (id) => {
         if (window.confirm('Are you sure you want to delete this question?')) {
@@ -1754,7 +1340,7 @@ const QuestionList = () => {
 
             <div className={`flex gap-4 px-4 md:px-6 py-4 ${splitScreenMode ? 'flex-col md:flex-row h-[65vh] overflow-hidden' : 'flex-col'}`}>
                 {/* List Side */}
-                <div className={`${splitScreenMode ? 'w-full md:w-1/2 overflow-y-auto pr-1 md:pr-2 custom-scrollbar flex flex-col gap-4' : 'w-full flex flex-col gap-4'}`}>
+                <div id="question-list-scroll-container" className={`${splitScreenMode ? 'w-full md:w-1/2 overflow-y-auto pr-1 md:pr-2 custom-scrollbar flex flex-col gap-4' : 'w-full flex flex-col gap-4'}`}>
                     {loading && currentPage === 1 ? (
                         <div className="py-16 text-center bg-white rounded-3xl border border-slate-100 shadow-sm mt-4">
                             <div className="flex flex-col items-center justify-center gap-4">
@@ -1773,7 +1359,15 @@ const QuestionList = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-3 pb-2">
+                        <div className="flex flex-col gap-3 pb-2 relative" style={{ overflowAnchor: 'none' }}>
+                            {/* Foolproof Observer Target: 2500px tall invisible div at the bottom.
+                                2500px height ensures it triggers 2-3 screens early to beat network latency!
+                                overflowAnchor: 'none' on parent ensures the browser NEVER jumps scroll position. */}
+                            <div 
+                                ref={observerTarget} 
+                                style={{ position: 'absolute', bottom: 0, height: '2500px', width: '100%', pointerEvents: 'none', zIndex: -1 }} 
+                            />
+                            
                             {questions.map((q, index) => (
                                 <QuestionListItem 
                                     key={q.id}
@@ -1795,11 +1389,19 @@ const QuestionList = () => {
                             ))}
                             
                             {currentPage < totalPages && (
-                                <div ref={observerTarget} className="py-6 flex flex-col items-center justify-center opacity-70">
+                                <div className="py-8 flex flex-col items-center justify-center relative z-10">
                                     {loadingMore ? (
-                                        <div className="w-6 h-6 border-2 border-indigo-100 border-t-primary rounded-full animate-spin"></div>
+                                        <div className="flex flex-col items-center gap-2 opacity-70">
+                                            <div className="w-5 h-5 border-2 border-indigo-200 border-t-primary rounded-full animate-spin"></div>
+                                            <span className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">Loading Questions...</span>
+                                        </div>
                                     ) : (
-                                        <span className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">Scroll for more</span>
+                                        <button 
+                                            onClick={() => setCurrentPage(prev => prev + 1)}
+                                            className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-sm rounded-full transition-all border border-slate-200 hover:border-slate-300 flex items-center shadow-sm"
+                                        >
+                                            Load More Questions
+                                        </button>
                                     )}
                                 </div>
                             )}
