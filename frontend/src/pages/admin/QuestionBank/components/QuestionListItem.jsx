@@ -18,6 +18,18 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
     };
     const typeLabel = q.type === 'MCQ' ? 'Multiple Choice' : q.type === 'CQ' ? 'Creative' : q.type === 'SHORT' ? 'Short Answer' : q.type;
 
+    let finalExplanation = q.explanation;
+    if (!finalExplanation && q.dynamicData) {
+        let dData = q.dynamicData;
+        if (typeof dData === 'string') {
+            try { dData = JSON.parse(dData); } catch (e) {}
+        }
+        if (dData && typeof dData === 'object') {
+            const expKey = Object.keys(dData).find(k => k.toLowerCase().includes('explanation'));
+            if (expKey) finalExplanation = dData[expKey];
+        }
+    }
+
     return (
         <div 
             id={`question-item-${q.id}`}
@@ -94,7 +106,7 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                     {q.type === 'CQ' ? (
                         <CQCombinedRenderer q={q} showAnswer={showAnswer} showExplanation={showExplanation} />
                     ) : q.dynamicData ? (
-                        <DynamicQuestionViewer q={q} mode="list" showAnswer={showAnswer} />
+                        <DynamicQuestionViewer q={q} mode="list" showAnswer={showAnswer} showExplanation={showExplanation} />
                     ) : (
                         <MarkdownRenderer content={q.questionText} />
                     )}
@@ -175,12 +187,12 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
 
 
             {/* ── Explanation Block ── */}
-            {showExplanation && q.type !== 'CQ' && q.explanation && (
+            {showExplanation && q.type !== 'CQ' && finalExplanation && (
                 <div className="mx-4 mb-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-[12px] text-blue-900 leading-snug">
-                    <MarkdownRenderer content={q.explanation} />
+                    <MarkdownRenderer content={finalExplanation} />
                 </div>
             )}
-            {showExplanation && q.type !== 'CQ' && !q.explanation && (
+            {showExplanation && q.type !== 'CQ' && !finalExplanation && (
                 <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No explanation available.</div>
             )}
 
