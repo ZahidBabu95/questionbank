@@ -476,8 +476,53 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
 
     
     // Target Question Types
-    const [selectedQuestionTypes, setSelectedQuestionTypes] = useState(['MULTIPLE_CHOICE', 'CREATIVE', 'SHORT_ANSWER']);
-    const [allowedQuestionTypes, setAllowedQuestionTypes] = useState(['MULTIPLE_CHOICE', 'CREATIVE', 'SHORT_ANSWER']);
+    const [dynamicTypes, setDynamicTypes] = useState([]);
+    const [selectedQuestionTypes, setSelectedQuestionTypes] = useState([]);
+    const [allowedQuestionTypes, setAllowedQuestionTypes] = useState([]);
+
+    useEffect(() => {
+        const fetchTypes = async () => {
+            try {
+                const { data } = await axios.get('/v1/question-types');
+                const mapped = data.map(dt => ({
+                    id: dt.code,
+                    label: dt.name,
+                    desc: dt.description || `Generate ${dt.name} questions`
+                }));
+                
+                // Merge with defaults
+                const defaultTypes = [
+                    { id: 'MULTIPLE_CHOICE', label: 'MCQ (বহুনির্বাচনি)', desc: 'Generate 4-option multiple choice questions' },
+                    { id: 'CREATIVE', label: 'CQ (সৃজনশীল প্রশ্ন)', desc: 'Generate Stimulus and 4 sub-questions (ক,খ,গ,ঘ)' },
+                    { id: 'SHORT_ANSWER', label: 'Short Answer (সংক্ষিপ্ত)', desc: 'Generate 1-2 sentence direct questions' }
+                ];
+                
+                // Only add defaults if they don't exist in the DB mapping
+                defaultTypes.forEach(def => {
+                    if (!mapped.find(m => m.id === def.id)) {
+                        mapped.unshift(def);
+                    }
+                });
+
+                setDynamicTypes(mapped);
+                const allIds = mapped.map(m => m.id);
+                setAllowedQuestionTypes(allIds);
+                setSelectedQuestionTypes(allIds);
+            } catch (err) {
+                console.error("Failed to fetch dynamic question types", err);
+                const fallback = [
+                    { id: 'MULTIPLE_CHOICE', label: 'MCQ (বহুনির্বাচনি)', desc: 'Generate 4-option multiple choice questions' },
+                    { id: 'CREATIVE', label: 'CQ (সৃজনশীল প্রশ্ন)', desc: 'Generate Stimulus and 4 sub-questions' },
+                    { id: 'SHORT_ANSWER', label: 'Short Answer (সংক্ষিপ্ত)', desc: 'Generate 1-2 sentence direct questions' }
+                ];
+                setDynamicTypes(fallback);
+                const fallbackIds = fallback.map(m => m.id);
+                setAllowedQuestionTypes(fallbackIds);
+                setSelectedQuestionTypes(fallbackIds);
+            }
+        };
+        fetchTypes();
+    }, []);
     
     const toggleQuestionType = (type) => {
         if (!allowedQuestionTypes.includes(type)) return;
@@ -495,8 +540,9 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
 
     // Automatically enforce curriculum question types when schema loads
     useEffect(() => {
+        const allIds = dynamicTypes.map(d => d.id);
         if (!schemaContent) {
-            setAllowedQuestionTypes(['MULTIPLE_CHOICE', 'CREATIVE', 'SHORT_ANSWER']);
+            setAllowedQuestionTypes(allIds);
             return;
         }
         try {
@@ -510,11 +556,15 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
             } else {
                 if (schemaObj.editor_config && schemaObj.editor_config.allowed_blocks) {
                     schemaObj.editor_config.allowed_blocks.forEach(t => {
+                        // Keep legacy mapping for old schemas
                         if (t === 'MCQ') allowed.add('MULTIPLE_CHOICE');
-                        if (t === 'CQ') allowed.add('CREATIVE');
-                        if (t === 'SHORT') allowed.add('SHORT_ANSWER');
+                        else if (t === 'CQ') allowed.add('CREATIVE');
+                        else if (t === 'SHORT') allowed.add('SHORT_ANSWER');
+                        else allowed.add(t);
                     });
-                } else if (schemaObj.scraping_rules) {
+                } 
+                
+                if (schemaObj.scraping_rules) {
                     schemaObj.scraping_rules.forEach(r => {
                         if (r.questionType) allowed.add(r.questionType);
                     });
@@ -524,8 +574,9 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
                 if (allowed.size === 0 && schemaObj.generation_blueprint && schemaObj.generation_blueprint.mandatory_sections) {
                      schemaObj.generation_blueprint.mandatory_sections.forEach(sec => {
                          if (sec.type === 'MCQ') allowed.add('MULTIPLE_CHOICE');
-                         if (sec.type === 'CQ') allowed.add('CREATIVE');
-                         if (sec.type === 'SHORT') allowed.add('SHORT_ANSWER');
+                         else if (sec.type === 'CQ') allowed.add('CREATIVE');
+                         else if (sec.type === 'SHORT') allowed.add('SHORT_ANSWER');
+                         else allowed.add(sec.type);
                      });
                 }
             }
@@ -536,12 +587,12 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
                 // Auto-select only the allowed ones
                 setSelectedQuestionTypes(prev => prev.filter(t => allowedArr.includes(t)));
             } else {
-                setAllowedQuestionTypes(['MULTIPLE_CHOICE', 'CREATIVE', 'SHORT_ANSWER']);
+                setAllowedQuestionTypes(allIds);
             }
         } catch (e) {
             console.error("Failed to parse schema for question types", e);
         }
-    }, [schemaContent]);
+    }, [schemaContent, dynamicTypes]);
 
     useEffect(() => {
         const fetchSchemas = async () => {
@@ -698,11 +749,11 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
                                 <div className="space-y-3">
                                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">2. Expected Generative Outputs</label>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        {[
-                                            { id: 'MULTIPLE_CHOICE', label: 'MCQ (বহুনির্বাচনি)', desc: 'Generate 4-option multiple choice questions' },
-                                            { id: 'CREATIVE', label: 'CQ (সৃজনশীল প্রশ্ন)', desc: 'Generate Stimulus and 4 sub-questions (ক,খ,গ,ঘ)' },
-                                            { id: 'SHORT_ANSWER', label: 'Short Answer (সংক্ষিপ্ত)', desc: 'Generate 1-2 sentence direct questions' }
-                                        ].map(type => {
+                                        {dynamicTypes.length === 0 ? (
+                                            <div className="col-span-full flex justify-center py-4 text-slate-400">
+                                                <Loader2 className="w-6 h-6 animate-spin" />
+                                            </div>
+                                        ) : dynamicTypes.map(type => {
                                             const isAllowed = allowedQuestionTypes.includes(type.id);
                                             return (
                                             <label key={type.id} className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${!isAllowed ? 'opacity-60 cursor-not-allowed bg-slate-50 border-slate-200' : selectedQuestionTypes.includes(type.id) ? 'bg-pink-50/50 border-pink-200 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300'}`}>

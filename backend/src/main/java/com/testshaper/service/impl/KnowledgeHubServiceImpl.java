@@ -89,6 +89,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     private final com.testshaper.repository.AiTopicExtractionJobRepository aiTopicExtractionJobRepository;
     private final com.testshaper.repository.AiKnowledgeBaseRepository aiKnowledgeBaseRepository;
     private final com.testshaper.repository.QuestionRepository questionRepository;
+    private final com.testshaper.repository.QuestionTypeRepository questionTypeRepository;
     private final com.testshaper.repository.QuestionSourceRepository questionSourceRepository;
     private final com.testshaper.repository.CurriculumDocumentChunkRepository curriculumDocumentChunkRepository;
     private final RestTemplate restTemplate = createRestTemplateWithTimeouts();
@@ -1831,6 +1832,18 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         String requestedTypesStr = "";
         if (config != null && config.getTargetQuestionTypes() != null && !config.getTargetQuestionTypes().isEmpty()) {
             requestedTypesStr = "6. **TARGET QUESTION TYPES**: Your response is STRICTLY restricted to only these types: [" + String.join(", ", config.getTargetQuestionTypes()) + "]. Do NOT generate or extract any question types outside of this list.\n";
+            
+            try {
+                java.util.List<com.testshaper.entity.QuestionType> dynamicTypes = questionTypeRepository.findByCodeIn(config.getTargetQuestionTypes());
+                for (com.testshaper.entity.QuestionType qt : dynamicTypes) {
+                    if (qt.getAiPromptTemplate() != null && !qt.getAiPromptTemplate().isBlank()) {
+                        requestedTypesStr += "  - Guidelines for " + qt.getCode() + ": " + qt.getAiPromptTemplate() + "\n";
+                    }
+                }
+            } catch(Exception e) {
+                log.warn("Failed to fetch dynamic AI prompt templates", e);
+            }
+
             if (config.getTargetQuestionTypes().contains("MULTIPLE_CHOICE") || config.getTargetQuestionTypes().contains("MCQ")) {
                 requestedTypesStr += "6.1 **MULTIPLE CHOICE TYPES (CRITICAL)**: Include a mix of 'SIMPLE' MCQs, 'MULTIPLE_COMPLETION' (বহুপদী) MCQs, and 'SITUATION_SET' (অভিন্ন তথ্যভিত্তিক) MCQs.\n" +
                                      "  - For MULTIPLE_COMPLETION, include a 'statements' array (e.g. [\"i. st 1\", \"ii. st 2\", \"iii. st 3\"]) and set 'mcqType' to 'MULTIPLE_COMPLETION'. Make 'options' combinations (e.g. 'i ও ii').\n" +

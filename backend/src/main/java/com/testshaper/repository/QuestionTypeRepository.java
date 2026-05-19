@@ -11,5 +11,6 @@ import java.util.List;
 @Repository
 public interface QuestionTypeRepository extends JpaRepository<QuestionType, UUID> {
     Optional<QuestionType> findByCode(String code);
+    List<QuestionType> findByCodeIn(java.util.Collection<String> codes);
     List<QuestionType> findByTenantIdOrTenantId(String tenantId, String defaultTenantId);
 }

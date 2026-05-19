@@ -61,9 +61,21 @@ const CurriculumRules = () => {
     const [isGeneratingFromText, setIsGeneratingFromText] = useState(false);
 
     // Initial Load
+    const [dynamicTypes, setDynamicTypes] = useState([]);
+    
     useEffect(() => {
         fetchAcademicStructure();
+        fetchDynamicTypes();
     }, []);
+
+    const fetchDynamicTypes = async () => {
+        try {
+            const { data } = await axios.get('/v1/question-types');
+            setDynamicTypes(data);
+        } catch (err) {
+            console.error('Failed to fetch dynamic types', err);
+        }
+    };
 
     const fetchAcademicStructure = async () => {
         setLoadingHierarchy(true);
@@ -898,6 +910,40 @@ const CurriculumRules = () => {
                                                 <FileJson size={18} className="text-indigo-500"/> Parsing JSON Schema
                                             </h3>
                                             <div className="flex items-center gap-2">
+                                                {/* Dynamic Type Selector */}
+                                                <select
+                                                    onChange={(e) => {
+                                                        if (!e.target.value) return;
+                                                        const type = dynamicTypes.find(t => t.code === e.target.value);
+                                                        if (!type) return;
+                                                        
+                                                        let insertedSchema = {};
+                                                        try { insertedSchema = JSON.parse(type.schemaTemplate || '{}'); } catch(e){}
+                                                        
+                                                        const schemaObj = {
+                                                            questionType: type.code,
+                                                            questionText: '(AI will generate question text here)',
+                                                            instructions: type.description || '',
+                                                            ...insertedSchema
+                                                        };
+                                                        
+                                                        try {
+                                                            let currentSchema = JSON.parse(jsonSchema);
+                                                            if (!currentSchema.scraping_rules) currentSchema.scraping_rules = [];
+                                                            currentSchema.scraping_rules.push(schemaObj);
+                                                            setJsonSchema(JSON.stringify(currentSchema, null, 4));
+                                                        } catch (err) {
+                                                            const newSchema = { subject: ruleTarget.subjectName || 'Unknown', scraping_rules: [schemaObj] };
+                                                            setJsonSchema(JSON.stringify(newSchema, null, 4));
+                                                        }
+                                                        e.target.value = '';
+                                                    }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-xl border bg-indigo-50 text-indigo-700 border-indigo-200 cursor-pointer outline-none focus:ring-2 focus:ring-indigo-300"
+                                                >
+                                                    <option value="">➕ Add Question Type</option>
+                                                    {dynamicTypes.map(dt => <option key={dt.code} value={dt.code}>{dt.name}</option>)}
+                                                </select>
+                                                
                                                 {/* Text Input Toggle */}
                                                 <button
                                                     onClick={() => setShowTextInput(v => !v)}

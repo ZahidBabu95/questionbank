@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Settings, Check, X, Shield, Edit2, Trash2, Box, Eye, Save, Code, RefreshCw } from 'lucide-react';
+import { Plus, Settings, Check, X, Shield, Edit2, Trash2, Box, Eye, Save, Code, RefreshCw, Copy } from 'lucide-react';
 import questionTypeService from '../../../services/questionTypeService';
 
 const QuestionTypes = () => {
@@ -103,6 +103,61 @@ const QuestionTypes = () => {
         setShowModal(true);
     };
 
+    const generateMarkdownPrompt = (type) => {
+        let schemaStr = type.schemaTemplate;
+        if (typeof schemaStr !== 'string') {
+            schemaStr = JSON.stringify(schemaStr, null, 2);
+        }
+        
+        return `# Question Generation Prompt: ${type.name} (${type.code})
+
+I am building dynamic questions for my Question Bank system. Please generate questions for me.
+
+## Guidelines & Instructions
+${type.aiPromptTemplate || 'Please follow standard educational guidelines for this question type.'}
+
+## Expected JSON Output Format
+You MUST return your output strictly in the following JSON schema format. Ensure it is perfectly valid JSON.
+
+\`\`\`json
+${schemaStr}
+\`\`\`
+`;
+    };
+
+    const copyMarkdownPrompt = (type) => {
+        const prompt = generateMarkdownPrompt(type);
+        navigator.clipboard.writeText(prompt);
+        setMessage({ type: 'success', text: 'AI Prompt Markdown copied to clipboard!' });
+        setTimeout(() => setMessage(null), 3000);
+    };
+
+    const copySchemaHelperPrompt = () => {
+        const prompt = `# Help Me Create a Dynamic Question Type
+
+I am creating a new dynamic question type for my Question Bank system (e.g., "Matching Table", "Fill in the Blanks", "True/False").
+
+Please generate two things for me:
+1. **JSON Schema Template**: This defines the exact data structure that will store the question data in my system. It should be a valid JSON object, usually containing arrays or nested objects to hold the question, options, and correct answers.
+2. **AI Prompt Template**: A set of clear instructions that I will save in my system. Later, I will use these instructions to tell an AI how to generate thousands of questions matching the exact schema you provide.
+
+Please give me your response in the following format:
+
+### JSON Schema
+\`\`\`json
+{
+  // Your schema here
+}
+\`\`\`
+
+### AI Prompt Template
+[Your instructions here...]
+`;
+        navigator.clipboard.writeText(prompt);
+        setMessage({ type: 'success', text: 'Helper Prompt copied! Paste it in ChatGPT/Claude.' });
+        setTimeout(() => setMessage(null), 3000);
+    };
+
     return (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[600px] p-8">
             <div className="flex items-center justify-between mb-8">
@@ -165,6 +220,13 @@ const QuestionTypes = () => {
                                         </td>
                                         <td className="px-6 py-4 flex items-center justify-end gap-2">
                                             <button 
+                                                onClick={() => copyMarkdownPrompt(type)}
+                                                title="Copy AI Prompt Markdown"
+                                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                            >
+                                                <Copy size={16} />
+                                            </button>
+                                            <button 
                                                 onClick={() => openEditModal(type)}
                                                 className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
                                             >
@@ -191,9 +253,18 @@ const QuestionTypes = () => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl flex flex-col max-h-[90vh]">
                         <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100">
-                            <h3 className="font-bold text-lg text-slate-800">
-                                {currentType.id ? 'Edit Question Type' : 'Create Question Type'}
-                            </h3>
+                            <div className="flex items-center gap-4">
+                                <h3 className="font-bold text-lg text-slate-800">
+                                    {currentType.id ? 'Edit Question Type' : 'Create Question Type'}
+                                </h3>
+                                <button 
+                                    onClick={copySchemaHelperPrompt}
+                                    className="text-xs flex items-center gap-1 font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors"
+                                    title="Copy a prompt to ask ChatGPT to build the schema for you"
+                                >
+                                    <Code size={14} /> AI Builder Prompt
+                                </button>
+                            </div>
                             <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
                                 <X size={20} />
                             </button>
@@ -225,7 +296,16 @@ const QuestionTypes = () => {
                                 </div>
                                 
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">AI Prompt Template</label>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <label className="block text-sm font-medium text-slate-700">AI Prompt Template</label>
+                                        <button 
+                                            type="button"
+                                            onClick={() => copyMarkdownPrompt(currentType)}
+                                            className="text-[10px] flex items-center gap-1 font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded"
+                                        >
+                                            <Copy size={12} /> Copy Full Prompt
+                                        </button>
+                                    </div>
                                     <textarea 
                                         value={currentType.aiPromptTemplate}
                                         onChange={(e) => setCurrentType({...currentType, aiPromptTemplate: e.target.value})}
