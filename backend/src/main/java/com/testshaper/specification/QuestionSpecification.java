@@ -92,9 +92,7 @@ public class QuestionSpecification {
 
             // Type filter
             if (StringUtils.hasText(filterType) && !"ALL".equalsIgnoreCase(filterType)) {
-                try {
-                    predicates.add(cb.equal(root.get("type"), Question.QuestionType.valueOf(filterType.toUpperCase())));
-                } catch (Exception e) {}
+                predicates.add(cb.equal(root.get("type"), filterType));
             }
 
             // Language filter

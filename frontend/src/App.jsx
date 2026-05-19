@@ -15,11 +15,13 @@ import RoleManagement from './pages/admin/Users/RoleManagement';
 import GeneralSettings from './pages/admin/Settings/GeneralSettings';
 import SecuritySettings from './pages/admin/Settings/SecuritySettings';
 import BackupSettings from './pages/admin/Settings/BackupSettings';
+import QuestionTypes from './pages/admin/Settings/QuestionTypes';
 import AcademicStructure from './pages/admin/Academic/AcademicStructure';
 import AcademicLayout from './pages/admin/Academic/AcademicLayout';
 import MCQCreate from './pages/admin/QuestionBank/MCQCreate';
 import CQCreate from './pages/admin/QuestionBank/CQCreate';
 import ShortQuestionCreate from './pages/admin/QuestionBank/ShortQuestionCreate';
+import DynamicQuestionCreate from './pages/admin/QuestionBank/DynamicQuestionCreate';
 import QuestionEdit from './pages/admin/QuestionBank/QuestionEdit';
 import ImportExcel from './pages/admin/QuestionBank/ImportExcel';
 import ImportAI from './pages/admin/QuestionBank/ImportAI';
@@ -179,6 +181,7 @@ function App() {
                         <Route path="/settings/general" element={<GeneralSettings />} />
                         <Route path="/settings/security" element={<SecuritySettings />} />
                         <Route path="/settings/backup" element={<BackupSettings />} />
+                        <Route path="/settings/question-types" element={<QuestionTypes />} />
                         <Route path="/settings/*" element={<UnderDevelopment featureName="System Settings" />} />
 
 
@@ -218,6 +221,7 @@ function App() {
                         <Route path="/questions/create/mcq" element={<MCQCreate />} />
                         <Route path="/questions/add/cq" element={<CQCreate />} />
                         <Route path="/questions/add/short" element={<ShortQuestionCreate />} />
+                        <Route path="/questions/create/dynamic" element={<DynamicQuestionCreate />} />
                         <Route path="/questions/import/excel" element={<ImportExcel />} />
                         <Route path="/questions/import/ai" element={<ImportAI />} />
                         <Route path="/questions/import/api" element={<ImportApi />} />

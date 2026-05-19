@@ -54,7 +54,7 @@ public class ExamDTO {
         private Double marks;
         private String questionText;
         private String stimulus;
-        private Question.QuestionType type;
+        private String type;
         private String mcqType;
         private java.util.List<String> statements;
         private Question.DifficultyLevel difficulty;

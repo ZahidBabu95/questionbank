@@ -303,7 +303,7 @@ public class QuestionController {
 
         // Prepare options for MCQ
         List<QuestionOption> draftOptions = null;
-        if (original.getType() == Question.QuestionType.MCQ) {
+        if (original.getType().equals(Question.QuestionType.MCQ.name())) {
             if (request.getOptions() != null && !request.getOptions().isEmpty()) {
                 // Use revised options from request
                 draftOptions = new java.util.ArrayList<>();

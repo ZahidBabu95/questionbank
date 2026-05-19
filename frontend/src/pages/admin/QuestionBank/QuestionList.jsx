@@ -4,6 +4,7 @@ import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFil
 import questionService from '../../../services/questionService';
 import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
+import questionTypeService from '../../../services/questionTypeService';
 import RevisePanel from './components/RevisePanel';
 import RevisionReviewPanel from './components/RevisionReviewPanel';
 import MarkdownRenderer from '../../../components/MarkdownRenderer';
@@ -60,6 +61,7 @@ const QuestionList = () => {
     });
 
     const [overviewStats, setOverviewStats] = useState(null);
+    const [dynamicTypes, setDynamicTypes] = useState([]);
 
 
 
@@ -262,6 +264,9 @@ const QuestionList = () => {
             if (levelData.length === 1) setSelectedLevelId(levelData[0].id);
             const hierarchyData = await academicService.getHierarchy();
             setFullHierarchy(hierarchyData || []);
+            
+            const qTypes = await questionTypeService.getAllQuestionTypes();
+            setDynamicTypes(qTypes || []);
         } catch (error) {
             console.error("Failed to fetch initial filters", error);
         }
@@ -750,6 +755,9 @@ const QuestionList = () => {
         { id: 'MCQ', label: 'MCQ' },
         { id: 'CQ', label: 'Creative (CQ)' },
         { id: 'SHORT', label: 'Short Q' },
+        ...dynamicTypes
+            .filter(t => !t.isSystemDefault)
+            .map(t => ({ id: t.code, label: t.name }))
     ];
 
     const getStatusBadge = (status) => {

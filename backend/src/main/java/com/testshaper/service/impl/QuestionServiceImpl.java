@@ -54,7 +54,9 @@ public class QuestionServiceImpl implements QuestionService {
                 .ifPresent(opt -> question.setCorrectAnswer(opt.getOptionText()));
 
         // Save Question
-        question.setType(Question.QuestionType.MCQ);
+        if (question.getType() == null || question.getType().isEmpty()) {
+            question.setType(Question.QuestionType.MCQ.name());
+        }
         question.setStatus(Question.QuestionStatus.PENDING); // Default status
         
         if (question.getSources() != null) {
@@ -93,10 +95,10 @@ public class QuestionServiceImpl implements QuestionService {
             
             // Respect parsed type
             if (question.getType() == null) {
-                question.setType(Question.QuestionType.MCQ);
+                question.setType(Question.QuestionType.MCQ.name());
             }
 
-            if (question.getType() == Question.QuestionType.MCQ) {
+            if (Question.QuestionType.MCQ.name().equals(question.getType())) {
                 if (options == null || options.size() < 2) {
                     isProblematic = true;
                     errorNote = "[AI Error: Needs at least 2 options] ";
@@ -181,7 +183,9 @@ public class QuestionServiceImpl implements QuestionService {
     @Override
     @Transactional
     public Question createShortQuestion(Question question) {
-        question.setType(Question.QuestionType.SHORT);
+        if (question.getType() == null || question.getType().isEmpty()) {
+            question.setType(Question.QuestionType.SHORT.name());
+        }
         question.setStatus(Question.QuestionStatus.PENDING);
         if (question.getSources() != null) {
             for (com.testshaper.entity.QuestionSource source : question.getSources()) {
@@ -194,7 +198,9 @@ public class QuestionServiceImpl implements QuestionService {
     @Override
     @Transactional
     public Question createCQ(Question question) {
-        question.setType(Question.QuestionType.CQ);
+        if (question.getType() == null || question.getType().isEmpty()) {
+            question.setType(Question.QuestionType.CQ.name());
+        }
         question.setStatus(Question.QuestionStatus.PENDING);
         if (question.getSources() != null) {
             for (com.testshaper.entity.QuestionSource source : question.getSources()) {

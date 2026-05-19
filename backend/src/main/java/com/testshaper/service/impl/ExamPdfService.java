@@ -348,12 +348,12 @@ public class ExamPdfService {
         }
 
         // MCQ Options
-        if (q.getType() == Question.QuestionType.MCQ) {
+        if (q.getType().equals(Question.QuestionType.MCQ.name())) {
             renderMcqOptions(doc, q, optionFont, answerFont, opts);
         }
 
         // CQ Sub-questions (জ্ঞান, অনুধাবন, প্রয়োগ, উচ্চতর দক্ষতা)
-        if (q.getType() == Question.QuestionType.CQ) {
+        if (q.getType().equals(Question.QuestionType.CQ.name())) {
             renderCqSubQuestions(doc, q, optionFont, answerFont, opts, order);
         }
 
@@ -484,7 +484,7 @@ public class ExamPdfService {
 
         // MCQ grid
         List<ExamQuestion> mcqQuestions = questions.stream()
-                .filter(eq -> eq.getQuestion().getType() == Question.QuestionType.MCQ)
+                .filter(eq -> eq.getQuestion().getType().equals(Question.QuestionType.MCQ.name()))
                 .toList();
 
         if (!mcqQuestions.isEmpty()) {
@@ -537,7 +537,7 @@ public class ExamPdfService {
 
         // Short / CQ — blank lines
         List<ExamQuestion> others = questions.stream()
-                .filter(eq -> eq.getQuestion().getType() != Question.QuestionType.MCQ)
+                .filter(eq -> !eq.getQuestion().getType().equals(Question.QuestionType.MCQ.name()))
                 .toList();
 
         if (!others.isEmpty()) {
@@ -588,13 +588,12 @@ public class ExamPdfService {
         return result;
     }
 
-    private String getSectionByType(Question.QuestionType type) {
-        return switch (type) {
-            case MCQ -> "বিভাগ ক — বহুনির্বাচনি প্রশ্ন / Section A — MCQ";
-            case SHORT -> "বিভাগ খ — সংক্ষিপ্ত প্রশ্ন / Section B — Short Questions";
-            case CQ -> "বিভাগ গ — সৃজনশীল প্রশ্ন / Section C — Creative Questions";
-            case TRUE_FALSE -> "বিভাগ ঘ — সত্য/মিথ্যা / Section D — True/False";
-        };
+    private String getSectionByType(String type) {
+        if ("MCQ".equals(type)) return "বিভাগ ক — বহুনির্বাচনি প্রশ্ন / Section A — MCQ";
+        if ("SHORT".equals(type)) return "বিভাগ খ — সংক্ষিপ্ত প্রশ্ন / Section B — Short Questions";
+        if ("CQ".equals(type)) return "বিভাগ গ — সৃজনশীল প্রশ্ন / Section C — Creative Questions";
+        if ("TRUE_FALSE".equals(type)) return "বিভাগ ঘ — সত্য/মিথ্যা / Section D — True/False";
+        return "অন্যান্য / Others";
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

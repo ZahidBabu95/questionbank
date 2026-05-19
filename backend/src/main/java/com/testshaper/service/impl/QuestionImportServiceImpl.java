@@ -127,7 +127,7 @@ public class QuestionImportServiceImpl implements QuestionImportService {
         // Indices: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 
         Question q = new Question();
-        q.setType(Question.QuestionType.MCQ);
+        q.setType(Question.QuestionType.MCQ.name());
         q.setStimulus(getCol(row, 0));
         q.setQuestionText(getCol(row, 1));
 
@@ -179,7 +179,7 @@ public class QuestionImportServiceImpl implements QuestionImportService {
         // Indices: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 
         Question q = new Question();
-        q.setType(Question.QuestionType.CQ);
+        q.setType(Question.QuestionType.CQ.name());
         q.setStimulus(getCol(row, 0));
 
         // For CQ, we combine questions into questionText for now or use a specific
@@ -211,7 +211,7 @@ public class QuestionImportServiceImpl implements QuestionImportService {
         // Indices: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 
         Question q = new Question();
-        q.setType(Question.QuestionType.SHORT);
+        q.setType(Question.QuestionType.SHORT.name());
         q.setStimulus(getCol(row, 0));
         q.setQuestionText(getCol(row, 1));
         q.setExplanation("Answer: " + getCol(row, 2) + "\n" + getCol(row, 10));

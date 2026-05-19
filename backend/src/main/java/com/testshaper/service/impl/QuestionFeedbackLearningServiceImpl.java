@@ -72,7 +72,7 @@ public class QuestionFeedbackLearningServiceImpl implements QuestionFeedbackLear
             AiKnowledgeBase kb = new AiKnowledgeBase();
             kb.setTitle("[✅ ভালো প্রশ্ন] " + truncateText(question.getQuestionText(), 80));
             kb.setContent(content);
-            kb.setTags(subjectTag + "," + existingTag + ",FEEDBACK_LOOP," + question.getType().name());
+            kb.setTags(subjectTag + "," + existingTag + ",FEEDBACK_LOOP," + question.getType());
             kb.setActive(true);
 
             // Set created by if user found
@@ -116,7 +116,7 @@ public class QuestionFeedbackLearningServiceImpl implements QuestionFeedbackLear
             AiKnowledgeBase kb = new AiKnowledgeBase();
             kb.setTitle("[❌ ভুল প্রশ্ন] " + truncateText(question.getQuestionText(), 80));
             kb.setContent(content);
-            kb.setTags(subjectTag + "," + existingTag + ",FEEDBACK_LOOP," + question.getType().name());
+            kb.setTags(subjectTag + "," + existingTag + ",FEEDBACK_LOOP," + question.getType());
             kb.setActive(true);
 
             setCreatedBy(kb, rejectedBy);
@@ -188,7 +188,7 @@ public class QuestionFeedbackLearningServiceImpl implements QuestionFeedbackLear
         }
 
         // Add options for MCQ
-        if (question.getType() == Question.QuestionType.MCQ) {
+        if (question.getType().equals(Question.QuestionType.MCQ.name())) {
             try {
                 List<QuestionOption> options = optionRepository.findByQuestionIdOrderByOptionLabelAsc(question.getId());
                 if (options != null) {

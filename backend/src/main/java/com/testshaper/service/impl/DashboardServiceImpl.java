@@ -110,13 +110,13 @@ public class DashboardServiceImpl implements DashboardService {
                 long mcqCount = 0, cqCount = 0, shortCount = 0, otherCount = 0;
 
                 for (Object[] result : typeCounts) {
-                        Question.QuestionType type = (Question.QuestionType) result[0];
+                        String type = (String) result[0];
                         long count = ((Number) result[1]).longValue();
-                        if (type == Question.QuestionType.MCQ)
+                        if (type.equals(Question.QuestionType.MCQ.name()))
                                 mcqCount += count;
-                        else if (type == Question.QuestionType.CQ)
+                        else if (type.equals(Question.QuestionType.CQ.name()))
                                 cqCount += count;
-                        else if (type == Question.QuestionType.SHORT)
+                        else if (type.equals(Question.QuestionType.SHORT.name()))
                                 shortCount += count;
                         else
                                 otherCount += count;

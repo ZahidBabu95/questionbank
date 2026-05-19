@@ -256,7 +256,7 @@ public class LectureService {
                 qdto.setQuestionOrder(lq.getQuestionOrder());
                 // Inline Question mapping
                 qdto.setQuestionText(lq.getQuestion().getQuestionText());
-                qdto.setType(lq.getQuestion().getType().name());
+                qdto.setType(lq.getQuestion().getType());
                 qdto.setMcqType(lq.getQuestion().getMcqType());
                 qdto.setStatements(lq.getQuestion().getStatements());
                 qdto.setDifficulty(lq.getQuestion().getDifficulty().name());
@@ -274,7 +274,7 @@ public class LectureService {
             qdto.setQuestionId(lq.getQuestion().getId());
             qdto.setQuestionOrder(lq.getQuestionOrder());
             qdto.setQuestionText(lq.getQuestion().getQuestionText());
-            qdto.setType(lq.getQuestion().getType().name());
+            qdto.setType(lq.getQuestion().getType());
             qdto.setMcqType(lq.getQuestion().getMcqType());
             qdto.setStatements(lq.getQuestion().getStatements());
             qdto.setDifficulty(lq.getQuestion().getDifficulty().name());

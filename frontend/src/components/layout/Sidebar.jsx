@@ -109,6 +109,7 @@ export const MENU_ITEMS = [
                     { id: 'QUESTION_BANK_ADD_QUESTION_MCQ', title: 'MCQ', path: '/questions/create/mcq', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { id: 'QUESTION_BANK_ADD_QUESTION_CQ_CREATIVE', title: 'CQ (Creative)', path: '/questions/add/cq', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                     { id: 'QUESTION_BANK_ADD_QUESTION_SHORT_QUESTION', title: 'Short Question', path: '/questions/add/short', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+                    { id: 'QUESTION_BANK_ADD_DYNAMIC', title: 'Dynamic Types', path: '/questions/create/dynamic', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
                 ]
             },
             {
@@ -205,6 +206,7 @@ export const MENU_ITEMS = [
         submenu: [
             { id: 'SETTINGS_SECURITY', title: 'Security', path: '/settings/security', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
             { id: 'SETTINGS_GENERAL', title: 'General', path: '/settings/general', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'SETTINGS_QUESTION_TYPES', title: 'Question Types', path: '/settings/question-types', roles: ['SUPER_ADMIN'] },
             { id: 'SETTINGS_BACKUP', title: 'Backup', path: '/settings/backup', roles: ['SUPER_ADMIN'] },
         ]
     },

@@ -221,9 +221,9 @@ public class ExamWordService {
             stimRun.setFontFamily(BANGLA_FONT);
         }
 
-        if (q.getType() == Question.QuestionType.MCQ) {
+        if (q.getType().equals(Question.QuestionType.MCQ.name())) {
             renderMcqOptions(document, q, fontSize, opts);
-        } else if (q.getType() == Question.QuestionType.CQ) {
+        } else if (q.getType().equals(Question.QuestionType.CQ.name())) {
             renderCqSubQuestions(document, q, fontSize, opts);
         }
     }
@@ -314,7 +314,7 @@ public class ExamWordService {
         addDivider(document);
 
         List<ExamQuestion> mcqQuestions = questions.stream()
-                .filter(eq -> eq.getQuestion().getType() == Question.QuestionType.MCQ)
+                .filter(eq -> eq.getQuestion().getType().equals(Question.QuestionType.MCQ.name()))
                 .toList();
 
         XWPFTable table = document.createTable();
@@ -357,13 +357,12 @@ public class ExamWordService {
         return result;
     }
 
-    private String getSectionByType(Question.QuestionType type) {
-        return switch (type) {
-            case MCQ -> "বিভাগ ক — বহুনির্বাচনি প্রশ্ন";
-            case SHORT -> "বিভাগ খ — সংক্ষিপ্ত প্রশ্ন";
-            case CQ -> "বিভাগ গ — সৃজনশীল প্রশ্ন";
-            case TRUE_FALSE -> "বিভাগ ঘ — সত্য/মিথ্যা";
-        };
+    private String getSectionByType(String type) {
+        if ("MCQ".equals(type)) return "বিভাগ ক — বহুনির্বাচনি প্রশ্ন";
+        if ("SHORT".equals(type)) return "বিভাগ খ — সংক্ষিপ্ত প্রশ্ন";
+        if ("CQ".equals(type)) return "বিভাগ গ — সৃজনশীল প্রশ্ন";
+        if ("TRUE_FALSE".equals(type)) return "বিভাগ ঘ — সত্য/মিথ্যা";
+        return "অন্যান্য";
     }
 
     private void addDivider(XWPFDocument document) {

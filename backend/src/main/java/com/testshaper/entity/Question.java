@@ -16,9 +16,15 @@ import java.util.UUID;
 @Setter
 public class Question extends BaseTenantEntity {
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private QuestionType type; // MCQ, CQ, SHORT, TRUE_FALSE
+    private String type; // Replaced enum with String for dynamic types (e.g., MCQ, CQ, FILL_BLANKS)
+
+    @Column(name = "parent_id")
+    private UUID parentId;
+
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(name = "dynamic_data", columnDefinition = "json")
+    private String dynamicData;
 
     @Column(columnDefinition = "LONGTEXT", nullable = false)
     private String questionText;

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, Edit, Trash2, CheckCircle, FileText, ThumbsUp, Bookmark, BookmarkCheck, GitCompare, MoreHorizontal, Layers } from 'lucide-react';
 import MarkdownRenderer from '../../../../components/MarkdownRenderer';
 import CQCombinedRenderer from './CQCombinedRenderer';
+import DynamicQuestionViewer from './DynamicQuestionViewer';
 
 const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, isSaved, onView, onDelete, onRevise, onReview, isSuperAdmin, hasPerm, splitScreenMode, isViewing }) => {
     const navigate = useNavigate();
@@ -92,6 +93,8 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 <div className="text-[13px] font-semibold text-slate-800 leading-snug">
                     {q.type === 'CQ' ? (
                         <CQCombinedRenderer q={q} showAnswer={showAnswer} showExplanation={showExplanation} />
+                    ) : q.dynamicData ? (
+                        <DynamicQuestionViewer q={q} mode="list" showAnswer={showAnswer} />
                     ) : (
                         <MarkdownRenderer content={q.questionText} />
                     )}

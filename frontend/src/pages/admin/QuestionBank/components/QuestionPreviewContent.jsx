@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle, XCircle, Clock, Edit, FileText } from 'lucide-react';
 import MarkdownRenderer from '../../../../components/MarkdownRenderer';
 import CQCombinedRenderer from './CQCombinedRenderer';
+import DynamicQuestionViewer from './DynamicQuestionViewer';
 
 const QuestionPreviewContent = ({ selectedQuestion, isDark = false }) => {
     const getStatusBadge = (status) => {
@@ -64,6 +65,8 @@ const QuestionPreviewContent = ({ selectedQuestion, isDark = false }) => {
                     <div className={`text-lg font-medium ${isDark ? 'text-white' : 'text-slate-900'} leading-relaxed`}>
                         {selectedQuestion.type === 'CQ' ? (
                             <CQCombinedRenderer q={selectedQuestion} showAnswer={true} showExplanation={true} isDark={isDark} />
+                        ) : selectedQuestion.dynamicData ? (
+                            <DynamicQuestionViewer q={selectedQuestion} mode="preview" showAnswer={true} isDark={isDark} />
                         ) : (
                             <MarkdownRenderer content={selectedQuestion.questionText} className={isDark ? 'prose-invert' : ''} />
                         )}

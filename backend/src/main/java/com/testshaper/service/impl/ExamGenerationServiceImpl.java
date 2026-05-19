@@ -561,7 +561,7 @@ public class ExamGenerationServiceImpl {
             qDto.setExplanation(q.getExplanation());
             qDto.setCorrectAnswer(q.getCorrectAnswer());
 
-            if (q.getType() == Question.QuestionType.MCQ) {
+            if (q.getType().equals(Question.QuestionType.MCQ.name())) {
                 java.util.List<ExamDTO.OptionDTO> optionDTOs = null;
 
                 // Check if options were overridden

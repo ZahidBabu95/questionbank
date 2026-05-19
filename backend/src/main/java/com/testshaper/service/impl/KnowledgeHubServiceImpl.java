@@ -1946,20 +1946,20 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                                 q.setTopic(chunk.getMappedTopic());
                             }
 
-                            q.setType(com.testshaper.entity.Question.QuestionType.MCQ);
+                            q.setType("MCQ");
                             if (qNode.hasNonNull("questionType") || qNode.hasNonNull("type")) {
                                 try {
                                     String typeStr = qNode.hasNonNull("questionType") ? qNode.get("questionType").asText().toUpperCase() : qNode.get("type").asText().toUpperCase();
                                     if (typeStr.equals("MULTIPLE_CHOICE") || typeStr.equals("MCQ")) {
-                                        q.setType(com.testshaper.entity.Question.QuestionType.MCQ);
+                                        q.setType("MCQ");
                                     } else if (typeStr.equals("CREATIVE") || typeStr.equals("CQ")) {
-                                        q.setType(com.testshaper.entity.Question.QuestionType.CQ);
+                                        q.setType("CQ");
                                     } else if (typeStr.equals("SHORT_ANSWER") || typeStr.equals("SHORT")) {
-                                        q.setType(com.testshaper.entity.Question.QuestionType.SHORT);
+                                        q.setType("SHORT");
                                     } else if (typeStr.equals("TRUE_FALSE")) {
-                                        q.setType(com.testshaper.entity.Question.QuestionType.TRUE_FALSE);
+                                        q.setType("TRUE_FALSE");
                                     } else {
-                                        q.setType(com.testshaper.entity.Question.QuestionType.valueOf(typeStr));
+                                        q.setType(typeStr);
                                     }
                                 } catch (Exception ignored) {}
                             }
