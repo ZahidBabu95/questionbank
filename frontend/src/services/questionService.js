@@ -2,6 +2,28 @@ import axios from '../utils/axios';
 
 const API_URL = '/v1/questions';
 
+// Simple In-Memory Request Cache for instant navigation
+const cache = new Map();
+const CACHE_TTL_MS = 60000; // 1 minute TTL
+
+export const clearQuestionCache = () => {
+    cache.clear();
+};
+
+const fetchWithCache = async (cacheKey, apiCall) => {
+    if (cache.has(cacheKey)) {
+        const cached = cache.get(cacheKey);
+        if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
+            // Background re-fetch to keep data fresh (Stale-while-revalidate pattern)
+            apiCall().then(data => cache.set(cacheKey, { data, timestamp: Date.now() })).catch(() => {});
+            return cached.data;
+        }
+        cache.delete(cacheKey);
+    }
+    const data = await apiCall();
+    cache.set(cacheKey, { data, timestamp: Date.now() });
+    return data;
+};
 
 const createMCQ = async (question, options, metadata = null) => {
     const body = { question, options };
@@ -20,11 +42,13 @@ const createMCQBulk = async (questions, optionsList, metadata = null, academicId
 
 const createShortQuestion = async (question) => {
     const response = await axios.post(`${API_URL}/short/create`, question);
+    clearQuestionCache();
     return response.data;
 };
 
 const createCQ = async (question) => {
     const response = await axios.post(`${API_URL}/cq/create`, question);
+    clearQuestionCache();
     return response.data;
 };
 
@@ -34,13 +58,14 @@ const getAllQuestions = async () => {
 };
 
 const getAllQuestionsPaginated = async (params) => {
-    // Expected params: { page, size, filterStatus, filterType, search, levelId, streamId, classId, subjectId, chapterId, topicId }
-    // Clean up empty params
     const cleanParams = Object.fromEntries(
         Object.entries(params).filter(([_, v]) => v !== null && v !== undefined && v !== '')
     );
-    const response = await axios.get(`${API_URL}/list-paginated`, { params: cleanParams });
-    return response.data;
+    const cacheKey = `paginated_${JSON.stringify(cleanParams)}`;
+    return fetchWithCache(cacheKey, async () => {
+        const response = await axios.get(`${API_URL}/list-paginated`, { params: cleanParams });
+        return response.data;
+    });
 };
 
 const getAllQuestionIds = async (params) => {
@@ -69,32 +94,39 @@ const getSourceTags = async (params = {}) => {
 
 const deleteQuestion = async (id) => {
     await axios.delete(`${API_URL}/${id}`);
+    clearQuestionCache();
 };
 
 const deleteQuestionsBulk = async (ids) => {
     await axios.post(`${API_URL}/bulk/delete`, ids);
+    clearQuestionCache();
 };
 
 const approveQuestion = async (id) => {
     const response = await axios.patch(`${API_URL}/${id}/approve`, {});
+    clearQuestionCache();
     return response.data;
 };
 
 const rejectQuestion = async (id) => {
     const response = await axios.patch(`${API_URL}/${id}/reject`, {});
+    clearQuestionCache();
     return response.data;
 };
 
 const approveQuestionsBulk = async (ids) => {
     await axios.patch(`${API_URL}/bulk/approve`, ids);
+    clearQuestionCache();
 };
 
 const rejectQuestionsBulk = async (ids) => {
     await axios.patch(`${API_URL}/bulk/reject`, ids);
+    clearQuestionCache();
 };
 
 const updateStatusBulk = async (ids, status) => {
     await axios.patch(`${API_URL}/bulk/status`, { ids, status });
+    clearQuestionCache();
 };
 
 const getQuestionById = async (id) => {

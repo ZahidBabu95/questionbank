@@ -326,10 +326,24 @@ public class QuestionServiceImpl implements QuestionService {
                 filters.get("sourceSchools")
             );
 
-        return questionRepository.findAll(spec).stream().map(Question::getId).collect(java.util.stream.Collectors.toList());
+        // OPTIMIZED ID PROJECTION: 
+        // Do not load full entities. Just select the UUIDs directly using Criteria API.
+        jakarta.persistence.criteria.CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        jakarta.persistence.criteria.CriteriaQuery<UUID> cq = cb.createQuery(UUID.class);
+        jakarta.persistence.criteria.Root<Question> root = cq.from(Question.class);
+        
+        cq.select(root.get("id"));
+        
+        jakarta.persistence.criteria.Predicate predicate = spec.toPredicate(root, cq, cb);
+        if (predicate != null) {
+            cq.where(predicate);
+        }
+        
+        return entityManager.createQuery(cq).getResultList();
     }
 
     @Override
+    @org.springframework.cache.annotation.Cacheable(value = "sourceTags", key = "#filters != null ? #filters.hashCode() : 0")
     public java.util.Map<String, Object> getSourceTags(java.util.Map<String, String> filters) {
         List<UUID> ids = getAllQuestionIds(filters);
         if (ids == null || ids.isEmpty()) {
@@ -390,6 +404,7 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
+    @org.springframework.cache.annotation.Cacheable(value = "questionStats", key = "#filters != null ? #filters.hashCode() : 0")
     public java.util.Map<String, Object> getOverviewStats(java.util.Map<String, String> filters) {
         String tenantId = com.testshaper.security.TenantContext.getTenantId();
         
@@ -439,13 +454,26 @@ public class QuestionServiceImpl implements QuestionService {
                 filters != null ? filters.get("sourceSchools") : null
             );
 
-        totalQuestions = questionRepository.count(baseSpec);
+        // OPTIMIZED STATS PROJECTION: 3 counts in 1 query
+        jakarta.persistence.criteria.CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        jakarta.persistence.criteria.CriteriaQuery<Object[]> cq = cb.createQuery(Object[].class);
+        jakarta.persistence.criteria.Root<Question> root = cq.from(Question.class);
 
-        org.springframework.data.jpa.domain.Specification<Question> approvedSpec = baseSpec.and((root, query, cb) -> cb.equal(root.get("status"), Question.QuestionStatus.APPROVED));
-        totalApproved = questionRepository.count(approvedSpec);
+        cq.multiselect(
+            cb.count(root),
+            cb.sum(cb.<Integer>selectCase().when(cb.equal(root.get("status"), Question.QuestionStatus.APPROVED), 1).otherwise(0)),
+            cb.sum(cb.<Integer>selectCase().when(cb.equal(root.get("status"), Question.QuestionStatus.PENDING), 1).otherwise(0))
+        );
 
-        org.springframework.data.jpa.domain.Specification<Question> pendingSpec = baseSpec.and((root, query, cb) -> cb.equal(root.get("status"), Question.QuestionStatus.PENDING));
-        totalPending = questionRepository.count(pendingSpec);
+        jakarta.persistence.criteria.Predicate predicate = baseSpec.toPredicate(root, cq, cb);
+        if (predicate != null) {
+            cq.where(predicate);
+        }
+
+        Object[] statsResult = entityManager.createQuery(cq).getSingleResult();
+        totalQuestions = statsResult[0] != null ? ((Number) statsResult[0]).longValue() : 0;
+        totalApproved = statsResult[1] != null ? ((Number) statsResult[1]).longValue() : 0;
+        totalPending = statsResult[2] != null ? ((Number) statsResult[2]).longValue() : 0;
 
         if (filters != null && filters.get("subjectId") != null && !filters.get("subjectId").isEmpty()) {
             totalSubjects = 1;

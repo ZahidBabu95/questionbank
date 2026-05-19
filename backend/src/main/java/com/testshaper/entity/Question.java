@@ -10,7 +10,8 @@ import java.util.UUID;
 @Table(name = "questions", indexes = {
     @Index(name = "idx_q_tenant_status", columnList = "tenant_id, status"),
     @Index(name = "idx_q_academic", columnList = "class_subject_id, chapter_id, topic_id"),
-    @Index(name = "idx_q_type_diff", columnList = "type, difficulty")
+    @Index(name = "idx_q_type_diff", columnList = "type, difficulty"),
+    @Index(name = "idx_q_created_at", columnList = "created_at")
 })
 @Getter
 @Setter

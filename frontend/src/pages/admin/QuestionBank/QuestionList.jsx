@@ -41,7 +41,23 @@ const QuestionList = () => {
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const observerTarget = useRef(null);
-    const [filterStatus, setFilterStatus] = useState('ALL');
+    const getInitialStatus = (path) => {
+        if (path.includes('/drafts')) return 'DRAFT';
+        if (path.includes('/pending')) return 'PENDING';
+        if (path.includes('/rejected')) return 'REJECTED';
+        if (path.includes('/approved')) return 'APPROVED';
+        if (path.includes('/revised')) return 'REVISED';
+        return 'ALL';
+    };
+
+    const getInitialViewMode = (path) => {
+        if (path.includes('/favorites')) return 'FAVORITES';
+        if (path.includes('/revised')) return 'REVISED';
+        return 'ALL';
+    };
+
+    const [filterStatus, setFilterStatus] = useState(() => getInitialStatus(location.pathname));
+    const [viewMode, setViewMode] = useState(() => getInitialViewMode(location.pathname));
     const [filterType, setFilterType] = useState('ALL');
     const [filterLanguage, setFilterLanguage] = useState(() => {
         if (user?.instituteMedium && user.instituteMedium.includes(',')) return 'ALL';
@@ -54,7 +70,6 @@ const QuestionList = () => {
     const [itemsPerPage, setItemsPerPage] = useState(50);
     const [totalElements, setTotalElements] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
-    const [viewMode, setViewMode] = useState('ALL');
     const [splitScreenMode, setSplitScreenMode] = useState(false);
     const [savedIds, setSavedIds] = useState(() => {
         try { return JSON.parse(localStorage.getItem('savedQuestionIds') || '[]'); } catch { return []; }
@@ -215,15 +230,10 @@ const QuestionList = () => {
         fetchSourceTags();
     }, [getHierarchyParams]);
 
+    // Run fetchInitialFilters once on mount
     useEffect(() => {
-        if (location.pathname.includes('/approved')) setFilterStatus('APPROVED');
-        else if (location.pathname.includes('/pending')) setFilterStatus('PENDING');
-        else if (location.pathname.includes('/rejected')) setFilterStatus('REJECTED');
-        else if (location.pathname.includes('/drafts')) setFilterStatus('DRAFT');
-        else setFilterStatus('ALL');
-
         fetchInitialFilters();
-    }, [location.pathname]);
+    }, []);
 
     useEffect(() => {
         const viewId = searchParams.get('view');

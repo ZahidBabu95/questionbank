@@ -62,7 +62,7 @@ public class QuestionSpecification {
             predicates.add(cb.equal(root.get("deleted"), false));
 
             // Optional FETCH to avoid N+1 for academic hierarchy details normally needed in lists
-            if (Long.class != query.getResultType() && Object[].class != query.getResultType()) { // don't fetch on count or aggregation query
+            if (Long.class != query.getResultType() && Object[].class != query.getResultType() && java.util.UUID.class != query.getResultType()) { // don't fetch on count, aggregation, or ID projection query
                 jakarta.persistence.criteria.Fetch<Object, Object> csFetch = root.fetch("classSubject", JoinType.LEFT);
                 csFetch.fetch("subject", JoinType.LEFT);
                 
