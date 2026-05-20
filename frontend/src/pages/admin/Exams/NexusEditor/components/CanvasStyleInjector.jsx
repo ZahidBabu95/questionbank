@@ -109,8 +109,23 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                                 (sec.optionGap !== undefined && sec.optionGap !== '' ? sec.optionGap : 8);
                 const cQuestionGap = sec.smartGap ? (mg === 1 ? 8 : mg === 2 ? 12 : mg === 3 ? 16 : mg === 4 ? 20 : 26) : 
                                 (sec.questionGap !== undefined && sec.questionGap !== '' ? sec.questionGap : (s.questionGap || 15));
+                const needsReset = sec.continuousNumbering === false;
+                const resetVal = (Number(sec.numberingStart) || 1) - 1;
+
                 return `
-                ${sec.showName === false ? `[data-section-id="${sec.id}"].section-name { display: none !important; }` : `
+                ${sec.showName === false ? `
+                    [data-section-id="${sec.id}"].section-name {
+                        display: block !important;
+                        visibility: hidden !important;
+                        height: 0 !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        border: none !important;
+                        background: none !important;
+                        column-span: all;
+                        ${needsReset ? `counter-reset: question-counter ${resetVal} !important;` : ''}
+                    }
+                ` : `
                     [data-section-id="${sec.id}"].section-name {
                         font-weight: ${sec.nameBold !== false ? 'bold' : 'normal'} !important;
                         font-style: ${sec.nameItalic ? 'italic' : 'normal'};
@@ -138,11 +153,30 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                         break-after: avoid;
                         page-break-after: avoid;
                         column-break-after: avoid;
+                        ${needsReset ? `counter-reset: question-counter ${resetVal} !important;` : ''}
                     }
                     [data-section-id="${sec.id}"].section-name * {
                         ${sec.nameBg === true || (sec.nameBg !== false && s.sectionStyle === 'কালো ব্যাকগ্রাউন্ড') ? `color: #ffffff !important;` : ''}
                     }
                 `}
+                
+                /* Reset counter on first question of section if continuousNumbering is false */
+                ${needsReset ? `
+                [data-section-id="${sec.id}"][data-type="question-block"][data-first-in-section="true"] {
+                    counter-reset: question-counter ${resetVal} !important;
+                }
+                ` : ''}
+                
+                ${sec.fontFamily ? `
+                    [data-section-id="${sec.id}"],
+                    [data-section-id="${sec.id}"] * {
+                        font-family: '${sec.fontFamily}', sans-serif !important;
+                    }
+                    [data-section-id="${sec.id}"].section-name ~ [data-type="question-block"],
+                    [data-section-id="${sec.id}"].section-name ~ [data-type="question-block"] * {
+                        font-family: '${sec.fontFamily}', sans-serif !important;
+                    }
+                ` : ''}
                 ${sec.showConditions === false ? `[data-section-id="${sec.id}"].section-conditions { display: none !important; }` : `
                     [data-section-id="${sec.id}"].section-conditions {
                         font-weight: ${sec.condBold ? 'bold' : 'normal'};
@@ -181,11 +215,23 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                     }
                 `}
                 
-                /* Apply column-span to simple headers instead to avoid Chrome crashes */
-                [data-section-id="${sec.id}"] {
-                    column-span: all;
+                /* Ensure Headers, Instructions, and Conditions Span All Columns */
+                [data-section-id="${sec.id}"].section-name,
+                [data-section-id="${sec.id}"].section-conditions,
+                [data-section-id="${sec.id}"].section-instructions {
+                    column-span: all !important;
+                    -webkit-column-span: all !important;
+                    display: block !important;
                     line-height: ${Math.max(1.0, Number(cLineGap))} !important;
                 }
+                
+                /* 1-Column Section Question Blocks Spanning All Columns */
+                ${(!sec.columns || sec.columns === 1) ? `
+                [data-section-id="${sec.id}"][data-type="question-block"] {
+                    column-span: all !important;
+                    -webkit-column-span: all !important;
+                }
+                ` : ''}
                 
                 /* Hide Empty Nodes */
                 [data-section-id="${sec.id}"].section-conditions:empty,
@@ -193,11 +239,6 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                     display: none !important;
                     margin: 0 !important;
                     padding: 0 !important;
-                }
-                
-                /* Ensure Headers Span All Columns */
-                [data-section-id="${sec.id}"] {
-                    column-span: all;
                 }
             `;}).join('\n')}
 
@@ -234,11 +275,12 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 margin-bottom: 0 !important;
             }
 
-            [data-type="question-block"][data-numberingstyle="bn"]::before,
-            [data-type="question-block"]:not([data-numberingstyle])::before {
+            [data-type="question-block"][data-numberingstyle="bn"]::before${s.language !== 'ENGLISH' ? `,
+            [data-type="question-block"]:not([data-numberingstyle])::before` : ''} {
                 content: counter(question-counter, bengali) ".";
             }
-            [data-type="question-block"][data-numberingstyle="en"]::before {
+            [data-type="question-block"][data-numberingstyle="en"]::before${s.language === 'ENGLISH' ? `,
+            [data-type="question-block"]:not([data-numberingstyle])::before` : ''} {
                 content: counter(question-counter, decimal) ".";
             }
             [data-type="question-block"][data-numberingstyle="roman"]::before {

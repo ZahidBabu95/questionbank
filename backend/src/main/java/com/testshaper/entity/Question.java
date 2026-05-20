@@ -149,7 +149,26 @@ public class Question extends BaseTenantEntity {
     private String chapterName;
 
     public enum QuestionType {
-        MCQ, CQ, SHORT, TRUE_FALSE
+        MCQ, CQ, SHORT, TRUE_FALSE;
+
+        @com.fasterxml.jackson.annotation.JsonCreator
+        public static QuestionType fromString(String value) {
+            if (value == null || value.trim().isEmpty()) return null;
+            String normalized = value.trim().toUpperCase().replace(" ", "_").replace("-", "_");
+            if (normalized.equals("SHORT_QUESTION") || normalized.equals("SHORT_ANSWER") || normalized.equals("SHORT")) {
+                return SHORT;
+            }
+            if (normalized.equals("MULTIPLE_CHOICE") || normalized.equals("MCQ")) {
+                return MCQ;
+            }
+            if (normalized.equals("CREATIVE") || normalized.equals("CQ")) {
+                return CQ;
+            }
+            if (normalized.equals("TRUE_FALSE")) {
+                return TRUE_FALSE;
+            }
+            return QuestionType.valueOf(normalized);
+        }
     }
 
     public enum DifficultyLevel {

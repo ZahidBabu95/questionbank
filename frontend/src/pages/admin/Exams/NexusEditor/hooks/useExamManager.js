@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import examService from '../../../../../services/examService';
 import questionService from '../../../../../services/questionService';
+import settingsService from '../../../../../services/settingsService';
 import axios from '../../../../../utils/axios';
 import { useNexusEditor } from '../context/NexusEditorContext';
 import { DEFAULT_SETTINGS } from '../components/DocumentSettings';
@@ -21,6 +22,36 @@ export const useExamManager = () => {
     const [templates, setTemplates] = useState([]);
     const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+    const [savedSubjectsList, setSavedSubjectsList] = useState([]);
+
+    const fetchSavedSubjects = async () => {
+        try {
+            let settings;
+            const userData = localStorage.getItem('user');
+            let isSuper = false;
+            if (userData) {
+                try {
+                    const user = JSON.parse(userData);
+                    isSuper = user.roles && (user.roles.includes('SUPER_ADMIN') || user.roles.includes('ROLE_SUPER_ADMIN'));
+                } catch (e) {}
+            }
+            if (isSuper) {
+                settings = await settingsService.getGlobalSettings('EXAM');
+            } else {
+                settings = await settingsService.getInstituteSettings('EXAM');
+            }
+            const list = Object.keys(settings || {})
+                .filter(k => k.startsWith('subject_default_'))
+                .map(k => k.replace('subject_default_', ''));
+            setSavedSubjectsList(list);
+        } catch (err) {
+            console.warn("Failed to load saved subjects list:", err);
+        }
+    };
+
+    useEffect(() => {
+        fetchSavedSubjects();
+    }, []);
 
     // Fetch existing exam
     useEffect(() => {
@@ -32,6 +63,18 @@ export const useExamManager = () => {
                     setExamData(res.data);
                     if (res.data.editorMode) {
                         setEditorMode(res.data.editorMode);
+                    }
+
+                    // Fetch Subject specific default setup from settings if exam has no settings of its own
+                    let subjectDefaultSettings = null;
+                    if (!res.data.docSettingsJson && res.data.subjectName) {
+                        try {
+                            const examSettings = await settingsService.getInstituteSettings('EXAM');
+                            const subKey = 'subject_default_' + res.data.subjectName.trim().toLowerCase();
+                            if (examSettings && examSettings[subKey]) {
+                                subjectDefaultSettings = JSON.parse(examSettings[subKey]);
+                            }
+                        } catch (schemaErr) { console.error("Failed to load subject default settings:", schemaErr); }
                     }
                     
                     let finalHtml = res.data.rawContent || '';
@@ -56,6 +99,7 @@ export const useExamManager = () => {
                             return `
                                 <div data-type="question-block" 
                                      questionid="${q.originalQuestionId || q.id}"
+                                     data-section-id="${q.sectionId || sec?.id || ''}"
                                      type="${q.type || 'MCQ'}" 
                                      questiontext="${qText}" 
                                      stimulus="${stimulusText}"
@@ -145,17 +189,19 @@ export const useExamManager = () => {
                                 setDocSettings(parsedSettings);
                             } catch (e) { console.error("Failed to parse docSettingsJson", e); }
                         } else {
+                            const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
                             setDocSettings(prev => ({
                                 ...prev,
-                                institute: res.data.instituteName || prev.institute,
-                                subject: res.data.subjectName || prev.subject,
-                                className: res.data.className || prev.className,
-                                exam: res.data.title || prev.exam,
-                                time: res.data.durationMinutes ? `${res.data.durationMinutes} ${res.data.language === 'ENGLISH' ? 'Minutes' : 'মিনিট'}` : prev.time,
-                                totalMarks: res.data.totalMarks || prev.totalMarks,
+                                ...baseSettings,
+                                institute: res.data.instituteName || baseSettings.institute || prev.institute,
+                                subject: res.data.subjectName || baseSettings.subject || prev.subject,
+                                className: res.data.className || baseSettings.className || prev.className,
+                                exam: res.data.title || baseSettings.exam || prev.exam,
+                                time: res.data.durationMinutes ? `${res.data.durationMinutes} ${res.data.language === 'ENGLISH' ? 'Minutes' : 'মিনিট'}` : (baseSettings.time || prev.time),
+                                totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                 year: new Date().getFullYear().toString(),
-                                language: res.data.language || 'BENGALI',
-                                sections: dynamicSections.length > 0 ? dynamicSections : prev.sections
+                                language: res.data.language || baseSettings.language || 'BENGALI',
+                                sections: dynamicSections.length > 0 ? dynamicSections : (baseSettings.sections || prev.sections)
                             }));
                         }
                     } else {
@@ -192,16 +238,19 @@ export const useExamManager = () => {
                             try { setDocSettings(JSON.parse(res.data.docSettingsJson)); } 
                             catch (e) { console.error("Failed to parse docSettingsJson", e); }
                         } else {
+                            const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
                             setDocSettings(prev => ({
                                 ...prev,
-                                institute: res.data.instituteName || prev.institute,
-                                subject: res.data.subjectName || prev.subject,
-                                className: res.data.className || prev.className,
-                                exam: res.data.title || prev.exam,
-                                time: res.data.durationMinutes ? `${res.data.durationMinutes} ${res.data.language === 'ENGLISH' ? 'Minutes' : 'মিনিট'}` : prev.time,
-                                totalMarks: res.data.totalMarks || prev.totalMarks,
+                                ...baseSettings,
+                                institute: res.data.instituteName || baseSettings.institute || prev.institute,
+                                subject: res.data.subjectName || baseSettings.subject || prev.subject,
+                                className: res.data.className || baseSettings.className || prev.className,
+                                exam: res.data.title || baseSettings.exam || prev.exam,
+                                time: res.data.durationMinutes ? `${res.data.durationMinutes} ${res.data.language === 'ENGLISH' ? 'Minutes' : 'মিনিট'}` : (baseSettings.time || prev.time),
+                                totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                 year: new Date().getFullYear().toString(),
-                                language: res.data.language || 'BENGALI'
+                                language: res.data.language || baseSettings.language || 'BENGALI',
+                                sections: baseSettings.sections || prev.sections
                             }));
                         }
                     }
@@ -359,8 +408,146 @@ export const useExamManager = () => {
         }
     };
 
+    const saveSubjectDefaults = async (subjectName, currentSettings) => {
+        if (!subjectName || subjectName.trim() === '') {
+            alert(uiLang === 'bn' ? "দয়া করে প্রথমে বিষয় নির্বাচন করুন।" : "Please set a subject name first.");
+            return;
+        }
+        const confirmSave = window.confirm(uiLang === 'bn' 
+            ? `আপনি কি বর্তমান লেআউটটি '${subjectName}' এর ডিফল্ট লেআউট হিসেবে সেট করতে চান?` 
+            : `Are you sure you want to save current layout as default for '${subjectName}'?`);
+        if (!confirmSave) return;
+
+        try {
+            const subKey = 'subject_default_' + subjectName.trim().toLowerCase();
+            const userData = localStorage.getItem('user');
+            let isSuper = false;
+            if (userData) {
+                try {
+                    const user = JSON.parse(userData);
+                    isSuper = user.roles && (user.roles.includes('SUPER_ADMIN') || user.roles.includes('ROLE_SUPER_ADMIN'));
+                } catch (e) {}
+            }
+
+            let examSettings = {};
+            try {
+                if (isSuper) {
+                    examSettings = await settingsService.getGlobalSettings('EXAM');
+                } else {
+                    examSettings = await settingsService.getInstituteSettings('EXAM');
+                }
+            } catch (err) {
+                console.warn("Failed to get current settings, initializing empty map", err);
+            }
+            examSettings[subKey] = JSON.stringify(currentSettings);
+            
+            if (isSuper) {
+                await settingsService.updateGlobalSettings('EXAM', examSettings);
+            } else {
+                await settingsService.updateInstituteSettings('EXAM', examSettings);
+            }
+            alert(uiLang === 'bn' ? "ডিফল্ট লেআউট সফলভাবে সংরক্ষিত হয়েছে!" : "Default layout saved successfully!");
+            fetchSavedSubjects();
+        } catch (err) {
+            console.error("Failed to save subject default settings:", err);
+            alert(uiLang === 'bn' ? "ডিফল্ট লেআউট সেভ করতে সমস্যা হয়েছে।" : "Error saving subject default layout.");
+        }
+    };
+
+    const loadSubjectDefaults = async (subjectName) => {
+        if (!subjectName || subjectName.trim() === '') return;
+        try {
+            const subKey = 'subject_default_' + subjectName.trim().toLowerCase();
+            let subjectDefaultSettings = null;
+            
+            // Try loading from institute settings first
+            try {
+                const examSettings = await settingsService.getInstituteSettings('EXAM');
+                if (examSettings && examSettings[subKey]) {
+                    subjectDefaultSettings = JSON.parse(examSettings[subKey]);
+                }
+            } catch (e) {
+                console.warn("Failed to get institute settings, checking global...", e);
+            }
+
+            // Fallback to global settings
+            if (!subjectDefaultSettings) {
+                try {
+                    const globalSettings = await settingsService.getGlobalSettings('EXAM');
+                    if (globalSettings && globalSettings[subKey]) {
+                        subjectDefaultSettings = JSON.parse(globalSettings[subKey]);
+                    }
+                } catch (e) {
+                    console.warn("Failed to get global settings", e);
+                }
+            }
+
+            if (subjectDefaultSettings) {
+                setDocSettings(prev => ({
+                    ...prev,
+                    ...subjectDefaultSettings,
+                    institute: docSettings.institute || prev.institute,
+                    subject: docSettings.subject || prev.subject,
+                    className: docSettings.className || prev.className,
+                    exam: docSettings.exam || prev.exam,
+                    time: docSettings.time || prev.time,
+                    totalMarks: docSettings.totalMarks || prev.totalMarks,
+                    year: docSettings.year || prev.year,
+                    language: docSettings.language || prev.language
+                }));
+                alert(uiLang === 'bn' ? "ডিফল্ট লেআউট লোড করা হয়েছে!" : "Default layout loaded successfully!");
+            } else {
+                alert(uiLang === 'bn' ? `'${subjectName}' এর জন্য কোনো ডিফল্ট লেআউট পাওয়া যায়নি।` : `No default layout found for '${subjectName}'.`);
+            }
+        } catch (err) {
+            console.error("Failed to load subject default layout:", err);
+            alert(uiLang === 'bn' ? "ডিফল্ট লেআউট লোড করতে সমস্যা হয়েছে।" : "Error loading subject default layout.");
+        }
+    };
+
+    const deleteSubjectDefault = async (subjectName) => {
+        const confirmDelete = window.confirm(uiLang === 'bn' 
+            ? `'${subjectName}' এর ডিফল্ট লেআউট কি মুছে ফেলতে চান?` 
+            : `Are you sure you want to delete default layout for '${subjectName}'?`);
+        if (!confirmDelete) return;
+
+        try {
+            const subKey = 'subject_default_' + subjectName.trim().toLowerCase();
+            const userData = localStorage.getItem('user');
+            let isSuper = false;
+            if (userData) {
+                try {
+                    const user = JSON.parse(userData);
+                    isSuper = user.roles && (user.roles.includes('SUPER_ADMIN') || user.roles.includes('ROLE_SUPER_ADMIN'));
+                } catch (e) {}
+            }
+
+            let examSettings = {};
+            if (isSuper) {
+                examSettings = await settingsService.getGlobalSettings('EXAM');
+            } else {
+                examSettings = await settingsService.getInstituteSettings('EXAM');
+            }
+
+            if (examSettings && examSettings[subKey]) {
+                delete examSettings[subKey];
+                if (isSuper) {
+                    await settingsService.updateGlobalSettings('EXAM', examSettings);
+                } else {
+                    await settingsService.updateInstituteSettings('EXAM', examSettings);
+                }
+                alert(uiLang === 'bn' ? "ডিফল্ট লেআউট মুছে ফেলা হয়েছে!" : "Default layout deleted successfully!");
+                fetchSavedSubjects();
+            }
+        } catch (err) {
+            console.error("Failed to delete subject default settings:", err);
+            alert(uiLang === 'bn' ? "ডিফল্ট লেআউট মুছতে সমস্যা হয়েছে।" : "Error deleting subject default layout.");
+        }
+    };
+
     return {
         templates, loadingTemplates, isSavingTemplate,
+        savedSubjectsList, fetchSavedSubjects, saveSubjectDefaults, loadSubjectDefaults, deleteSubjectDefault,
         applyTemplate, handleSaveTemplate,
         handleSaveDocument, handleSaveAs
     };

@@ -936,7 +936,8 @@ const GeneralSettings = () => {
                         </div>
                     </div>
                 );
-            case 'EXAM':
+            case 'EXAM': {
+                const subjectDefaults = Object.keys(settings).filter(key => key.startsWith('subject_default_'));
                 return (
                     <div className="space-y-5 max-w-2xl">
                         {renderInput('default_exam_duration', 'Default Duration (minutes)', 'number', '60')}
@@ -950,8 +951,56 @@ const GeneralSettings = () => {
                             { value: 'CQ', label: 'Creative Questions' },
                             { value: 'MIXED', label: 'Mixed (MCQ + CQ)' },
                         ])}
+
+                        {/* Subject Specific Layout Defaults List */}
+                        <div className="pt-5 border-t border-slate-100">
+                            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-3">
+                                <FileText size={15} className="text-indigo-500" />
+                                Subject Default Layouts
+                            </h3>
+                            <p className="text-xs text-slate-400 mb-4">
+                                Below are the custom default layouts saved for specific subjects. Deleting them will revert the subject back to the system layout default.
+                            </p>
+                            
+                            {subjectDefaults.length === 0 ? (
+                                <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                    <p className="text-xs font-medium text-slate-400">No subject default layouts saved yet</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {subjectDefaults.map(key => {
+                                        const subjectName = key.replace('subject_default_', '');
+                                        return (
+                                            <div key={key} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-bold text-slate-700 capitalize">{subjectName}</span>
+                                                    <span className="text-[10px] text-slate-400 font-mono mt-0.5">Key: {key}</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (window.confirm(`Are you sure you want to delete the default layout for "${subjectName}"?`)) {
+                                                            setSettings(prev => {
+                                                                const updated = { ...prev };
+                                                                delete updated[key];
+                                                                return updated;
+                                                            });
+                                                        }
+                                                    }}
+                                                    className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-500 transition-colors"
+                                                    title="Delete subject default"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 );
+            }
             case 'STORAGE':
                 return (
                     <div className="space-y-5 max-w-2xl">

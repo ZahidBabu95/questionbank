@@ -221,7 +221,9 @@ const stripOptionPrefix = (html) => {
         return (
                         <NodeViewWrapper 
                 data-type="question-block" 
+                data-section-id={node.attrs.sectionId}
                 data-numberingstyle={node.attrs.numberingStyle || 'bn'}
+                data-first-in-section={node.attrs.firstInSection ? 'true' : undefined}
                 className={`relative group mb-0 transition-all duration-200 rounded-xl ${isStrict ? 'cursor-pointer hover:bg-slate-50' : 'cursor-text'} print:bg-transparent print:scale-100 print:shadow-none print:ring-0`}
                 style={{ 
                     fontSize: fSize ? `${fSize}px` : 'inherit',
@@ -432,8 +434,7 @@ export const QuestionBlockNode = Node.create({
     addAttributes() {
         return {
             questionId: { default: null },
-            subjectId: { default: null },
-            chapterId: { default: null },
+            sectionId: { default: null },
             type: { default: 'MCQ' },
             questionText: { default: '' },
             stimulus: { default: '' },
@@ -455,7 +456,8 @@ export const QuestionBlockNode = Node.create({
             questionGap: { default: null },
             textAlign: { default: 'left' },
             smartFit: { default: true },
-            pageCols: { default: 1 }
+            pageCols: { default: 1 },
+            firstInSection: { default: false }
         };
     },
 
@@ -479,6 +481,7 @@ export const QuestionBlockNode = Node.create({
                 }
                 return {
                     questionId: dom.getAttribute('questionid') || null,
+                    sectionId: dom.getAttribute('data-section-id') || null,
                     type: dom.getAttribute('type') || 'MCQ',
                     questionText: dom.getAttribute('questiontext') || '',
                     stimulus: dom.getAttribute('stimulus') || '',
@@ -500,6 +503,7 @@ export const QuestionBlockNode = Node.create({
                     textAlign: dom.getAttribute('textalign') || 'left',
                     smartFit: dom.getAttribute('smartfit') !== 'false',
                     pageCols: Number(dom.getAttribute('pagecols')) || 1,
+                    firstInSection: dom.getAttribute('data-first-in-section') === 'true',
                     options
                 };
             }
@@ -513,6 +517,7 @@ export const QuestionBlockNode = Node.create({
             'data-options': JSON.stringify(options || []),
             'data-statements': JSON.stringify(statements || []),
             'questionid': HTMLAttributes.questionId || null,
+            'data-section-id': HTMLAttributes.sectionId || null,
             'stimulus': HTMLAttributes.stimulus || '',
             'explanation': HTMLAttributes.explanation || '',
             'answer': HTMLAttributes.answer || '',
@@ -523,7 +528,8 @@ export const QuestionBlockNode = Node.create({
             'questiongap': HTMLAttributes.questionGap || null,
             'textalign': HTMLAttributes.textAlign || 'left',
             'smartfit': HTMLAttributes.smartFit !== false ? 'true' : 'false',
-            'pagecols': HTMLAttributes.pageCols || 1
+            'pagecols': HTMLAttributes.pageCols || 1,
+            'data-first-in-section': HTMLAttributes.firstInSection ? 'true' : null
         })];
     },
 

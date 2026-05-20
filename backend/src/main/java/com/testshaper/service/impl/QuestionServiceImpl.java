@@ -609,7 +609,7 @@ public class QuestionServiceImpl implements QuestionService {
         Question savedQuestion = questionRepository.save(question);
 
         // Update Options if it's MCQ and options are provided
-        if (question.getType() == Question.QuestionType.MCQ && options != null) {
+        if (Question.QuestionType.MCQ.name().equals(question.getType()) && options != null) {
             // Validate new options
             if (options.size() < 2) {
                 throw new IllegalArgumentException("MCQ must have at least 2 options.");
@@ -787,7 +787,7 @@ public class QuestionServiceImpl implements QuestionService {
         original.setStatus(Question.QuestionStatus.APPROVED); // Ensure original stays APPROVED after merge
 
         // 2. Erase old options, copy new ones
-        if (revision.getType() == Question.QuestionType.MCQ) {
+        if (Question.QuestionType.MCQ.name().equals(revision.getType())) {
             List<QuestionOption> oldOptions = optionRepository.findByQuestionIdOrderByOptionLabelAsc(original.getId());
             optionRepository.deleteAll(oldOptions);
 

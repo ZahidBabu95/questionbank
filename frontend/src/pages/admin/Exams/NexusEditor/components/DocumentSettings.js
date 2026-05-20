@@ -59,7 +59,10 @@ export const DEFAULT_SETTINGS = {
       numberingStyle: "bn",
       optionDecoration: "dot",
       nameGap: 0,
-      nameTopGap: -18
+      nameTopGap: -18,
+      continuousNumbering: true,
+      numberingStart: 1,
+      fontFamily: ""
     },
     {
       id: "sec-2",
@@ -69,7 +72,10 @@ export const DEFAULT_SETTINGS = {
       numberingStyle: "bn",
       marksConfig: "hide",
       optionLayout: "col1",
-      isMCQ: false
+      isMCQ: false,
+      continuousNumbering: true,
+      numberingStart: 1,
+      fontFamily: ""
     }
   ]
 };

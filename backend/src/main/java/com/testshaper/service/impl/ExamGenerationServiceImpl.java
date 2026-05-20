@@ -271,18 +271,19 @@ public class ExamGenerationServiceImpl {
                 : excludedIds;
 
         Set<UUID> eligibleIdsSet = new HashSet<>();
+        String typeStr = type != null ? type.name() : null;
 
         if (chapterIds == null && topicIds == null) {
             eligibleIdsSet.addAll(questionPoolRepository.findEligibleQuestionIds(
-                    tenantId, globalTenantId, classSubjectId, type, difficulty, language, null, safeExclusions));
+                    tenantId, globalTenantId, classSubjectId, typeStr, difficulty, language, null, safeExclusions));
         } else {
             if (chapterIds != null && !chapterIds.isEmpty()) {
                 eligibleIdsSet.addAll(questionPoolRepository.findEligibleQuestionIds(
-                        tenantId, globalTenantId, classSubjectId, type, difficulty, language, chapterIds, safeExclusions));
+                        tenantId, globalTenantId, classSubjectId, typeStr, difficulty, language, chapterIds, safeExclusions));
             }
             if (topicIds != null && !topicIds.isEmpty()) {
                 eligibleIdsSet.addAll(questionPoolRepository.findEligibleQuestionIdsByTopic(
-                        tenantId, globalTenantId, classSubjectId, type, difficulty, language, topicIds, safeExclusions));
+                        tenantId, globalTenantId, classSubjectId, typeStr, difficulty, language, topicIds, safeExclusions));
             }
         }
 
@@ -541,6 +542,9 @@ public class ExamGenerationServiceImpl {
             qDto.setId(eq.getId());
             qDto.setOrder(eq.getQuestionOrder());
             qDto.setMarks(eq.getMarks());
+            if (eq.getSection() != null) {
+                qDto.setSectionId(eq.getSection().getId());
+            }
             Question q = eq.getQuestion();
             qDto.setOriginalQuestionId(q.getId());
 

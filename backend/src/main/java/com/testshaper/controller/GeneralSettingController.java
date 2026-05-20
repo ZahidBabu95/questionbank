@@ -80,11 +80,21 @@ public class GeneralSettingController {
     }
 
     @PutMapping("/institute/{category}")
-    @PreAuthorize("hasAnyRole('INSTITUTE_ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('INSTITUTE_ADMIN', 'SUPER_ADMIN', 'TEACHER')")
     public ResponseEntity<Map<String, Object>> updateInstituteSettings(
             @PathVariable GeneralSetting.SettingCategory category,
             @RequestBody Map<String, String> settings,
             Authentication authentication) {
+
+        boolean isTeacherOnly = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_TEACHER")) &&
+                authentication.getAuthorities().stream()
+                .noneMatch(a -> a.getAuthority().equals("ROLE_INSTITUTE_ADMIN") || a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+
+        if (isTeacherOnly && category != GeneralSetting.SettingCategory.EXAM) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                    .body(Map.of("success", false, "message", "Teachers are only allowed to update Exam configurations"));
+        }
 
         User user = getUser(authentication);
         String tenantId = getTenantId(user);

@@ -241,12 +241,9 @@ public class ManualExamServiceImpl {
     public Page<ExamDTO.ExamQuestionDTO> searchQuestions(QuestionSearchParams params) {
         String tenantId = TenantContext.getTenantId();
 
-        Question.QuestionType type = null;
+        String type = null;
         if (params.getType() != null && !params.getType().isBlank()) {
-            try {
-                type = Question.QuestionType.valueOf(params.getType());
-            } catch (Exception ignored) {
-            }
+            type = params.getType().trim().toUpperCase();
         }
         Question.DifficultyLevel difficulty = null;
         if (params.getDifficulty() != null && !params.getDifficulty().isBlank()) {
@@ -376,6 +373,9 @@ public class ManualExamServiceImpl {
                     qDto.setId(eq.getId());
                     qDto.setOrder(eq.getQuestionOrder());
                     qDto.setMarks(eq.getMarks());
+                    if (eq.getSection() != null) {
+                        qDto.setSectionId(eq.getSection().getId());
+                    }
                     Question q = eq.getQuestion();
                     qDto.setOriginalQuestionId(q.getId());
                     qDto.setQuestionText(q.getQuestionText());

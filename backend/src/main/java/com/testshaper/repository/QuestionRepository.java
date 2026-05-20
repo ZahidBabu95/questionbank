@@ -70,7 +70,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                         @Param("classSubjectId") UUID classSubjectId,
                         @Param("chapterId") UUID chapterId,
                         @Param("topicId") UUID topicId,
-                        @Param("type") Question.QuestionType type,
+                        @Param("type") String type,
                         @Param("difficulty") Question.DifficultyLevel difficulty,
                         @Param("language") String language,
                         @Param("keyword") String keyword,

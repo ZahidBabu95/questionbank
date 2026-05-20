@@ -2,11 +2,13 @@ import React from 'react';
 import { SUBJECTS, CLASSES, EXAMS, GROUPS, BOARDS, BN_FONTS, EN_FONTS, PAGE_SIZES, HEADER_STYLES, SECTION_STYLES, WATERMARK_OPT } from './DocumentSettings';
 import { Toggle, FL, G2, Num, Sel, Inp, Slide, ST, Seg, FieldDisplay, NumDisplay, CollapsibleBox, TypographyToolbar } from './SettingsComponents';
 import { UI_TEXT } from './translations';
-import { Lock, Unlock, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react';
+import { Lock, Unlock, AlignLeft, AlignCenter, AlignRight, AlignJustify, Trash2, ArrowUp, ArrowDown, FileText, Settings, ChevronDown, ChevronRight } from 'lucide-react';
 
 export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
     const t = UI_TEXT[uiLang];
     const [isEditMode, setIsEditMode] = React.useState(true);
+    const [sectionTabs, setSectionTabs] = React.useState({});
+    const [collapsedSections, setCollapsedSections] = React.useState({});
 
     return (
         <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-white">
@@ -15,7 +17,19 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                     <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.sections || 'Sections'}</span>
                     <button 
                         onClick={() => {
-                            const newSec = { id: 'sec-'+Date.now(), name: "নতুন বিভাগ", instructions: "", conditions: "", numberingStyle: "bn", marksConfig: "hide", optionLayout: "col1", isMCQ: false };
+                            const newSec = { 
+                                id: 'sec-'+Date.now(), 
+                                name: "নতুন বিভাগ", 
+                                instructions: "", 
+                                conditions: "", 
+                                numberingStyle: "bn", 
+                                marksConfig: "hide", 
+                                optionLayout: "col1", 
+                                isMCQ: false,
+                                continuousNumbering: true,
+                                numberingStart: 1,
+                                fontFamily: ""
+                            };
                             u("sections", [...(s.sections || []), newSec]);
                         }}
                         className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-md text-[11px] font-bold hover:bg-indigo-100 transition-colors"
@@ -25,272 +39,461 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                 </div>
 
                 <div className="space-y-4">
-                    {(s.sections || []).map((sec, idx) => (
-                        <div key={sec.id} className="bg-slate-50 rounded-xl border border-slate-200 p-3 shadow-sm relative group">
-                            <button 
-                                onClick={() => {
-                                    if(window.confirm('Are you sure?')) {
-                                        const ns = [...s.sections]; ns.splice(idx,1); u("sections", ns);
-                                    }
-                                }}
-                                className="absolute top-2 right-2 text-rose-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                                ×
-                            </button>
-                            
-                            <div className="space-y-3 mt-1">
-                                {/* Text Content Collapsibles */}
-                                <CollapsibleBox 
-                                    title={t.sectionName || 'Section Name'} 
-                                    defaultOpen={true}
-                                    toggleKey="showName"
-                                    toggleVal={sec.showName !== false}
-                                    onToggle={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }}
-                                >
-                                    <Inp 
-                                        value={sec.name} 
-                                        disabled={sec.showName === false}
-                                        onChange={v => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], name: v }; u("sections", ns); }} 
-                                    />
-                                    {sec.showName !== false && (
-                                        <TypographyToolbar 
-                                            state={{
-                                                ...sec,
-                                                nameBg: sec.nameBg !== undefined ? sec.nameBg : s.sectionStyle === 'কালো ব্যাকগ্রাউন্ড',
-                                                nameDivider: sec.nameDivider !== undefined ? sec.nameDivider : ['বর্ডার বক্স', 'আন্ডারলাইন', 'ডটেড লাইন'].includes(s.sectionStyle)
-                                            }} 
-                                            prefix="name" 
-                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }} 
-                                        />
-                                    )}
-                                </CollapsibleBox>
-                                
-                                <CollapsibleBox 
-                                    title={t.conditions || 'Conditions'} 
-                                    defaultOpen={false}
-                                    toggleKey="showConditions"
-                                    toggleVal={sec.showConditions !== false}
-                                    onToggle={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }}
-                                >
-                                    <Inp 
-                                        value={sec.conditions || ''} 
-                                        disabled={sec.showConditions === false}
-                                        onChange={v => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], conditions: v }; u("sections", ns); }} 
-                                    />
-                                    {sec.showConditions !== false && (
-                                        <TypographyToolbar 
-                                            state={sec} 
-                                            prefix="cond" 
-                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }} 
-                                        />
-                                    )}
-                                </CollapsibleBox>
-                                
-                                <CollapsibleBox 
-                                    title={t.instructions || 'Instructions'} 
-                                    defaultOpen={false}
-                                    toggleKey="showInstructions"
-                                    toggleVal={sec.showInstructions !== false}
-                                    onToggle={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }}
-                                >
-                                    <textarea 
-                                        className="w-full text-[13px] p-2 border border-slate-200 rounded-md outline-none focus:border-indigo-400 min-h-[50px] resize-y disabled:opacity-50"
-                                        value={sec.instructions || ''}
-                                        disabled={sec.showInstructions === false}
-                                        onChange={e => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], instructions: e.target.value }; u("sections", ns); }}
-                                    />
-                                    {sec.showInstructions !== false && (
-                                        <TypographyToolbar 
-                                            state={sec} 
-                                            prefix="inst" 
-                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }} 
-                                        />
-                                    )}
-                                </CollapsibleBox>
-                                
-                                {/* Section Layout & Style */}
-                                <CollapsibleBox 
-                                    title={uiLang === 'bn' ? 'লেআউট এবং স্টাইল (Layout & Style)' : 'Layout & Styling'} 
-                                    defaultOpen={false}
-                                >
-                                    <div className="mb-3">
-                                        <div className="grid grid-cols-2 gap-2 mb-2">
-                                            <FL label={t.numberingStyle || 'Numbering'}>
-                                                <Sel value={sec.numberingStyle} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], numberingStyle: v }; u("sections", ns);
-                                                }} opts={[
-                                                    {v: 'bn', l: '১, ২, ৩'},
-                                                    {v: 'en', l: '1, 2, 3'},
-                                                    {v: 'roman', l: 'i, ii, iii'},
-                                                    {v: 'alpha', l: 'ক, খ, গ'},
-                                                    {v: 'hide', l: 'Hide'}
-                                                ]} />
-                                            </FL>
-                                            <FL label={t.marksConfig || 'Marks'}>
-                                                <Sel value={sec.marksConfig} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], marksConfig: v }; u("sections", ns);
-                                                }} opts={[
-                                                    {v: 'hide', l: 'Hide'},
-                                                    {v: 'showRight', l: 'Right Align'},
-                                                    {v: 'showBracket', l: 'In Bracket'}
-                                                ]} />
-                                            </FL>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2 mb-2">
-                                            <FL label={uiLang === 'bn' ? 'অপশন স্টাইল' : 'Option Style'}>
-                                                <Sel value={sec.optionStyle || 'bn'} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionStyle: v }; u("sections", ns);
-                                                }} opts={[
-                                                    {v: 'bn', l: t.optBn || 'ক, খ, গ, ঘ'},
-                                                    {v: 'en', l: t.optEn || 'a, b, c, d'},
-                                                    {v: 'roman', l: t.optRoman || 'i, ii, iii, iv'},
-                                                    {v: 'num_bn', l: t.optNumBn || '১, ২, ৩, ৪'},
-                                                    {v: 'num_en', l: t.optNumEn || '1, 2, 3, 4'}
-                                                ]} />
-                                            </FL>
-                                            <FL label={uiLang === 'bn' ? 'অপশন লেআউট' : 'Option Layout'}>
-                                                <div className="flex flex-col gap-1 w-full">
-                                                    <Sel value={sec.optionLayout} onChange={v => {
-                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionLayout: v }; u("sections", ns);
-                                                    }} opts={[
-                                                        {v: 'col1', l: t.col1 || '1 Col'},
-                                                        {v: 'col2', l: t.col2 || '2 Cols'},
-                                                        {v: 'col4', l: t.col4 || '4 Cols'}
-                                                    ]} />
-                                                    <label className="flex items-center gap-1.5 mt-1 ml-1 cursor-pointer group w-max">
-                                                        <input 
-                                                            type="checkbox" 
-                                                            checked={sec.smartFit !== false} 
-                                                            onChange={e => {
-                                                                const ns = [...s.sections]; ns[idx] = { ...ns[idx], smartFit: e.target.checked }; u("sections", ns);
-                                                            }} 
-                                                            className="rounded border-slate-300 text-indigo-500 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 w-3 h-3 cursor-pointer"
-                                                        />
-                                                        <span className="text-[10px] text-slate-500 font-bold group-hover:text-indigo-600 transition-colors select-none">
-                                                            {t.smartFit || 'Smart Fit'}
-                                                        </span>
-                                                    </label>
-                                                </div>
-                                            </FL>
-                                        </div>
-                                        <div>
-                                            <FL label={uiLang === 'bn' ? 'অপশন মার্কার' : 'Option Marker'}>
-                                                <Sel value={sec.optionDecoration || 'rightBracket'} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionDecoration: v }; u("sections", ns);
-                                                }} opts={[
-                                                    {v: 'rightBracket', l: t.rightBracket || 'ক)'},
-                                                    {v: 'dot', l: t.dot || 'ক.'},
-                                                    {v: 'bracket', l: t.bothBracket || '(ক)'},
-                                                    {v: 'bubble', l: t.bubble || 'OMR Bubble'}
-                                                ]} />
-                                            </FL>
-                                        </div>
+                    {(s.sections || []).map((sec, idx) => {
+                        const activeSubTab = sectionTabs[sec.id] || 'content';
+                        const setActiveSubTab = (tab) => setSectionTabs(prev => ({ ...prev, [sec.id]: tab }));
+                        const isCollapsed = collapsedSections[sec.id] !== undefined ? collapsedSections[sec.id] : idx > 0;
+                        const toggleCollapse = () => setCollapsedSections(prev => ({ ...prev, [sec.id]: !isCollapsed }));
+                        
+                        return (
+                            <div key={sec.id} className={`bg-white rounded-2xl border border-slate-200/80 shadow-sm relative group hover:border-slate-300 hover:shadow-md transition-all ${isCollapsed ? 'p-3 pb-2.5' : 'p-4'}`}>
+                                {/* Card Header */}
+                                <div className={`flex items-center justify-between ${isCollapsed ? '' : 'border-b border-slate-100 pb-3 mb-3'}`}>
+                                    <div 
+                                        className="flex items-center gap-2 cursor-pointer select-none group/hdr max-w-[65%]"
+                                        onClick={toggleCollapse}
+                                    >
+                                        {isCollapsed ? (
+                                            <ChevronRight size={15} className="text-slate-400 group-hover/hdr:text-indigo-600 transition-colors shrink-0" />
+                                        ) : (
+                                            <ChevronDown size={15} className="text-indigo-500 group-hover/hdr:text-indigo-600 transition-colors shrink-0" />
+                                        )}
+                                        <span className="w-5 h-5 flex items-center justify-center bg-indigo-50 text-indigo-600 font-bold rounded-md text-[10px] border border-indigo-100/50 shadow-sm shrink-0">
+                                            {idx + 1}
+                                        </span>
+                                        <span className="font-bold text-slate-800 text-[13px] truncate group-hover/hdr:text-indigo-600 transition-colors">
+                                            {sec.name || (uiLang === 'bn' ? 'নামহীন সেকশন' : 'Unnamed Section')}
+                                        </span>
                                     </div>
-
-                                    <div className="mt-2 pt-3 border-t border-slate-100">
-                                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">{uiLang === 'bn' ? 'কলাম ও স্পেসিং' : 'Columns & Spacing'}</div>
+                                    
+                                    <div className="flex items-center gap-1.5">
+                                        {/* Type badge */}
+                                        <button
+                                            onClick={() => {
+                                                const ns = [...s.sections];
+                                                ns[idx] = { ...ns[idx], isMCQ: !ns[idx].isMCQ };
+                                                u("sections", ns);
+                                            }}
+                                            className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold tracking-wider uppercase border shadow-sm transition-all hover:scale-105 active:scale-95 ${sec.isMCQ 
+                                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
+                                                : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}
+                                            title={uiLang === 'bn' ? 'প্রশ্ন টাইপ পরিবর্তন করুন' : 'Click to toggle type'}
+                                        >
+                                            {sec.isMCQ ? 'MCQ' : 'CQ'}
+                                        </button>
                                         
-                                        <div className="grid grid-cols-3 gap-2 mb-2">
-                                            <FL label={uiLang === 'bn' ? 'কলাম' : 'Columns'}>
-                                                <Sel value={sec.columns || 1} onChange={v => {
-                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], columns: Number(v) }; u("sections", ns);
-                                                }} opts={[
-                                                    {v: 1, l: uiLang === 'bn' ? '১ কলাম' : '1 Column'},
-                                                    {v: 2, l: uiLang === 'bn' ? '২ কলাম' : '2 Columns'},
-                                                    {v: 3, l: uiLang === 'bn' ? '৩ কলাম' : '3 Columns'}
-                                                ]} />
-                                            </FL>
-                                            <FL label={uiLang === 'bn' ? 'বর্ডার' : 'Border'}>
-                                                <Seg 
-                                                    value={sec.columnBorder === true ? 'yes' : 'no'} 
-                                                    onChange={v => {
-                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], columnBorder: (v === 'yes') }; u("sections", ns);
-                                                    }}
-                                                    opts={[
-                                                        {v: 'yes', l: uiLang === 'bn' ? 'হ্যাঁ' : 'Yes'},
-                                                        {v: 'no', l: uiLang === 'bn' ? 'না' : 'No'}
-                                                    ]}
-                                                />
-                                            </FL>
-                                            <FL label={uiLang === 'bn' ? 'গ্যাপ(mm)' : 'Gap(mm)'}>
-                                                <input 
-                                                    type="number" 
-                                                    value={sec.colGap !== undefined ? sec.colGap : (s.colGap || 10)} 
-                                                    onChange={e => {
-                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], colGap: e.target.value }; u("sections", ns);
-                                                    }}
-                                                    className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
-                                                />
-                                            </FL>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-2 mb-2">
-                                            <FL label={uiLang === 'bn' ? 'ফন্ট সাইজ (pt)' : 'Font Size (pt)'}>
-                                                <input 
-                                                    type="number" 
-                                                    value={sec.fontSize !== undefined ? sec.fontSize : (s.bodyFontSize || 14)} 
-                                                    onChange={e => {
-                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], fontSize: e.target.value }; u("sections", ns);
-                                                    }}
-                                                    className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
-                                                />
-                                            </FL>
-                                            <FL label={uiLang === 'bn' ? 'অ্যালাইনমেন্ট' : 'Alignment'}>
-                                                <div className="flex gap-[2px] h-full">
-                                                    {['left', 'center', 'right', 'justify'].map(align => (
-                                                        <button 
-                                                            key={align}
-                                                            onClick={() => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], textAlign: align }; u("sections", ns); }}
-                                                            className={`flex-1 py-1.5 px-0 rounded border transition-colors flex justify-center items-center ${sec.textAlign === align || (!sec.textAlign && align === 'left') ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                                                            title={align.charAt(0).toUpperCase() + align.slice(1)}
-                                                        >
-                                                            {align === 'left' && <AlignLeft size={14}/>}
-                                                            {align === 'center' && <AlignCenter size={14}/>}
-                                                            {align === 'right' && <AlignRight size={14}/>}
-                                                            {align === 'justify' && <AlignJustify size={14}/>}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </FL>
-                                        </div>
-
-                                        <div className="grid grid-cols-3 gap-2 mt-2">
-                                            <FL label={uiLang === 'bn' ? 'লাইন গ্যাপ' : 'Line Gap'}>
-                                                <input 
-                                                    type="number" step="0.1" min="0.1" max="5.0"
-                                                    value={sec.lineGap !== undefined ? sec.lineGap : (s.lineHeight || 1.5)} 
-                                                    onChange={e => {
-                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], lineGap: e.target.value }; u("sections", ns);
-                                                    }}
-                                                    className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
-                                                />
-                                            </FL>
-                                            <FL label={uiLang === 'bn' ? 'অপশন (px)' : 'Option (px)'}>
-                                                <input 
-                                                    type="number" min="-50" max="100"
-                                                    value={sec.optionGap !== undefined ? sec.optionGap : 8} 
-                                                    onChange={e => {
-                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionGap: e.target.value }; u("sections", ns);
-                                                    }}
-                                                    className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
-                                                />
-                                            </FL>
-                                            <FL label={uiLang === 'bn' ? 'প্রশ্ন (px)' : 'Question (px)'}>
-                                                <input 
-                                                    type="number" min="-100" max="150"
-                                                    value={sec.questionGap !== undefined ? sec.questionGap : (s.questionGap || 15)} 
-                                                    onChange={e => {
-                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], questionGap: e.target.value }; u("sections", ns);
-                                                    }}
-                                                    className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
-                                                />
-                                            </FL>
+                                        {/* Action toolbar */}
+                                        <div className="flex items-center gap-1">
+                                            <button 
+                                                disabled={idx === 0}
+                                                onClick={() => {
+                                                    const ns = [...s.sections];
+                                                    const temp = ns[idx];
+                                                    ns[idx] = ns[idx - 1];
+                                                    ns[idx - 1] = temp;
+                                                    u("sections", ns);
+                                                }}
+                                                className="p-1 text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-400 hover:bg-slate-50 rounded transition-colors"
+                                                title={uiLang === 'bn' ? 'উপরে সরান' : 'Move Up'}
+                                            >
+                                                <ArrowUp size={13} />
+                                            </button>
+                                            <button 
+                                                disabled={idx === s.sections.length - 1}
+                                                onClick={() => {
+                                                    const ns = [...s.sections];
+                                                    const temp = ns[idx];
+                                                    ns[idx] = ns[idx + 1];
+                                                    ns[idx + 1] = temp;
+                                                    u("sections", ns);
+                                                }}
+                                                className="p-1 text-slate-400 hover:text-indigo-600 disabled:opacity-30 disabled:hover:text-slate-400 hover:bg-slate-50 rounded transition-colors"
+                                                title={uiLang === 'bn' ? 'নিচে সরান' : 'Move Down'}
+                                            >
+                                                <ArrowDown size={13} />
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    if(window.confirm(uiLang === 'bn' ? 'আপনি কি এই সেকশনটি মুছে ফেলতে চান?' : 'Are you sure you want to delete this section?')) {
+                                                        const ns = [...s.sections]; ns.splice(idx,1); u("sections", ns);
+                                                    }
+                                                }}
+                                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                                title={uiLang === 'bn' ? 'মুছে ফেলুন' : 'Delete'}
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
                                         </div>
                                     </div>
-                                </CollapsibleBox>
+                                </div>
+
+                                {/* Active Settings Overrides Badges (স্ট্যাটাস ইন্ডিকেটর) */}
+                                <div className={`flex flex-wrap gap-1 ${isCollapsed ? 'mt-2' : 'mb-3'}`}>
+                                    {sec.continuousNumbering === false && (
+                                        <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[9px] font-medium font-mono border border-slate-200/40">
+                                            Reset: Q.{sec.numberingStart || 1}
+                                        </span>
+                                    )}
+                                    {sec.fontFamily && (
+                                        <span className="bg-indigo-50/50 text-indigo-600 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-indigo-100/40">
+                                            Font: {sec.fontFamily}
+                                        </span>
+                                    )}
+                                    {sec.columns > 1 && (
+                                        <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-blue-100/50">
+                                            {sec.columns} Col
+                                        </span>
+                                    )}
+                                    {sec.fontSize && (
+                                        <span className="bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded text-[9px] font-semibold border border-amber-100/50">
+                                            Size: {sec.fontSize}pt
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Expanded Content Panel */}
+                                {!isCollapsed && (
+                                    <>
+                                        {/* Tab Selector (Content vs Design) */}
+                                        <div className="flex gap-1 bg-slate-50 p-1 rounded-xl mb-3 border border-slate-100">
+                                            <button
+                                                onClick={() => setActiveSubTab('content')}
+                                                className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-all ${activeSubTab === 'content'
+                                                    ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50'
+                                                    : 'text-slate-500 hover:text-slate-800'}`}
+                                            >
+                                                <FileText size={12} />
+                                                {uiLang === 'bn' ? 'বিষয়বস্তু' : 'Content'}
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveSubTab('design')}
+                                                className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-all ${activeSubTab === 'design'
+                                                    ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50'
+                                                    : 'text-slate-500 hover:text-slate-800'}`}
+                                            >
+                                                <Settings size={12} />
+                                                {uiLang === 'bn' ? 'ডিজাইন ও লেআউট' : 'Design & Layout'}
+                                            </button>
+                                        </div>
+
+                                        {/* Content Tab Pane */}
+                                        {activeSubTab === 'content' && (
+                                            <div className="space-y-3 pt-1">
+                                                {/* Section Name */}
+                                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-3">
+                                                    <FL label={uiLang === 'bn' ? 'বিভাগের নাম' : 'Section Name'} toggleKey="showName" toggleVal={sec.showName !== false} onToggle={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }}>
+                                                        <Inp 
+                                                            value={sec.name} 
+                                                            disabled={sec.showName === false}
+                                                            onChange={v => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], name: v }; u("sections", ns); }} 
+                                                        />
+                                                    </FL>
+                                                    {sec.showName !== false && (
+                                                        <TypographyToolbar 
+                                                            state={{
+                                                                ...sec,
+                                                                nameBg: sec.nameBg !== undefined ? sec.nameBg : s.sectionStyle === 'কালো ব্যাকগ্রাউন্ড',
+                                                                nameDivider: sec.nameDivider !== undefined ? sec.nameDivider : ['বর্ডার বক্স', 'আন্ডারলাইন', 'ডটেড লাইন'].includes(s.sectionStyle)
+                                                            }} 
+                                                            prefix="name" 
+                                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }} 
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                {/* Conditions */}
+                                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-3">
+                                                    <FL label={uiLang === 'bn' ? 'শর্তাবলী (যেমন: মান: ১০x৭=৭০)' : 'Conditions'} toggleKey="showConditions" toggleVal={sec.showConditions !== false} onToggle={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }}>
+                                                        <Inp 
+                                                            value={sec.conditions || ''} 
+                                                            disabled={sec.showConditions === false}
+                                                            onChange={v => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], conditions: v }; u("sections", ns); }} 
+                                                        />
+                                                    </FL>
+                                                    {sec.showConditions !== false && (
+                                                        <TypographyToolbar 
+                                                            state={sec} 
+                                                            prefix="cond" 
+                                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }} 
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                {/* Instructions */}
+                                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-3">
+                                                    <FL label={uiLang === 'bn' ? 'নির্দেশনাবলী' : 'Instructions'} toggleKey="showInstructions" toggleVal={sec.showInstructions !== false} onToggle={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }}>
+                                                        <textarea 
+                                                            className="w-full text-[13px] p-2.5 border border-slate-200 rounded-md outline-none focus:border-indigo-400 min-h-[50px] resize-y disabled:opacity-50 bg-white"
+                                                            value={sec.instructions || ''}
+                                                            disabled={sec.showInstructions === false}
+                                                            onChange={e => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], instructions: e.target.value }; u("sections", ns); }}
+                                                        />
+                                                    </FL>
+                                                    {sec.showInstructions !== false && (
+                                                        <TypographyToolbar 
+                                                            state={sec} 
+                                                            prefix="inst" 
+                                                            onChange={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }} 
+                                                        />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Design Tab Pane */}
+                                        {activeSubTab === 'design' && (
+                                            <div className="space-y-3.5 pt-1">
+                                                {/* Numbering & Layout Settings Row */}
+                                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-3 space-y-3">
+                                                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{uiLang === 'bn' ? 'নম্বরক্রম ও লেআউট' : 'Numbering & Layout'}</div>
+                                                    
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <FL label={t.numberingStyle || 'Numbering'}>
+                                                            <Sel value={sec.numberingStyle} onChange={v => {
+                                                                const ns = [...s.sections]; ns[idx] = { ...ns[idx], numberingStyle: v }; u("sections", ns);
+                                                            }} opts={[
+                                                                {v: 'bn', l: '১, ২, ৩'},
+                                                                {v: 'en', l: '1, 2, 3'},
+                                                                {v: 'roman', l: 'i, ii, iii'},
+                                                                {v: 'alpha', l: 'ক, খ, গ'},
+                                                                {v: 'hide', l: 'Hide'}
+                                                            ]} />
+                                                        </FL>
+                                                        <FL label={t.marksConfig || 'Marks'}>
+                                                            <Sel value={sec.marksConfig} onChange={v => {
+                                                                const ns = [...s.sections]; ns[idx] = { ...ns[idx], marksConfig: v }; u("sections", ns);
+                                                            }} opts={[
+                                                                {v: 'hide', l: 'Hide'},
+                                                                {v: 'showRight', l: 'Right Align'},
+                                                                {v: 'showBracket', l: 'In Bracket'}
+                                                            ]} />
+                                                        </FL>
+                                                    </div>
+
+                                                    {/* Continuous Numbering controls */}
+                                                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/40">
+                                                        <FL label={uiLang === 'bn' ? 'ক্রমাগত নম্বরক্রম' : 'Continuous Numbering'}>
+                                                            <Seg 
+                                                                value={sec.continuousNumbering !== false ? 'yes' : 'no'} 
+                                                                onChange={v => {
+                                                                    const ns = [...s.sections]; 
+                                                                    ns[idx] = { 
+                                                                        ...ns[idx], 
+                                                                        continuousNumbering: (v === 'yes'),
+                                                                        numberingStart: v === 'no' ? (ns[idx].numberingStart || 1) : undefined
+                                                                    }; 
+                                                                    u("sections", ns);
+                                                                }}
+                                                                opts={[
+                                                                    {v: 'yes', l: uiLang === 'bn' ? 'হ্যাঁ' : 'Yes'},
+                                                                    {v: 'no', l: uiLang === 'bn' ? 'না' : 'No'}
+                                                                ]}
+                                                            />
+                                                        </FL>
+                                                        <FL label={uiLang === 'bn' ? 'শুরু করার নম্বর' : 'Start Number'}>
+                                                            <input 
+                                                                type="number" 
+                                                                min="1"
+                                                                disabled={sec.continuousNumbering !== false}
+                                                                value={sec.numberingStart !== undefined ? sec.numberingStart : 1} 
+                                                                onChange={e => {
+                                                                    const ns = [...s.sections]; 
+                                                                    ns[idx] = { ...ns[idx], numberingStart: Number(e.target.value) || 1 }; 
+                                                                    u("sections", ns);
+                                                                }}
+                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono disabled:opacity-40"
+                                                            />
+                                                        </FL>
+                                                    </div>
+                                                </div>
+
+                                                {/* MCQ Settings (only shown if isMCQ is true) */}
+                                                {sec.isMCQ && (
+                                                    <div className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-3 space-y-3">
+                                                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{uiLang === 'bn' ? 'বহুনির্বাচনী অপশন সেটিংস' : 'MCQ Option Settings'}</div>
+                                                        
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <FL label={uiLang === 'bn' ? 'অপশন স্টাইল' : 'Option Style'}>
+                                                                <Sel value={sec.optionStyle || 'bn'} onChange={v => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionStyle: v }; u("sections", ns);
+                                                                }} opts={[
+                                                                    {v: 'bn', l: t.optBn || 'ক, খ, গ, ঘ'},
+                                                                    {v: 'en', l: t.optEn || 'a, b, c, d'},
+                                                                    {v: 'roman', l: t.optRoman || 'i, ii, iii, iv'},
+                                                                    {v: 'num_bn', l: t.optNumBn || '১, ২, ৩, ৪'},
+                                                                    {v: 'num_en', l: t.optNumEn || '1, 2, 3, 4'}
+                                                                ]} />
+                                                            </FL>
+                                                            <FL label={uiLang === 'bn' ? 'অপশন লেআউট' : 'Option Layout'}>
+                                                                <div className="flex flex-col gap-1 w-full">
+                                                                    <Sel value={sec.optionLayout} onChange={v => {
+                                                                        const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionLayout: v }; u("sections", ns);
+                                                                    }} opts={[
+                                                                        {v: 'col1', l: t.col1 || '1 Col'},
+                                                                        {v: 'col2', l: t.col2 || '2 Cols'},
+                                                                        {v: 'col4', l: t.col4 || '4 Cols'}
+                                                                    ]} />
+                                                                    <label className="flex items-center gap-1.5 mt-1 ml-1 cursor-pointer group w-max">
+                                                                        <input 
+                                                                            type="checkbox" 
+                                                                            checked={sec.smartFit !== false} 
+                                                                            onChange={e => {
+                                                                                const ns = [...s.sections]; ns[idx] = { ...ns[idx], smartFit: e.target.checked }; u("sections", ns);
+                                                                            }} 
+                                                                            className="rounded border-slate-300 text-indigo-500 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 w-3 h-3 cursor-pointer"
+                                                                        />
+                                                                        <span className="text-[10px] text-slate-500 font-bold group-hover:text-indigo-600 transition-colors select-none font-sans">
+                                                                            {t.smartFit || 'Smart Fit'}
+                                                                        </span>
+                                                                    </label>
+                                                                </div>
+                                                            </FL>
+                                                        </div>
+                                                        
+                                                        <div>
+                                                            <FL label={uiLang === 'bn' ? 'অপশন মার্কার' : 'Option Marker'}>
+                                                                <Sel value={sec.optionDecoration || 'rightBracket'} onChange={v => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionDecoration: v }; u("sections", ns);
+                                                                }} opts={[
+                                                                    {v: 'rightBracket', l: t.rightBracket || 'ক)'},
+                                                                    {v: 'dot', l: t.dot || 'ক.'},
+                                                                    {v: 'bracket', l: t.bothBracket || '(ক)'},
+                                                                    {v: 'bubble', l: t.bubble || 'OMR Bubble'}
+                                                                ]} />
+                                                            </FL>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Typography & Fonts Override */}
+                                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-3 space-y-3">
+                                                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{uiLang === 'bn' ? 'ফন্ট এবং সাইজ' : 'Typography & Size'}</div>
+                                                    
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <FL label={uiLang === 'bn' ? 'ফন্ট ফ্যামিলি' : 'Font Family'}>
+                                                            <Sel 
+                                                                value={sec.fontFamily || ''} 
+                                                                onChange={v => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], fontFamily: v }; u("sections", ns);
+                                                                }} 
+                                                                opts={[
+                                                                    { v: '', l: uiLang === 'bn' ? 'ডিফল্ট (ইনহেরিট)' : 'Default (Inherit)' },
+                                                                    ...BN_FONTS.map(f => ({ v: f, l: f })),
+                                                                    ...EN_FONTS.map(f => ({ v: f, l: f }))
+                                                                ]} 
+                                                            />
+                                                        </FL>
+                                                        <FL label={uiLang === 'bn' ? 'ফন্ট সাইজ (pt)' : 'Font Size (pt)'}>
+                                                            <input 
+                                                                type="number" 
+                                                                value={sec.fontSize !== undefined ? sec.fontSize : (s.bodyFontSize || 14)} 
+                                                                onChange={e => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], fontSize: e.target.value }; u("sections", ns);
+                                                                }}
+                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
+                                                            />
+                                                        </FL>
+                                                    </div>
+                                                </div>
+
+                                                {/* Columns & Gaps Override */}
+                                                <div className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-3 space-y-3">
+                                                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{uiLang === 'bn' ? 'কলাম এবং ফাকা স্থান (Spacing)' : 'Columns & Spacing'}</div>
+                                                    
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <FL label={uiLang === 'bn' ? 'কলাম' : 'Columns'}>
+                                                            <Sel value={sec.columns || 1} onChange={v => {
+                                                                const ns = [...s.sections]; ns[idx] = { ...ns[idx], columns: Number(v) }; u("sections", ns);
+                                                            }} opts={[
+                                                                {v: 1, l: uiLang === 'bn' ? '১ কলাম' : '1 Column'},
+                                                                {v: 2, l: uiLang === 'bn' ? '২ কলাম' : '2 Columns'},
+                                                                {v: 3, l: uiLang === 'bn' ? '৩ কলাম' : '3 Columns'}
+                                                            ]} />
+                                                        </FL>
+                                                        <FL label={uiLang === 'bn' ? 'বর্ডার' : 'Border'}>
+                                                            <Seg 
+                                                                value={sec.columnBorder === true ? 'yes' : 'no'} 
+                                                                onChange={v => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], columnBorder: (v === 'yes') }; u("sections", ns);
+                                                                }}
+                                                                opts={[
+                                                                    {v: 'yes', l: uiLang === 'bn' ? 'হ্যাঁ' : 'Yes'},
+                                                                    {v: 'no', l: uiLang === 'bn' ? 'না' : 'No'}
+                                                                ]}
+                                                            />
+                                                        </FL>
+                                                        <FL label={uiLang === 'bn' ? 'গ্যাপ(mm)' : 'Gap(mm)'}>
+                                                            <input 
+                                                                type="number" 
+                                                                value={sec.colGap !== undefined ? sec.colGap : (s.colGap || 10)} 
+                                                                onChange={e => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], colGap: e.target.value }; u("sections", ns);
+                                                                }}
+                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
+                                                            />
+                                                        </FL>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <FL label={uiLang === 'bn' ? 'লাইন গ্যাপ' : 'Line Gap'}>
+                                                            <input 
+                                                                type="number" step="0.1" min="0.1" max="5.0"
+                                                                value={sec.lineGap !== undefined ? sec.lineGap : (s.lineHeight || 1.5)} 
+                                                                onChange={e => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], lineGap: e.target.value }; u("sections", ns);
+                                                                }}
+                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
+                                                            />
+                                                        </FL>
+                                                        <FL label={uiLang === 'bn' ? 'অপশন (px)' : 'Option (px)'}>
+                                                            <input 
+                                                                type="number" min="-50" max="100"
+                                                                value={sec.optionGap !== undefined ? sec.optionGap : 8} 
+                                                                onChange={e => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionGap: e.target.value }; u("sections", ns);
+                                                                }}
+                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
+                                                            />
+                                                        </FL>
+                                                        <FL label={uiLang === 'bn' ? 'প্রশ্ন (px)' : 'Question (px)'}>
+                                                            <input 
+                                                                type="number" min="-100" max="150"
+                                                                value={sec.questionGap !== undefined ? sec.questionGap : (s.questionGap || 15)} 
+                                                                onChange={e => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], questionGap: e.target.value }; u("sections", ns);
+                                                                }}
+                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
+                                                            />
+                                                        </FL>
+                                                    </div>
+
+                                                    <div>
+                                                        <FL label={uiLang === 'bn' ? 'অ্যালাইনমেন্ট' : 'Alignment'}>
+                                                            <div className="flex gap-[2px] h-full">
+                                                                {['left', 'center', 'right', 'justify'].map(align => (
+                                                                    <button 
+                                                                        key={align}
+                                                                        onClick={() => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], textAlign: align }; u("sections", ns); }}
+                                                                        className={`flex-1 py-1.5 px-0 rounded border transition-colors flex justify-center items-center ${sec.textAlign === align || (!sec.textAlign && align === 'left') ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                                                        title={align.charAt(0).toUpperCase() + align.slice(1)}
+                                                                    >
+                                                                        {align === 'left' && <AlignLeft size={14}/>}
+                                                                        {align === 'center' && <AlignCenter size={14}/>}
+                                                                        {align === 'right' && <AlignRight size={14}/>}
+                                                                        {align === 'justify' && <AlignJustify size={14}/>}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </FL>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </>}
 
@@ -447,7 +650,7 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                 </div>
                 </div>
                 <ST>{t.presetMargins}</ST>
-                {[{n:t.narrow,t:12,b:12,l:15,r:15},{n:t.normal,t:20,b:20,l:25,r:20},{n:t.wide,t:25,b:25,l:30,r:30}].map(p=>(
+                {[{n:t.narrow,t:12,b:12,l:15,r:15},{n:t.normal,t:20,b:20,l:25,r:20},{n:t.wide,t:25,b:25,l:30,r:30},{n: uiLang === 'bn' ? 'সংক্ষিপ্ত (জিরো মার্জিন)' : 'Compact (Zero Margin)', t:5,b:5,l:5,r:5},{n: uiLang === 'bn' ? 'প্রশস্ত ওয়ার্কশিট' : 'Wide Worksheet', t:30,b:30,l:35,r:35}].map(p=>(
                 <button key={p.n} className="w-full text-left px-3 py-2 border border-slate-200 rounded-md text-xs text-slate-600 mb-2 hover:bg-indigo-50 hover:border-indigo-200 font-medium" 
                         onClick={()=>uMulti({marginTop:p.t,marginBottom:p.b,marginLeft:p.l,marginRight:p.r})}>
                     {p.n} — ↑{p.t} ↓{p.b} ←{p.l} →{p.r}

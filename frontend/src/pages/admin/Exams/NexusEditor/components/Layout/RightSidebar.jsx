@@ -21,7 +21,10 @@ const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
         workspaceTools, setWorkspaceTools
     } = useNexusEditor();
 
-    const { templates, loadingTemplates, applyTemplate } = useExamManager();
+    const { 
+        templates, loadingTemplates, applyTemplate, 
+        savedSubjectsList, saveSubjectDefaults, loadSubjectDefaults, deleteSubjectDefault 
+    } = useExamManager();
 
     const [isCropperOpen, setIsCropperOpen] = useState(false);
     const [isCroppingImageUpload, setIsCroppingImageUpload] = useState(false);
@@ -169,6 +172,73 @@ const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
                                     </label>
                                 </div>
                             </div>
+
+                            {/* Subject-Specific Default Layout Setup */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4">
+                                <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                                    <Settings2 size={14} className="text-indigo-500" />
+                                    {uiLang === 'bn' ? 'বিষয় ভিত্তিক ডিফল্ট সেটআপ' : 'Subject Default Layout'}
+                                </h3>
+                                <p className="text-[11px] text-slate-500 leading-normal mb-3 font-medium">
+                                    {uiLang === 'bn' 
+                                        ? 'বর্তমান এডিটর ফাইলের লেআউটটি নির্দিষ্ট বিষয়ের ডিফল্ট হিসেবে সেট করুন।' 
+                                        : 'Save or apply layout defaults for the current subject.'}
+                                </p>
+                                
+                                <div className="p-2.5 bg-white border border-slate-200 rounded-lg mb-3">
+                                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                        {uiLang === 'bn' ? 'বর্তমান বিষয়' : 'Current Subject'}
+                                    </div>
+                                    <div className="text-sm font-bold text-indigo-600">
+                                        {docSettings.subject || (uiLang === 'bn' ? 'কোনো বিষয় নেই' : 'No Subject Set')}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 mb-3">
+                                    <button 
+                                        onClick={() => saveSubjectDefaults(docSettings.subject, docSettings)}
+                                        className="py-2 px-3 text-center bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors shadow-sm"
+                                    >
+                                        {uiLang === 'bn' ? 'ডিফল্ট সেভ করুন' : 'Save Default'}
+                                    </button>
+                                    <button 
+                                        onClick={() => loadSubjectDefaults(docSettings.subject)}
+                                        className="py-2 px-3 text-center bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors"
+                                    >
+                                        {uiLang === 'bn' ? 'ডিফল্ট লোড করুন' : 'Load Default'}
+                                    </button>
+                                </div>
+
+                                {savedSubjectsList && savedSubjectsList.length > 0 && (
+                                    <div className="mt-4 pt-3 border-t border-slate-100">
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                            {uiLang === 'bn' ? 'সংরক্ষিত বিষয়ের তালিকা' : 'Saved Subjects'}
+                                        </div>
+                                        <div className="space-y-1.5 max-h-[120px] overflow-y-auto pr-1 custom-scrollbar">
+                                            {savedSubjectsList.map(subName => (
+                                                <div key={subName} className="flex items-center justify-between px-2.5 py-1.5 bg-white border border-slate-100 rounded-md text-xs">
+                                                    <span className="font-semibold text-slate-600 capitalize">{subName}</span>
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            onClick={() => loadSubjectDefaults(subName)}
+                                                            className="text-[10px] font-bold text-indigo-600 hover:underline"
+                                                        >
+                                                            {uiLang === 'bn' ? 'অ্যাপ্লাই' : 'Apply'}
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => deleteSubjectDefault(subName)}
+                                                            className="text-[10px] font-bold text-rose-500 hover:text-rose-700"
+                                                        >
+                                                            {uiLang === 'bn' ? 'মুছুন' : 'Delete'}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                                 <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
                                     <Globe size={14} className="text-blue-500" /> {t.availTemplates}
