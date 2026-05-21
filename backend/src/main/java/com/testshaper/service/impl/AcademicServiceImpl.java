@@ -23,6 +23,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AcademicServiceImpl implements AcademicService {
 
+    private static final ThreadLocal<Boolean> fgacBypass = ThreadLocal.withInitial(() -> false);
+
     private final AcademicLevelRepository levelRepository;
     private final AcademicStreamRepository streamRepository;
     private final AcademicClassRepository classRepository;
@@ -50,6 +52,9 @@ public class AcademicServiceImpl implements AcademicService {
     }
 
     private boolean isFgacRestricted() {
+        if (fgacBypass.get()) {
+            return false;
+        }
         String tenantId = TenantContext.getTenantId();
         if (tenantId != null && !"DEFAULT".equals(tenantId)) {
             try {
@@ -568,115 +573,126 @@ public class AcademicServiceImpl implements AcademicService {
 
     // --- Batch Hierarchy (single call for entire academic structure) ---
     @Override
-    public java.util.Map<String, Object> getFullHierarchy() {
-        List<AcademicLevel> levels = getAllLevels();
-        List<Subject> subjects = getAllSubjects();
-
-        // Build streams with _levelName and _levelId metadata
-        List<java.util.Map<String, Object>> allStreams = new java.util.ArrayList<>();
-        for (AcademicLevel level : levels) {
-            List<AcademicStream> streams = getStreamsByLevel(level.getId());
-            for (AcademicStream stream : streams) {
-                java.util.Map<String, Object> streamMap = new java.util.LinkedHashMap<>();
-                streamMap.put("id", stream.getId());
-                streamMap.put("name", stream.getName());
-                streamMap.put("order", stream.getOrder());
-                streamMap.put("_levelId", level.getId());
-                streamMap.put("_levelName", level.getName());
-                allStreams.add(streamMap);
-            }
+    public java.util.Map<String, Object> getFullHierarchy(boolean bypassRestrictions) {
+        if (bypassRestrictions) {
+            fgacBypass.set(true);
         }
+        try {
+            List<AcademicLevel> levels = getAllLevels();
+            List<Subject> subjects = getAllSubjects();
 
-        // Build classes with streamName and levelName metadata
-        List<java.util.Map<String, Object>> allClasses = new java.util.ArrayList<>();
-        for (java.util.Map<String, Object> streamMap : allStreams) {
-            UUID streamId = (UUID) streamMap.get("id");
-            String streamName = (String) streamMap.get("name");
-            String levelName = (String) streamMap.get("_levelName");
-
-            List<AcademicClass> classes = getClassesByStream(streamId);
-            for (AcademicClass cls : classes) {
-                java.util.Map<String, Object> classMap = new java.util.LinkedHashMap<>();
-                classMap.put("id", cls.getId());
-                classMap.put("name", cls.getName());
-                classMap.put("order", cls.getOrder());
-                classMap.put("_streamId", streamId);
-                classMap.put("_streamName", streamName);
-                classMap.put("_levelName", levelName);
-                allClasses.add(classMap);
+            // Build streams with _levelName and _levelId metadata
+            List<java.util.Map<String, Object>> allStreams = new java.util.ArrayList<>();
+            for (AcademicLevel level : levels) {
+                List<AcademicStream> streams = getStreamsByLevel(level.getId());
+                for (AcademicStream stream : streams) {
+                    java.util.Map<String, Object> streamMap = new java.util.LinkedHashMap<>();
+                    streamMap.put("id", stream.getId());
+                    streamMap.put("name", stream.getName());
+                    streamMap.put("order", stream.getOrder());
+                    streamMap.put("_levelId", level.getId());
+                    streamMap.put("_levelName", level.getName());
+                    allStreams.add(streamMap);
+                }
             }
-        }
 
-        // ---------------------------------------------------------
-        // FINE-GRAINED ACADEMIC ACCESS CONTROL
-        // ---------------------------------------------------------
-        java.util.Set<UUID> allowedClassSubjectIds = new java.util.HashSet<>();
-        boolean isRestricted = false;
-        String tenantId = TenantContext.getTenantId();
-        if (tenantId != null && !"DEFAULT".equals(tenantId)) {
-            try {
-                Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
-                if (inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
-                    isRestricted = true;
-                    for (ClassSubject cs : inst.getAssignedSubjects()) {
-                        allowedClassSubjectIds.add(cs.getId());
+            // Build classes with streamName and levelName metadata
+            List<java.util.Map<String, Object>> allClasses = new java.util.ArrayList<>();
+            for (java.util.Map<String, Object> streamMap : allStreams) {
+                UUID streamId = (UUID) streamMap.get("id");
+                String streamName = (String) streamMap.get("name");
+                String levelName = (String) streamMap.get("_levelName");
+
+                List<AcademicClass> classes = getClassesByStream(streamId);
+                for (AcademicClass cls : classes) {
+                    java.util.Map<String, Object> classMap = new java.util.LinkedHashMap<>();
+                    classMap.put("id", cls.getId());
+                    classMap.put("name", cls.getName());
+                    classMap.put("order", cls.getOrder());
+                    classMap.put("_streamId", streamId);
+                    classMap.put("_streamName", streamName);
+                    classMap.put("_levelName", levelName);
+                    allClasses.add(classMap);
+                }
+            }
+
+            // ---------------------------------------------------------
+            // FINE-GRAINED ACADEMIC ACCESS CONTROL
+            // ---------------------------------------------------------
+            java.util.Set<UUID> allowedClassSubjectIds = new java.util.HashSet<>();
+            boolean isRestricted = false;
+            if (!bypassRestrictions) {
+                String tenantId = TenantContext.getTenantId();
+                if (tenantId != null && !"DEFAULT".equals(tenantId)) {
+                    try {
+                        Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
+                        if (inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
+                            isRestricted = true;
+                            for (ClassSubject cs : inst.getAssignedSubjects()) {
+                                allowedClassSubjectIds.add(cs.getId());
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error("Failed to parse tenant UUID for FGAC", e);
                     }
                 }
-            } catch (Exception e) {
-                log.error("Failed to parse tenant UUID for FGAC", e);
             }
-        }
 
-        // Build classSubjects
-        List<java.util.Map<String, Object>> allClassSubjects = new java.util.ArrayList<>();
-        for (AcademicClass cls : getAllClasses()) {
-            List<com.testshaper.dto.ClassSubjectDTO> classSubjectDtos = getSubjectsByClass(cls.getId(), null);
-            for (com.testshaper.dto.ClassSubjectDTO csDTO : classSubjectDtos) {
-                // Apply FGAC filter
-                if (isRestricted && !allowedClassSubjectIds.contains(csDTO.getClassSubjectId())) {
-                    continue; // Skip restricted subjects
+            // Build classSubjects
+            List<java.util.Map<String, Object>> allClassSubjects = new java.util.ArrayList<>();
+            for (AcademicClass cls : getAllClasses()) {
+                List<com.testshaper.dto.ClassSubjectDTO> classSubjectDtos = getSubjectsByClass(cls.getId(), null);
+                for (com.testshaper.dto.ClassSubjectDTO csDTO : classSubjectDtos) {
+                    // Apply FGAC filter
+                    if (isRestricted && !allowedClassSubjectIds.contains(csDTO.getClassSubjectId())) {
+                        continue; // Skip restricted subjects
+                    }
+                    
+                    java.util.Map<String, Object> csMap = new java.util.LinkedHashMap<>();
+                    csMap.put("id", csDTO.getClassSubjectId());
+                    csMap.put("name", csDTO.getSubjectName());
+                    csMap.put("_classId", cls.getId());
+                    csMap.put("_subjectId", csDTO.getSubjectId());
+                    csMap.put("order", csDTO.getOrder());
+                    // optional ones
+                    if(csDTO.getGroupId() != null) csMap.put("_groupId", csDTO.getGroupId());
+                    if(csDTO.getSessionId() != null) csMap.put("_sessionId", csDTO.getSessionId());
+                    allClassSubjects.add(csMap);
                 }
+            }
+
+            // Clean up empty parents if restricted
+            if (isRestricted) {
+                java.util.Set<UUID> activeClassIds = new java.util.HashSet<>();
+                for (java.util.Map<String, Object> csMap : allClassSubjects) {
+                    activeClassIds.add((UUID) csMap.get("_classId"));
+                }
+                allClasses.removeIf(cMap -> !activeClassIds.contains(cMap.get("id")));
                 
-                java.util.Map<String, Object> csMap = new java.util.LinkedHashMap<>();
-                csMap.put("id", csDTO.getClassSubjectId());
-                csMap.put("name", csDTO.getSubjectName());
-                csMap.put("_classId", cls.getId());
-                csMap.put("_subjectId", csDTO.getSubjectId());
-                csMap.put("order", csDTO.getOrder());
-                // optional ones
-                if(csDTO.getGroupId() != null) csMap.put("_groupId", csDTO.getGroupId());
-                if(csDTO.getSessionId() != null) csMap.put("_sessionId", csDTO.getSessionId());
-                allClassSubjects.add(csMap);
+                java.util.Set<UUID> activeStreamIds = new java.util.HashSet<>();
+                for (java.util.Map<String, Object> cMap : allClasses) {
+                    activeStreamIds.add((UUID) cMap.get("_streamId"));
+                }
+                allStreams.removeIf(sMap -> !activeStreamIds.contains(sMap.get("id")));
+                
+                java.util.Set<UUID> activeLevelIds = new java.util.HashSet<>();
+                for (java.util.Map<String, Object> sMap : allStreams) {
+                    activeLevelIds.add((UUID) sMap.get("_levelId"));
+                }
+                levels.removeIf(l -> !activeLevelIds.contains(l.getId()));
+            }
+
+            java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+            result.put("levels", levels);
+            result.put("streams", allStreams);
+            result.put("classes", allClasses);
+            result.put("subjects", subjects); // Global subjects list, harmless to keep full
+            result.put("classSubjects", allClassSubjects);
+            return result;
+        } finally {
+            if (bypassRestrictions) {
+                fgacBypass.remove();
             }
         }
-
-        // Clean up empty parents if restricted
-        if (isRestricted) {
-            java.util.Set<UUID> activeClassIds = new java.util.HashSet<>();
-            for (java.util.Map<String, Object> csMap : allClassSubjects) {
-                activeClassIds.add((UUID) csMap.get("_classId"));
-            }
-            allClasses.removeIf(cMap -> !activeClassIds.contains(cMap.get("id")));
-            
-            java.util.Set<UUID> activeStreamIds = new java.util.HashSet<>();
-            for (java.util.Map<String, Object> cMap : allClasses) {
-                activeStreamIds.add((UUID) cMap.get("_streamId"));
-            }
-            allStreams.removeIf(sMap -> !activeStreamIds.contains(sMap.get("id")));
-            
-            java.util.Set<UUID> activeLevelIds = new java.util.HashSet<>();
-            for (java.util.Map<String, Object> sMap : allStreams) {
-                activeLevelIds.add((UUID) sMap.get("_levelId"));
-            }
-            levels.removeIf(l -> !activeLevelIds.contains(l.getId()));
-        }
-
-        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
-        result.put("levels", levels);
-        result.put("streams", allStreams);
-        result.put("classes", allClasses);
-        result.put("subjects", subjects); // Global subjects list, harmless to keep full
-        result.put("classSubjects", allClassSubjects);
-        return result;
     }
 }

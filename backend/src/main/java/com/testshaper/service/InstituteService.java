@@ -37,4 +37,6 @@ public interface InstituteService {
     void assignAcademicSubjects(UUID instituteId, java.util.Set<UUID> classSubjectIds);
 
     java.util.Set<UUID> getAssignedAcademicSubjects(UUID instituteId);
+
+    Institute updateSubscriptionPackage(UUID instituteId, UUID packageId);
 }

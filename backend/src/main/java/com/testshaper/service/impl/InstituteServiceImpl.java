@@ -298,4 +298,29 @@ public class InstituteServiceImpl implements InstituteService {
                 .map(com.testshaper.entity.ClassSubject::getId)
                 .collect(java.util.stream.Collectors.toSet());
     }
+
+    @Override
+    @Transactional
+    public Institute updateSubscriptionPackage(UUID instituteId, UUID packageId) {
+        Institute institute = getInstitute(instituteId);
+        BillingPackage pkg = billingPackageRepository.findById(packageId)
+                .orElseThrow(() -> new RuntimeException("Billing package not found"));
+        institute.setSubscriptionPackage(pkg);
+        institute.setMaxTeachers(pkg.getMaxTeachers() != null ? pkg.getMaxTeachers() : 5);
+        institute.setMaxStudents(pkg.getMaxStudents() != null ? pkg.getMaxStudents() : 50);
+        institute.setAiLimitPerMonth(pkg.getAiLimitPerMonth() != null ? pkg.getAiLimitPerMonth() : 100000);
+        institute.setMaxQuestions(pkg.getMaxQuestions() != null ? pkg.getMaxQuestions() : 500);
+        institute.setStorageLimitMb(pkg.getStorageLimitMb() != null ? pkg.getStorageLimitMb() : 500);
+        
+        if (pkg.getPackageCode().contains("PREMIUM")) {
+            institute.setPlanType(Institute.SubscriptionPlan.PREMIUM);
+        } else if (pkg.getPackageCode().contains("BASIC")) {
+            institute.setPlanType(Institute.SubscriptionPlan.BASIC);
+        } else if (pkg.getPackageCode().contains("ENTERPRISE")) {
+            institute.setPlanType(Institute.SubscriptionPlan.ENTERPRISE);
+        } else {
+            institute.setPlanType(Institute.SubscriptionPlan.FREE);
+        }
+        return instituteRepository.save(institute);
+    }
 }

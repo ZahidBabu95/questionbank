@@ -30,7 +30,7 @@ public class UserAdvancedController {
 
     // ── Activity Logs for a specific user ────────────────────────────────────
     @GetMapping("/{id}/activity-log")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or @userSecurity.isSelf(authentication, #id)")
     public ResponseEntity<Map<String, Object>> getUserActivityLog(
             @PathVariable UUID id,
             @RequestParam(defaultValue = "0") int page,
@@ -53,7 +53,7 @@ public class UserAdvancedController {
 
     // ── Login History for a specific user ────────────────────────────────────
     @GetMapping("/{id}/login-history")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or @userSecurity.isSelf(authentication, #id)")
     public ResponseEntity<Map<String, Object>> getLoginHistory(
             @PathVariable UUID id,
             @RequestParam(defaultValue = "0") int page,

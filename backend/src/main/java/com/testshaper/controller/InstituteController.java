@@ -98,12 +98,20 @@ public class InstituteController {
     }
 
     @PutMapping("/{id}/assigned-subjects")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or (hasRole('INSTITUTE_ADMIN') and @userSecurity.isInstituteAdmin(#id))")
     public ResponseEntity<Void> assignSubjects(
             @PathVariable UUID id,
             @RequestBody java.util.Set<UUID> classSubjectIds) {
         instituteService.assignAcademicSubjects(id, classSubjectIds);
         return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/{id}/subscription-package")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or (hasRole('INSTITUTE_ADMIN') and @userSecurity.isInstituteAdmin(#id))")
+    public ResponseEntity<Institute> updateSubscriptionPackage(
+            @PathVariable UUID id,
+            @RequestParam UUID packageId) {
+        return ResponseEntity.ok(instituteService.updateSubscriptionPackage(id, packageId));
     }
 
     @PostMapping("/request")

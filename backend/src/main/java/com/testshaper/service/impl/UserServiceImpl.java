@@ -14,6 +14,7 @@ import com.testshaper.service.SecuritySettingService;
 import com.testshaper.service.UserService;
 import com.testshaper.service.EmailService;
 import com.testshaper.service.UserActivityLogService;
+import com.testshaper.service.DynamicStorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -42,6 +43,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final UserActivityLogService activityLogService;
+    private final DynamicStorageService storageService;
 
     @Override
     @Transactional
@@ -268,11 +270,17 @@ public class UserServiceImpl implements UserService {
     public void uploadProfileImage(@NonNull UUID id, @NonNull MultipartFile file) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-
-        // Logic to save file to disk/cloud and update URL
-        String imageUrl = "/uploads/" + id + "_" + file.getOriginalFilename();
-        user.setProfileImageUrl(imageUrl);
-        userRepository.save(user);
+        try {
+            String imageUrl = storageService.uploadFile(
+                file, 
+                user.getInstitute() != null ? user.getInstitute().getId().toString() : null, 
+                "avatars"
+            );
+            user.setProfileImageUrl(imageUrl);
+            userRepository.save(user);
+        } catch (java.io.IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload profile image to storage: " + e.getMessage());
+        }
     }
 
     @Override

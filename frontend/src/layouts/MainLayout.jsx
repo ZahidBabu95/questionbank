@@ -18,8 +18,21 @@ const MainLayout = () => {
     const location = useLocation();
     const branding = useBranding();
 
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
+    const isSuperAdmin = userData?.roles?.some(r => {
+        const roleName = typeof r === 'string' ? r : (r.name || '');
+        return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
+    }) || userData?.email === 'admin';
+    const isDefaultInstitute = isSuperAdmin || userData?.instituteName === 'DEFAULT' || userData?.instituteName === 'Default Institute';
+
     // Robustly check if running inside an iframe, so embedding state is preserved across navigations within the iframe
     const isEmbedded = window !== window.parent || new URLSearchParams(location.search).get('embedded') === 'true';
+
+    useEffect(() => {
+        if (!isEmbedded && !isDefaultInstitute && location.pathname === '/profile') {
+            navigate('/ai-workspace?tool_url=/profile', { replace: true });
+        }
+    }, [location.pathname, isEmbedded, isDefaultInstitute, navigate]);
 
     if (isEmbedded) {
         return (
@@ -91,7 +104,6 @@ const MainLayout = () => {
 
     const isTabActive = (path) => location.pathname.startsWith(path.replace(/\/[^/]*$/, '')) || location.pathname === path;
 
-    const userData = JSON.parse(localStorage.getItem('user') || '{}');
     const userName = userData.name || 'User';
     const userRole = userData.roles && userData.roles.length > 0
         ? userData.roles[0].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
@@ -196,11 +208,7 @@ const MainLayout = () => {
         }
     };
 
-    const isSuperAdmin = userData?.roles?.some(r => {
-        const roleName = typeof r === 'string' ? r : (r.name || '');
-        return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
-    }) || userData?.email === 'admin';
-    const isDefaultInstitute = isSuperAdmin || userData?.instituteName === 'DEFAULT' || userData?.instituteName === 'Default Institute';
+    
     
     // Sidebar is entirely restricted to Admins & Default Institute users
     const hideSidebar = !isDefaultInstitute;
@@ -354,7 +362,7 @@ const MainLayout = () => {
 
                         <div className="h-6 w-[1px] bg-slate-100 hidden sm:block"></div>
 
-                        <Link to="/profile" className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded-xl transition-all active:scale-[0.97]">
+                        <Link to={isDefaultInstitute ? "/profile" : "/ai-workspace?tool_url=/profile"} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded-xl transition-all active:scale-[0.97]">
                             <div className="hidden sm:flex flex-col items-end">
                                 <span className="text-xs font-bold text-slate-800 leading-tight">{userName}</span>
                                 <span className="text-[10px] font-medium text-slate-500">{userRole}</span>

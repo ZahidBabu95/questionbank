@@ -33,8 +33,8 @@ public class AcademicController {
     /** Returns complete academic hierarchy (levels, streams, classes, subjects) in a SINGLE call.
      *  This eliminates 20+ individual API calls that would exhaust the connection pool. */
     @GetMapping("/hierarchy")
-    public ResponseEntity<?> getFullHierarchy() {
-        return ResponseEntity.ok(academicService.getFullHierarchy());
+    public ResponseEntity<?> getFullHierarchy(@RequestParam(required = false, defaultValue = "false") boolean bypass) {
+        return ResponseEntity.ok(academicService.getFullHierarchy(bypass));
     }
 
     @DeleteMapping("/levels/{id}")

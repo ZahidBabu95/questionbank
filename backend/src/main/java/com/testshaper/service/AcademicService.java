@@ -66,6 +66,6 @@ public interface AcademicService {
     List<Topic> getTopicsByChapter(UUID chapterId);
     void deleteTopic(UUID id);
 
-    // --- Batch Hierarchy (single call for entire structure) ---
-    java.util.Map<String, Object> getFullHierarchy();
+    // --- Batch Hierarchy (single call for entire academic structure) ---
+    java.util.Map<String, Object> getFullHierarchy(boolean bypassRestrictions);
 }

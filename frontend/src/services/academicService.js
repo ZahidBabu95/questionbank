@@ -74,7 +74,7 @@ const getTopicsByChapter = async (chapterId) => axios.get(`${API_URL}/chapters/$
 const deleteTopic = async (id) => axios.delete(`${API_URL}/topics/${id}`);
 
 // --- Batch Hierarchy (single call for entire structure — replaces 20+ individual calls) ---
-const getHierarchy = async () => axios.get(`${API_URL}/hierarchy`).then(res => res.data);
+const getHierarchy = async (bypass = false) => axios.get(`${API_URL}/hierarchy`, { params: { bypass } }).then(res => res.data);
 
 // --- Session ---
 const getActiveSession = async () => axios.get(`/v1/sessions/active`).then(res => res.data);

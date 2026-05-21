@@ -59,5 +59,11 @@ export default {
     assignSubjects: async (id, subjectIds) => {
         const response = await axios.put(`${API_URL}/${id}/assigned-subjects`, subjectIds);
         return response.data;
+    },
+    updateSubscriptionPackage: async (id, packageId) => {
+        const response = await axios.put(`${API_URL}/${id}/subscription-package`, null, {
+            params: { packageId }
+        });
+        return response.data;
     }
 };
