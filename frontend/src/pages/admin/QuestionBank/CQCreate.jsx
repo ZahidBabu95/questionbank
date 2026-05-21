@@ -105,7 +105,7 @@ const CQCreate = () => {
         if (!formData.academicClassId || !formData.subjectId || !formData.chapterId) {
             setMessage({ type: 'error', text: 'ক্লাস, বিষয় ও অধ্যায় নির্বাচন করুন।' }); return;
         }
-        if (subQuestions.some(sq => !sq.text.trim())) {
+        if (subQuestions.some(sq => !sq.text || sq.text.trim() === '' || sq.text === '<p><br></p>')) {
             setMessage({ type: 'error', text: `সকল ${subQuestions.length} টি উপ-প্রশ্ন পূরণ করুন।` }); return;
         }
 
@@ -324,21 +324,41 @@ const CQCreate = () => {
                                                     <span className="text-[10px] font-bold uppercase tracking-wide opacity-60">{part.level}</span>
                                                 </div>
                                                 <div className="space-y-3">
-                                                    <textarea rows={2}
-                                                        className="w-full p-2.5 text-sm border border-white/60 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none bg-white/90 transition-all resize-none leading-relaxed"
-                                                        value={sq.text || ''}
-                                                        onChange={(e) => { const n = [...subQuestions]; n[index].text = e.target.value; setSubQuestions(n); }}
-                                                        placeholder={part.placeholder} />
-                                                    <textarea rows={2}
-                                                        className="w-full p-2.5 text-sm border border-emerald-200/60 rounded-lg focus:ring-2 focus:ring-emerald-500/20 outline-none bg-emerald-50/50 hover:bg-emerald-50 transition-all resize-none leading-relaxed"
-                                                        value={sq.answer || ''}
-                                                        onChange={(e) => { const n = [...subQuestions]; n[index].answer = e.target.value; setSubQuestions(n); }}
-                                                        placeholder={`${part.label} অংশের উত্তর লিখুন (ঐচ্ছিক)...`} />
-                                                    <textarea rows={2}
-                                                        className="w-full p-2.5 text-sm border border-amber-200/60 rounded-lg focus:ring-2 focus:ring-amber-500/20 outline-none bg-amber-50/50 hover:bg-amber-50 transition-all resize-none leading-relaxed"
-                                                        value={sq.explanation || ''}
-                                                        onChange={(e) => { const n = [...subQuestions]; n[index].explanation = e.target.value; setSubQuestions(n); }}
-                                                        placeholder={`${part.label} অংশের ব্যাখ্যা লিখুন (ঐচ্ছিক)...`} />
+                                                    <div className="space-y-4 w-full">
+                                                        <div className="bg-white/80 p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                                                            <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">প্রশ্ন টেক্সট</span>
+                                                            <RichTextEditor
+                                                                value={sq.text || ''}
+                                                                onChange={(val) => { const n = [...subQuestions]; n[index].text = val; setSubQuestions(n); }}
+                                                                placeholder={part.placeholder}
+                                                                height="h-20"
+                                                                minimal={true}
+                                                                className="text-sm bg-white"
+                                                            />
+                                                        </div>
+                                                        <div className="bg-emerald-50/30 p-2.5 rounded-lg border border-emerald-100 shadow-sm">
+                                                            <span className="block text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1">উত্তর (ঐচ্ছিক)</span>
+                                                            <RichTextEditor
+                                                                value={sq.answer || ''}
+                                                                onChange={(val) => { const n = [...subQuestions]; n[index].answer = val; setSubQuestions(n); }}
+                                                                placeholder={`${part.label} অংশের উত্তর লিখুন...`}
+                                                                height="h-16"
+                                                                minimal={true}
+                                                                className="text-sm bg-white"
+                                                            />
+                                                        </div>
+                                                        <div className="bg-amber-50/30 p-2.5 rounded-lg border border-amber-100 shadow-sm">
+                                                            <span className="block text-[10px] font-bold text-amber-600 uppercase tracking-wide mb-1">ব্যাখ্যা (ঐচ্ছিক)</span>
+                                                            <RichTextEditor
+                                                                value={sq.explanation || ''}
+                                                                onChange={(val) => { const n = [...subQuestions]; n[index].explanation = val; setSubQuestions(n); }}
+                                                                placeholder={`${part.label} অংশের ব্যাখ্যা লিখুন...`}
+                                                                height="h-16"
+                                                                minimal={true}
+                                                                className="text-sm bg-white"
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

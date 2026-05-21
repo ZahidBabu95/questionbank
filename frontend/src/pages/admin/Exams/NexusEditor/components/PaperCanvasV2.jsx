@@ -31,6 +31,8 @@ const PaperCanvasV2 = React.memo(({
 }) => {
     const s = docSettings || {};
     const lastEditorContentRef = useRef(rawContent);
+    const editorUpdateTimeoutRef = useRef(null);
+    const extractTimeoutRef = useRef(null);
 
     const editor = useEditor({
         extensions: [
@@ -110,8 +112,8 @@ const PaperCanvasV2 = React.memo(({
             const html = editor.getHTML();
             lastEditorContentRef.current = html;
             // Debounce to prevent lag when typing
-            if (window.editorUpdateTimeout) clearTimeout(window.editorUpdateTimeout);
-            window.editorUpdateTimeout = setTimeout(() => {
+            if (editorUpdateTimeoutRef.current) clearTimeout(editorUpdateTimeoutRef.current);
+            editorUpdateTimeoutRef.current = setTimeout(() => {
                 setRawContent(html);
             }, 800);
         }
@@ -140,8 +142,8 @@ const PaperCanvasV2 = React.memo(({
         if (!editor) return;
         
         const extractAndDispatch = () => {
-            if (window.extractTimeout) clearTimeout(window.extractTimeout);
-            window.extractTimeout = setTimeout(() => {
+            if (extractTimeoutRef.current) clearTimeout(extractTimeoutRef.current);
+            extractTimeoutRef.current = setTimeout(() => {
                 const qs = [];
                 editor.state.doc.descendants((node, pos) => {
                     if (node.type.name === 'questionBlock') {
@@ -175,8 +177,17 @@ const PaperCanvasV2 = React.memo(({
         return () => {
             editor.off('update', extractAndDispatch);
             window.removeEventListener('nexusDeleteNodeRequested', handleDelete);
+            if (extractTimeoutRef.current) clearTimeout(extractTimeoutRef.current);
         };
     }, [editor]);
+
+    // Global cleanup for active timers on unmount
+    useEffect(() => {
+        return () => {
+            if (editorUpdateTimeoutRef.current) clearTimeout(editorUpdateTimeoutRef.current);
+            if (extractTimeoutRef.current) clearTimeout(extractTimeoutRef.current);
+        };
+    }, []);
 
     // Sync external rawContent changes (e.g., when a Template is clicked)
     useEffect(() => {

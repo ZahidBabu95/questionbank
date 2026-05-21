@@ -30,6 +30,11 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
         }
     }
 
+    const isStructuredCQAnswer = q.type === 'CQ' && q.correctAnswer && q.correctAnswer.includes('cq-ans-part');
+    const isStructuredCQExplanation = q.type === 'CQ' && finalExplanation && finalExplanation.includes('cq-exp-part');
+    const hasCQAnswer = q.correctAnswer && q.correctAnswer.replace(/<[^>]*>/g, '').trim().length > 0;
+    const hasCQExplanation = finalExplanation && finalExplanation.replace(/<[^>]*>/g, '').trim().length > 0;
+
     return (
         <div 
             id={`question-item-${q.id}`}
@@ -150,11 +155,17 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             )}
 
             {/* Non-MCQ: show correct answer block after Show Answer click */}
-            {showAnswer && q.type !== 'MCQ' && q.type !== 'CQ' && q.correctAnswer && (
+            {showAnswer && q.type !== 'MCQ' && (q.type !== 'CQ' || !isStructuredCQAnswer) && q.correctAnswer && hasCQAnswer && (
                 <div className="mx-4 mb-2 px-3 py-2.5 bg-emerald-50 border border-emerald-300 rounded-lg text-[12px] text-emerald-900 font-semibold leading-snug flex items-start gap-2">
                     <CheckCircle size={14} className="text-emerald-500 mt-0.5 shrink-0" />
-                    <span><MarkdownRenderer content={q.correctAnswer} /></span>
+                    <div className="flex-1 min-w-0">
+                        {q.type === 'CQ' && <span className="block text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1">সৃজনশীল উত্তর (পুরাতন/আনস্ট্রাকচার্ড ফরম্যাট):</span>}
+                        <span><MarkdownRenderer content={q.correctAnswer} /></span>
+                    </div>
                 </div>
+            )}
+            {showAnswer && q.type === 'CQ' && (!q.correctAnswer || !hasCQAnswer) && (
+                <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No answer available.</div>
             )}
 
             {/* ── Show Answer + Explanation Buttons ── */}
@@ -187,10 +198,16 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
 
 
             {/* ── Explanation Block ── */}
-            {showExplanation && q.type !== 'CQ' && finalExplanation && (
+            {showExplanation && (q.type !== 'CQ' || !isStructuredCQExplanation) && finalExplanation && hasCQExplanation && (
                 <div className="mx-4 mb-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-[12px] text-blue-900 leading-snug">
-                    <MarkdownRenderer content={finalExplanation} />
+                    <div className="flex-1 min-w-0">
+                        {q.type === 'CQ' && <span className="block text-[10px] font-bold text-blue-600 uppercase tracking-wide mb-1">সৃজনশীল ব্যাখ্যা (পুরাতন/আনস্ট্রাকচার্ড ফরম্যাট):</span>}
+                        <MarkdownRenderer content={finalExplanation} />
+                    </div>
                 </div>
+            )}
+            {showExplanation && q.type === 'CQ' && (!finalExplanation || !hasCQExplanation) && (
+                <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No explanation available.</div>
             )}
             {showExplanation && q.type !== 'CQ' && !finalExplanation && (
                 <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No explanation available.</div>

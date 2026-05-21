@@ -2,12 +2,103 @@ import React, { memo } from 'react';
 import { FileText } from 'lucide-react';
 import RichTextEditor from '../../../../components/RichTextEditor';
 
-const QuestionContentEditor = memo(({ formData, setFormData, questionType }) => {
+const QuestionContentEditor = memo(({ 
+    formData, 
+    setFormData, 
+    questionType,
+    isLegacyCQ,
+    editMode,
+    setEditMode,
+    showReference,
+    setShowReference,
+    originalQuestion
+}) => {
     return (
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
             <h2 className="text-lg font-semibold text-slate-800 mb-6 flex items-center gap-2 border-b pb-3 border-slate-100">
                 <FileText size={18} className="text-amber-500" /> Content Editor
             </h2>
+
+            {/* Warning Banner & Mode Selector for Legacy CQ in full editor */}
+            {isLegacyCQ && (
+                <div className="mb-6 p-4 rounded-xl border border-amber-200 bg-amber-50/30 space-y-3">
+                    <div className="flex gap-2.5">
+                        <span className="text-amber-600 shrink-0 text-lg font-bold">⚠️</span>
+                        <div className="space-y-1">
+                            <h4 className="text-sm font-bold text-amber-800">লেগেসি (আনস্ট্রাকচার্ড) সৃজনশীল প্রশ্ন সনাক্ত করা হয়েছে</h4>
+                            <p className="text-xs text-amber-700 leading-relaxed">
+                                এই প্রশ্নটি ক, খ, গ, ঘ সাব-প্রশ্নে বিভক্ত নয়। আপনি এটিকে সরাসরি মূল টেক্সট হিসেবে এডিট করতে পারেন অথবা নতুন ক, খ, গ, ঘ স্ট্রাকচারে রূপান্তর করতে পারেন।
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 border-t border-amber-200/60 pt-2.5">
+                        <button
+                            type="button"
+                            onClick={() => setEditMode('legacy')}
+                            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                                editMode === 'legacy'
+                                    ? 'bg-amber-600 text-white shadow-sm font-extrabold'
+                                    : 'bg-white text-amber-800 border border-amber-300 hover:bg-amber-100/50'
+                            }`}
+                        >
+                            Raw Text এডিট করুন
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setEditMode('structured')}
+                            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                                editMode === 'structured'
+                                    ? 'bg-amber-600 text-white shadow-sm font-extrabold'
+                                    : 'bg-white text-amber-800 border border-amber-300 hover:bg-amber-100/50'
+                            }`}
+                        >
+                            Structured এ রূপান্তর করুন
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Collapsible Reference Panel for Legacy CQ Conversion */}
+            {isLegacyCQ && editMode === 'structured' && originalQuestion && (
+                <div className="mb-6 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                    <button
+                        type="button"
+                        onClick={() => setShowReference(!showReference)}
+                        className="w-full px-4 py-3 bg-slate-100 flex items-center justify-between text-slate-700 hover:bg-slate-200/70 transition-all text-left"
+                    >
+                        <span className="text-xs font-bold flex items-center gap-1.5">
+                            📚 মূল লেগেসি টেক্সট রেফারেন্স (এখান থেকে কপি করুন)
+                        </span>
+                        <span className={`text-slate-500 transition-transform ${showReference ? 'rotate-180' : ''}`}>▼</span>
+                    </button>
+                    {showReference && (
+                        <div className="p-4 space-y-4 text-xs border-t border-slate-200 max-h-80 overflow-y-auto custom-scrollbar bg-white">
+                            {originalQuestion.stimulus && (
+                                <div>
+                                    <span className="font-bold text-slate-500 block mb-1">মূল উদ্দীপক (Stimulus):</span>
+                                    <div className="p-2.5 bg-slate-50 rounded border border-slate-200 text-slate-700 max-h-32 overflow-y-auto" dangerouslySetInnerHTML={{ __html: originalQuestion.stimulus }} />
+                                </div>
+                            )}
+                            <div>
+                                <span className="font-bold text-slate-500 block mb-1">মূল প্রশ্ন টেক্সট (Question Text):</span>
+                                <div className="p-2.5 bg-slate-50 rounded border border-slate-200 text-slate-700 max-h-40 overflow-y-auto" dangerouslySetInnerHTML={{ __html: originalQuestion.questionText || '—' }} />
+                            </div>
+                            {originalQuestion.correctAnswer && (
+                                <div>
+                                    <span className="font-bold text-slate-500 block mb-1">মূল উত্তর (Correct Answer):</span>
+                                    <div className="p-2.5 bg-slate-50 rounded border border-slate-200 text-slate-700 max-h-40 overflow-y-auto" dangerouslySetInnerHTML={{ __html: originalQuestion.correctAnswer }} />
+                                </div>
+                            )}
+                            {originalQuestion.explanation && (
+                                <div>
+                                    <span className="font-bold text-slate-500 block mb-1">মূল ব্যাখ্যা (Explanation):</span>
+                                    <div className="p-2.5 bg-slate-50 rounded border border-slate-200 text-slate-700 max-h-40 overflow-y-auto" dangerouslySetInnerHTML={{ __html: originalQuestion.explanation }} />
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="space-y-8">
                 <div>
@@ -17,7 +108,7 @@ const QuestionContentEditor = memo(({ formData, setFormData, questionType }) => 
                         height="min-h-[120px]" className="border border-slate-200 rounded-lg overflow-hidden" />
                 </div>
 
-                {questionType !== 'CQ' && (
+                {(questionType !== 'CQ' || editMode === 'legacy') && (
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Question Text *</label>
                         <RichTextEditor value={formData.questionText || ''}
@@ -58,7 +149,7 @@ const QuestionContentEditor = memo(({ formData, setFormData, questionType }) => 
                     </div>
                 )}
 
-                {questionType !== 'MCQ' && questionType !== 'CQ' && (
+                {((questionType !== 'MCQ' && questionType !== 'CQ') || (questionType === 'CQ' && editMode === 'legacy')) && (
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Correct Answer</label>
                         <RichTextEditor value={formData.correctAnswer || ''}
@@ -67,7 +158,7 @@ const QuestionContentEditor = memo(({ formData, setFormData, questionType }) => 
                     </div>
                 )}
 
-                {questionType !== 'CQ' && (
+                {(questionType !== 'CQ' || editMode === 'legacy') && (
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">Explanation (ব্যাখ্যা) <span className="text-slate-400 font-normal">- Optional</span></label>
                         <RichTextEditor value={formData.explanation || ''}

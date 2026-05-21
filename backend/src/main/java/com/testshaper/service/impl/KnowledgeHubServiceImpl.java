@@ -2014,6 +2014,8 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
 
                                 StringBuilder answersHtmlBuilder = new StringBuilder("<div class=\"cq-answers\">");
                                 StringBuilder explanationsHtmlBuilder = new StringBuilder("<div class=\"cq-explanations\">");
+                                boolean hasAnyAnswer = false;
+                                boolean hasAnyExplanation = false;
 
                                 for (com.fasterxml.jackson.databind.JsonNode sp : rootNode.get("sub_parts")) {
                                     String part = sp.hasNonNull("part_label") ? sp.get("part_label").asText() : sp.path("part").asText("");
@@ -2031,11 +2033,13 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                                     if(!ans.isBlank()) {
                                         answersHtmlBuilder.append("<div class=\"cq-ans-part\" data-label=\"").append(part).append("\" style=\"margin-bottom:8px;\">");
                                         answersHtmlBuilder.append("<strong>").append(part).append(") উত্তর:</strong> <span class=\"cq-ans-content\">").append(ans).append("</span></div>");
+                                        hasAnyAnswer = true;
                                     }
                                     if(!hint.isBlank()) {
                                         explanationsHtmlBuilder.append("<div class=\"cq-exp-part\" data-label=\"").append(part).append("\" style=\"margin-bottom:8px;\">");
                                         explanationsHtmlBuilder.append("<strong>").append(part).append(") ব্যাখ্যা:</strong> <span class=\"cq-exp-content\">").append(hint).append("</span></div>");
                                         explanationBuilder.append(part).append(") ").append(hint).append("\n"); // Fallback
+                                        hasAnyExplanation = true;
                                     }
                                 }
                                 cqBuilder.append("</ol></div>");
@@ -2044,10 +2048,10 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                                 
                                 qText = cqBuilder.toString();
                                 
-                                if (answersHtmlBuilder.length() > 25) {
+                                if (hasAnyAnswer) {
                                     q.setCorrectAnswer(answersHtmlBuilder.toString());
                                 }
-                                if (explanationsHtmlBuilder.length() > 30) {
+                                if (hasAnyExplanation) {
                                     q.setExplanation(explanationsHtmlBuilder.toString());
                                 }
                             }
@@ -2064,7 +2068,13 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
 
                             q.setMarks(qNode.hasNonNull("marks") ? qNode.get("marks").asDouble() : 1.0);
                             q.setNegativeMarks(0.0);
-                            q.setCorrectAnswer(qNode.path("answer").asText(null));
+                            if (q.getCorrectAnswer() == null || q.getCorrectAnswer().isBlank()) {
+                                String ansVal = null;
+                                if (qNode.hasNonNull("answer")) {
+                                    ansVal = qNode.get("answer").asText();
+                                }
+                                q.setCorrectAnswer(ansVal);
+                            }
                             
                             // Parse Statements for Multiple Completion Type
                             if ((rootNode.hasNonNull("statements") && rootNode.get("statements").isArray()) || (qNode.hasNonNull("statements") && qNode.get("statements").isArray())) {
@@ -2074,7 +2084,13 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                                 }
                             }
                             
-                            q.setExplanation(qNode.path("explanation").asText(explanationBuilder.toString()));
+                            if (q.getExplanation() == null || q.getExplanation().isBlank()) {
+                                String expVal = explanationBuilder.toString();
+                                if (qNode.hasNonNull("explanation")) {
+                                    expVal = qNode.get("explanation").asText();
+                                }
+                                q.setExplanation(expVal);
+                            }
                             q.setLanguage(book.getLanguage() != null ? book.getLanguage() : "Bangla");
                             q.setBloomLevel(qNode.path("bloomLevel").asText("UNDERSTANDING"));
                             q.setDifficulty(com.testshaper.entity.Question.DifficultyLevel.MEDIUM);

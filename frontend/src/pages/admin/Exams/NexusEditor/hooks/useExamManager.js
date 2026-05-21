@@ -8,6 +8,127 @@ import { useNexusEditor } from '../context/NexusEditorContext';
 import { DEFAULT_SETTINGS } from '../components/DocumentSettings';
 import { formatDuration, parseDurationToMinutes } from '../../../../../utils/formatUtils';
 
+// Module-level caches to prevent duplicate requests on rapid remounts
+const examPromises = new Map();
+const examCache = new Map();
+const examCacheTimes = new Map();
+
+const deduplicatedGetExam = (id) => {
+    const now = Date.now();
+    if (examCache.has(id) && (now - (examCacheTimes.get(id) || 0) < 3000)) {
+        return Promise.resolve(examCache.get(id));
+    }
+    if (examPromises.has(id)) {
+        return examPromises.get(id);
+    }
+    const promise = examService.getExam(id).then(res => {
+        examCache.set(id, res);
+        examCacheTimes.set(id, Date.now());
+        examPromises.delete(id);
+        return res;
+    }).catch(err => {
+        examPromises.delete(id);
+        throw err;
+    });
+    examPromises.set(id, promise);
+    return promise;
+};
+
+const invalidateExamCache = (id) => {
+    if (id) {
+        examCache.delete(id);
+        examCacheTimes.delete(id);
+    }
+};
+
+const settingsPromises = new Map();
+const settingsCache = new Map();
+const settingsCacheTimes = new Map();
+
+const deduplicatedGetSettings = (type, isGlobal = false) => {
+    const key = `${type}_${isGlobal ? 'global' : 'institute'}`;
+    const now = Date.now();
+    if (settingsCache.has(key) && (now - (settingsCacheTimes.get(key) || 0) < 3000)) {
+        return Promise.resolve(settingsCache.get(key));
+    }
+    if (settingsPromises.has(key)) {
+        return settingsPromises.get(key);
+    }
+    const serviceCall = isGlobal 
+        ? settingsService.getGlobalSettings(type)
+        : settingsService.getInstituteSettings(type);
+    
+    const promise = serviceCall.then(res => {
+        settingsCache.set(key, res);
+        settingsCacheTimes.set(key, Date.now());
+        settingsPromises.delete(key);
+        return res;
+    }).catch(err => {
+        settingsPromises.delete(key);
+        throw err;
+    });
+    settingsPromises.set(key, promise);
+    return promise;
+};
+
+const invalidateSettingsCache = (type, isGlobal = false) => {
+    const key = `${type}_${isGlobal ? 'global' : 'institute'}`;
+    settingsCache.delete(key);
+    settingsCacheTimes.delete(key);
+};
+
+let templatesPromise = null;
+let templatesCache = null;
+let templatesCacheTime = 0;
+
+const deduplicatedGetTemplates = () => {
+    const now = Date.now();
+    if (templatesCache && (now - templatesCacheTime < 3000)) {
+        return Promise.resolve(templatesCache);
+    }
+    if (templatesPromise) {
+        return templatesPromise;
+    }
+    templatesPromise = examService.getTemplates().then(res => {
+        templatesCache = res;
+        templatesCacheTime = Date.now();
+        templatesPromise = null;
+        return res;
+    }).catch(err => {
+        templatesPromise = null;
+        throw err;
+    });
+    return templatesPromise;
+};
+
+const invalidateTemplatesCache = () => {
+    templatesCache = null;
+    templatesCacheTime = 0;
+};
+
+let knowledgePromise = null;
+let knowledgeCache = null;
+let knowledgeCacheTime = 0;
+
+const deduplicatedGetKnowledge = () => {
+    const now = Date.now();
+    if (knowledgeCache && (now - knowledgeCacheTime < 3000)) {
+        return Promise.resolve(knowledgeCache);
+    }
+    if (knowledgePromise) {
+        return knowledgePromise;
+    }
+    knowledgePromise = axios.get('/v1/support/knowledge').then(res => {
+        knowledgeCache = res;
+        knowledgeCacheTime = Date.now();
+        knowledgePromise = null;
+        return res;
+    }).catch(err => {
+        knowledgePromise = null;
+        throw err;
+    });
+    return knowledgePromise;
+};
 
 export const useExamManager = () => {
     const { id } = useParams();
@@ -92,9 +213,9 @@ export const useExamManager = () => {
                 } catch (e) {}
             }
             if (isSuper) {
-                settings = await settingsService.getGlobalSettings('EXAM');
+                settings = await deduplicatedGetSettings('EXAM', true);
             } else {
-                settings = await settingsService.getInstituteSettings('EXAM');
+                settings = await deduplicatedGetSettings('EXAM', false);
             }
             const allKeys = Object.keys(settings || {})
                 .filter(k => k.startsWith('subject_default_'))
@@ -119,7 +240,7 @@ export const useExamManager = () => {
         if (!id) return;
         const fetchExam = async () => {
             try {
-                const res = await examService.getExam(id);
+                const res = await deduplicatedGetExam(id);
                 if (res?.data) {
                     setExamData(res.data);
                     if (res.data.editorMode) {
@@ -143,7 +264,7 @@ export const useExamManager = () => {
                             
                             // 1. Try loading from institute settings
                             try {
-                                const examSettings = await settingsService.getInstituteSettings('EXAM');
+                                const examSettings = await deduplicatedGetSettings('EXAM', false);
                                 subjectDefaultSettings = findDefaultLayoutInSettings(examSettings, className, subjectName);
                             } catch (e) {
                                 console.warn("Failed to load institute default layout:", e);
@@ -152,7 +273,7 @@ export const useExamManager = () => {
                             // 2. Fallback to global settings
                             if (!subjectDefaultSettings) {
                                 try {
-                                    const globalSettings = await settingsService.getGlobalSettings('EXAM');
+                                    const globalSettings = await deduplicatedGetSettings('EXAM', true);
                                     subjectDefaultSettings = findDefaultLayoutInSettings(globalSettings, className, subjectName);
                                 } catch (e) {
                                     console.warn("Failed to load global default layout:", e);
@@ -433,7 +554,7 @@ export const useExamManager = () => {
                         try {
                             const subTag = 'RULE_FOR_' + res.data.subjectName.replace(/\s/g, '');
                             const altTag = res.data.subjectName;
-                            const kbRes = await axios.get('/v1/support/knowledge');
+                            const kbRes = await deduplicatedGetKnowledge();
                             let rules = kbRes.data.filter(k => k.tags && (k.tags.includes(subTag) || k.tags.includes(altTag)));
                             if (rules.length === 0) rules = kbRes.data.filter(k => k.content && k.content.includes(res.data.subjectName));
                             if (rules.length > 0) {
@@ -459,7 +580,7 @@ export const useExamManager = () => {
         const fetchTemplates = async () => {
             setLoadingTemplates(true);
             try {
-                const res = await examService.getTemplates();
+                const res = await deduplicatedGetTemplates();
                 if (res?.data) setTemplates(res.data);
             } catch (err) { console.error("Failed to load templates:", err); } 
             finally { setLoadingTemplates(false); }
@@ -513,6 +634,7 @@ export const useExamManager = () => {
             };
             const res = await examService.createTemplate(payload);
             if (res?.data) {
+                invalidateTemplatesCache();
                 setTemplates(prev => [...prev, res.data]);
                 alert(uiLang === 'bn' ? "টেমপ্লেট সফলভাবে সেভ হয়েছে!" : "Template saved successfully!");
             }
@@ -541,6 +663,7 @@ export const useExamManager = () => {
             
             if (id) {
                 await examService.updateExam(id, payload);
+                invalidateExamCache(id);
                 alert(uiLang === 'bn' ? "ডকুমেন্ট সফলভাবে আপডেট হয়েছে!" : "Document updated successfully!");
             } else {
                 const title = window.prompt(uiLang === 'bn' ? "এই ডকুমেন্টের একটি নাম দিন:" : "Enter a title for this document/exam:");
@@ -645,6 +768,7 @@ export const useExamManager = () => {
             } else {
                 await settingsService.updateInstituteSettings('EXAM', examSettings);
             }
+            invalidateSettingsCache('EXAM', isSuper);
             alert(uiLang === 'bn' ? "ডিফল্ট লেআউট সফলভাবে সংরক্ষিত হয়েছে!" : "Default layout saved successfully!");
             fetchSavedSubjects();
         } catch (err) {
@@ -662,14 +786,14 @@ export const useExamManager = () => {
             
             // Try loading from institute settings first
             try {
-                examSettings = await settingsService.getInstituteSettings('EXAM');
+                examSettings = await deduplicatedGetSettings('EXAM', false);
             } catch (e) {
                 console.warn("Failed to get institute settings, checking global...", e);
             }
 
             // Fallback to global settings
             try {
-                globalSettings = await settingsService.getGlobalSettings('EXAM');
+                globalSettings = await deduplicatedGetSettings('EXAM', true);
             } catch (e) {
                 console.warn("Failed to get global settings", e);
             }
@@ -772,9 +896,10 @@ export const useExamManager = () => {
                     delete examSettings[matchedKey];
                     if (isSuper) {
                         await settingsService.updateGlobalSettings('EXAM', examSettings);
-                    } else (
-                        await settingsService.updateInstituteSettings('EXAM', examSettings)
-                    );
+                    } else {
+                        await settingsService.updateInstituteSettings('EXAM', examSettings);
+                    }
+                    invalidateSettingsCache('EXAM', isSuper);
                     alert(uiLang === 'bn' ? "ডিফল্ট লেআউট মুছে ফেলা হয়েছে!" : "Default layout deleted successfully!");
                     fetchSavedSubjects();
                 } else {

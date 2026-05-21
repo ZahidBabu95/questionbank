@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { DEFAULT_SETTINGS } from '../components/DocumentSettings';
 import { UI_TEXT } from '../components/translations';
 
@@ -49,17 +49,17 @@ export const NexusEditorProvider = ({ children }) => {
     const [toasts, setToasts] = useState([]);
     const [canvasTheme, setCanvasTheme] = useState('white'); // 'white' | 'cream' | 'dark'
 
-    const addToast = (message, type = 'success', duration = 4000) => {
+    const addToast = useCallback((message, type = 'success', duration = 4000) => {
         const id = Date.now() + Math.random().toString(36).substr(2, 5);
         setToasts(prev => [...prev, { id, message, type }]);
         setTimeout(() => {
             setToasts(prev => prev.filter(t => t.id !== id));
         }, duration);
-    };
+    }, []);
 
-    const removeToast = (id) => {
+    const removeToast = useCallback((id) => {
         setToasts(prev => prev.filter(t => t.id !== id));
-    };
+    }, []);
 
     // --- Interaction States ---
     const [editor, setEditor] = useState(null);
@@ -70,10 +70,10 @@ export const NexusEditorProvider = ({ children }) => {
     const [documentQuestions, setDocumentQuestions] = useState([]);
 
     // Helpers
-    const updateSetting = (key, value) => setDocSettings(prev => ({ ...prev, [key]: value }));
-    const updateMultiSettings = (obj) => setDocSettings(prev => ({ ...prev, ...obj }));
+    const updateSetting = useCallback((key, value) => setDocSettings(prev => ({ ...prev, [key]: value })), []);
+    const updateMultiSettings = useCallback((obj) => setDocSettings(prev => ({ ...prev, ...obj })), []);
 
-    const value = {
+    const value = useMemo(() => ({
         // Core
         editorMode, setEditorMode,
         rawContent, setRawContent,
@@ -109,7 +109,15 @@ export const NexusEditorProvider = ({ children }) => {
         pendingSwapQuestion, setPendingSwapQuestion,
         selectedImageConfig, setSelectedImageConfig,
         documentQuestions, setDocumentQuestions
-    };
+    }), [
+        editorMode, rawContent, docSettings, updateSetting, updateMultiSettings,
+        zoom, pageCount, examData, isSavingDocument, editor,
+        editorConfig, generationBlueprint,
+        uiLang, t, workspaceTools, toasts, addToast, removeToast, canvasTheme,
+        isLeftPanelOpen, leftPanelWidth, leftPanelTab,
+        isRightPanelOpen, rightPanelWidth, activeTab,
+        pendingInsertQuestion, swapTarget, pendingSwapQuestion, selectedImageConfig, documentQuestions
+    ]);
 
     return (
         <NexusEditorContext.Provider value={value}>

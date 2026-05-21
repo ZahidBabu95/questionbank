@@ -109,6 +109,8 @@ const MathNode = Node.create({
 const InlineGoldenEditor = ({ value, onChange, placeholder = "Type here...", className = "" }) => {
     const isUpdating = useRef(false);
     const [isFocused, setIsFocused] = useState(false);
+    const updateTimeoutRef = useRef(null);
+    const blurTimeoutRef = useRef(null);
 
     const editor = useEditor({
         extensions: [
@@ -123,11 +125,13 @@ const InlineGoldenEditor = ({ value, onChange, placeholder = "Type here...", cla
             isUpdating.current = true;
             onChange(editor.getHTML());
             // small delay to prevent cycle
-            setTimeout(() => { isUpdating.current = false; }, 50);
+            if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+            updateTimeoutRef.current = setTimeout(() => { isUpdating.current = false; }, 50);
         },
         onFocus: () => setIsFocused(true),
         onBlur: () => {
-            setTimeout(() => { setIsFocused(false); }, 150);
+            if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+            blurTimeoutRef.current = setTimeout(() => { setIsFocused(false); }, 150);
         },
         editorProps: {
             attributes: {
@@ -142,6 +146,14 @@ const InlineGoldenEditor = ({ value, onChange, placeholder = "Type here...", cla
             editor.commands.setContent(value, false);
         }
     }, [value, editor]);
+
+    // Cleanup active timers on unmount to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
+            if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+        };
+    }, []);
 
     if (!editor) return null;
 

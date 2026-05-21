@@ -1,13 +1,18 @@
 # Last Session Summary
 
 ## What We Did
-1. **Dynamic Question Type Backend Configuration:** Integrated the `QuestionTypeRepository` into `KnowledgeHubServiceImpl` to fetch custom AI prompt guidelines dynamically based on the requested question type. 
-2. **Dynamic UI Rendering (Proofreading Workspace):** Updated the frontend to fetch question types from `/v1/question-types` and merge them with core defaults (`MULTIPLE_CHOICE`, `CREATIVE`, `SHORT_ANSWER`). 
-3. **Curriculum Rules Helper:** Added a "➕ Add Question Type" dropdown in the `CurriculumRules.jsx` JSON editor to instantly inject schema blueprints.
-4. **AI Generation Pipeline (RAG):** The AI now strictly adheres to the custom schema structure (`BANGLA_PARAGRAPH`, `TRUE_FALSE`, etc.) by reading the database definitions, and returns structured data that natively flows into the UI without manual coding.
-5. **Architectural Analysis:** Confirmed that the system is fully polymorphic. Core forms (`MCQ`, `CQ`, `SHORT`) act as native fallbacks, while dynamic entries map transparently to JSON.
+1. **Resolved NexusEditor Memory Leaks**:
+   - Replaced global window timeouts inside `PaperCanvasV2.jsx` and `InlineGoldenEditor.jsx` with React `useRef` and ensured proper `useEffect` cleanups on component unmount.
+   - Refactored `ResizableImageNode.jsx` window mouse move/up listeners to prevent memory leakage when unmounted mid-drag.
+   - Optimized `useCanvasSync.js` dependency arrays by serializing the relevant layout settings.
+2. **Eliminated Context Churn & Render Loops**:
+   - Wrapped `updateSetting`, `updateMultiSettings`, and Toast helper methods in React `useCallback` inside `NexusEditorContext.jsx`.
+   - Memoized the context provider `value` object using React `useMemo`.
+   - Split page title `useEffect` inside `NexusEditor.jsx` to prevent continuous header resetting and layout thrashing.
+3. **Stopped Network API Request Storms**:
+   - Implemented static module-level request deduplication and cache controls (using a short-lived `3000ms` window) in `useExamManager.js` for exams, settings, templates, and knowledge base retrievals.
+   - Wired cache invalidation hooks to trigger upon explicit document save, template creation, and settings update requests.
 
 ## Next Steps
-- Implement frontend dynamic form generation for manual user input (Dynamic Form Builder) to replace hardcoded data-entry forms.
-- Proceed with building more complex, nested question types and analyzing edge-case parsing.
-- Refine the frontend previewing module for highly specific new types like Matching Tables.
+- Verify the editor performance locally.
+- Test document saving, template application, and default layout configuration across multiple page switches.

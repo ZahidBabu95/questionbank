@@ -37,6 +37,16 @@ const ResizableImageView = ({ node, updateAttributes, selected, editor, getPos }
         return () => el.removeEventListener('mousedown', handleMouseDown, { capture: true });
     }, [editor, getPos, selected, imgError]);
 
+    const onMoveRef = useRef(null);
+    const onUpRef = useRef(null);
+
+    useEffect(() => {
+        return () => {
+            if (onMoveRef.current) window.removeEventListener('mousemove', onMoveRef.current);
+            if (onUpRef.current) window.removeEventListener('mouseup', onUpRef.current);
+        };
+    }, []);
+
     const onResizeStart = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -53,7 +63,16 @@ const ResizableImageView = ({ node, updateAttributes, selected, editor, getPos }
             updateAttributes({ width: `${Math.max(60, startW.current + mu.clientX - startX.current)}px` });
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('mouseup', onUp);
+            onMoveRef.current = null;
+            onUpRef.current = null;
         };
+
+        if (onMoveRef.current) window.removeEventListener('mousemove', onMoveRef.current);
+        if (onUpRef.current) window.removeEventListener('mouseup', onUpRef.current);
+
+        onMoveRef.current = onMove;
+        onUpRef.current = onUp;
+
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
     };

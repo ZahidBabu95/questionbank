@@ -5,6 +5,7 @@ import {
     Layers, Info, Edit3, Send, Eye
 } from 'lucide-react';
 import questionService from '../../../../services/questionService';
+import RichTextEditor from '../../../../components/RichTextEditor';
 
 // ─── Locked field display ────────────────────────────────────────────────────
 const LockedField = ({ label, value }) => (
@@ -42,21 +43,98 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
         explanation: '',
         options: [],
         statements: [],
+        cqParts: [],
         revisionNotes: '',
     });
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState(null);
+    const [isLegacyCQ, setIsLegacyCQ] = useState(false);
+    const [editMode, setEditMode] = useState('structured'); // 'legacy' or 'structured'
+    const [showReference, setShowReference] = useState(true);
+
+    const convertMarkdownImagesToHtml = (text) => {
+        if (!text) return text;
+        return text.replace(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/gi, (match, alt, url) => {
+            return `<img src="${url}" alt="${alt}" />`;
+        });
+    };
 
     // Pre-fill form when question changes
     useEffect(() => {
         if (!q) return;
+
+        let initialStimulus = q.stimulus || '';
+        let parsedCqParts = [];
+        let detectedLegacy = false;
+
+        if (q.type === 'CQ') {
+            const hasCqQuestions = q.questionText && q.questionText.includes('cq-questions');
+            detectedLegacy = !hasCqQuestions;
+
+            if (!detectedLegacy) {
+                const html = convertMarkdownImagesToHtml(q.questionText || '');
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                const ansHtml = convertMarkdownImagesToHtml(q.correctAnswer || '');
+                const expHtml = convertMarkdownImagesToHtml(q.explanation || '');
+                
+                const ansDoc = parser.parseFromString(ansHtml, 'text/html');
+                const expDoc = parser.parseFromString(expHtml, 'text/html');
+                
+                const qList = doc.querySelectorAll('.cq-questions ol li');
+                qList.forEach((li, idx) => {
+                    const marks = parseFloat(li.getAttribute('data-marks')) || 1;
+                    const textSpan = li.querySelector('.cq-text');
+                    const label = ['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(97 + idx);
+                    
+                    let partAns = '';
+                    let partExp = '';
+                    
+                    const ansNode = ansDoc.querySelector(`.cq-ans-part[data-label="${label}"] .cq-ans-content`) || ansDoc.querySelector(`.cq-ans-part[data-label="${label}"]`);
+                    if (ansNode) partAns = ansNode.innerHTML;
+                    
+                    const expNode = expDoc.querySelector(`.cq-exp-part[data-label="${label}"] .cq-exp-content`) || expDoc.querySelector(`.cq-exp-part[data-label="${label}"]`);
+                    if (expNode) partExp = expNode.innerHTML;
+                    
+                    parsedCqParts.push({
+                        label: label,
+                        text: textSpan ? textSpan.innerHTML : li.innerHTML,
+                        marks: marks,
+                        answer: partAns,
+                        explanation: partExp
+                    });
+                });
+
+                const stemDiv = doc.querySelector('.cq-stem');
+                if (stemDiv) {
+                    initialStimulus = stemDiv.innerHTML;
+                } else if (!initialStimulus && q.questionText && q.questionText.includes('<div class="cq-questions">')) {
+                    initialStimulus = q.questionText.split('<div class="cq-questions">')[0];
+                }
+            }
+
+            if (parsedCqParts.length === 0) {
+                parsedCqParts = [
+                    { label: 'ক', text: '', answer: '', explanation: '', marks: 1 },
+                    { label: 'খ', text: '', answer: '', explanation: '', marks: 2 },
+                    { label: 'গ', text: '', answer: '', explanation: '', marks: 3 },
+                    { label: 'ঘ', text: '', answer: '', explanation: '', marks: 4 }
+                ];
+            }
+        }
+
+        setIsLegacyCQ(detectedLegacy);
+        setEditMode(detectedLegacy ? 'legacy' : 'structured');
+
         setForm({
-            stimulus: q.stimulus || '',
+            stimulus: initialStimulus,
             questionText: q.questionText || '',
             correctAnswer: q.correctAnswer || '',
             explanation: q.explanation || '',
             options: (q.options || []).map(o => ({ ...o, correct: o.correct ?? o.isCorrect ?? false })),
             statements: q.statements || [],
+            cqParts: parsedCqParts,
             revisionNotes: '',
         });
         setToast(null);
@@ -77,6 +155,12 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
             setToast({ type: 'error', msg: 'Revision notes আবশ্যক — কেন রিভাইজ করছেন লিখুন।' });
             return;
         }
+        if (q.type === 'CQ' && editMode === 'structured') {
+            if (form.cqParts.some(sq => !sq.text || sq.text.trim() === '' || sq.text === '<p><br></p>')) {
+                setToast({ type: 'error', msg: `সকল ${form.cqParts.length} টি উপ-প্রশ্ন পূরণ করুন।` });
+                return;
+            }
+        }
         setSaving(true);
         setToast(null);
         try {
@@ -87,11 +171,47 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                 return stripped;
             };
 
+            let finalQuestionText = form.questionText;
+            let finalCorrectAnswer = form.correctAnswer;
+            let finalExplanation = form.explanation;
+
+            if (q.type === 'CQ') {
+                if (editMode === 'structured') {
+                    let stemHtml = form.stimulus || '';
+                    let combinedHtml = `<div class="cq-stem">${stemHtml}</div><div class="cq-questions"><ol type="a">`;
+                    let answersHtml = '<div class="cq-answers">';
+                    let explanationsHtml = '<div class="cq-explanations">';
+
+                    form.cqParts.forEach(sq => {
+                        combinedHtml += `<li data-marks="${sq.marks}"><span class="cq-text">${sq.text}</span> <span class="cq-marks">(${sq.marks})</span></li>`;
+                        if (sq.answer) {
+                            answersHtml += `<div class="cq-ans-part" data-label="${sq.label}" style="margin-bottom:8px;"><strong>${sq.label}) উত্তর:</strong> <span class="cq-ans-content">${sq.answer}</span></div>`;
+                        }
+                        if (sq.explanation) {
+                            explanationsHtml += `<div class="cq-exp-part" data-label="${sq.label}" style="margin-bottom:8px;"><strong>${sq.label}) ব্যাখ্যা:</strong> <span class="cq-exp-content">${sq.explanation}</span></div>`;
+                        }
+                    });
+
+                    combinedHtml += '</ol></div>';
+                    answersHtml += '</div>';
+                    explanationsHtml += '</div>';
+
+                    finalQuestionText = combinedHtml;
+                    finalCorrectAnswer = answersHtml === '<div class="cq-answers"></div>' ? null : answersHtml;
+                    finalExplanation = explanationsHtml === '<div class="cq-explanations"></div>' ? null : explanationsHtml;
+                } else {
+                    // Legacy mode: save raw fields as-is
+                    finalQuestionText = form.questionText;
+                    finalCorrectAnswer = form.correctAnswer;
+                    finalExplanation = form.explanation;
+                }
+            }
+
             const payload = {
                 stimulus: form.stimulus,
-                questionText: form.questionText,
-                correctAnswer: form.correctAnswer,
-                explanation: form.explanation,
+                questionText: finalQuestionText,
+                correctAnswer: finalCorrectAnswer,
+                explanation: finalExplanation,
                 options: q.type === 'MCQ' ? form.options.map(o => ({
                     id: o.id,
                     optionLabel: o.optionLabel,
@@ -176,29 +296,207 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                             </span>
                         </div>
 
+                        {/* Warning Banner & Mode Selector for Legacy CQ */}
+                        {isLegacyCQ && (
+                            <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/30 space-y-3">
+                                <div className="flex gap-2.5">
+                                    <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={16} />
+                                    <div className="space-y-1">
+                                        <h4 className="text-[12px] font-bold text-amber-800">লেগেসি (আনস্ট্রাকচার্ড) সৃজনশীল প্রশ্ন সনাক্ত করা হয়েছে</h4>
+                                        <p className="text-[11px] text-amber-700 leading-relaxed">
+                                            এই প্রশ্নটি ক, খ, গ, ঘ সাব-প্রশ্নে বিভক্ত নয়। আপনি এটিকে সরাসরি মূল টেক্সট হিসেবে এডিট করতে পারেন অথবা নতুন ক, খ, গ, ঘ স্ট্রাকচারে রূপান্তর করতে পারেন।
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 border-t border-amber-200/60 pt-2.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditMode('legacy')}
+                                        className={`flex-1 py-1.5 px-3 rounded-lg text-[11px] font-bold transition-all ${
+                                            editMode === 'legacy'
+                                                ? 'bg-amber-600 text-white shadow-sm'
+                                                : 'bg-white text-amber-800 border border-amber-300 hover:bg-amber-100/50'
+                                        }`}
+                                    >
+                                        Raw Text এডিট করুন
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditMode('structured')}
+                                        className={`flex-1 py-1.5 px-3 rounded-lg text-[11px] font-bold transition-all ${
+                                            editMode === 'structured'
+                                                ? 'bg-amber-600 text-white shadow-sm'
+                                                : 'bg-white text-amber-800 border border-amber-300 hover:bg-amber-100/50'
+                                        }`}
+                                    >
+                                        Structured এ রূপান্তর করুন
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Collapsible Reference Panel for Legacy CQ Conversion */}
+                        {isLegacyCQ && editMode === 'structured' && (
+                            <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowReference(!showReference)}
+                                    className="w-full px-4 py-2.5 bg-slate-100 flex items-center justify-between text-slate-700 hover:bg-slate-200/70 transition-all text-left"
+                                >
+                                    <span className="text-[11px] font-bold flex items-center gap-1.5">
+                                        <BookOpen size={13} className="text-slate-500" />
+                                        মূল লেগেসি টেক্সট রেফারেন্স (এখান থেকে কপি করুন)
+                                    </span>
+                                    <ChevronRight size={14} className={`text-slate-500 transition-transform ${showReference ? 'rotate-90' : ''}`} />
+                                </button>
+                                {showReference && (
+                                    <div className="p-3.5 space-y-3 text-[11px] border-t border-slate-200 max-h-60 overflow-y-auto custom-scrollbar bg-white">
+                                        {q.stimulus && (
+                                            <div>
+                                                <span className="font-bold text-slate-500 block mb-1">মূল উদ্দীপক (Stimulus):</span>
+                                                <div className="p-2 bg-slate-50 rounded border border-slate-200 text-slate-700 max-h-24 overflow-y-auto" dangerouslySetInnerHTML={{ __html: q.stimulus }} />
+                                            </div>
+                                        )}
+                                        <div>
+                                            <span className="font-bold text-slate-500 block mb-1">মূল প্রশ্ন টেক্সট (Question Text):</span>
+                                            <div className="p-2 bg-slate-50 rounded border border-slate-200 text-slate-700 max-h-32 overflow-y-auto" dangerouslySetInnerHTML={{ __html: q.questionText || '—' }} />
+                                        </div>
+                                        {q.correctAnswer && (
+                                            <div>
+                                                <span className="font-bold text-slate-500 block mb-1">মূল উত্তর (Correct Answer):</span>
+                                                <div className="p-2 bg-slate-50 rounded border border-slate-200 text-slate-700 max-h-32 overflow-y-auto" dangerouslySetInnerHTML={{ __html: q.correctAnswer }} />
+                                            </div>
+                                        )}
+                                        {q.explanation && (
+                                            <div>
+                                                <span className="font-bold text-slate-500 block mb-1">মূল ব্যাখ্যা (Explanation):</span>
+                                                <div className="p-2 bg-slate-50 rounded border border-slate-200 text-slate-700 max-h-32 overflow-y-auto" dangerouslySetInnerHTML={{ __html: q.explanation }} />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* ── EDITABLE: Stimulus ── */}
                         <div className="space-y-1.5">
                             <SectionHeader icon={Edit3} title="উদ্দীপক / Stimulus" />
-                            <textarea
-                                value={form.stimulus}
-                                onChange={e => set('stimulus', e.target.value)}
-                                rows={3}
-                                placeholder="উদ্দীপক লিখুন (যদি থাকে)..."
-                                className="w-full px-3 py-2.5 text-[12px] bg-amber-50/50 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400"
-                            />
+                            {q.type === 'CQ' ? (
+                                <RichTextEditor
+                                    value={form.stimulus}
+                                    onChange={val => set('stimulus', val)}
+                                    height="h-28"
+                                    placeholder="উদ্দীপক লিখুন — সমীকরণ, তথ্য, পরিস্থিতি..."
+                                    className="bg-white text-[12px]"
+                                />
+                            ) : (
+                                <textarea
+                                    value={form.stimulus}
+                                    onChange={e => set('stimulus', e.target.value)}
+                                    rows={3}
+                                    placeholder="উদ্দীপক লিখুন (যদি থাকে)..."
+                                    className="w-full px-3 py-2.5 text-[12px] bg-amber-50/50 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400"
+                                />
+                            )}
                         </div>
 
                         {/* ── EDITABLE: Question Text ── */}
-                        <div className="space-y-1.5">
-                            <SectionHeader icon={FileText} title="প্রশ্ন / Question Text" />
-                            <textarea
-                                value={form.questionText}
-                                onChange={e => set('questionText', e.target.value)}
-                                rows={4}
-                                placeholder="প্রশ্নের টেক্সট লিখুন..."
-                                className="w-full px-3 py-2.5 text-[13px] font-medium bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-800 placeholder:text-slate-400"
-                            />
-                        </div>
+                        {q.type === 'CQ' && editMode === 'legacy' ? (
+                            <div className="space-y-1.5">
+                                <SectionHeader icon={FileText} title="সৃজনশীল প্রশ্ন / Question Text" />
+                                <RichTextEditor
+                                    value={form.questionText}
+                                    onChange={val => set('questionText', val)}
+                                    height="h-40"
+                                    placeholder="সৃজনশীল প্রশ্নের মূল কন্টেন্ট লিখুন..."
+                                    className="bg-white text-[12px]"
+                                />
+                            </div>
+                        ) : q.type !== 'CQ' ? (
+                            <div className="space-y-1.5">
+                                <SectionHeader icon={FileText} title="প্রশ্ন / Question Text" />
+                                <textarea
+                                    value={form.questionText}
+                                    onChange={e => set('questionText', e.target.value)}
+                                    rows={4}
+                                    placeholder="প্রশ্নের টেক্সট লিখুন..."
+                                    className="w-full px-3 py-2.5 text-[13px] font-medium bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-800 placeholder:text-slate-400"
+                                />
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <SectionHeader icon={FileText} title="উপ-প্রশ্ন (CQ Sub-Questions)" />
+                                {form.cqParts.map((part, index) => {
+                                    const colors = [
+                                        { color: 'border-blue-200 bg-blue-50/30', iconBg: 'bg-blue-500' },
+                                        { color: 'border-emerald-200 bg-emerald-50/30', iconBg: 'bg-emerald-500' },
+                                        { color: 'border-amber-200 bg-amber-50/30', iconBg: 'bg-amber-500' },
+                                        { color: 'border-rose-200 bg-rose-50/30', iconBg: 'bg-rose-500' }
+                                    ];
+                                    const theme = colors[index % colors.length];
+                                    const isEnglish = q.language && q.language.toLowerCase() === 'english';
+                                    const displayLabel = isEnglish ? String.fromCharCode(97 + index) : (['ক', 'খ', 'গ', 'ঘ'][index] || String.fromCharCode(97 + index));
+
+                                    return (
+                                        <div key={index} className={`flex items-start gap-3 p-3.5 rounded-xl border-2 ${theme.color} transition-all`}>
+                                            <div className="shrink-0 flex flex-col items-center gap-1">
+                                                <span className={`w-8 h-8 rounded-lg ${theme.iconBg} text-white flex items-center justify-center font-bold text-sm shadow-sm`}>
+                                                    {displayLabel}
+                                                </span>
+                                                <span className="text-[10px] font-black text-slate-500">Marks: {part.marks}</span>
+                                            </div>
+                                            <div className="flex-1 min-w-0 space-y-3">
+                                                <div className="bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                                                    <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">প্রশ্ন টেক্সট</span>
+                                                    <RichTextEditor
+                                                        value={part.text || ''}
+                                                        onChange={(val) => {
+                                                            const pts = [...form.cqParts];
+                                                            pts[index].text = val;
+                                                            set('cqParts', pts);
+                                                        }}
+                                                        placeholder={`${displayLabel} অংশের প্রশ্ন লিখুন...`}
+                                                        height="h-16"
+                                                        minimal={true}
+                                                        className="text-xs bg-white"
+                                                    />
+                                                </div>
+                                                <div className="bg-emerald-50/30 p-2 rounded-lg border border-emerald-100 shadow-sm">
+                                                    <span className="block text-[9px] font-bold text-emerald-600 uppercase tracking-wide mb-1">উত্তর (ঐচ্ছিক)</span>
+                                                    <RichTextEditor
+                                                        value={part.answer || ''}
+                                                        onChange={(val) => {
+                                                            const pts = [...form.cqParts];
+                                                            pts[index].answer = val;
+                                                            set('cqParts', pts);
+                                                        }}
+                                                        placeholder={`${displayLabel} অংশের উত্তর লিখুন (ঐচ্ছিক)...`}
+                                                        height="h-16"
+                                                        minimal={true}
+                                                        className="text-xs bg-white"
+                                                    />
+                                                </div>
+                                                <div className="bg-amber-50/30 p-2 rounded-lg border border-amber-100 shadow-sm">
+                                                    <span className="block text-[9px] font-bold text-amber-600 uppercase tracking-wide mb-1">ব্যাখ্যা (ঐচ্ছিক)</span>
+                                                    <RichTextEditor
+                                                        value={part.explanation || ''}
+                                                        onChange={(val) => {
+                                                            const pts = [...form.cqParts];
+                                                            pts[index].explanation = val;
+                                                            set('cqParts', pts);
+                                                        }}
+                                                        placeholder={`${displayLabel} অংশের ব্যাখ্যা লিখুন (ঐচ্ছিক)...`}
+                                                        height="h-16"
+                                                        minimal={true}
+                                                        className="text-xs bg-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
 
                         {/* ── EDITABLE: Statements (Multiple Completion) ── */}
                         {q.mcqType === 'MULTIPLE_COMPLETION' && (
@@ -266,31 +564,53 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                             </div>
                         )}
 
-                        {/* ── EDITABLE: Correct Answer (non-MCQ) ── */}
-                        {q.type !== 'MCQ' && (
+                        {/* ── EDITABLE: Correct Answer (non-MCQ / Legacy CQ) ── */}
+                        {((q.type !== 'MCQ' && q.type !== 'CQ') || (q.type === 'CQ' && editMode === 'legacy')) && (
                             <div className="space-y-1.5">
                                 <SectionHeader icon={CheckCircle} title="সঠিক উত্তর / Correct Answer" />
-                                <textarea
-                                    value={form.correctAnswer}
-                                    onChange={e => set('correctAnswer', e.target.value)}
-                                    rows={3}
-                                    placeholder="সঠিক উত্তর লিখুন..."
-                                    className="w-full px-3 py-2.5 text-[12px] bg-emerald-50/50 border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400"
-                                />
+                                {q.type === 'CQ' ? (
+                                    <RichTextEditor
+                                        value={form.correctAnswer}
+                                        onChange={val => set('correctAnswer', val)}
+                                        height="h-32"
+                                        placeholder="সৃজনশীল প্রশ্নের উত্তর লিখুন..."
+                                        className="bg-white text-[12px]"
+                                    />
+                                ) : (
+                                    <textarea
+                                        value={form.correctAnswer}
+                                        onChange={e => set('correctAnswer', e.target.value)}
+                                        rows={3}
+                                        placeholder="সঠিক উত্তর লিখুন..."
+                                        className="w-full px-3 py-2.5 text-[12px] bg-emerald-50/50 border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400"
+                                    />
+                                )}
                             </div>
                         )}
 
                         {/* ── EDITABLE: Explanation ── */}
-                        <div className="space-y-1.5">
-                            <SectionHeader icon={MessageSquare} title="ব্যাখ্যা / Explanation" />
-                            <textarea
-                                value={form.explanation}
-                                onChange={e => set('explanation', e.target.value)}
-                                rows={3}
-                                placeholder="প্রশ্নের ব্যাখ্যা লিখুন (ঐচ্ছিক)..."
-                                className="w-full px-3 py-2.5 text-[12px] bg-blue-50/50 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400"
-                            />
-                        </div>
+                        {(q.type !== 'CQ' || (q.type === 'CQ' && editMode === 'legacy')) && (
+                            <div className="space-y-1.5">
+                                <SectionHeader icon={MessageSquare} title="ব্যাখ্যা / Explanation" />
+                                {q.type === 'CQ' ? (
+                                    <RichTextEditor
+                                        value={form.explanation}
+                                        onChange={val => set('explanation', val)}
+                                        height="h-32"
+                                        placeholder="প্রশ্নের ব্যাখ্যা লিখুন (ঐচ্ছিক)..."
+                                        className="bg-white text-[12px]"
+                                    />
+                                ) : (
+                                    <textarea
+                                        value={form.explanation}
+                                        onChange={e => set('explanation', e.target.value)}
+                                        rows={3}
+                                        placeholder="প্রশ্নের ব্যাখ্যা লিখুন (ঐচ্ছিক)..."
+                                        className="w-full px-3 py-2.5 text-[12px] bg-blue-50/50 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400"
+                                    />
+                                )}
+                            </div>
+                        )}
 
                         <div className="border-t border-dashed border-slate-200" />
 

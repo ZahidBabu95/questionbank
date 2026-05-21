@@ -1,5 +1,6 @@
 import React from 'react';
 import { Book } from 'lucide-react';
+import RichTextEditor from '../../../../components/RichTextEditor';
 
 const CQPartsEditor = ({ cqParts, setCqParts, language }) => {
     
@@ -56,39 +57,51 @@ const CQPartsEditor = ({ cqParts, setCqParts, language }) => {
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="space-y-3">
-                                    <textarea 
-                                        rows={2}
-                                        className="w-full p-3 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none bg-white hover:bg-slate-50 transition-all resize-y shadow-sm"
-                                        value={part.text || ''}
-                                        onChange={(e) => {
-                                            const pts = [...cqParts];
-                                            pts[index].text = e.target.value;
-                                            setCqParts(pts);
-                                        }}
-                                        placeholder={`${displayLabel} অংশের প্রশ্ন লিখুন...`}
-                                    />
-                                    <textarea 
-                                        rows={2}
-                                        className="w-full p-3 text-sm border border-emerald-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-300 outline-none bg-emerald-50/30 hover:bg-emerald-50 transition-all resize-y shadow-sm"
-                                        value={part.answer || ''}
-                                        onChange={(e) => {
-                                            const pts = [...cqParts];
-                                            pts[index].answer = e.target.value;
-                                            setCqParts(pts);
-                                        }}
-                                        placeholder={`${displayLabel} অংশের উত্তর লিখুন (ঐচ্ছিক)...`}
-                                    />
-                                    <textarea 
-                                        rows={2}
-                                        className="w-full p-3 text-sm border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500/20 focus:border-amber-300 outline-none bg-amber-50/30 hover:bg-amber-50 transition-all resize-y shadow-sm"
-                                        value={part.explanation || ''}
-                                        onChange={(e) => {
-                                            const pts = [...cqParts];
-                                            pts[index].explanation = e.target.value;
-                                            setCqParts(pts);
-                                        }}
-                                        placeholder={`${displayLabel} অংশের ব্যাখ্যা লিখুন (ঐচ্ছিক)...`}
-                                    />
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
+                                        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">প্রশ্ন টেক্সট</span>
+                                        <RichTextEditor
+                                            value={part.text || ''}
+                                            onChange={(val) => {
+                                                const pts = [...cqParts];
+                                                pts[index].text = val;
+                                                setCqParts(pts);
+                                            }}
+                                            placeholder={`${displayLabel} অংশের প্রশ্ন লিখুন...`}
+                                            height="h-20"
+                                            minimal={true}
+                                            className="text-sm bg-white"
+                                        />
+                                    </div>
+                                    <div className="bg-emerald-50/30 p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                                        <span className="block text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1">উত্তর (ঐচ্ছিক)</span>
+                                        <RichTextEditor
+                                            value={part.answer || ''}
+                                            onChange={(val) => {
+                                                const pts = [...cqParts];
+                                                pts[index].answer = val;
+                                                setCqParts(pts);
+                                            }}
+                                            placeholder={`${displayLabel} অংশের উত্তর লিখুন (ঐচ্ছিক)...`}
+                                            height="h-16"
+                                            minimal={true}
+                                            className="text-sm bg-white"
+                                        />
+                                    </div>
+                                    <div className="bg-amber-50/30 p-2.5 rounded-xl border border-amber-100 shadow-sm">
+                                        <span className="block text-[10px] font-bold text-amber-600 uppercase tracking-wide mb-1">ব্যাখ্যা (ঐচ্ছিক)</span>
+                                        <RichTextEditor
+                                            value={part.explanation || ''}
+                                            onChange={(val) => {
+                                                const pts = [...cqParts];
+                                                pts[index].explanation = val;
+                                                setCqParts(pts);
+                                            }}
+                                            placeholder={`${displayLabel} অংশের ব্যাখ্যা লিখুন (ঐচ্ছিক)...`}
+                                            height="h-16"
+                                            minimal={true}
+                                            className="text-sm bg-white"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                             <button 

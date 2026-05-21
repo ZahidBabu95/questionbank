@@ -105,18 +105,18 @@ const QuestionPreviewContent = ({ selectedQuestion, isDark = false }) => {
                     </div>
                 )}
 
-                {selectedQuestion.correctAnswer && selectedQuestion.type !== 'MCQ' && selectedQuestion.type !== 'CQ' && (
+                {selectedQuestion.correctAnswer && selectedQuestion.type !== 'MCQ' && (selectedQuestion.type !== 'CQ' || !selectedQuestion.correctAnswer.includes('cq-ans-part')) && (
                     <div>
-                        <h3 className={`text-sm font-bold ${isDark ? 'text-emerald-500' : 'text-emerald-600'} uppercase tracking-wider mb-2 flex items-center gap-2`}><CheckCircle size={16} /> Correct Answer</h3>
+                        <h3 className={`text-sm font-bold ${isDark ? 'text-emerald-500' : 'text-emerald-600'} uppercase tracking-wider mb-2 flex items-center gap-2`}><CheckCircle size={16} /> {selectedQuestion.type === 'CQ' ? 'Correct Answer (Legacy/Unstructured)' : 'Correct Answer'}</h3>
                         <div className={`p-4 ${isDark ? 'bg-emerald-900/10 text-emerald-300 border-emerald-800/30' : 'bg-emerald-50 text-emerald-900 border-emerald-200'} font-medium leading-relaxed rounded-xl border`}>
                             <MarkdownRenderer content={selectedQuestion.correctAnswer} className={isDark ? 'prose-invert' : ''} />
                         </div>
                     </div>
                 )}
 
-                {selectedQuestion.explanation && selectedQuestion.type !== 'CQ' && (
+                {selectedQuestion.explanation && (selectedQuestion.type !== 'CQ' || !selectedQuestion.explanation.includes('cq-exp-part')) && (
                     <div>
-                        <h3 className={`text-sm font-bold ${isDark ? 'text-blue-500' : 'text-blue-600'} uppercase tracking-wider mb-2`}>Explanation (ব্যাখ্যা)</h3>
+                        <h3 className={`text-sm font-bold ${isDark ? 'text-blue-500' : 'text-blue-600'} uppercase tracking-wider mb-2`}>{selectedQuestion.type === 'CQ' ? 'Explanation (Legacy/Unstructured)' : 'Explanation (ব্যাখ্যা)'}</h3>
                         <div className={`p-4 ${isDark ? 'bg-blue-900/10 text-blue-300 border-blue-800/30' : 'bg-blue-50 text-blue-900 border-blue-200'} font-medium leading-relaxed rounded-xl border`}>
                             <MarkdownRenderer content={selectedQuestion.explanation} className={isDark ? 'prose-invert' : ''} />
                         </div>

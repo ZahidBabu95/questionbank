@@ -78,17 +78,29 @@ const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) 
                             {isEnglish ? cleanMarks(p.marks) : formatBanglaDigits(cleanMarks(p.marks))}
                         </span>
                     </div>
-                    {showAnswer && p.answer && (
-                        <div className={`ml-[1.25rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-emerald-900/10 border-emerald-800/30 text-emerald-300 border-l-[3px] border-l-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-900 border-l-[3px] border-l-emerald-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
-                            <span className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-emerald-500' : 'text-emerald-600'} mb-1.5 uppercase tracking-wider`}><CheckCircle size={12}/> উত্তর ({p.label}):</span>
-                            <MarkdownRenderer content={p.answer} className={`-mt-1 !max-w-full ${isDark ? 'prose-invert' : ''}`} />
-                        </div>
+                    {showAnswer && (
+                        p.answer ? (
+                            <div className={`ml-[1.25rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-300 border-l-[3px] border-l-emerald-600' : 'bg-emerald-50/70 border-emerald-100 text-emerald-900 border-l-[3px] border-l-emerald-500'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
+                                <span className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'} mb-1.5 uppercase tracking-wider`}><CheckCircle size={12}/> উত্তর ({p.label}):</span>
+                                <MarkdownRenderer content={p.answer} className={`-mt-1 !max-w-full ${isDark ? 'prose-invert' : ''}`} />
+                            </div>
+                        ) : (
+                            <div className={`ml-[1.25rem] p-2 border border-dashed ${isDark ? 'bg-rose-950/10 border-rose-900/30 text-rose-400' : 'bg-rose-50/30 border-rose-200 text-rose-700'} mt-0.5 rounded-lg text-[11px] flex items-center gap-1.5`}>
+                                <span>⚠️ {p.label} অংশের কোনো উত্তর যুক্ত করা হয়নি।</span>
+                            </div>
+                        )
                     )}
-                    {showExplanation && p.explanation && (
-                        <div className={`ml-[1.25rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-amber-900/10 border-amber-800/30 text-amber-300 border-l-[3px] border-l-amber-600' : 'bg-amber-50 border-amber-200 text-amber-900 border-l-[3px] border-l-amber-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
-                            <span className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-amber-500' : 'text-amber-600'} mb-1.5`}><Layers size={12}/> ব্যাখ্যা ({p.label}):</span>
-                            <MarkdownRenderer content={p.explanation} className={`-mt-1 !max-w-full ${isDark ? 'prose-invert' : ''}`} />
-                        </div>
+                    {showExplanation && (
+                        p.explanation ? (
+                            <div className={`ml-[1.25rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-blue-950/20 border-blue-800/40 text-blue-300 border-l-[3px] border-l-blue-600' : 'bg-blue-50/70 border-blue-100 text-blue-950 border-l-[3px] border-l-blue-500'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
+                                <span className={`flex items-center gap-1.5 text-[10px] font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'} mb-1.5`}><Layers size={12}/> ব্যাখ্যা ({p.label}):</span>
+                                <MarkdownRenderer content={p.explanation} className={`-mt-1 !max-w-full ${isDark ? 'prose-invert' : ''}`} />
+                            </div>
+                        ) : (
+                            <div className={`ml-[1.25rem] p-2 border border-dashed ${isDark ? 'bg-amber-950/10 border-amber-900/30 text-amber-400' : 'bg-amber-50/30 border-amber-200 text-amber-700'} mt-0.5 rounded-lg text-[11px] flex items-center gap-1.5`}>
+                                <span>⚠️ {p.label} অংশের কোনো ব্যাখ্যা যুক্ত করা হয়নি।</span>
+                            </div>
+                        )
                     )}
                 </div>
             ))}

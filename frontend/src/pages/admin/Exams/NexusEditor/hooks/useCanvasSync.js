@@ -4,6 +4,39 @@ export const useCanvasSync = (editor, s) => {
     const prevFormatHashRef = useRef(null);
     const syncTimeoutRef = useRef(null);
 
+    // Serialize formatting-related settings to create a stable key
+    const serializedSettings = JSON.stringify({
+        sections: s?.sections?.map(sec => ({
+            id: sec.id,
+            name: sec.name,
+            instructions: sec.instructions,
+            conditions: sec.conditions,
+            showConditions: sec.showConditions !== false,
+            showInstructions: sec.showInstructions !== false,
+            showName: sec.showName !== false,
+            numberingStyle: sec.numberingStyle,
+            marksConfig: sec.marksConfig,
+            optionLayout: sec.optionLayout,
+            optionStyle: sec.optionStyle,
+            optionDecoration: sec.optionDecoration,
+            fontSize: sec.fontSize,
+            lineGap: sec.lineGap,
+            optionGap: sec.optionGap,
+            questionGap: sec.questionGap,
+            textAlign: sec.textAlign,
+            columns: sec.columns,
+            smartFit: sec.smartFit,
+            continuousNumbering: sec.continuousNumbering,
+            numberingStart: sec.numberingStart,
+            fontFamily: sec.fontFamily
+        })),
+        bodyFontSize: s?.bodyFontSize,
+        lineHeight: s?.lineHeight,
+        questionGap: s?.questionGap,
+        language: s?.language,
+        columns: s?.columns
+    });
+
     // Dynamically apply Question Setup settings to existing question nodes and upgrade legacy headers
     useEffect(() => {
         if (!editor || !s.sections) return;
@@ -283,5 +316,5 @@ export const useCanvasSync = (editor, s) => {
             editor.off('update', handleUpdate);
             if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
         };
-    }, [s, editor]);
+    }, [serializedSettings, editor]);
 };

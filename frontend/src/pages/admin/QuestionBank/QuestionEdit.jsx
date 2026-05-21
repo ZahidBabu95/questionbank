@@ -55,6 +55,10 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
     const [options, setOptions] = useState([]);
     const [cqParts, setCqParts] = useState([]);
     const [examSources, setExamSources] = useState([]);
+    const [originalQuestion, setOriginalQuestion] = useState(null);
+    const [isLegacyCQ, setIsLegacyCQ] = useState(false);
+    const [editMode, setEditMode] = useState('structured'); // 'legacy' or 'structured'
+    const [showReference, setShowReference] = useState(true);
 
     // Image Upload & Crop States
     const [imageUploading, setImageUploading] = useState(false);
@@ -73,6 +77,7 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                 // Fetch Question
                 const questionData = await questionService.getQuestionById(id);
                 setQuestionType(questionData.type);
+                setOriginalQuestion(questionData);
 
                 // Prefill basic fields
                 setFormData({
@@ -126,51 +131,59 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                 
                 // Parse out CQ parts if it's a CQ
                 if (questionData.type === 'CQ') {
-                    const html = convertMarkdownImagesToHtml(questionData.questionText || '');
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    
-                    const ansHtml = convertMarkdownImagesToHtml(questionData.correctAnswer || '');
-                    const expHtml = convertMarkdownImagesToHtml(questionData.explanation || '');
-                    
-                    const ansDoc = parser.parseFromString(ansHtml, 'text/html');
-                    const expDoc = parser.parseFromString(expHtml, 'text/html');
-                    
-                    const partsTemp = [];
-                    const qList = doc.querySelectorAll('.cq-questions ol li');
-                    qList.forEach((li, idx) => {
-                        const marks = parseFloat(li.getAttribute('data-marks')) || 1;
-                        const textSpan = li.querySelector('.cq-text');
-                        const label = ['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(97 + idx);
+                    const hasCqQuestions = questionData.questionText && questionData.questionText.includes('cq-questions');
+                    const detectedLegacy = !hasCqQuestions;
+                    setIsLegacyCQ(detectedLegacy);
+                    setEditMode(detectedLegacy ? 'legacy' : 'structured');
+
+                    let partsTemp = [];
+                    if (!detectedLegacy) {
+                        const html = convertMarkdownImagesToHtml(questionData.questionText || '');
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
                         
-                        let partAns = '';
-                        let partExp = '';
+                        const ansHtml = convertMarkdownImagesToHtml(questionData.correctAnswer || '');
+                        const expHtml = convertMarkdownImagesToHtml(questionData.explanation || '');
                         
-                        const ansNode = ansDoc.querySelector(`.cq-ans-part[data-label=\"${label}\"] .cq-ans-content`);
-                        if (ansNode) partAns = ansNode.innerHTML;
-                        else if (ansDoc.body.textContent && idx === 0) partAns = ansDoc.body.innerHTML; // fallback
+                        const ansDoc = parser.parseFromString(ansHtml, 'text/html');
+                        const expDoc = parser.parseFromString(expHtml, 'text/html');
                         
-                        const expNode = expDoc.querySelector(`.cq-exp-part[data-label=\"${label}\"] .cq-exp-content`);
-                        if (expNode) partExp = expNode.innerHTML;
-                        else if (expDoc.body.textContent && idx === 0) partExp = expDoc.body.innerHTML; // fallback
-                        
-                        partsTemp.push({
-                            label: label,
-                            text: textSpan ? textSpan.innerHTML : li.textContent,
-                            marks: marks,
-                            answer: partAns,
-                            explanation: partExp
+                        const qList = doc.querySelectorAll('.cq-questions ol li');
+                        qList.forEach((li, idx) => {
+                            const marks = parseFloat(li.getAttribute('data-marks')) || 1;
+                            const textSpan = li.querySelector('.cq-text');
+                            const label = ['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(97 + idx);
+                            
+                            let partAns = '';
+                            let partExp = '';
+                            
+                            const ansNode = ansDoc.querySelector(`.cq-ans-part[data-label="${label}"] .cq-ans-content`) || ansDoc.querySelector(`.cq-ans-part[data-label="${label}"]`);
+                            if (ansNode) partAns = ansNode.innerHTML;
+                            
+                            const expNode = expDoc.querySelector(`.cq-exp-part[data-label="${label}"] .cq-exp-content`) || expDoc.querySelector(`.cq-exp-part[data-label="${label}"]`);
+                            if (expNode) partExp = expNode.innerHTML;
+                            
+                            partsTemp.push({
+                                label: label,
+                                text: textSpan ? textSpan.innerHTML : li.innerHTML,
+                                marks: marks,
+                                answer: partAns,
+                                explanation: partExp
+                            });
                         });
-                    });
+                    }
                     
                     if (partsTemp.length > 0) {
                         setCqParts(partsTemp);
+                        const html = convertMarkdownImagesToHtml(questionData.questionText || '');
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
                         const stemDiv = doc.querySelector('.cq-stem');
                         if (stemDiv) {
                             setFormData(prev => ({ ...prev, stimulus: stemDiv.innerHTML }));
                         }
                     } else {
-                        // Fallback to empty standard CQ if parsing failed or doesn't have the structure
+                        // Fallback to empty standard CQ if parsing failed or is legacy
                         setCqParts([
                             { label: 'ক', text: '', answer: '', explanation: '', marks: 1 },
                             { label: 'খ', text: '', answer: '', explanation: '', marks: 2 },
@@ -411,7 +424,7 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
         setMessage(null);
 
         // Validation
-        if (questionType !== 'CQ' && isEmptyQuill(formData.questionText)) {
+        if (((questionType !== 'CQ') || (questionType === 'CQ' && editMode === 'legacy')) && isEmptyQuill(formData.questionText)) {
             setMessage({ type: 'error', text: 'Please fill all required context and question text fields.' });
             document.querySelector('.question-edit-container')?.scrollTo({ top: 0, behavior: 'smooth' });
             return;
@@ -453,30 +466,37 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
             let finalAnswerText = formData.correctAnswer;
             let finalExplanationText = formData.explanation;
             
-            // If CQ, build the structured HTML string from the parts
+            // If CQ, build the structured HTML string from the parts ONLY IF editMode === 'structured'
             if (questionType === 'CQ') {
-                let stemHtml = formData.stimulus || '';
-                let combinedHtml = `<div class=\"cq-stem\">${stemHtml}</div><div class=\"cq-questions\"><ol type=\"a\">`;
-                let answersHtml = '<div class=\"cq-answers\">';
-                let explanationsHtml = '<div class=\"cq-explanations\">';
-                
-                cqParts.forEach(sq => {
-                    combinedHtml += `<li data-marks=\"${sq.marks}\"><span class=\"cq-text\">${sq.text}</span> <span class=\"cq-marks\">(${sq.marks})</span></li>`;
-                    if (sq.answer) {
-                        answersHtml += `<div class=\"cq-ans-part\" data-label=\"${sq.label}\" style=\"margin-bottom:8px;\"><strong>${sq.label}) উত্তর:</strong> <span class=\"cq-ans-content\">${sq.answer}</span></div>`;
-                    }
-                    if (sq.explanation) {
-                        explanationsHtml += `<div class=\"cq-exp-part\" data-label=\"${sq.label}\" style=\"margin-bottom:8px;\"><strong>${sq.label}) ব্যাখ্যা:</strong> <span class=\"cq-exp-content\">${sq.explanation}</span></div>`;
-                    }
-                });
-                
-                combinedHtml += '</ol></div>';
-                answersHtml += '</div>';
-                explanationsHtml += '</div>';
-                
-                finalQuestionText = combinedHtml;
-                finalAnswerText = answersHtml === '<div class=\"cq-answers\"></div>' ? '' : answersHtml;
-                finalExplanationText = explanationsHtml === '<div class=\"cq-explanations\"></div>' ? '' : explanationsHtml;
+                if (editMode === 'structured') {
+                    let stemHtml = formData.stimulus || '';
+                    let combinedHtml = `<div class="cq-stem">${stemHtml}</div><div class="cq-questions"><ol type="a">`;
+                    let answersHtml = '<div class="cq-answers">';
+                    let explanationsHtml = '<div class="cq-explanations">';
+                    
+                    cqParts.forEach(sq => {
+                        combinedHtml += `<li data-marks="${sq.marks}"><span class="cq-text">${sq.text}</span> <span class="cq-marks">(${sq.marks})</span></li>`;
+                        if (sq.answer) {
+                            answersHtml += `<div class="cq-ans-part" data-label="${sq.label}" style="margin-bottom:8px;"><strong>${sq.label}) উত্তর:</strong> <span class="cq-ans-content">${sq.answer}</span></div>`;
+                        }
+                        if (sq.explanation) {
+                            explanationsHtml += `<div class="cq-exp-part" data-label="${sq.label}" style="margin-bottom:8px;"><strong>${sq.label}) ব্যাখ্যা:</strong> <span class="cq-exp-content">${sq.explanation}</span></div>`;
+                        }
+                    });
+                    
+                    combinedHtml += '</ol></div>';
+                    answersHtml += '</div>';
+                    explanationsHtml += '</div>';
+                    
+                    finalQuestionText = combinedHtml;
+                    finalAnswerText = answersHtml === '<div class="cq-answers"></div>' ? '' : answersHtml;
+                    finalExplanationText = explanationsHtml === '<div class="cq-explanations"></div>' ? '' : explanationsHtml;
+                } else {
+                    // Legacy mode: save raw fields as-is
+                    finalQuestionText = formData.questionText;
+                    finalAnswerText = formData.correctAnswer;
+                    finalExplanationText = formData.explanation;
+                }
             }
 
             const questionPayload = {
@@ -700,10 +720,16 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                         formData={formData} 
                         setFormData={setFormData} 
                         questionType={questionType} 
+                        isLegacyCQ={isLegacyCQ}
+                        editMode={editMode}
+                        setEditMode={setEditMode}
+                        showReference={showReference}
+                        setShowReference={setShowReference}
+                        originalQuestion={originalQuestion}
                     />
 
                     {/* CQ Parts (Conditional) */}
-                    {questionType === 'CQ' && (
+                    {questionType === 'CQ' && editMode === 'structured' && (
                         <CQPartsEditor 
                             cqParts={cqParts}
                             setCqParts={setCqParts}

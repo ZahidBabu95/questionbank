@@ -66,6 +66,12 @@ const NexusEditorContent = () => {
     }, [setActiveTab, setIsRightPanelOpen]);
 
     useEffect(() => {
+        return () => {
+            window.dispatchEvent(new CustomEvent('setDynamicPageTitle', { detail: null }));
+        };
+    }, []);
+
+    useEffect(() => {
         const docTitle = docSettings?.exam || 'Untitled Document';
         window.dispatchEvent(new CustomEvent('setDynamicPageTitle', {
             detail: { 
@@ -75,7 +81,6 @@ const NexusEditorContent = () => {
                 onTitleChange: (newTitle) => updateSetting('exam', newTitle)
             }
         }));
-        return () => window.dispatchEvent(new CustomEvent('setDynamicPageTitle', { detail: null }));
     }, [docSettings?.exam, updateSetting]);
 
     return (

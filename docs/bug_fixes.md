@@ -13,6 +13,18 @@ This document tracks identified bugs, their root causes, and how they were solve
 ## ✅ SOLVED BUGS
 *(Move bugs here after they are fixed and briefly describe the solution.)*
 
+### 18. Nexus Editor Memory Leak & Infinite Render/Network Loop Crash
+**Location:** `PaperCanvasV2.jsx`, `useCanvasSync.js`, `InlineGoldenEditor.jsx`, `ResizableImageNode.jsx`, `NexusEditorContext.jsx`, `NexusEditor.jsx`, `useExamManager.js`
+**Description:** Leaving the Nexus Editor page open for a prolonged period would result in the browser tab freezing or crashing with an "Out of Memory" (Aw, Snap!) error.
+**Root Cause:**
+1. **Memory Leaks**: Timeouts (`window.editorUpdateTimeout` and `window.extractTimeout`) were assigned globally to `window` and never cleared on unmount. Image resizer drag event listeners on `window` were also orphaned, retaining heavy ProseMirror editor instances and DOM trees.
+2. **Infinite Render Loop**: In `NexusEditorContext`, the `updateSetting` method was recreated on every render (due to lack of memoization). Since the page title updater `useEffect` in `NexusEditor` depended on `updateSetting`, it cleaned up and re-bound on every render, dispatching `detail: null` and then `detail: {...}` to the parent layout. This double state update triggered a parent re-render which cascaded back down, recreating `updateSetting` and looping infinitely.
+3. **Network Storm**: The continuous rendering loop caused `useExamManager` hooks to execute repeatedly, spamming backend API endpoints (`/v1/exams/:id`, `/v1/settings/EXAM`, `/v1/support/knowledge`, `/v1/exams/templates`) and locking the UI thread.
+**Solution Applied:**
+1. **Leak Fixes**: Wrapped editor update and extract timeouts in React `useRef` and cleared them in `useEffect` cleanups. Stored image resizing window listeners in refs and removed them on unmount.
+2. **Loop Fixes**: Wrapped all context state updater and toast functions in `useCallback` and memoized the context `value` export with `useMemo`. Split the title update `useEffect` so that the layout-clearing cleanup (`detail: null`) only runs on component unmount, while updates run only when settings properties actually change.
+3. **Network Fixes**: Implemented module-level caching and request promise deduplication (with a short-lived `3000ms` window) inside `useExamManager.js`. Intercepted save/delete operations to programmatically invalidate the deduplication caches, ensuring the user always interacts with fresh data while preventing automated API storms.
+
 ### 17. Question Bank Filters Clutter & State Loss
 **Location:** `QuestionList.jsx`
 **Description:** The Question Bank dashboard was overly cluttered with advanced dropdowns at the top. Furthermore, Super Admins (and users) had to manually re-select the entire hierarchy (Level -> Stream -> Class -> Subject) every time the page was reloaded because the state was wiped out by cascading `useEffects`.
