@@ -2,6 +2,18 @@ import React, { useMemo } from 'react';
 import MarkdownRenderer from '../../../../components/MarkdownRenderer';
 import { CheckCircle, Layers } from 'lucide-react';
 
+const formatBanglaDigits = (num) => {
+    if (num === null || num === undefined) return '';
+    const enToBn = { '0': '০', '1': '১', '2': '২', '3': '৩', '4': '৪', '5': '৫', '6': '৬', '7': '৭', '8': '৮', '9': '৯' };
+    return num.toString().replace(/[0-9]/g, m => enToBn[m]);
+};
+
+const cleanMarks = (num) => {
+    if (num === null || num === undefined) return '';
+    const parsed = parseFloat(num);
+    return isNaN(parsed) ? num.toString() : parsed.toString();
+};
+
 const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) => {
     const parts = useMemo(() => {
         const questionText = q.questionText || '';
@@ -51,6 +63,8 @@ const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) 
         return <MarkdownRenderer content={q.type === 'CQ' && q.questionText && q.questionText.includes('<div class="cq-questions">') ? '<div class="cq-questions">' + q.questionText.split('<div class="cq-questions">')[1] : q.questionText} className={isDark ? 'prose-invert' : ''} />;
     }
 
+    const isEnglish = q.language && q.language.toLowerCase() === 'english';
+
     return (
         <div className="flex flex-col gap-3 mt-2">
             {parts.map((p, idx) => (
@@ -60,7 +74,9 @@ const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) 
                         <div className="flex-1 min-w-0 font-medium">
                             <MarkdownRenderer content={p.text} className={`!max-w-full prose-p:!m-0 prose-p:!p-0 ${isDark ? 'prose-invert' : ''}`} />
                         </div>
-                        <span className={`text-[12px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'} shrink-0 ml-2`}>({Math.round(p.marks)})</span>
+                        <span className={`text-[12px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'} shrink-0 ml-2`}>
+                            {isEnglish ? cleanMarks(p.marks) : formatBanglaDigits(cleanMarks(p.marks))}
+                        </span>
                     </div>
                     {showAnswer && p.answer && (
                         <div className={`ml-[1.25rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-emerald-900/10 border-emerald-800/30 text-emerald-300 border-l-[3px] border-l-emerald-600' : 'bg-emerald-50 border-emerald-200 text-emerald-900 border-l-[3px] border-l-emerald-400'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>

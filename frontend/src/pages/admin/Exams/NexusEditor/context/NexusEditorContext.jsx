@@ -45,7 +45,24 @@ export const NexusEditorProvider = ({ children }) => {
     const [rightPanelWidth, setRightPanelWidth] = useState(420);
     const [activeTab, setActiveTab] = useState('examInfo'); // Right panel tab
     
+    // --- Toasts and Canvas Theme State ---
+    const [toasts, setToasts] = useState([]);
+    const [canvasTheme, setCanvasTheme] = useState('white'); // 'white' | 'cream' | 'dark'
+
+    const addToast = (message, type = 'success', duration = 4000) => {
+        const id = Date.now() + Math.random().toString(36).substr(2, 5);
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, duration);
+    };
+
+    const removeToast = (id) => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+    };
+
     // --- Interaction States ---
+    const [editor, setEditor] = useState(null);
     const [pendingInsertQuestion, setPendingInsertQuestion] = useState(null);
     const [swapTarget, setSwapTarget] = useState(null);
     const [pendingSwapQuestion, setPendingSwapQuestion] = useState(null);
@@ -65,6 +82,7 @@ export const NexusEditorProvider = ({ children }) => {
         pageCount, setPageCount,
         examData, setExamData,
         isSavingDocument, setIsSavingDocument,
+        editor, setEditor,
         
         // Schema
         editorConfig, setEditorConfig,
@@ -73,6 +91,8 @@ export const NexusEditorProvider = ({ children }) => {
         // UI
         uiLang, setUiLang, t,
         workspaceTools, setWorkspaceTools,
+        toasts, addToast, removeToast,
+        canvasTheme, setCanvasTheme,
         
         // Panels
         isLeftPanelOpen, setIsLeftPanelOpen,

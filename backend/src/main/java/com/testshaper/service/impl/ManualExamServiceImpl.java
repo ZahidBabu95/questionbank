@@ -361,10 +361,15 @@ public class ManualExamServiceImpl {
         }
 
         if (exam.getClassSubject() != null) {
-            if (exam.getClassSubject().getSubject() != null)
+            dto.setClassSubjectId(exam.getClassSubject().getId());
+            if (exam.getClassSubject().getSubject() != null) {
+                dto.setSubjectId(exam.getClassSubject().getSubject().getId());
                 dto.setSubjectName(exam.getClassSubject().getSubject().getName());
-            if (exam.getClassSubject().getAcademicClass() != null)
+            }
+            if (exam.getClassSubject().getAcademicClass() != null) {
+                dto.setClassId(exam.getClassSubject().getAcademicClass().getId());
                 dto.setClassName(exam.getClassSubject().getAcademicClass().getName());
+            }
         }
 
         dto.setQuestions(exam.getExamQuestions().stream()

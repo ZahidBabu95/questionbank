@@ -7,6 +7,9 @@ import NexusHeader from './components/Layout/NexusHeader';
 import LeftSidebar from './components/Layout/LeftSidebar';
 import RightSidebar from './components/Layout/RightSidebar';
 import PaperCanvasV2 from './components/PaperCanvasV2';
+import ToastContainer from './components/Layout/ToastContainer';
+import CanvasControlBar from './components/Layout/CanvasControlBar';
+import { PanelLeftOpen, PanelRightOpen, Database, Settings2 } from 'lucide-react';
 
 const NexusEditorContent = () => {
     const { 
@@ -16,8 +19,13 @@ const NexusEditorContent = () => {
         pendingSwapQuestion, setPendingSwapQuestion,
         setActiveTab, setIsRightPanelOpen,
         setDocumentQuestions, documentQuestions, setSwapTarget, setIsLeftPanelOpen, setLeftPanelTab,
-        setSelectedImageConfig, updateSetting
+        setSelectedImageConfig, updateSetting,
+        isLeftPanelOpen, isRightPanelOpen, leftPanelTab, activeTab,
+        canvasTheme, uiLang, setEditor
     } = useNexusEditor();
+
+    const setPendingInsertQuestionNull = React.useCallback(() => setPendingInsertQuestion(null), [setPendingInsertQuestion]);
+    const setPendingSwapQuestionNull = React.useCallback(() => setPendingSwapQuestion(null), [setPendingSwapQuestion]);
 
     // Initialize logic hooks
     const { isDraggingLeft: resizingL, setIsDraggingLeft, isDraggingRight: resizingR, setIsDraggingRight } = usePanelResizer();
@@ -89,6 +97,31 @@ const NexusEditorContent = () => {
             <NexusHeader />
             
             <div className={`flex-1 flex overflow-hidden print:block print:w-full print:h-auto print:overflow-visible ${(resizingL || resizingR) ? 'select-none' : ''}`}>
+                
+                {/* Closed Left Sidebar Docking Tray */}
+                {!isLeftPanelOpen && (
+                    <div className="w-12 bg-white border-r border-slate-200 shadow-sm flex flex-col items-center py-4 gap-4 z-10 print:hidden transition-all duration-300">
+                        <button 
+                             onClick={() => setIsLeftPanelOpen(true)}
+                            className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100/80 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-sm border border-indigo-100 animate-in slide-in-from-left duration-200"
+                            title="Open Question Bank"
+                        >
+                            <PanelLeftOpen size={16} />
+                        </button>
+                        <div className="w-6 h-[1px] bg-slate-200"></div>
+                        <button 
+                            onClick={() => {
+                                setIsLeftPanelOpen(true);
+                                setLeftPanelTab('manual');
+                            }}
+                            className={`p-2 rounded-xl transition-all hover:scale-105 active:scale-95 ${leftPanelTab === 'manual' ? 'text-indigo-600 bg-indigo-50 border border-indigo-100' : 'text-slate-400 hover:text-slate-600'}`}
+                            title="Manual Insert/Swap"
+                        >
+                            <Database size={15} />
+                        </button>
+                    </div>
+                )}
+
                 <LeftSidebar isDraggingLeft={resizingL} setIsDraggingLeft={setIsDraggingLeft} />
                 
                 <div className="flex-1 overflow-auto p-4 custom-scrollbar relative bg-slate-200/60 print:block print:w-full print:h-auto print:overflow-visible print:m-0 print:p-0">
@@ -99,16 +132,49 @@ const NexusEditorContent = () => {
                             docSettings={docSettings} zoom={zoom}
                             workspaceTools={workspaceTools} editorConfig={editorConfig}
                             onPageCountChange={setPageCount}
-                            pendingInsertQuestion={pendingInsertQuestion} onQuestionInserted={() => setPendingInsertQuestion(null)}
-                            pendingSwapQuestion={pendingSwapQuestion} onQuestionSwapped={() => setPendingSwapQuestion(null)}
+                            pendingInsertQuestion={pendingInsertQuestion} onQuestionInserted={setPendingInsertQuestionNull}
+                            pendingSwapQuestion={pendingSwapQuestion} onQuestionSwapped={setPendingSwapQuestionNull}
                             setDocumentQuestions={setDocumentQuestions}
                             documentQuestions={documentQuestions}
+                            canvasTheme={canvasTheme}
+                            uiLang={uiLang}
+                            setEditor={setEditor}
                         />
                     </div>
                 </div>
 
                 <RightSidebar isDraggingRight={resizingR} setIsDraggingRight={setIsDraggingRight} />
+
+                {/* Closed Right Sidebar Docking Tray */}
+                {!isRightPanelOpen && (
+                    <div className="w-12 bg-white border-l border-slate-200 shadow-sm flex flex-col items-center py-4 gap-4 z-10 print:hidden transition-all duration-300">
+                        <button 
+                            onClick={() => setIsRightPanelOpen(true)}
+                            className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100/80 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-sm border border-indigo-100 animate-in slide-in-from-right duration-200"
+                            title="Open Settings"
+                        >
+                            <PanelRightOpen size={16} />
+                        </button>
+                        <div className="w-6 h-[1px] bg-slate-200"></div>
+                        <button 
+                            onClick={() => {
+                                setIsRightPanelOpen(true);
+                                setActiveTab('examInfo');
+                            }}
+                            className={`p-2 rounded-xl transition-all hover:scale-105 active:scale-95 ${activeTab === 'examInfo' ? 'text-indigo-600 bg-indigo-50 border border-indigo-100' : 'text-slate-400 hover:text-slate-600'}`}
+                            title="Exam Info"
+                        >
+                            <Settings2 size={15} />
+                        </button>
+                    </div>
+                )}
             </div>
+
+            {/* Float control bar for zoom and canvas themes */}
+            <CanvasControlBar />
+
+            {/* Custom toast alerts */}
+            <ToastContainer />
         </div>
     );
 };

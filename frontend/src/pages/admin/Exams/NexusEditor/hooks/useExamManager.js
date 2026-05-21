@@ -6,6 +6,8 @@ import settingsService from '../../../../../services/settingsService';
 import axios from '../../../../../utils/axios';
 import { useNexusEditor } from '../context/NexusEditorContext';
 import { DEFAULT_SETTINGS } from '../components/DocumentSettings';
+import { formatDuration, parseDurationToMinutes } from '../../../../../utils/formatUtils';
+
 
 export const useExamManager = () => {
     const { id } = useParams();
@@ -23,6 +25,60 @@ export const useExamManager = () => {
     const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [isSavingTemplate, setIsSavingTemplate] = useState(false);
     const [savedSubjectsList, setSavedSubjectsList] = useState([]);
+    const [savedClassSubjectsList, setSavedClassSubjectsList] = useState([]);
+
+    const getNormalizedSubjectKey = (subject) => {
+        if (!subject) return '';
+        return subject.toString().trim().toLowerCase().replace(/\s+/g, '');
+    };
+
+    const getNormalizedClassKey = (className) => {
+        if (!className) return '';
+        return className.toString().trim().toLowerCase().replace(/\s+/g, '');
+    };
+
+    const findDefaultLayoutInSettings = (settings, className, subjectName) => {
+        if (!settings || !subjectName) return null;
+        
+        const normSubject = subjectName.toString().trim().toLowerCase().replace(/\s+/g, '');
+        const normClass = className ? className.toString().trim().toLowerCase().replace(/\s+/g, '') : '';
+        
+        const targetClassSubKey = 'subject_default_' + normClass + '_' + normSubject;
+        const targetSubOnlyKey = 'subject_default_' + normSubject;
+        
+        const settingsKeys = Object.keys(settings);
+        const normalizeSettingKey = (k) => k.toString().trim().toLowerCase().replace(/\s+/g, '');
+        
+        // 1. Try matching Class + Subject first
+        if (className) {
+            const matchedKey = settingsKeys.find(k => {
+                const normK = normalizeSettingKey(k);
+                return normK === targetClassSubKey;
+            });
+            if (matchedKey && settings[matchedKey]) {
+                try {
+                    return JSON.parse(settings[matchedKey]);
+                } catch (e) {
+                    console.error("Failed to parse settings for key:", matchedKey, e);
+                }
+            }
+        }
+        
+        // 2. Try matching Subject only
+        const matchedSubKey = settingsKeys.find(k => {
+            const normK = normalizeSettingKey(k);
+            return normK === targetSubOnlyKey;
+        });
+        if (matchedSubKey && settings[matchedSubKey]) {
+            try {
+                return JSON.parse(settings[matchedSubKey]);
+            } catch (e) {
+                console.error("Failed to parse settings for key:", matchedSubKey, e);
+            }
+        }
+        
+        return null;
+    };
 
     const fetchSavedSubjects = async () => {
         try {
@@ -40,10 +96,15 @@ export const useExamManager = () => {
             } else {
                 settings = await settingsService.getInstituteSettings('EXAM');
             }
-            const list = Object.keys(settings || {})
+            const allKeys = Object.keys(settings || {})
                 .filter(k => k.startsWith('subject_default_'))
                 .map(k => k.replace('subject_default_', ''));
-            setSavedSubjectsList(list);
+            
+            const classSubjectList = allKeys.filter(k => k.includes('_'));
+            const subjectOnlyList = allKeys.filter(k => !k.includes('_'));
+            
+            setSavedSubjectsList(subjectOnlyList);
+            setSavedClassSubjectsList(classSubjectList);
         } catch (err) {
             console.warn("Failed to load saved subjects list:", err);
         }
@@ -67,12 +128,39 @@ export const useExamManager = () => {
 
                     // Fetch Subject specific default setup from settings if exam has no settings of its own
                     let subjectDefaultSettings = null;
-                    if (!res.data.docSettingsJson && res.data.subjectName) {
+                    const hasNoSettings = !res.data.docSettingsJson || 
+                                          res.data.docSettingsJson === 'null' || 
+                                          res.data.docSettingsJson === 'undefined' ||
+                                          res.data.docSettingsJson === '{}' || 
+                                          res.data.docSettingsJson.trim() === '';
+                    
+                    console.log("[useExamManager] Fetching exam, docSettingsJson is empty?", hasNoSettings, "subject:", res.data.subjectName, "class:", res.data.className);
+                    
+                    if (hasNoSettings && res.data.subjectName) {
                         try {
-                            const examSettings = await settingsService.getInstituteSettings('EXAM');
-                            const subKey = 'subject_default_' + res.data.subjectName.trim().toLowerCase();
-                            if (examSettings && examSettings[subKey]) {
-                                subjectDefaultSettings = JSON.parse(examSettings[subKey]);
+                            const subjectName = res.data.subjectName;
+                            const className = res.data.className;
+                            
+                            // 1. Try loading from institute settings
+                            try {
+                                const examSettings = await settingsService.getInstituteSettings('EXAM');
+                                subjectDefaultSettings = findDefaultLayoutInSettings(examSettings, className, subjectName);
+                            } catch (e) {
+                                console.warn("Failed to load institute default layout:", e);
+                            }
+                            
+                            // 2. Fallback to global settings
+                            if (!subjectDefaultSettings) {
+                                try {
+                                    const globalSettings = await settingsService.getGlobalSettings('EXAM');
+                                    subjectDefaultSettings = findDefaultLayoutInSettings(globalSettings, className, subjectName);
+                                } catch (e) {
+                                    console.warn("Failed to load global default layout:", e);
+                                }
+                            }
+                            
+                            if (subjectDefaultSettings) {
+                                console.log("[useExamManager] Found matching default layout settings:", subjectDefaultSettings);
                             }
                         } catch (schemaErr) { console.error("Failed to load subject default settings:", schemaErr); }
                     }
@@ -89,7 +177,7 @@ export const useExamManager = () => {
                             else qsByType.OTHER.push(q);
                         });
 
-                        const getQHtml = (q, sec) => {
+                         const getQHtml = (q, sec) => {
                             const optionsJson = q.options ? JSON.stringify(q.options).replace(/'/g, "&#39;") : "[]";
                             const statementsJson = q.statements ? JSON.stringify(q.statements).replace(/'/g, "&#39;") : "[]";
                             const qText = q.questionText ? q.questionText.replace(/"/g, "&quot;") : "";
@@ -106,6 +194,7 @@ export const useExamManager = () => {
                                      explanation="${explanationText}"
                                      answer="${answerText}"
                                      syncedfromdb="true"
+                                     language="${q.language || 'Bangla'}"
                                      chaptername="${q.chapterName || q.subjectName || 'General'}" 
                                      marks="${q.marks || 1}" 
                                      numberingstyle="${sec?.numberingStyle || 'bn'}"
@@ -125,10 +214,52 @@ export const useExamManager = () => {
 
                         const buildSectionConfig = (type) => {
                             const isMCQ = type === 'MCQ';
-                            const defaultSec = DEFAULT_SETTINGS.sections.find(s => s.isMCQ === isMCQ && (type === 'MCQ' || type === 'CQ'));
-                            if (defaultSec && (type === 'MCQ' || type === 'CQ')) {
-                                return { ...defaultSec, id: `sec-${Date.now()}-${sectionIndex}`, name: `${sectionPrefixes[sectionIndex]}-বিভাগ: ${sectionNames[type]}` };
+                            const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
+                            let defaultSec = null;
+                            if (baseSettings.sections && Array.isArray(baseSettings.sections)) {
+                                if (type === 'MCQ') {
+                                    defaultSec = baseSettings.sections.find(s => s.isMCQ === true);
+                                } else if (type === 'CQ') {
+                                    defaultSec = baseSettings.sections.find(s => 
+                                        s.isMCQ === false && 
+                                        (s.name?.includes('সৃজনশীল') || s.name?.toLowerCase().includes('cq'))
+                                    ) || baseSettings.sections.find(s => s.isMCQ === false);
+                                } else if (type === 'SHORT') {
+                                    defaultSec = baseSettings.sections.find(s => 
+                                        s.isMCQ === false && 
+                                        (s.name?.includes('সংক্ষিপ্ত') || s.name?.toLowerCase().includes('short'))
+                                    ) || baseSettings.sections.filter(s => s.isMCQ === false)[1]
+                                      || baseSettings.sections.find(s => s.isMCQ === false);
+                                } else {
+                                    defaultSec = baseSettings.sections.find(s => 
+                                        s.isMCQ === false && 
+                                        !s.name?.includes('সৃজনশীল') && 
+                                        !s.name?.includes('সংক্ষিপ্ত')
+                                    ) || baseSettings.sections.find(s => s.isMCQ === false);
+                                }
                             }
+
+                            if (defaultSec) {
+                                let cleanName = defaultSec.name || sectionNames[type] || 'প্রশ্নমালা';
+                                cleanName = cleanName.replace(/^[ক-হa-zA-Z\d\s-]+-বিভাগ:\s*/, '');
+                                cleanName = cleanName.replace(/^Section\s+[A-Z]:\s*/i, '');
+                                cleanName = cleanName.replace(/^বিভাগ:\s*/, '');
+                                
+                                if (type === 'SHORT' && !cleanName.includes('সংক্ষিপ্ত') && !cleanName.toLowerCase().includes('short')) {
+                                    cleanName = sectionNames[type];
+                                } else if (type === 'CQ' && !cleanName.includes('সৃজনশীল') && !cleanName.toLowerCase().includes('cq')) {
+                                    cleanName = sectionNames[type];
+                                } else if (type === 'MCQ' && !cleanName.includes('বহুনির্বাচনী') && !cleanName.toLowerCase().includes('mcq')) {
+                                    cleanName = sectionNames[type];
+                                }
+                                
+                                return { 
+                                    ...defaultSec, 
+                                    id: `sec-${Date.now()}-${sectionIndex}`, 
+                                    name: `${sectionPrefixes[sectionIndex]}-বিভাগ: ${cleanName}`
+                                };
+                            }
+
                             return {
                                 id: `sec-${Date.now()}-${sectionIndex}`,
                                 name: `${sectionPrefixes[sectionIndex]}-বিভাগ: ${sectionNames[type] || 'প্রশ্নমালা'}`,
@@ -182,12 +313,32 @@ export const useExamManager = () => {
 
                         setRawContent(finalHtml);
                         
-                        if (res.data.docSettingsJson) {
+                        if (!hasNoSettings) {
                             try {
                                 const parsedSettings = JSON.parse(res.data.docSettingsJson);
-                                if (dynamicSections.length > 0) parsedSettings.sections = [...(parsedSettings.sections || []), ...dynamicSections];
-                                setDocSettings(parsedSettings);
-                            } catch (e) { console.error("Failed to parse docSettingsJson", e); }
+                                if (parsedSettings && typeof parsedSettings === 'object') {
+                                    if (dynamicSections.length > 0) parsedSettings.sections = [...(parsedSettings.sections || []), ...dynamicSections];
+                                    setDocSettings(parsedSettings);
+                                } else {
+                                    throw new Error("Parsed settings is null or invalid object");
+                                }
+                            } catch (e) {
+                                console.error("Failed to parse docSettingsJson, falling back:", e);
+                                const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
+                                setDocSettings(prev => ({
+                                    ...prev,
+                                    ...baseSettings,
+                                    institute: res.data.instituteName || baseSettings.institute || prev.institute,
+                                    subject: res.data.subjectName || baseSettings.subject || prev.subject,
+                                    className: res.data.className || baseSettings.className || prev.className,
+                                    exam: res.data.title || baseSettings.exam || prev.exam,
+                                    time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, res.data.language) : (baseSettings.time || prev.time),
+                                    totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
+                                    year: new Date().getFullYear().toString(),
+                                    language: res.data.language || baseSettings.language || 'BENGALI',
+                                    sections: dynamicSections.length > 0 ? dynamicSections : (baseSettings.sections || prev.sections)
+                                }));
+                            }
                         } else {
                             const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
                             setDocSettings(prev => ({
@@ -197,7 +348,7 @@ export const useExamManager = () => {
                                 subject: res.data.subjectName || baseSettings.subject || prev.subject,
                                 className: res.data.className || baseSettings.className || prev.className,
                                 exam: res.data.title || baseSettings.exam || prev.exam,
-                                time: res.data.durationMinutes ? `${res.data.durationMinutes} ${res.data.language === 'ENGLISH' ? 'Minutes' : 'মিনিট'}` : (baseSettings.time || prev.time),
+                                time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, res.data.language) : (baseSettings.time || prev.time),
                                 totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                 year: new Date().getFullYear().toString(),
                                 language: res.data.language || baseSettings.language || 'BENGALI',
@@ -234,9 +385,31 @@ export const useExamManager = () => {
                         }
 
                         setRawContent(finalHtml);
-                        if (res.data.docSettingsJson) {
-                            try { setDocSettings(JSON.parse(res.data.docSettingsJson)); } 
-                            catch (e) { console.error("Failed to parse docSettingsJson", e); }
+                        if (!hasNoSettings) {
+                            try {
+                                const parsedSettings = JSON.parse(res.data.docSettingsJson);
+                                if (parsedSettings && typeof parsedSettings === 'object') {
+                                    setDocSettings(parsedSettings);
+                                } else {
+                                    throw new Error("Parsed settings is null or invalid object");
+                                }
+                            } catch (e) {
+                                console.error("Failed to parse docSettingsJson, falling back:", e);
+                                const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
+                                setDocSettings(prev => ({
+                                    ...prev,
+                                    ...baseSettings,
+                                    institute: res.data.instituteName || baseSettings.institute || prev.institute,
+                                    subject: res.data.subjectName || baseSettings.subject || prev.subject,
+                                    className: res.data.className || baseSettings.className || prev.className,
+                                    exam: res.data.title || baseSettings.exam || prev.exam,
+                                    time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, res.data.language) : (baseSettings.time || prev.time),
+                                    totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
+                                    year: new Date().getFullYear().toString(),
+                                    language: res.data.language || baseSettings.language || 'BENGALI',
+                                    sections: baseSettings.sections || prev.sections
+                                }));
+                            }
                         } else {
                             const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
                             setDocSettings(prev => ({
@@ -246,7 +419,7 @@ export const useExamManager = () => {
                                 subject: res.data.subjectName || baseSettings.subject || prev.subject,
                                 className: res.data.className || baseSettings.className || prev.className,
                                 exam: res.data.title || baseSettings.exam || prev.exam,
-                                time: res.data.durationMinutes ? `${res.data.durationMinutes} ${res.data.language === 'ENGLISH' ? 'Minutes' : 'মিনিট'}` : (baseSettings.time || prev.time),
+                                time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, res.data.language) : (baseSettings.time || prev.time),
                                 totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                 year: new Date().getFullYear().toString(),
                                 language: res.data.language || baseSettings.language || 'BENGALI',
@@ -308,6 +481,8 @@ export const useExamManager = () => {
                 parsedSettings.subject = docSettings.subject;
                 parsedSettings.className = docSettings.className;
                 parsedSettings.exam = docSettings.exam;
+                parsedSettings.group = docSettings.group;
+                parsedSettings.board = docSettings.board;
                 parsedSettings.totalMarks = docSettings.totalMarks;
                 parsedSettings.time = docSettings.time;
                 parsedSettings.year = docSettings.year;
@@ -352,6 +527,7 @@ export const useExamManager = () => {
     const handleSaveDocument = async () => {
         setIsSavingDocument(true);
         try {
+            const parsedMins = parseDurationToMinutes(docSettings.time);
             const payload = {
                 title: docSettings.exam || "Nexus Exam",
                 examCode: "NEXUS-" + Math.floor(Math.random() * 10000),
@@ -359,7 +535,8 @@ export const useExamManager = () => {
                 rawContent: rawContent,
                 docSettingsJson: JSON.stringify(docSettings),
                 isAutoGenerated: !!id,
-                status: 'DRAFT'
+                status: 'DRAFT',
+                ...(parsedMins !== null ? { durationMinutes: parsedMins } : {})
             };
             
             if (id) {
@@ -389,6 +566,7 @@ export const useExamManager = () => {
 
         setIsSavingDocument(true);
         try {
+            const parsedMins = parseDurationToMinutes(docSettings.time);
             const payload = {
                 title: title.trim(),
                 examCode: "NEXUS-" + Math.floor(Math.random() * 10000),
@@ -396,7 +574,8 @@ export const useExamManager = () => {
                 rawContent: rawContent,
                 docSettingsJson: JSON.stringify(docSettings),
                 isAutoGenerated: false,
-                status: 'DRAFT'
+                status: 'DRAFT',
+                ...(parsedMins !== null ? { durationMinutes: parsedMins } : {})
             };
             await examService.createManualExam(payload);
             alert(uiLang === 'bn' ? "নতুন ডকুমেন্ট হিসেবে সেভ হয়েছে!" : "Saved as a new Document successfully!");
@@ -408,18 +587,38 @@ export const useExamManager = () => {
         }
     };
 
-    const saveSubjectDefaults = async (subjectName, currentSettings) => {
+    const saveSubjectDefaults = async (subjectName, currentSettings, type, className) => {
         if (!subjectName || subjectName.trim() === '') {
             alert(uiLang === 'bn' ? "দয়া করে প্রথমে বিষয় নির্বাচন করুন।" : "Please set a subject name first.");
             return;
         }
-        const confirmSave = window.confirm(uiLang === 'bn' 
-            ? `আপনি কি বর্তমান লেআউটটি '${subjectName}' এর ডিফল্ট লেআউট হিসেবে সেট করতে চান?` 
-            : `Are you sure you want to save current layout as default for '${subjectName}'?`);
+        
+        let confirmMessage = '';
+        if (type === 'class_subject') {
+            if (!className || className.trim() === '') {
+                alert(uiLang === 'bn' ? "দয়া করে প্রথমে শ্রেণী নির্বাচন করুন।" : "Please set a class name first.");
+                return;
+            }
+            confirmMessage = uiLang === 'bn' 
+                ? `আপনি কি বর্তমান লেআউটটি '${className}' শ্রেণীর '${subjectName}' বিষয়ের ডিফল্ট লেআউট হিসেবে সেট করতে চান?` 
+                : `Are you sure you want to save current layout as default for Class '${className}' and Subject '${subjectName}'?`;
+        } else {
+            confirmMessage = uiLang === 'bn' 
+                ? `আপনি কি বর্তমান লেআউটটি '${subjectName}' এর ডিফল্ট লেআউট হিসেবে সেট করতে চান?` 
+                : `Are you sure you want to save current layout as default for '${subjectName}'?`;
+        }
+        
+        const confirmSave = window.confirm(confirmMessage);
         if (!confirmSave) return;
 
         try {
-            const subKey = 'subject_default_' + subjectName.trim().toLowerCase();
+            let subKey = '';
+            if (type === 'class_subject') {
+                subKey = 'subject_default_' + className.trim().toLowerCase() + '_' + subjectName.trim().toLowerCase();
+            } else {
+                subKey = 'subject_default_' + subjectName.trim().toLowerCase();
+            }
+            
             const userData = localStorage.getItem('user');
             let isSuper = false;
             if (userData) {
@@ -454,32 +653,47 @@ export const useExamManager = () => {
         }
     };
 
-    const loadSubjectDefaults = async (subjectName) => {
+    const loadSubjectDefaults = async (subjectName, type, className) => {
         if (!subjectName || subjectName.trim() === '') return;
         try {
-            const subKey = 'subject_default_' + subjectName.trim().toLowerCase();
             let subjectDefaultSettings = null;
+            let examSettings = null;
+            let globalSettings = null;
             
             // Try loading from institute settings first
             try {
-                const examSettings = await settingsService.getInstituteSettings('EXAM');
-                if (examSettings && examSettings[subKey]) {
-                    subjectDefaultSettings = JSON.parse(examSettings[subKey]);
-                }
+                examSettings = await settingsService.getInstituteSettings('EXAM');
             } catch (e) {
                 console.warn("Failed to get institute settings, checking global...", e);
             }
 
             // Fallback to global settings
-            if (!subjectDefaultSettings) {
-                try {
-                    const globalSettings = await settingsService.getGlobalSettings('EXAM');
-                    if (globalSettings && globalSettings[subKey]) {
-                        subjectDefaultSettings = JSON.parse(globalSettings[subKey]);
-                    }
-                } catch (e) {
-                    console.warn("Failed to get global settings", e);
+            try {
+                globalSettings = await settingsService.getGlobalSettings('EXAM');
+            } catch (e) {
+                console.warn("Failed to get global settings", e);
+            }
+
+            // Helper to match using findDefaultLayoutInSettings
+            const findMatch = (settings) => {
+                if (!settings) return null;
+                
+                // If subjectName already contains key format (e.g. from the list: "৯ম-১০ম শ্রেণি_পদার্থবিজ্ঞান")
+                if (type === 'class_subject' && subjectName.includes('_')) {
+                    const parts = subjectName.split('_');
+                    const displayClass = parts[0];
+                    const displaySubject = parts.slice(1).join('_');
+                    return findDefaultLayoutInSettings(settings, displayClass, displaySubject);
                 }
+                
+                return findDefaultLayoutInSettings(settings, className, subjectName);
+            };
+
+            if (examSettings) {
+                subjectDefaultSettings = findMatch(examSettings);
+            }
+            if (!subjectDefaultSettings && globalSettings) {
+                subjectDefaultSettings = findMatch(globalSettings);
             }
 
             if (subjectDefaultSettings) {
@@ -497,7 +711,10 @@ export const useExamManager = () => {
                 }));
                 alert(uiLang === 'bn' ? "ডিফল্ট লেআউট লোড করা হয়েছে!" : "Default layout loaded successfully!");
             } else {
-                alert(uiLang === 'bn' ? `'${subjectName}' এর জন্য কোনো ডিফল্ট লেআউট পাওয়া যায়নি।` : `No default layout found for '${subjectName}'.`);
+                const displayName = type === 'class_subject' 
+                    ? (subjectName.includes('_') ? subjectName.replace('_', ' - ') : `${className} - ${subjectName}`) 
+                    : subjectName;
+                alert(uiLang === 'bn' ? `'${displayName}' এর জন্য কোনো ডিফল্ট লেআউট পাওয়া যায়নি।` : `No default layout found for '${displayName}'.`);
             }
         } catch (err) {
             console.error("Failed to load subject default layout:", err);
@@ -505,14 +722,33 @@ export const useExamManager = () => {
         }
     };
 
-    const deleteSubjectDefault = async (subjectName) => {
+    const deleteSubjectDefault = async (subjectName, type, className) => {
+        let targetKeySuffix = '';
+        let displayName = subjectName;
+        
+        if (type === 'class_subject') {
+            if (subjectName.includes('_')) {
+                targetKeySuffix = subjectName;
+                const parts = subjectName.split('_');
+                displayName = parts[0] + ' - ' + parts.slice(1).join(' ');
+            } else {
+                if (!className) return;
+                targetKeySuffix = className + '_' + subjectName;
+                displayName = className + ' - ' + subjectName;
+            }
+        } else {
+            targetKeySuffix = subjectName;
+        }
+
+        const targetKey = 'subject_default_' + targetKeySuffix;
+        const normTargetKey = targetKey.toString().trim().toLowerCase().replace(/\s+/g, '');
+
         const confirmDelete = window.confirm(uiLang === 'bn' 
-            ? `'${subjectName}' এর ডিফল্ট লেআউট কি মুছে ফেলতে চান?` 
-            : `Are you sure you want to delete default layout for '${subjectName}'?`);
+            ? `'${displayName}' এর ডিফল্ট লেআউট কি মুছে ফেলতে চান?` 
+            : `Are you sure you want to delete default layout for '${displayName}'?`);
         if (!confirmDelete) return;
 
         try {
-            const subKey = 'subject_default_' + subjectName.trim().toLowerCase();
             const userData = localStorage.getItem('user');
             let isSuper = false;
             if (userData) {
@@ -529,15 +765,21 @@ export const useExamManager = () => {
                 examSettings = await settingsService.getInstituteSettings('EXAM');
             }
 
-            if (examSettings && examSettings[subKey]) {
-                delete examSettings[subKey];
-                if (isSuper) {
-                    await settingsService.updateGlobalSettings('EXAM', examSettings);
+            if (examSettings) {
+                // Find matching key using normalized compare
+                const matchedKey = Object.keys(examSettings).find(k => k.toString().trim().toLowerCase().replace(/\s+/g, '') === normTargetKey);
+                if (matchedKey) {
+                    delete examSettings[matchedKey];
+                    if (isSuper) {
+                        await settingsService.updateGlobalSettings('EXAM', examSettings);
+                    } else (
+                        await settingsService.updateInstituteSettings('EXAM', examSettings)
+                    );
+                    alert(uiLang === 'bn' ? "ডিফল্ট লেআউট মুছে ফেলা হয়েছে!" : "Default layout deleted successfully!");
+                    fetchSavedSubjects();
                 } else {
-                    await settingsService.updateInstituteSettings('EXAM', examSettings);
+                    alert(uiLang === 'bn' ? "ডিফল্ট লেআউট খুঁজে পাওয়া যায়নি।" : "Default layout not found.");
                 }
-                alert(uiLang === 'bn' ? "ডিফল্ট লেআউট মুছে ফেলা হয়েছে!" : "Default layout deleted successfully!");
-                fetchSavedSubjects();
             }
         } catch (err) {
             console.error("Failed to delete subject default settings:", err);
@@ -547,8 +789,9 @@ export const useExamManager = () => {
 
     return {
         templates, loadingTemplates, isSavingTemplate,
-        savedSubjectsList, fetchSavedSubjects, saveSubjectDefaults, loadSubjectDefaults, deleteSubjectDefault,
+        savedSubjectsList, savedClassSubjectsList, fetchSavedSubjects, saveSubjectDefaults, loadSubjectDefaults, deleteSubjectDefault,
         applyTemplate, handleSaveTemplate,
-        handleSaveDocument, handleSaveAs
+        handleSaveDocument, handleSaveAs,
+        getNormalizedSubjectKey, getNormalizedClassKey
     };
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNexusEditor } from '../context/NexusEditorContext';
 import { X, Printer, Loader2 } from 'lucide-react';
 import questionService from '../../../../../services/questionService';
+import { formatDurationString } from '../../../../../utils/formatUtils';
 
 const AnswerSheetPreview = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -181,7 +182,7 @@ const AnswerSheetPreview = () => {
                     
                     {(docSettings?.showTime !== false || docSettings?.showTotalMarks !== false) && (
                         <div style={{display:'flex', justifyContent:'space-between', fontSize: ptToPx((docSettings?.subHeaderFontSize || 14) * 0.85), fontWeight: 'bold', lineHeight: 1}}>
-                            <span>{docSettings?.showTime !== false ? `${docSettings?.language === 'ENGLISH' ? 'Time' : 'সময়'}: ${convertDigits(docSettings?.time, docSettings?.language)}` : ''}</span>
+                            <span>{docSettings?.showTime !== false ? `${docSettings?.language === 'ENGLISH' ? 'Time' : 'সময়'}: ${convertDigits(formatDurationString(docSettings?.time, docSettings?.language), docSettings?.language)}` : ''}</span>
                             <span>{docSettings?.showTotalMarks !== false ? `${docSettings?.language === 'ENGLISH' ? 'Full Marks' : 'পূর্ণমান'}: ${convertDigits(docSettings?.totalMarks, docSettings?.language)}` : ''}</span>
                         </div>
                     )}
@@ -233,41 +234,123 @@ const AnswerSheetPreview = () => {
                         lineHeight: '1.5'
                     }}
                 >
-                    {layout === 'compact' && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                            {documentQuestions.map((q, i) => {
-                                const qId = q.attrs?.questionId;
-                                const realQ = qId ? realQuestions[qId] : null;
-                                const qType = realQ ? realQ.type : (q.attrs?.type || 'MCQ');
-                                const options = realQ ? realQ.options : q.attrs?.options;
-                                let ansText = '';
+                    {layout === 'compact' && (() => {
+                        const mcqQuestions = [];
+                        const nonMcqQuestions = [];
 
-                                if (qType === 'MCQ' && options && Array.isArray(options)) {
-                                    const correctOpts = [];
-                                    options.forEach((opt, oi) => {
-                                        if (opt.correct || opt.isCorrect) {
-                                            const label = opt.optionLabel || opt.label || getOptionLabel(oi, q.attrs?.optionStyle);
-                                            correctOpts.push(label);
-                                        }
-                                    });
-                                    if (correctOpts.length > 0) {
-                                        ansText = correctOpts.join(', ');
-                                    } else {
-                                        ansText = 'N/A';
-                                    }
-                                } else {
-                                    ansText = (realQ ? realQ.correctAnswer : q.attrs?.answer) || 'N/A';
-                                }
+                        documentQuestions.forEach((q, i) => {
+                            const qId = q.attrs?.questionId;
+                            const realQ = qId ? realQuestions[qId] : null;
+                            const qType = realQ ? realQ.type : (q.attrs?.type || 'MCQ');
+                            const qNum = q.attrs?.questionNumber || (i + 1);
+                            const displayNum = docSettings?.language === 'ENGLISH' 
+                                ? qNum 
+                                : convertDigits(qNum, 'BANGLA');
 
-                                return (
-                                    <div key={i} className="flex items-start gap-2 border border-slate-200 p-2 rounded-lg break-inside-avoid">
-                                        <span className="font-bold text-slate-600 w-6">{i + 1}.</span>
-                                        <span className="font-bold text-indigo-700" dangerouslySetInnerHTML={{ __html: ansText }} />
+                            if (qType === 'MCQ') {
+                                mcqQuestions.push({ q, index: i, displayNum, realQ });
+                            } else {
+                                nonMcqQuestions.push({ q, index: i, displayNum, realQ });
+                            }
+                        });
+
+                        const numCols = 5;
+                        const totalMcq = mcqQuestions.length;
+                        const numRows = Math.ceil(totalMcq / numCols);
+
+                        return (
+                            <div>
+                                {/* MCQ Answers Grid Table */}
+                                {totalMcq > 0 && (
+                                    <table className="w-full border-collapse border-2 border-slate-800 text-center text-sm mb-6">
+                                        <thead>
+                                            <tr className="bg-slate-50 border-b border-slate-800">
+                                                {Array.from({ length: numCols }).map((_, colIdx) => (
+                                                    <React.Fragment key={colIdx}>
+                                                        <th className={`border border-slate-800 py-1 px-1.5 font-bold ${colIdx > 0 ? 'border-l-2' : ''}`} style={{ width: '8%' }}>
+                                                            {docSettings?.language === 'ENGLISH' ? 'Q.' : 'প্রশ্ন'}
+                                                        </th>
+                                                        <th className="border border-slate-800 py-1 px-1.5 font-bold" style={{ width: '12%' }}>
+                                                            {docSettings?.language === 'ENGLISH' ? 'Ans.' : 'উত্তর'}
+                                                        </th>
+                                                    </React.Fragment>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {Array.from({ length: numRows }).map((_, rowIdx) => (
+                                                <tr key={rowIdx} className="hover:bg-slate-50 border-b border-slate-800 last:border-b-2">
+                                                    {Array.from({ length: numCols }).map((_, colIdx) => {
+                                                        const qIndex = rowIdx * numCols + colIdx;
+                                                        
+                                                        if (qIndex < totalMcq) {
+                                                            const { q, displayNum, realQ } = mcqQuestions[qIndex];
+                                                            const options = realQ ? realQ.options : q.attrs?.options;
+                                                            const correctOpts = [];
+                                                            if (options && Array.isArray(options)) {
+                                                                options.forEach((opt, oi) => {
+                                                                    if (opt.correct || opt.isCorrect) {
+                                                                        const label = opt.optionLabel || opt.label || getOptionLabel(oi, q.attrs?.optionStyle);
+                                                                        correctOpts.push(label);
+                                                                    }
+                                                                });
+                                                            }
+                                                            const ansText = correctOpts.length > 0 ? correctOpts.join(', ') : 'N/A';
+                                                            const qFontSize = q.attrs?.fontSize || docSettings?.bodyFontSize || 12;
+
+                                                            return (
+                                                                <React.Fragment key={colIdx}>
+                                                                    <td className={`border border-slate-800 py-1.5 px-1 font-bold text-slate-700 bg-slate-50/50 ${colIdx > 0 ? 'border-l-2' : ''}`} style={{ fontSize: ptToPx(qFontSize) }}>
+                                                                        {displayNum}
+                                                                    </td>
+                                                                    <td className="border border-slate-800 py-1.5 px-2 font-bold text-indigo-700" style={{ fontSize: ptToPx(qFontSize) }} dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                                </React.Fragment>
+                                                            );
+                                                        } else {
+                                                            return (
+                                                                <React.Fragment key={colIdx}>
+                                                                    <td className={`border border-slate-800 py-1.5 px-1 bg-slate-50/30 ${colIdx > 0 ? 'border-l-2' : ''}`}>-</td>
+                                                                    <td className="border border-slate-800 py-1.5 px-2">-</td>
+                                                                </React.Fragment>
+                                                            );
+                                                        }
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+
+                                {/* Non-MCQ Answers List */}
+                                {nonMcqQuestions.length > 0 && (
+                                    <div className="mt-6 space-y-4 text-left">
+                                        <h5 className="font-bold border-b border-slate-300 pb-1 text-slate-800" style={{ fontSize: ptToPx(docSettings?.subHeaderFontSize || 14) }}>
+                                            {docSettings?.language === 'ENGLISH' ? 'Short & Broad Questions Answers' : 'সংক্ষিপ্ত ও রচনামূলক প্রশ্নের উত্তর'}
+                                        </h5>
+                                        <div className="space-y-4">
+                                            {nonMcqQuestions.map(({ q, displayNum, realQ }) => {
+                                                const content = q.attrs?.questionText || q.attrs?.content || '';
+                                                const ansText = (realQ ? realQ.correctAnswer : q.attrs?.answer) || 'N/A';
+                                                const qFontSize = q.attrs?.fontSize || docSettings?.bodyFontSize || 12;
+                                                return (
+                                                    <div key={displayNum} className="border-b border-slate-100 pb-2 last:border-b-0 break-inside-avoid" style={{ fontSize: ptToPx(qFontSize) }}>
+                                                        <div className="flex gap-2">
+                                                            <span className="font-bold text-slate-700">{displayNum}.</span>
+                                                            <div className="font-semibold text-slate-800 inline-block" dangerouslySetInnerHTML={{ __html: content }} />
+                                                        </div>
+                                                        <div className="pl-6 mt-1 text-indigo-700 font-bold">
+                                                            <span className="text-xs text-slate-500 font-normal mr-1.5">{docSettings?.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
+                                                            <div className="inline" dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     {layout === 'highlighted' && (
                         <div className="space-y-6">

@@ -82,11 +82,18 @@ public class GeneralSettingServiceImpl implements GeneralSettingService {
             existingSettings = settingRepository.findByTenantIdAndCategory(tenantId, category);
         }
 
-        Map<String, GeneralSetting> existingMap = existingSettings.stream()
-                .collect(Collectors.toMap(GeneralSetting::getKey, s -> s));
+        Map<String, GeneralSetting> existingLowercaseMap = existingSettings.stream()
+                .collect(Collectors.toMap(s -> s.getKey().toLowerCase(), s -> s, (s1, s2) -> s1));
+
+        // Delete keys that exist in the database but are missing in newSettings (case-insensitive check)
+        existingLowercaseMap.forEach((lowerKey, setting) -> {
+            if (!newSettings.containsKey(lowerKey)) {
+                settingRepository.delete(setting);
+            }
+        });
 
         newSettings.forEach((key, value) -> {
-            GeneralSetting setting = existingMap.getOrDefault(key, new GeneralSetting());
+            GeneralSetting setting = existingLowercaseMap.getOrDefault(key.toLowerCase(), new GeneralSetting());
             if (setting.getId() == null) {
                 setting.setTenantId(tenantId);
                 setting.setCategory(category);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 export const Toggle = ({checked,onChange}) => (
   <label style={{position:"relative",width:40,height:22,cursor:"pointer",display:"inline-block",flexShrink:0}}>
@@ -29,10 +29,39 @@ export const FL = ({label, help, children, toggleKey, toggleVal, onToggle}) => (
 
 export const G2 = ({children}) => <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{children}</div>;
 
-export const Num = ({value,onChange,min=0,max=999,step=1}) => (
-  <input type="number" value={value} onChange={e=>onChange(+e.target.value)} min={min} max={max} step={step}
-    className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono" />
-);
+export const Num = ({value,onChange,min=0,max=999,step=1,disabled=false,className=""}) => {
+  const [localVal, setLocalVal] = useState(value);
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localVal !== value) {
+        onChange(localVal);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [localVal, value, onChange]);
+
+  const handleBlur = () => {
+    if (localVal !== value) {
+      onChange(localVal);
+    }
+  };
+
+  return (
+    <input type="number" value={localVal ?? ''} 
+      onChange={e => {
+        const val = e.target.value === '' ? '' : +e.target.value;
+        setLocalVal(val);
+      }} 
+      onBlur={handleBlur}
+      min={min} max={max} step={step} disabled={disabled}
+      className={className || "w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono disabled:opacity-40"} />
+  );
+};
 
 export const Sel = ({value,onChange,opts}) => (
   <select value={value} onChange={e=>onChange(e.target.value)}
@@ -41,10 +70,70 @@ export const Sel = ({value,onChange,opts}) => (
   </select>
 );
 
-export const Inp = ({value,onChange,placeholder=""}) => (
-  <input type="text" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-    className="w-full text-[13px] px-2.5 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400" />
-);
+export const Inp = ({value,onChange,placeholder="",disabled=false}) => {
+  const [localVal, setLocalVal] = useState(value);
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localVal !== value) {
+        onChange(localVal);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [localVal, value, onChange]);
+
+  const handleBlur = () => {
+    if (localVal !== value) {
+      onChange(localVal);
+    }
+  };
+
+  return (
+    <input type="text" value={localVal ?? ''} 
+      onChange={e => setLocalVal(e.target.value)} 
+      onBlur={handleBlur}
+      placeholder={placeholder}
+      disabled={disabled}
+      className={`w-full text-[13px] px-2.5 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 ${disabled ? 'opacity-50 cursor-not-allowed bg-slate-50' : ''}`} />
+  );
+};
+
+export const Txt = ({value,onChange,placeholder="",disabled=false,className=""}) => {
+  const [localVal, setLocalVal] = useState(value);
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localVal !== value) {
+        onChange(localVal);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [localVal, value, onChange]);
+
+  const handleBlur = () => {
+    if (localVal !== value) {
+      onChange(localVal);
+    }
+  };
+
+  return (
+    <textarea 
+      value={localVal ?? ''} 
+      onChange={e => setLocalVal(e.target.value)} 
+      onBlur={handleBlur}
+      placeholder={placeholder}
+      disabled={disabled}
+      className={className} />
+  );
+};
 
 export const Slide = ({value,onChange,min,max,step=1}) => {
   const [localVal, setLocalVal] = useState(value);
@@ -87,20 +176,64 @@ export const Seg = ({opts,value,onChange}) => (
 );
 
 export const FieldDisplay = ({ isEdit, value, onChange, placeholder="", disabled=false }) => {
+  const [localVal, setLocalVal] = useState(value);
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localVal !== value) {
+        onChange(localVal);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [localVal, value, onChange]);
+
+  const handleBlur = () => {
+    if (localVal !== value) {
+      onChange(localVal);
+    }
+  };
+
   if (isEdit) {
-    return <input type="text" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled} className={`w-full text-[13px] px-2.5 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 ${disabled ? 'opacity-50 cursor-not-allowed bg-slate-50' : ''}`} />;
+    return <input type="text" value={localVal ?? ''} onChange={e=>setLocalVal(e.target.value)} onBlur={handleBlur} placeholder={placeholder} disabled={disabled} className={`w-full text-[13px] px-2.5 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 ${disabled ? 'opacity-50 cursor-not-allowed bg-slate-50' : ''}`} />;
   }
   return <div className={`w-full text-[13px] px-2.5 py-1.5 bg-slate-50 border border-slate-100 rounded-md text-slate-700 font-medium truncate ${disabled ? 'opacity-40 line-through' : ''}`} title={value || 'N/A'}>{value || 'N/A'}</div>;
 };
 
 export const NumDisplay = ({ isEdit, value, onChange, min=0, max=999, disabled=false }) => {
+  const [localVal, setLocalVal] = useState(value);
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localVal !== value) {
+        onChange(localVal);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [localVal, value, onChange]);
+
+  const handleBlur = () => {
+    if (localVal !== value) {
+      onChange(localVal);
+    }
+  };
+
   if (isEdit) {
-    return <input type="number" value={value} onChange={e=>onChange(+e.target.value)} min={min} max={max} disabled={disabled} className={`w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono ${disabled ? 'opacity-50 cursor-not-allowed bg-slate-50' : ''}`} />;
+    return <input type="number" value={localVal ?? ''} onChange={e=>{
+      const val = e.target.value === '' ? '' : +e.target.value;
+      setLocalVal(val);
+    }} onBlur={handleBlur} min={min} max={max} disabled={disabled} className={`w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono ${disabled ? 'opacity-50 cursor-not-allowed bg-slate-50' : ''}`} />;
   }
   return <div className={`w-full text-[13px] px-2 py-1.5 bg-slate-50 border border-slate-100 rounded-md text-slate-700 font-mono text-center ${disabled ? 'opacity-40 line-through' : ''}`}>{value || 0}</div>;
 };
 
-import { useState, useEffect } from 'react';
 
 export const CollapsibleBox = ({ title, children, defaultOpen = false, toggleKey, toggleVal, onToggle }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);

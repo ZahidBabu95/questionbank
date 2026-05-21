@@ -140,8 +140,9 @@ public class ExamWordService {
                 ? exam.getClassSubject().getAcademicClass().getName()
                 : "—";
 
-        String metaText = String.format("বিষয়: %s | শ্রেণি: %s | সময়: %d মিনিট | পূর্ণমান: %s",
-                subjectName, className, exam.getDurationMinutes(), String.valueOf(exam.getTotalMarks().intValue()));
+        String timeText = formatDuration(exam.getDurationMinutes(), exam.getLanguage());
+        String metaText = String.format("বিষয়: %s | শ্রেণি: %s | সময়: %s | পূর্ণমান: %s",
+                subjectName, className, timeText, String.valueOf(exam.getTotalMarks().intValue()));
         metaRun.setText(metaText);
         metaRun.setBold(true);
         metaRun.setFontSize(11);
@@ -155,6 +156,49 @@ public class ExamWordService {
         dateRun.setFontFamily(BANGLA_FONT);
 
         addDivider(document);
+    }
+
+    private String toBengaliNumber(String numberStr) {
+        if (numberStr == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (char c : numberStr.toCharArray()) {
+            if (c >= '0' && c <= '9') {
+                sb.append((char) (c - '0' + '০'));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    private String formatDuration(Integer minutes, String language) {
+        if (minutes == null) return "";
+        int mins = minutes;
+        int hours = mins / 60;
+        int remainingMins = mins % 60;
+        boolean isEnglish = language != null && (language.equalsIgnoreCase("ENGLISH") || language.equalsIgnoreCase("English"));
+
+        if (isEnglish) {
+            if (hours > 0 && remainingMins > 0) {
+                String hStr = hours == 1 ? "Hour" : "Hours";
+                String mStr = remainingMins == 1 ? "Minute" : "Minutes";
+                return String.format("%d %s %d %s", hours, hStr, remainingMins, mStr);
+            } else if (hours > 0) {
+                String hStr = hours == 1 ? "Hour" : "Hours";
+                return String.format("%d %s", hours, hStr);
+            } else {
+                String mStr = remainingMins == 1 ? "Minute" : "Minutes";
+                return String.format("%d %s", remainingMins, mStr);
+            }
+        } else {
+            if (hours > 0 && remainingMins > 0) {
+                return String.format("%s ঘণ্টা %s মিনিট", toBengaliNumber(String.valueOf(hours)), toBengaliNumber(String.valueOf(remainingMins)));
+            } else if (hours > 0) {
+                return String.format("%s ঘণ্টা", toBengaliNumber(String.valueOf(hours)));
+            } else {
+                return String.format("%s মিনিট", toBengaliNumber(String.valueOf(remainingMins)));
+            }
+        }
     }
 
     private void renderStudentInfo(XWPFDocument document) {

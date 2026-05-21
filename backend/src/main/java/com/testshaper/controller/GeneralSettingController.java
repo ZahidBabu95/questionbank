@@ -71,12 +71,17 @@ public class GeneralSettingController {
             return ResponseEntity.ok(settingService.getGlobalSettings(category));
         }
 
-        Map<String, String> settings = settingService.getInstituteSettings(tenantId, category);
-        if (settings == null || settings.isEmpty()) {
-            // Fallback to global defaults if no institute-specific settings exist
-            settings = settingService.getGlobalSettings(category);
+        Map<String, String> globalSettings = settingService.getGlobalSettings(category);
+        Map<String, String> instituteSettings = settingService.getInstituteSettings(tenantId, category);
+        
+        Map<String, String> mergedSettings = new java.util.HashMap<>();
+        if (globalSettings != null) {
+            mergedSettings.putAll(globalSettings);
         }
-        return ResponseEntity.ok(settings != null ? settings : new HashMap<>());
+        if (instituteSettings != null) {
+            mergedSettings.putAll(instituteSettings);
+        }
+        return ResponseEntity.ok(mergedSettings);
     }
 
     @PutMapping("/institute/{category}")
@@ -172,6 +177,10 @@ public class GeneralSettingController {
         }
 
         if (user.getInstitute() != null) {
+            String name = user.getInstitute().getName();
+            if ("DEFAULT".equalsIgnoreCase(name) || "Default Institute".equalsIgnoreCase(name)) {
+                return null;
+            }
             return user.getInstitute().getId().toString();
         }
         return null;

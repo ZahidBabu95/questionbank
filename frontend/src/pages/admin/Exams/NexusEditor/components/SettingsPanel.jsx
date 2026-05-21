@@ -1,6 +1,6 @@
 import React from 'react';
 import { SUBJECTS, CLASSES, EXAMS, GROUPS, BOARDS, BN_FONTS, EN_FONTS, PAGE_SIZES, HEADER_STYLES, SECTION_STYLES, WATERMARK_OPT } from './DocumentSettings';
-import { Toggle, FL, G2, Num, Sel, Inp, Slide, ST, Seg, FieldDisplay, NumDisplay, CollapsibleBox, TypographyToolbar } from './SettingsComponents';
+import { Toggle, FL, G2, Num, Sel, Inp, Slide, ST, Seg, FieldDisplay, NumDisplay, CollapsibleBox, TypographyToolbar, Txt } from './SettingsComponents';
 import { UI_TEXT } from './translations';
 import { Lock, Unlock, AlignLeft, AlignCenter, AlignRight, AlignJustify, Trash2, ArrowUp, ArrowDown, FileText, Settings, ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -222,11 +222,11 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                                 {/* Instructions */}
                                                 <div className="bg-slate-50/50 border border-slate-200/60 rounded-xl p-3">
                                                     <FL label={uiLang === 'bn' ? 'নির্দেশনাবলী' : 'Instructions'} toggleKey="showInstructions" toggleVal={sec.showInstructions !== false} onToggle={(k, v) => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], [k]: v }; u("sections", ns); }}>
-                                                        <textarea 
+                                                        <Txt 
                                                             className="w-full text-[13px] p-2.5 border border-slate-200 rounded-md outline-none focus:border-indigo-400 min-h-[50px] resize-y disabled:opacity-50 bg-white"
                                                             value={sec.instructions || ''}
                                                             disabled={sec.showInstructions === false}
-                                                            onChange={e => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], instructions: e.target.value }; u("sections", ns); }}
+                                                            onChange={v => { const ns = [...s.sections]; ns[idx] = { ...ns[idx], instructions: v }; u("sections", ns); }}
                                                         />
                                                     </FL>
                                                     {sec.showInstructions !== false && (
@@ -291,17 +291,15 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                                             />
                                                         </FL>
                                                         <FL label={uiLang === 'bn' ? 'শুরু করার নম্বর' : 'Start Number'}>
-                                                            <input 
-                                                                type="number" 
-                                                                min="1"
+                                                            <Num 
+                                                                min={1}
                                                                 disabled={sec.continuousNumbering !== false}
                                                                 value={sec.numberingStart !== undefined ? sec.numberingStart : 1} 
-                                                                onChange={e => {
+                                                                onChange={v => {
                                                                     const ns = [...s.sections]; 
-                                                                    ns[idx] = { ...ns[idx], numberingStart: Number(e.target.value) || 1 }; 
+                                                                    ns[idx] = { ...ns[idx], numberingStart: Number(v) || 1 }; 
                                                                     u("sections", ns);
                                                                 }}
-                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono disabled:opacity-40"
                                                             />
                                                         </FL>
                                                     </div>
@@ -384,13 +382,11 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                                             />
                                                         </FL>
                                                         <FL label={uiLang === 'bn' ? 'ফন্ট সাইজ (pt)' : 'Font Size (pt)'}>
-                                                            <input 
-                                                                type="number" 
+                                                            <Num 
                                                                 value={sec.fontSize !== undefined ? sec.fontSize : (s.bodyFontSize || 14)} 
-                                                                onChange={e => {
-                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], fontSize: e.target.value }; u("sections", ns);
+                                                                onChange={v => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], fontSize: v }; u("sections", ns);
                                                                 }}
-                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
                                                             />
                                                         </FL>
                                                     </div>
@@ -423,46 +419,41 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                                             />
                                                         </FL>
                                                         <FL label={uiLang === 'bn' ? 'গ্যাপ(mm)' : 'Gap(mm)'}>
-                                                            <input 
-                                                                type="number" 
+                                                            <Num 
                                                                 value={sec.colGap !== undefined ? sec.colGap : (s.colGap || 10)} 
-                                                                onChange={e => {
-                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], colGap: e.target.value }; u("sections", ns);
+                                                                onChange={v => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], colGap: v }; u("sections", ns);
                                                                 }}
-                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
                                                             />
                                                         </FL>
                                                     </div>
 
                                                     <div className="grid grid-cols-3 gap-2">
                                                         <FL label={uiLang === 'bn' ? 'লাইন গ্যাপ' : 'Line Gap'}>
-                                                            <input 
-                                                                type="number" step="0.1" min="0.1" max="5.0"
+                                                            <Num 
+                                                                step={0.1} min={0.1} max={5.0}
                                                                 value={sec.lineGap !== undefined ? sec.lineGap : (s.lineHeight || 1.5)} 
-                                                                onChange={e => {
-                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], lineGap: e.target.value }; u("sections", ns);
+                                                                onChange={v => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], lineGap: v }; u("sections", ns);
                                                                 }}
-                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
                                                             />
                                                         </FL>
                                                         <FL label={uiLang === 'bn' ? 'অপশন (px)' : 'Option (px)'}>
-                                                            <input 
-                                                                type="number" min="-50" max="100"
+                                                            <Num 
+                                                                min={-50} max={100}
                                                                 value={sec.optionGap !== undefined ? sec.optionGap : 8} 
-                                                                onChange={e => {
-                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionGap: e.target.value }; u("sections", ns);
+                                                                onChange={v => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], optionGap: v }; u("sections", ns);
                                                                 }}
-                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
                                                             />
                                                         </FL>
                                                         <FL label={uiLang === 'bn' ? 'প্রশ্ন (px)' : 'Question (px)'}>
-                                                            <input 
-                                                                type="number" min="-100" max="150"
+                                                            <Num 
+                                                                min={-100} max={150}
                                                                 value={sec.questionGap !== undefined ? sec.questionGap : (s.questionGap || 15)} 
-                                                                onChange={e => {
-                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], questionGap: e.target.value }; u("sections", ns);
+                                                                onChange={v => {
+                                                                    const ns = [...s.sections]; ns[idx] = { ...ns[idx], questionGap: v }; u("sections", ns);
                                                                 }}
-                                                                className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 text-center font-mono"
                                                             />
                                                         </FL>
                                                     </div>

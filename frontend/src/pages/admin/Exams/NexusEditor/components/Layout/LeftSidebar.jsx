@@ -19,8 +19,12 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
         swapTarget, setSwapTarget,
         editorConfig, rawContent, docSettings,
         setPendingInsertQuestion, setPendingSwapQuestion,
-        documentQuestions
+        documentQuestions, addToast, examData
     } = useNexusEditor();
+
+    React.useEffect(() => {
+        document.documentElement.style.setProperty('--left-panel-width', `${leftPanelWidth}px`);
+    }, [leftPanelWidth]);
 
     const [revisingQuestionNode, setRevisingQuestionNode] = useState(null);
 
@@ -47,6 +51,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                 explanation: q.explanation || '',
                 answer: q.correctAnswer || '',
                 syncedFromDb: true,
+                language: q.language || 'Bangla',
                 statements: q.statements || [],
                 chapterName: q.chapterName || q.subjectName || 'General',
                 marks: q.marks || 1,
@@ -82,6 +87,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                 explanation: q.explanation || '',
                 answer: q.correctAnswer || '',
                 syncedFromDb: true,
+                language: q.language || 'Bangla',
                 statements: q.statements || [],
                 chapterName: q.chapterName || q.subjectName || 'General',
                 marks: q.marks || 1,
@@ -93,6 +99,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                 options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : []
             }
         });
+        addToast(uiLang === 'bn' ? 'প্রশ্নটি ক্যানভাসে যোগ করা হয়েছে।' : 'Question added to canvas.', 'success');
     };
 
     const handleReplaceHere = (q) => {
@@ -111,6 +118,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                 explanation: q.explanation || '',
                 answer: q.correctAnswer || '',
                 syncedFromDb: true,
+                language: q.language || 'Bangla',
                 statements: q.statements || [],
                 chapterName: q.chapterName || q.subjectName || 'General',
                 marks: q.marks || 1,
@@ -129,19 +137,43 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
         });
         setSwapTarget(null);
         setLeftPanelTab('document');
+        addToast(uiLang === 'bn' ? 'প্রশ্নটি সফলভাবে প্রতিস্থাপন করা হয়েছে।' : 'Question replaced successfully.', 'success');
     };
 
     const handleAutoSwap = async (qNode) => {
         const { pos, nodeSize, attrs } = qNode;
         try {
+            let targetChapterId = attrs.chapterId;
+            let targetSubjectId = attrs.subjectId;
+
+            // Fallback for legacy questions without attributes: fetch details from DB
+            if ((!targetChapterId || !targetSubjectId) && attrs.questionId) {
+                try {
+                    const qDetails = await questionService.getQuestionById(attrs.questionId);
+                    if (qDetails) {
+                        if (qDetails.chapter?.id) {
+                            targetChapterId = qDetails.chapter.id;
+                        }
+                        if (qDetails.classSubject?.id) {
+                            targetSubjectId = qDetails.classSubject.id;
+                        }
+                    }
+                } catch (dbErr) {
+                    console.warn("Failed to fetch legacy question details for auto-swap fallback", dbErr);
+                }
+            }
+
             const payload = {
-                subjectId: attrs.subjectId || '',
-                chapterId: attrs.chapterId || '',
-                filterType: attrs.type || '',
+                subjectId: targetSubjectId || examData?.classSubjectId || examData?.subjectId || '',
+                chapterId: targetChapterId || '',
+                className: examData?.className || '',
+                subjectName: examData?.subjectName || '',
+                filterType: attrs.type || 'MCQ',
                 filterStatus: 'APPROVED',
                 page: 0,
                 size: 50
             };
+            console.log("[LeftSidebar] handleAutoSwap payload:", payload);
             const response = await questionService.getAllQuestionsPaginated(payload);
             const content = response?.data?.content || response?.content || [];
             if (content.length > 0) {
@@ -179,24 +211,25 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                             options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : []
                         }
                     });
+                    addToast(uiLang === 'bn' ? 'সফলভাবে অটো সোয়াপ করা হয়েছে।' : 'Auto swapped successfully.', 'success');
                     return;
                 }
             }
-            alert(uiLang === 'bn' ? "এই অধ্যায়ে নতুন কোনো প্রশ্ন পাওয়া যায়নি।" : "No fresh questions available for auto-swap in this chapter.");
+            addToast(uiLang === 'bn' ? "এই অধ্যায়ে নতুন কোনো প্রশ্ন পাওয়া যায়নি।" : "No fresh questions available for auto-swap in this chapter.", 'warning');
         } catch (err) {
             console.error("Auto swap failed", err);
-            alert(uiLang === 'bn' ? "অটো সোয়াপ ব্যর্থ হয়েছে।" : "Auto swap failed.");
+            addToast(uiLang === 'bn' ? "অটো সোয়াপ ব্যর্থ হয়েছে।" : "Auto swap failed.", 'error');
         }
     };
 
     return (
-        <div style={{ width: isLeftPanelOpen ? `${leftPanelWidth}px` : '0px' }}
+        <div style={{ width: isLeftPanelOpen ? 'var(--left-panel-width, 320px)' : '0px' }}
              className={`${!isDraggingLeft ? 'transition-all duration-300 ease-in-out' : ''} bg-white border-r border-slate-200 shrink-0 flex flex-col z-10 relative print:hidden`}>
             {/* Resize Handle */}
             <div onMouseDown={() => setIsDraggingLeft(true)}
                  className={`absolute top-0 right-[-3px] w-[6px] h-full cursor-col-resize z-40 transition-colors hover:bg-indigo-400 ${isDraggingLeft ? 'bg-indigo-500' : 'bg-transparent'}`} />
             
-            <div className={`absolute top-0 left-0 h-full flex flex-col bg-white ${!isLeftPanelOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${!isDraggingLeft ? 'transition-opacity duration-300' : ''}`} style={{ width: `${leftPanelWidth}px` }}>
+            <div className={`absolute top-0 left-0 h-full flex flex-col bg-white ${!isLeftPanelOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${!isDraggingLeft ? 'transition-opacity duration-300' : ''}`} style={{ width: 'var(--left-panel-width, 320px)' }}>
                 <div className="p-4 border-b border-slate-100 shrink-0">
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex bg-slate-100 p-1 rounded-lg">
@@ -386,6 +419,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                                             <button onClick={() => {
                                                 if(window.confirm("Are you sure you want to delete this question?")) {
                                                     window.dispatchEvent(new CustomEvent('nexusDeleteNodeRequested', { detail: { pos: q.pos, nodeSize: q.nodeSize } }));
+                                                    addToast(uiLang === 'bn' ? 'প্রশ্নটি মুছে ফেলা হয়েছে।' : 'Question has been deleted.', 'info');
                                                 }
                                             }} className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded" title="Delete Question"><Trash2 size={14} /></button>
                                         </div>

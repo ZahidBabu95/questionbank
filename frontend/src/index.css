@@ -144,39 +144,54 @@
   
   .cq-questions li {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    background-color: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    background-color: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0.2rem 0 !important;
     margin: 0 !important;
   }
 
   .cq-questions li::before {
-    font-weight: 800;
-    color: #475569;
-    background-color: #f1f5f9;
-    padding: 0.1rem 0.4rem;
-    border-radius: 0.25rem;
+    font-weight: bold;
+    color: inherit;
+    background-color: transparent !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
     margin-right: 0.5rem;
-    font-size: 0.7rem;
+    font-size: inherit !important;
     display: inline-flex;
   }
 
   /* Default / English Labels */
-  .cq-questions li:nth-child(1)::before { content: "a)"; }
-  .cq-questions li:nth-child(2)::before { content: "b)"; }
-  .cq-questions li:nth-child(3)::before { content: "c)"; }
-  .cq-questions li:nth-child(4)::before { content: "d)"; }
-  .cq-questions li:nth-child(5)::before { content: "e)"; }
+  .cq-questions li:nth-child(1)::before,
+  .lang-en .cq-questions li:nth-child(1)::before,
+  [language="English"] .cq-questions li:nth-child(1)::before { content: "a)"; }
+  .cq-questions li:nth-child(2)::before,
+  .lang-en .cq-questions li:nth-child(2)::before,
+  [language="English"] .cq-questions li:nth-child(2)::before { content: "b)"; }
+  .cq-questions li:nth-child(3)::before,
+  .lang-en .cq-questions li:nth-child(3)::before,
+  [language="English"] .cq-questions li:nth-child(3)::before { content: "c)"; }
+  .cq-questions li:nth-child(4)::before,
+  .lang-en .cq-questions li:nth-child(4)::before,
+  [language="English"] .cq-questions li:nth-child(4)::before { content: "d)"; }
+  .cq-questions li:nth-child(5)::before,
+  .lang-en .cq-questions li:nth-child(5)::before,
+  [language="English"] .cq-questions li:nth-child(5)::before { content: "e)"; }
 
   /* Bangla Labels */
-  .lang-bn .cq-questions li:nth-child(1)::before { content: "ক)"; }
-  .lang-bn .cq-questions li:nth-child(2)::before { content: "খ)"; }
-  .lang-bn .cq-questions li:nth-child(3)::before { content: "গ)"; }
-  .lang-bn .cq-questions li:nth-child(4)::before { content: "ঘ)"; }
-  .lang-bn .cq-questions li:nth-child(5)::before { content: "ঙ)"; }
+  .lang-bn .cq-questions li:nth-child(1)::before,
+  [language="Bangla"] .cq-questions li:nth-child(1)::before { content: "ক)"; }
+  .lang-bn .cq-questions li:nth-child(2)::before,
+  [language="Bangla"] .cq-questions li:nth-child(2)::before { content: "খ)"; }
+  .lang-bn .cq-questions li:nth-child(3)::before,
+  [language="Bangla"] .cq-questions li:nth-child(3)::before { content: "গ)"; }
+  .lang-bn .cq-questions li:nth-child(4)::before,
+  [language="Bangla"] .cq-questions li:nth-child(4)::before { content: "ঘ)"; }
+  .lang-bn .cq-questions li:nth-child(5)::before,
+  [language="Bangla"] .cq-questions li:nth-child(5)::before { content: "ঙ)"; }
 
   
   .cq-questions li .cq-text {
@@ -184,12 +199,12 @@
   }
 
   .cq-questions li .cq-marks {
-    font-size: 0.7rem;
-    font-weight: 800;
-    color: #64748b;
-    background-color: #f1f5f9;
-    padding: 0.15rem 0.4rem;
-    border-radius: 0.25rem;
+    font-size: 0.95em;
+    font-weight: 600;
+    color: #475569;
+    background-color: transparent !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
     margin-left: 0.5rem;
     flex-shrink: 0;
   }

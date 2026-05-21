@@ -23,6 +23,10 @@ const parseMarkdownImages = (text, contextId = 'unknown') => {
             if (parts[1]) align = parts[1];
             if (parts[2]) width = parts[2];
         }
+        
+        if (contextId === 'stimulus' && (width === 'auto' || !width)) {
+            width = '35%';
+        }
             let marginStyle = '0.5rem 0';
             if (align === 'center') marginStyle = '0.5rem auto';
             if (align === 'right') marginStyle = '0.5rem 0 0 auto';
@@ -41,6 +45,31 @@ const stripOptionPrefix = (html) => {
     stripped = stripped.replace(/^(<p[^>]*>)?\s*(?:(?:[কখগঘa-dA-D1-4]|i{1,3}|iv)\s*[\.\)])\s*/i, '$1');
     return stripped;
 };
+
+const formatMarksDigits = (marksVal, numberingStyle) => {
+    if (marksVal === null || marksVal === undefined) return '';
+    let str = marksVal.toString().trim();
+    
+    // Normalize: convert Bengali digits to English digits temporarily for numeric processing
+    const bnToEn = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+    let enStr = str.replace(/[০-৯]/g, m => bnToEn[m]);
+    
+    // Parse as float, then convert to string to strip trailing .0 (e.g. 1.0 -> 1)
+    const num = parseFloat(enStr);
+    if (!isNaN(num)) {
+        enStr = num.toString();
+    }
+    
+    // Now translate to target numbering style
+    if (numberingStyle === 'bn') {
+        const enToBn = { '0': '০', '1': '১', '2': '২', '3': '৩', '4': '৪', '5': '৫', '6': '৬', '7': '৭', '8': '৮', '9': '৯' };
+        str = enStr.replace(/[0-9]/g, m => enToBn[m]);
+    } else {
+        str = enStr;
+    }
+    return str;
+};
+
 
     const QuestionComponent = ({ node, editor, deleteNode, updateAttributes, getPos, selected }) => {
         // Strict mode lock removed as per user request to make it fully usable
@@ -80,6 +109,7 @@ const stripOptionPrefix = (html) => {
                             syncedFromDb: true,
                             explanation: q.explanation || '',
                             answer: q.correctAnswer || '',
+                            language: q.language || 'Bangla',
                             options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : attrs.options
                         });
                     }
@@ -201,6 +231,37 @@ const stripOptionPrefix = (html) => {
             }
         };
 
+        const getRenderedQuestionText = () => {
+            let html = node.attrs.questionText || '';
+            if (node.attrs.type === 'CQ' || html.includes('cq-stem') || html.includes('cq-marks')) {
+                try {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const stem = doc.querySelector('.cq-stem');
+                    if (stem) {
+                        stem.remove();
+                    }
+                    
+                    const cqMarks = doc.querySelectorAll('.cq-marks');
+                    cqMarks.forEach(span => {
+                        let text = span.textContent || '';
+                        const match = text.match(/[\d\.০-৯]+/);
+                        if (match) {
+                            const originalNum = match[0];
+                            const targetStyle = (node.attrs.language === 'English' || node.attrs.numberingStyle === 'en') ? 'en' : 'bn';
+                            const formattedNum = formatMarksDigits(originalNum, targetStyle);
+                            span.textContent = formattedNum;
+                        }
+                    });
+                    
+                    html = doc.body.innerHTML;
+                } catch (e) {
+                    console.error("Failed to strip cq-stem or format cq-marks", e);
+                }
+            }
+            return html;
+        };
+
         const cleanHtml = (html) => {
             if (!html) return '';
             let cleaned = html;
@@ -219,18 +280,19 @@ const stripOptionPrefix = (html) => {
         };
 
         return (
-                        <NodeViewWrapper 
+            <NodeViewWrapper 
                 data-type="question-block" 
                 data-section-id={node.attrs.sectionId}
                 data-numberingstyle={node.attrs.numberingStyle || 'bn'}
                 data-first-in-section={node.attrs.firstInSection ? 'true' : undefined}
-                className={`relative group mb-0 transition-all duration-200 rounded-xl ${isStrict ? 'cursor-pointer hover:bg-slate-50' : 'cursor-text'} print:bg-transparent print:scale-100 print:shadow-none print:ring-0`}
+                className={`relative group mb-0 transition-all duration-200 rounded-xl ${isStrict ? 'cursor-pointer hover:bg-slate-50' : 'cursor-text'} print:bg-transparent print:scale-100 print:shadow-none print:ring-0 ${node.attrs.language === 'English' ? 'lang-en' : 'lang-bn'}`}
                 style={{ 
                     fontSize: fSize ? `${fSize}px` : 'inherit',
                     lineHeight: safeLineGap,
                     marginBottom: node.attrs.questionGap !== undefined && node.attrs.questionGap !== null ? `${node.attrs.questionGap}px` : undefined,
                     paddingTop: '0px',
-                    paddingBottom: '0px'
+                    paddingBottom: '0px',
+                    counterReset: node.attrs.questionNumber ? `question-counter ${node.attrs.questionNumber - 1}` : undefined
                 }}
                 onMouseDown={handleMouseDown}
                 onClick={handleClick}
@@ -239,9 +301,9 @@ const stripOptionPrefix = (html) => {
                     {/* Action buttons moved to sidebar */}
                 </div>
 
-                <div className="flex flex-col items-start gap-1 w-full">
+                <div className="flex flex-col items-start gap-1 w-full cq-question-layout">
                     {node.attrs.stimulus && (
-                        <div className="w-full mb-1 text-slate-800" 
+                        <div className="w-full mb-1 text-slate-800 cq-stimulus-block" 
                              style={{ textAlign: node.attrs.textAlign || 'left', lineHeight: safeLineGap }}
                              dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(node.attrs.stimulus, 'stimulus')) }} 
                         />
@@ -250,12 +312,14 @@ const stripOptionPrefix = (html) => {
                     <div className="flex items-start justify-between gap-4 w-full">
                         <div className="text-slate-900 font-medium flex-1 w-full" 
                              style={{ textAlign: node.attrs.textAlign || 'left' }}
-                             dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(node.attrs.questionText, 'questionText')) }} 
+                             dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(getRenderedQuestionText(), 'questionText')) }} 
                         />
                         {node.attrs.marksConfig !== 'hide' && node.attrs.marks && (
                             <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 mt-0.5 select-none"
                                   style={{ fontSize: fSize ? `${fSize * 0.9}px` : '0.9em' }}>
-                                {node.attrs.marksConfig === 'showBracket' ? `(${node.attrs.marks})` : node.attrs.marks}
+                                {node.attrs.marksConfig === 'showBracket' 
+                                    ? `(${formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)})` 
+                                    : formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)}
                             </span>
                         )}
                     </div>
@@ -435,6 +499,8 @@ export const QuestionBlockNode = Node.create({
         return {
             questionId: { default: null },
             sectionId: { default: null },
+            subjectId: { default: null },
+            chapterId: { default: null },
             type: { default: 'MCQ' },
             questionText: { default: '' },
             stimulus: { default: '' },
@@ -445,6 +511,7 @@ export const QuestionBlockNode = Node.create({
             explanation: { default: '' },
             answer: { default: '' },
             syncedFromDb: { default: false },
+            language: { default: 'Bangla' },
             numberingStyle: { default: 'bn' },
             marksConfig: { default: 'hide' },
             optionLayout: { default: 'col1' },
@@ -457,7 +524,8 @@ export const QuestionBlockNode = Node.create({
             textAlign: { default: 'left' },
             smartFit: { default: true },
             pageCols: { default: 1 },
-            firstInSection: { default: false }
+            firstInSection: { default: false },
+            questionNumber: { default: null }
         };
     },
 
@@ -482,6 +550,8 @@ export const QuestionBlockNode = Node.create({
                 return {
                     questionId: dom.getAttribute('questionid') || null,
                     sectionId: dom.getAttribute('data-section-id') || null,
+                    subjectId: dom.getAttribute('subjectid') || null,
+                    chapterId: dom.getAttribute('chapterid') || null,
                     type: dom.getAttribute('type') || 'MCQ',
                     questionText: dom.getAttribute('questiontext') || '',
                     stimulus: dom.getAttribute('stimulus') || '',
@@ -491,6 +561,7 @@ export const QuestionBlockNode = Node.create({
                     explanation: dom.getAttribute('explanation') || '',
                     answer: dom.getAttribute('answer') || '',
                     syncedFromDb: dom.getAttribute('syncedfromdb') === 'true',
+                    language: dom.getAttribute('language') || 'Bangla',
                     numberingStyle: dom.getAttribute('numberingstyle') || 'bn',
                     marksConfig: dom.getAttribute('marksconfig') || 'hide',
                     optionLayout: dom.getAttribute('optionlayout') || 'col1',
@@ -504,6 +575,7 @@ export const QuestionBlockNode = Node.create({
                     smartFit: dom.getAttribute('smartfit') !== 'false',
                     pageCols: Number(dom.getAttribute('pagecols')) || 1,
                     firstInSection: dom.getAttribute('data-first-in-section') === 'true',
+                    questionNumber: dom.getAttribute('data-question-number') ? Number(dom.getAttribute('data-question-number')) : null,
                     options
                 };
             }
@@ -512,16 +584,26 @@ export const QuestionBlockNode = Node.create({
 
     renderHTML({ HTMLAttributes }) {
         const { options, statements, ...restAttrs } = HTMLAttributes;
+        const qNum = HTMLAttributes.questionNumber;
+        const styleString = restAttrs.style || '';
+        const counterResetStyle = qNum ? `counter-reset: question-counter ${qNum - 1} !important;` : '';
+        const finalStyle = styleString 
+            ? (styleString.endsWith(';') ? `${styleString} ${counterResetStyle}` : `${styleString}; ${counterResetStyle}`) 
+            : counterResetStyle;
+
         return ['div', mergeAttributes(restAttrs, {
             'data-type': 'question-block',
             'data-options': JSON.stringify(options || []),
             'data-statements': JSON.stringify(statements || []),
             'questionid': HTMLAttributes.questionId || null,
             'data-section-id': HTMLAttributes.sectionId || null,
+            'subjectid': HTMLAttributes.subjectId || null,
+            'chapterid': HTMLAttributes.chapterId || null,
             'stimulus': HTMLAttributes.stimulus || '',
             'explanation': HTMLAttributes.explanation || '',
             'answer': HTMLAttributes.answer || '',
             'syncedfromdb': HTMLAttributes.syncedFromDb ? 'true' : 'false',
+            'language': HTMLAttributes.language || 'Bangla',
             'fontsize': HTMLAttributes.fontSize || null,
             'linegap': HTMLAttributes.lineGap || null,
             'optiongap': HTMLAttributes.optionGap || null,
@@ -529,7 +611,9 @@ export const QuestionBlockNode = Node.create({
             'textalign': HTMLAttributes.textAlign || 'left',
             'smartfit': HTMLAttributes.smartFit !== false ? 'true' : 'false',
             'pagecols': HTMLAttributes.pageCols || 1,
-            'data-first-in-section': HTMLAttributes.firstInSection ? 'true' : null
+            'data-first-in-section': HTMLAttributes.firstInSection ? 'true' : null,
+            'data-question-number': qNum || null,
+            'style': finalStyle || null
         })];
     },
 

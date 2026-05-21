@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
-import Underline from '@tiptap/extension-underline';
+import { Underline } from '@tiptap/extension-underline';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
@@ -17,18 +17,20 @@ import { CustomHeading, CustomParagraph } from '../extensions/CustomNodes';
 import CanvasStyleInjector from './CanvasStyleInjector';
 import { useCanvasSync } from '../hooks/useCanvasSync';
 import { usePageCountObserver } from '../hooks/usePageCountObserver';
-
+import { formatDurationString } from '../../../../../utils/formatUtils';
 // Custom Extension to handle "Locked Question Blocks" in Strict Mode
 // In future, this will be expanded to a NodeView to render CQ/MCQ UI
-const PaperCanvasV2 = ({ 
+const PaperCanvasV2 = React.memo(({ 
     editorMode, rawContent, setRawContent, 
     docSettings, zoom = 100,
     editorConfig = null, workspaceTools = null, onPageCountChange,
     pendingInsertQuestion, onQuestionInserted,
     pendingSwapQuestion, onQuestionSwapped,
-    setDocumentQuestions, documentQuestions = []
+    setDocumentQuestions, documentQuestions = [],
+    canvasTheme = 'white', uiLang = 'bn', setEditor
 }) => {
     const s = docSettings || {};
+    const lastEditorContentRef = useRef(rawContent);
 
     const editor = useEditor({
         extensions: [
@@ -105,13 +107,26 @@ const PaperCanvasV2 = ({
             }
         },
         onUpdate: ({ editor }) => {
+            const html = editor.getHTML();
+            lastEditorContentRef.current = html;
             // Debounce to prevent lag when typing
             if (window.editorUpdateTimeout) clearTimeout(window.editorUpdateTimeout);
             window.editorUpdateTimeout = setTimeout(() => {
-                setRawContent(editor.getHTML());
+                setRawContent(html);
             }, 800);
-        },
+        }
     });
+
+    useEffect(() => {
+        if (editor && setEditor) {
+            setEditor(editor);
+        }
+        return () => {
+            if (setEditor) {
+                setEditor(null);
+            }
+        };
+    }, [editor, setEditor]);
 
     // Handle Mode Switching visually
     useEffect(() => {
@@ -165,8 +180,14 @@ const PaperCanvasV2 = ({
 
     // Sync external rawContent changes (e.g., when a Template is clicked)
     useEffect(() => {
-        if (editor && rawContent && rawContent !== editor.getHTML()) {
-            editor.commands.setContent(rawContent);
+        if (editor && rawContent && rawContent !== lastEditorContentRef.current) {
+            const timer = setTimeout(() => {
+                if (editor && !editor.isDestroyed) {
+                    editor.commands.setContent(rawContent);
+                }
+            }, 0);
+            lastEditorContentRef.current = rawContent;
+            return () => clearTimeout(timer);
         }
     }, [rawContent, editor]);
 
@@ -245,6 +266,20 @@ const PaperCanvasV2 = ({
     const containerRef = useRef(null);
     const pageCount = usePageCountObserver(containerRef, editor, totalH, paddingTop, paddingBottom, onPageCountChange);
 
+    const [isDragActive, setIsDragActive] = useState(false);
+    useEffect(() => {
+        const handleDragStart = () => setIsDragActive(true);
+        const handleDragEnd = () => setIsDragActive(false);
+        window.addEventListener('nexusDragStarted', handleDragStart);
+        window.addEventListener('nexusDragEnded', handleDragEnd);
+        return () => {
+            window.removeEventListener('nexusDragStarted', handleDragStart);
+            window.removeEventListener('nexusDragEnded', handleDragEnd);
+        };
+    }, []);
+
+    const canvasTextColor = canvasTheme === 'dark' ? '#f1f5f9' : '#000000';
+    const canvasBorderColor = canvasTheme === 'dark' ? '#475569' : '#000000';
 
     // Check workspace tools from user UI settings (default to true)
     const hasMath = workspaceTools?.math ?? true;
@@ -287,7 +322,7 @@ const PaperCanvasV2 = ({
             >
             <div 
                 ref={containerRef}
-                className="paper-canvas-container relative origin-top-left print:block print:m-0 print:p-0" 
+                className={`paper-canvas-container relative origin-top-left print:block print:m-0 print:p-0 theme-${canvasTheme}`}
                 style={{ 
                     transform: `scale(${zoom / 100})`, 
                     width: `${w}px`, 
@@ -298,10 +333,11 @@ const PaperCanvasV2 = ({
             {/* Background Pages Array */}
             <div className="absolute top-0 left-0 w-full h-full z-0 pointer-events-none flex flex-col" style={{ gap: `${gap}px` }}>
                 {Array.from({ length: pageCount }).map((_, i) => (
-                    <div key={i} className="bg-white w-full relative overflow-hidden" style={{ 
+                    <div key={i} className="w-full relative overflow-hidden transition-colors duration-300" style={{ 
                         height: `${h}px`,
-                        border: s.outerBorder ? `${s.outerBorderWidth}px solid #000` : 'none',
-                        borderBottom: gap === 0 && i < pageCount - 1 ? '1px dashed #cbd5e1' : undefined,
+                        backgroundColor: canvasTheme === 'cream' ? '#fbf0d9' : canvasTheme === 'dark' ? '#1e293b' : '#ffffff',
+                        border: s.outerBorder ? `${s.outerBorderWidth}px solid ${canvasBorderColor}` : 'none',
+                        borderBottom: gap === 0 && i < pageCount - 1 ? (canvasTheme === 'dark' ? '1px dashed #475569' : '1px dashed #cbd5e1') : undefined,
                         margin: s.outerBorder ? `${s.outerBorderWidth}px` : '0',
                         boxShadow: gap > 0 ? '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)' : (i === 0 ? '0 4px 6px -1px rgb(0 0 0 / 0.1)' : 'none')
                     }}>
@@ -325,20 +361,21 @@ const PaperCanvasV2 = ({
             )}
             
             <div className="relative z-10 h-full w-full paper-content-wrapper" style={{
-                paddingTop, paddingBottom, paddingLeft, paddingRight
+                paddingTop, paddingBottom, paddingLeft, paddingRight,
+                color: canvasTextColor
             }}>
                 {/* Native Header for Strict Mode */}
                 {editorMode === 'STRICT_LINKED' && (
                     <div style={{
-                        fontFamily: s.bnFont, 
-                        borderBottom: s.headerStyle === 'ডাবল বর্ডার' ? '3px double #000' : 
-                                      s.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 
-                                      s.headerStyle === 'থিক টপ লাইন' ? '3px solid #000' : 
-                                      (s.showDivider ? (s.dividerStyle === 'double' ? '3px double #000' : s.dividerStyle === 'dashed' ? '1px dashed #000' : '1px solid #000') : 'none'),
-                        borderTop: s.headerStyle === 'থিক টপ লাইন' ? '3px solid #000' : 
-                                   s.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 'none',
-                        borderLeft: s.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 'none',
-                        borderRight: s.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 'none',
+                        fontFamily: s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'), 
+                        borderBottom: s.headerStyle === 'ডাবল বর্ডার' ? '3px double ' + canvasBorderColor : 
+                                      s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 
+                                      s.headerStyle === 'থিক টপ লাইন' ? '3px solid ' + canvasBorderColor : 
+                                      (s.showDivider ? (s.dividerStyle === 'double' ? '3px double ' + canvasBorderColor : s.dividerStyle === 'dashed' ? '1px dashed ' + canvasBorderColor : '1px solid ' + canvasBorderColor) : 'none'),
+                        borderTop: s.headerStyle === 'থিক টপ লাইন' ? '3px solid ' + canvasBorderColor : 
+                                   s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
+                        borderLeft: s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
+                        borderRight: s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
                         padding: s.headerStyle === 'বক্স স্টাইল' ? '10px' : '0 0 4px 0',
                         marginBottom: 20
                     }}>
@@ -346,7 +383,7 @@ const PaperCanvasV2 = ({
                             {/* Left: Subject Code */}
                             <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start', minWidth: 0 }}>
                                 {(s.showSubjectCode !== false && s.subjectCode) && (
-                                    <div style={{display: 'inline-block', border: '1px solid #000', padding: '2px 8px', fontSize: ptToPx(s.bodyFontSize), fontWeight: 'bold', borderRadius: '4px', whiteSpace: 'nowrap'}}>
+                                    <div style={{display: 'inline-block', border: '1px solid ' + canvasBorderColor, padding: '2px 8px', fontSize: ptToPx(s.bodyFontSize), fontWeight: 'bold', borderRadius: '4px', whiteSpace: 'nowrap'}}>
                                         {s.language === 'ENGLISH' ? 'Sub Code' : 'বিষয় কোড'}: {convertDigits(s.subjectCode, s.language)}
                                     </div>
                                 )}
@@ -364,7 +401,7 @@ const PaperCanvasV2 = ({
                             {/* Right: Set Code */}
                             <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', minWidth: 0 }}>
                                 {(s.showSetCode !== false && s.setCode) && (
-                                    <div style={{display: 'inline-block', border: '1px solid #000', padding: '2px 8px', fontSize: ptToPx(s.bodyFontSize), fontWeight: 'bold', borderRadius: '4px', whiteSpace: 'nowrap'}}>
+                                    <div style={{display: 'inline-block', border: '1px solid ' + canvasBorderColor, padding: '2px 8px', fontSize: ptToPx(s.bodyFontSize), fontWeight: 'bold', borderRadius: '4px', whiteSpace: 'nowrap'}}>
                                         {s.language === 'ENGLISH' ? 'Set Code' : 'সেট কোড'}: {convertDigits(s.setCode, s.language)}
                                     </div>
                                 )}
@@ -373,7 +410,7 @@ const PaperCanvasV2 = ({
                             <div style={{textAlign: 'center', fontSize: ptToPx(s.subHeaderFontSize), fontWeight: s.boldSubject ? 'bold' : 'normal', marginBottom: 8, lineHeight: s.headerLineHeight || 1.2}}>
                                 {(s.showBoard !== false && s.board) && (
                                     <div style={{marginBottom: 2}}>
-                                        {s.board} {s.language === 'ENGLISH' ? 'Board' : 'বোর্ড'}
+                                        {s.board} {s.language === 'ENGLISH' ? 'Board' : 'বอร์ด'}
                                     </div>
                                 )}
                                 {(s.showExamType !== false || s.showYear !== false) && (
@@ -393,7 +430,7 @@ const PaperCanvasV2 = ({
                             </div>
                             {(s.showTime !== false || s.showTotalMarks !== false) && (
                                 <div style={{display:'flex', justifyContent:'space-between', fontSize: ptToPx((s.subHeaderFontSize || 14) * 0.85), fontWeight: 'bold', lineHeight: 1}}>
-                                    <span>{s.showTime !== false ? `${s.language === 'ENGLISH' ? 'Time' : 'সময়'}: ${convertDigits(s.time, s.language)}` : ''}</span>
+                                    <span>{s.showTime !== false ? `${s.language === 'ENGLISH' ? 'Time' : 'সময়'}: ${convertDigits(formatDurationString(s.time, s.language), s.language)}` : ''}</span>
                                     <span>{s.showTotalMarks !== false ? `${s.language === 'ENGLISH' ? 'Full Marks' : 'পূর্ণমান'}: ${convertDigits(s.totalMarks, s.language)}` : ''}</span>
                                 </div>
                             )}
@@ -401,19 +438,19 @@ const PaperCanvasV2 = ({
                             <div style={{ marginTop: 12, fontSize: ptToPx(s.bodyFontSize) }}>
                                 {s.candidateLayout === 'inline' ? (
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 15 }}>
-                                        {s.showName && <div style={{flex: 1}}><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Name' : 'নাম'}:</span> <span style={{display:'inline-block', width:'calc(100% - 40px)', borderBottom:'1px dashed #000'}}></span></div>}
+                                        {s.showName && <div style={{flex: 1}}><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Name' : 'নাম'}:</span> <span style={{display:'inline-block', width:'calc(100% - 40px)', borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
                                         <div style={{display:'flex', gap: 15, flexShrink: 0}}>
-                                            {s.showRoll && <div><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Roll No' : 'রোল নম্বর'}:</span> <span style={{display:'inline-block', width:80, borderBottom:'1px dashed #000'}}></span></div>}
-                                            {s.showReg && <div><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Reg No' : 'রেজিঃ নম্বর'}:</span> <span style={{display:'inline-block', width:90, borderBottom:'1px dashed #000'}}></span></div>}
+                                            {s.showRoll && <div><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Roll No' : 'রোল নম্বর'}:</span> <span style={{display:'inline-block', width:80, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
+                                            {s.showReg && <div><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Reg No' : 'রেজিঃ নম্বর'}:</span> <span style={{display:'inline-block', width:90, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
                                         </div>
                                     </div>
                                 ) : (
                                     <>
-                                        {s.showName && <div style={{marginBottom: 8, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Name' : 'নাম'}:</span> <span style={{flex: 1, borderBottom:'1px dashed #000'}}></span></div>}
+                                        {s.showName && <div style={{marginBottom: 8, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Name' : 'নাম'}:</span> <span style={{flex: 1, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
                                         {(s.showRoll || s.showReg) && (
                                             <div style={{display:'flex', justifyContent: (s.showRoll && s.showReg) ? 'space-between' : 'flex-start', gap: 40}}>
-                                                {s.showRoll && <div style={{flex: 1, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Roll No' : 'রোল নম্বর'}:</span> <span style={{flex: 1, borderBottom:'1px dashed #000'}}></span></div>}
-                                                {s.showReg && <div style={{flex: 1, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Reg No' : 'রেজিঃ নম্বর'}:</span> <span style={{flex: 1, borderBottom:'1px dashed #000'}}></span></div>}
+                                                {s.showRoll && <div style={{flex: 1, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Roll No' : 'রোল নম্বর'}:</span> <span style={{flex: 1, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
+                                                {s.showReg && <div style={{flex: 1, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Reg No' : 'রেজিঃ নম্বর'}:</span> <span style={{flex: 1, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
                                             </div>
                                         )}
                                     </>
@@ -424,63 +461,159 @@ const PaperCanvasV2 = ({
                 )}
                 
                 {/* Tiptap Content */}
-                <div className={s.includeAnswerSheet ? `show-answers-${s.ansLayout || 'highlighted'}` : ''}>
+                <div className={(s.includeAnswerSheet && s.ansLayout !== 'compact') ? `show-answers-${s.ansLayout || 'highlighted'}` : ''}>
                     <EditorContent editor={editor} />
                 </div>
 
                 {/* Compact Answer Grid Inline */}
-                {s.includeAnswerSheet && s.ansLayout === 'compact' && documentQuestions && documentQuestions.length > 0 && (
-                    <div className="mt-12 pt-6 border-t-2 border-slate-800 break-inside-avoid print:break-before-page" style={{ fontFamily: s.fontFamily || 'Kalpurush' }}>
-                        <h4 className="text-center font-bold mb-4" style={{ fontSize: ptToPx(s.subHeaderFontSize || 14) }}>
-                            {s.language === 'ENGLISH' ? 'Answer Sheet' : 'উত্তরপত্র'}
-                        </h4>
-                        <div className="grid grid-cols-4 gap-x-4 gap-y-2 text-sm" style={{ fontSize: ptToPx(s.bodyFontSize || 12) }}>
-                            {documentQuestions.map((q, i) => {
-                                const qType = q.attrs?.type || 'MCQ';
-                                const options = q.attrs?.options || [];
-                                let ansText = '';
+                {s.includeAnswerSheet && s.ansLayout === 'compact' && documentQuestions && documentQuestions.length > 0 && (() => {
+                    const mcqQuestions = [];
+                    const nonMcqQuestions = [];
 
-                                if (qType === 'MCQ' && options && Array.isArray(options)) {
-                                    const correctOpts = [];
-                                    options.forEach((opt, oi) => {
-                                        if (opt.correct || opt.isCorrect) {
-                                            const optStyle = q.attrs?.optionStyle || 'bn';
-                                            const optLabel = optStyle === 'en' 
-                                                ? String.fromCharCode(97 + oi) 
-                                                : optStyle === 'roman'
-                                                ? ['i', 'ii', 'iii', 'iv', 'v'][oi]
-                                                : optStyle === 'num_en'
-                                                ? `${oi + 1}`
-                                                : optStyle === 'num_bn'
-                                                ? ['১', '২', '৩', '৪', '৫'][oi]
-                                                : ['ক', 'খ', 'গ', 'ঘ', 'ঙ'][oi] || String.fromCharCode(2453 + oi);
-                                            correctOpts.push(optLabel);
-                                        }
-                                    });
-                                    ansText = correctOpts.length > 0 ? correctOpts.join(', ') : 'N/A';
-                                } else {
-                                    ansText = q.attrs?.answer || 'N/A';
-                                }
+                    documentQuestions.forEach((q, i) => {
+                        const qType = q.attrs?.type || 'MCQ';
+                        const qNum = q.attrs?.questionNumber || (i + 1);
+                        const displayNum = q.attrs?.numberingStyle === 'en' || s.language === 'ENGLISH' 
+                            ? qNum 
+                            : convertDigits(qNum, 'BANGLA');
 
-                                const qNumber = q.attrs?.numberingStyle === 'en' || s.language === 'ENGLISH' 
-                                    ? (i + 1) 
-                                    : convertDigits(i + 1, 'BANGLA');
+                        if (qType === 'MCQ') {
+                            mcqQuestions.push({ q, index: i, displayNum });
+                        } else {
+                            nonMcqQuestions.push({ q, index: i, displayNum });
+                        }
+                    });
 
-                                return (
-                                    <div key={i} className="flex items-start gap-1">
-                                        <span className="font-bold shrink-0">{qNumber}.</span>
-                                        <span className="font-bold" dangerouslySetInnerHTML={{ __html: ansText }} />
+                    const numCols = 5;
+                    const totalMcq = mcqQuestions.length;
+                    const numRows = Math.ceil(totalMcq / numCols);
+
+                    const getOptionLabel = (idx, style = 'bn') => {
+                        if (style === 'en') return String.fromCharCode(97 + idx);
+                        if (style === 'roman') return ['i', 'ii', 'iii', 'iv', 'v'][idx] || (idx + 1);
+                        if (style === 'num_en') return `${idx + 1}`;
+                        if (style === 'num_bn') return ['১', '২', '৩', '৪', '৫'][idx] || (idx + 1);
+                        return ['ক', 'খ', 'গ', 'ঘ', 'ঙ'][idx] || String.fromCharCode(97 + idx);
+                    };
+
+                    return (
+                        <div className="mt-12 pt-6 border-t-2 border-slate-800 break-inside-avoid print:break-before-page" style={{ fontFamily: s.fontFamily || 'Kalpurush' }}>
+                            <h4 className="text-center font-bold mb-4" style={{ fontSize: ptToPx(s.subHeaderFontSize || 14) }}>
+                                {s.language === 'ENGLISH' ? 'Answer Sheet' : 'উত্তরপত্র'}
+                            </h4>
+                            
+                            {/* MCQ Answers Grid Table */}
+                            {totalMcq > 0 && (
+                                <table className="w-full border-collapse border-2 border-slate-800 text-center text-sm mb-6" style={{ fontSize: ptToPx(s.bodyFontSize || 12) }}>
+                                    <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-800">
+                                            {Array.from({ length: numCols }).map((_, colIdx) => (
+                                                <React.Fragment key={colIdx}>
+                                                    <th className={`border border-slate-800 py-1 px-1.5 font-bold ${colIdx > 0 ? 'border-l-2' : ''}`} style={{ width: '8%' }}>
+                                                        {s.language === 'ENGLISH' ? 'Q.' : 'প্রশ্ন'}
+                                                    </th>
+                                                    <th className="border border-slate-800 py-1 px-1.5 font-bold" style={{ width: '12%' }}>
+                                                        {s.language === 'ENGLISH' ? 'Ans.' : 'উত্তর'}
+                                                    </th>
+                                                </React.Fragment>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Array.from({ length: numRows }).map((_, rowIdx) => (
+                                            <tr key={rowIdx} className="hover:bg-slate-50 border-b border-slate-800 last:border-b-2">
+                                                {Array.from({ length: numCols }).map((_, colIdx) => {
+                                                    const qIndex = rowIdx * numCols + colIdx;
+                                                    
+                                                    if (qIndex < totalMcq) {
+                                                        const { q, displayNum } = mcqQuestions[qIndex];
+                                                        const options = q.attrs?.options || [];
+                                                        const correctOpts = [];
+                                                        options.forEach((opt, oi) => {
+                                                            if (opt.correct || opt.isCorrect) {
+                                                                const optStyle = q.attrs?.optionStyle || 'bn';
+                                                                const optLabel = optStyle === 'en' 
+                                                                    ? String.fromCharCode(97 + oi) 
+                                                                    : optStyle === 'roman'
+                                                                    ? ['i', 'ii', 'iii', 'iv', 'v'][oi]
+                                                                    : optStyle === 'num_en'
+                                                                    ? `${oi + 1}`
+                                                                    : optStyle === 'num_bn'
+                                                                    ? ['১', '২', '৩', '৪', '৫'][oi]
+                                                                    : ['ক', 'খ', 'গ', 'ঘ', 'ঙ'][oi] || String.fromCharCode(2453 + oi);
+                                                                correctOpts.push(optLabel);
+                                                            }
+                                                        });
+                                                        const ansText = correctOpts.length > 0 ? correctOpts.join(', ') : 'N/A';
+                                                        const qFontSize = q.attrs?.fontSize || s.bodyFontSize || 12;
+
+                                                        return (
+                                                            <React.Fragment key={colIdx}>
+                                                                <td className={`border border-slate-800 py-1.5 px-1 font-bold text-slate-700 bg-slate-50/50 ${colIdx > 0 ? 'border-l-2' : ''}`} style={{ fontSize: ptToPx(qFontSize) }}>
+                                                                    {displayNum}
+                                                                </td>
+                                                                <td className="border border-slate-800 py-1.5 px-2 font-bold text-indigo-700" style={{ fontSize: ptToPx(qFontSize) }} dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                            </React.Fragment>
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <React.Fragment key={colIdx}>
+                                                                <td className={`border border-slate-800 py-1.5 px-1 bg-slate-50/30 ${colIdx > 0 ? 'border-l-2' : ''}`}>-</td>
+                                                                <td className="border border-slate-800 py-1.5 px-2">-</td>
+                                                            </React.Fragment>
+                                                        );
+                                                    }
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+
+                            {/* Non-MCQ Answers List */}
+                            {nonMcqQuestions.length > 0 && (
+                                <div className="mt-6 space-y-4 text-left">
+                                    <h5 className="font-bold border-b border-slate-300 pb-1 text-slate-800" style={{ fontSize: ptToPx(s.subHeaderFontSize || 14) }}>
+                                        {s.language === 'ENGLISH' ? 'Short & Broad Questions Answers' : 'সংক্ষিপ্ত ও রচনামূলক প্রশ্নের উত্তর'}
+                                    </h5>
+                                    <div className="space-y-4">
+                                        {nonMcqQuestions.map(({ q, displayNum }) => {
+                                            const content = q.attrs?.questionText || q.attrs?.content || '';
+                                            const ansText = q.attrs?.answer || 'N/A';
+                                            const qFontSize = q.attrs?.fontSize || s.bodyFontSize || 12;
+                                            return (
+                                                <div key={displayNum} className="border-b border-slate-100 pb-2 last:border-b-0 break-inside-avoid" style={{ fontSize: ptToPx(qFontSize) }}>
+                                                    <div className="flex gap-2">
+                                                        <span className="font-bold text-slate-700">{displayNum}.</span>
+                                                        <div className="font-semibold text-slate-800 inline-block" dangerouslySetInnerHTML={{ __html: content }} />
+                                                    </div>
+                                                    <div className="pl-6 mt-1 text-indigo-700 font-bold">
+                                                        <span className="text-xs text-slate-500 font-normal mr-1.5">{s.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
+                                                        <div className="inline" dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                );
-                            })}
+                                </div>
+                            )}
                         </div>
-                    </div>
-                )}
+                    );
+                })()}
                 
                 {/* Print Footer */}
                 {s.showFooter && s.footerText && (
                     <div className="hidden print:block fixed bottom-[8mm] left-0 right-0 text-center" style={{ fontSize: ptToPx(10), fontFamily: s.fontFamily || 'Kalpurush', color: '#64748b' }}>
                         {s.footerText}
+                    </div>
+                )}
+
+                {isDragActive && (
+                    <div className="absolute inset-0 bg-indigo-500/10 border-4 border-dashed border-indigo-500 rounded-lg pointer-events-none z-[999] flex items-center justify-center animate-pulse">
+                        <div className="bg-indigo-600 text-white font-extrabold text-sm px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 border border-indigo-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="animate-bounce"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+                            {uiLang === 'bn' ? 'প্রশ্নটি ক্যানভাসে ড্রপ করুন' : 'Drop Question here to insert'}
+                        </div>
                     </div>
                 )}
             </div>
@@ -491,6 +624,21 @@ const PaperCanvasV2 = ({
         </div>
         </div>
     );
-};
+}, (prevProps, nextProps) => {
+    return (
+        prevProps.editorMode === nextProps.editorMode &&
+        prevProps.rawContent === nextProps.rawContent &&
+        prevProps.docSettings === nextProps.docSettings &&
+        prevProps.zoom === nextProps.zoom &&
+        prevProps.canvasTheme === nextProps.canvasTheme &&
+        prevProps.uiLang === nextProps.uiLang &&
+        prevProps.workspaceTools === nextProps.workspaceTools &&
+        prevProps.editorConfig === nextProps.editorConfig &&
+        prevProps.pendingInsertQuestion === nextProps.pendingInsertQuestion &&
+        prevProps.pendingSwapQuestion === nextProps.pendingSwapQuestion &&
+        prevProps.documentQuestions === nextProps.documentQuestions &&
+        prevProps.setEditor === nextProps.setEditor
+    );
+});
 
 export default PaperCanvasV2;

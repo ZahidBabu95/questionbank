@@ -8,8 +8,10 @@ export const UI_TEXT = {
         spacing: "Spacing",
         design: "Design",
         templates: "Templates",
-        tools: "Tools",
         answerSheet: "Answer Sheet",
+        image: "Images",
+        imageProps: "Image Properties",
+        noImages: "No images found in the document.",
 
         // Question Setup
         sections: "Sections",
@@ -166,8 +168,10 @@ export const UI_TEXT = {
         spacing: "স্পেসিং",
         design: "ডিজাইন",
         templates: "টেমপ্লেট",
-        tools: "টুলস",
         answerSheet: "উত্তরপত্র",
+        image: "ইমেজ",
+        imageProps: "ইমেজ প্রোপার্টিজ",
+        noImages: "প্রশ্নপত্রে কোনো ইমেজ পাওয়া যায়নি।",
 
         // Question Setup
         sections: "বিভাগ সমূহ",

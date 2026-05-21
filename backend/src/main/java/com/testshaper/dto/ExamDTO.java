@@ -38,6 +38,9 @@ public class ExamDTO {
     private String rawContent;
     private String docSettingsJson;
     private UUID templateId;
+    private UUID classSubjectId;
+    private UUID subjectId;
+    private UUID classId;
 
     // Academic info
     private String subjectName;

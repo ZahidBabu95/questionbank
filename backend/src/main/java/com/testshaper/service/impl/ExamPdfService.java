@@ -209,7 +209,7 @@ public class ExamPdfService {
 
         addMetaCell(meta, "বিষয়/Subject", subjectName, bf);
         addMetaCell(meta, "শ্রেণী/Class", className, bf);
-        addMetaCell(meta, "সময়/Time", exam.getDurationMinutes() + " মিনিট", bf);
+        addMetaCell(meta, "সময়/Time", formatDuration(exam.getDurationMinutes(), exam.getLanguage()), bf);
         addMetaCell(meta, "মোট নম্বর/Marks", String.valueOf(exam.getTotalMarks().intValue()), bf);
         addMetaCell(meta, "তারিখ/Date", LocalDate.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")), bf);
         doc.add(meta);
@@ -218,6 +218,49 @@ public class ExamPdfService {
         doc.add(new Paragraph(" "));
         doc.add(new LineSeparator(1f, 100f, DARK, Element.ALIGN_CENTER, -3f));
         doc.add(new Paragraph(" "));
+    }
+
+    private String toBengaliNumber(String numberStr) {
+        if (numberStr == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (char c : numberStr.toCharArray()) {
+            if (c >= '0' && c <= '9') {
+                sb.append((char) (c - '0' + '০'));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    private String formatDuration(Integer minutes, String language) {
+        if (minutes == null) return "";
+        int mins = minutes;
+        int hours = mins / 60;
+        int remainingMins = mins % 60;
+        boolean isEnglish = language != null && (language.equalsIgnoreCase("ENGLISH") || language.equalsIgnoreCase("English"));
+
+        if (isEnglish) {
+            if (hours > 0 && remainingMins > 0) {
+                String hStr = hours == 1 ? "Hour" : "Hours";
+                String mStr = remainingMins == 1 ? "Minute" : "Minutes";
+                return String.format("%d %s %d %s", hours, hStr, remainingMins, mStr);
+            } else if (hours > 0) {
+                String hStr = hours == 1 ? "Hour" : "Hours";
+                return String.format("%d %s", hours, hStr);
+            } else {
+                String mStr = remainingMins == 1 ? "Minute" : "Minutes";
+                return String.format("%d %s", remainingMins, mStr);
+            }
+        } else {
+            if (hours > 0 && remainingMins > 0) {
+                return String.format("%s ঘণ্টা %s মিনিট", toBengaliNumber(String.valueOf(hours)), toBengaliNumber(String.valueOf(remainingMins)));
+            } else if (hours > 0) {
+                return String.format("%s ঘণ্টা", toBengaliNumber(String.valueOf(hours)));
+            } else {
+                return String.format("%s মিনিট", toBengaliNumber(String.valueOf(remainingMins)));
+            }
+        }
     }
 
     private void addMetaCell(PdfPTable table, String label, String value, BaseFont bf) {

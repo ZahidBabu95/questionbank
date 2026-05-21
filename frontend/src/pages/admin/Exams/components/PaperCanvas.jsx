@@ -1,6 +1,8 @@
 import React from 'react';
 import { Plus, Trash2, Minus, RotateCcw } from 'lucide-react';
 import InlineGoldenEditor from './InlineGoldenEditor';
+import { formatDuration } from '../../../../utils/formatUtils';
+
 
 const marginPixels = {
     'narrow': '48px', // 0.5in
@@ -101,7 +103,9 @@ const PaperCanvas = ({
                                         <span contentEditable suppressContentEditableWarning onBlur={(e) => setExam({ ...exam, setName: e.target.innerText })} className="outline-none min-w-[80px]">
                                             {exam?.setName ? `সেট: ${exam.setName}` : "সেট: ________"}
                                         </span>
-                                        <span className="font-bold">সময়: {exam?.durationMinutes} মিনিট</span>
+                                        <span className="font-bold">
+                                            {isBengaliFont ? `সময়: ${formatDuration(exam?.durationMinutes, 'BENGALI')}` : `Time: ${formatDuration(exam?.durationMinutes, 'ENGLISH')}`}
+                                        </span>
                                     </div>
                                     <div className="flex flex-col gap-1 items-end">
                                         <span contentEditable suppressContentEditableWarning onBlur={(e) => setExam({ ...exam, chapterName: e.target.innerText })} className="outline-none min-w-[80px] text-right">

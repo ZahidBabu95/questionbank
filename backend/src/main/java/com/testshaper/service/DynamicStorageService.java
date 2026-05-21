@@ -162,7 +162,65 @@ public class DynamicStorageService {
 
     public byte[] loadFileBytes(String filePath) throws IOException {
         if (filePath.startsWith("http://") || filePath.startsWith("https://")) {
-            // Technically we could use RestTemplate or URL read, but for MVP:
+            try {
+                Map<String, String> storageSettings = settingService.getGlobalSettings(GeneralSetting.SettingCategory.STORAGE);
+                String provider = storageSettings.getOrDefault("storage_provider", "LOCAL");
+                if ("CLOUDFLARE_R2".equalsIgnoreCase(provider)) {
+                    String accountId = storageSettings.get("cloudflare_account_id") != null ? storageSettings.get("cloudflare_account_id").trim() : null;
+                    String bucketName = storageSettings.get("cloudflare_r2_bucket") != null ? storageSettings.get("cloudflare_r2_bucket").trim() : null;
+                    String accessKey = storageSettings.get("storage_access_key") != null ? storageSettings.get("storage_access_key").trim() : null;
+                    String secretKey = storageSettings.get("storage_secret_key") != null ? storageSettings.get("storage_secret_key").trim() : null;
+                    String publicUrlBase = storageSettings.get("cloudflare_public_url") != null ? storageSettings.get("cloudflare_public_url").trim() : null;
+
+                    if (accountId != null && bucketName != null && accessKey != null && secretKey != null) {
+                        String key = null;
+                        
+                        // Parse key from publicUrlBase
+                        if (publicUrlBase != null && !publicUrlBase.isEmpty()) {
+                            String base = publicUrlBase;
+                            if (base.endsWith("/")) {
+                                base = base.substring(0, base.length() - 1);
+                            }
+                            if (filePath.startsWith(base + "/")) {
+                                key = filePath.substring(base.length() + 1);
+                            }
+                        }
+
+                        // Fallback parsing: extract everything starting with knowledge_hub/
+                        if (key == null) {
+                            int idx = filePath.indexOf("knowledge_hub/");
+                            if (idx != -1) {
+                                key = filePath.substring(idx);
+                            }
+                        }
+
+                        if (key != null) {
+                            String endpointUrl = String.format("https://%s.r2.cloudflarestorage.com", accountId);
+                            try (S3Client s3Client = S3Client.builder()
+                                    .region(Region.of("auto"))
+                                    .endpointOverride(URI.create(endpointUrl))
+                                    .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
+                                    .forcePathStyle(true)
+                                    .build()) {
+                                
+                                software.amazon.awssdk.services.s3.model.GetObjectRequest getReq = 
+                                    software.amazon.awssdk.services.s3.model.GetObjectRequest.builder()
+                                        .bucket(bucketName)
+                                        .key(key)
+                                        .build();
+                                
+                                try (software.amazon.awssdk.core.ResponseInputStream<software.amazon.awssdk.services.s3.model.GetObjectResponse> s3in = s3Client.getObject(getReq)) {
+                                    return s3in.readAllBytes();
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to load file bytes directly from Cloudflare R2, falling back to HTTP openStream: {}", e.getMessage());
+            }
+
+            // Fallback to HTTP download
             try (java.io.InputStream in = new java.net.URL(filePath).openStream()) {
                 return in.readAllBytes();
             }

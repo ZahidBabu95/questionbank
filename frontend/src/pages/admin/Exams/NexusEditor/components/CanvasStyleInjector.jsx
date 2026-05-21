@@ -14,9 +14,14 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             .strict-analytics-mode p, .strict-analytics-mode h3 {
                 cursor: default !important;
             }
+            .ProseMirror,
+            .ProseMirror *,
+            .paper-canvas-container,
+            .paper-canvas-container * {
+                font-family: '${s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali')}', sans-serif;
+            }
             
             .ProseMirror {
-                font-family: '${s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali')}', sans-serif;
                 font-size: ${ptToPx(s.bodyFontSize)}px;
                 line-height: ${s.lineHeight};
                 width: 100% !important;
@@ -162,21 +167,62 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 
                 /* Reset counter on first question of section if continuousNumbering is false */
                 ${needsReset ? `
+                .ProseMirror > *:has([data-section-id="${sec.id}"][data-first-in-section="true"]),
+                .paper-canvas-container > *:has([data-section-id="${sec.id}"][data-first-in-section="true"]),
                 [data-section-id="${sec.id}"][data-type="question-block"][data-first-in-section="true"] {
                     counter-reset: question-counter ${resetVal} !important;
                 }
                 ` : ''}
                 
-                ${sec.fontFamily ? `
-                    [data-section-id="${sec.id}"],
-                    [data-section-id="${sec.id}"] * {
-                        font-family: '${sec.fontFamily}', sans-serif !important;
-                    }
-                    [data-section-id="${sec.id}"].section-name ~ [data-type="question-block"],
-                    [data-section-id="${sec.id}"].section-name ~ [data-type="question-block"] * {
-                        font-family: '${sec.fontFamily}', sans-serif !important;
-                    }
-                ` : ''}
+                /* Section Question Blocks (including all child elements) */
+                [data-section-id="${sec.id}"][data-type="question-block"],
+                [data-section-id="${sec.id}"][data-type="question-block"] * {
+                    font-family: '${sec.fontFamily || (s.language === 'ENGLISH' || sec.numberingStyle === 'en' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'))}', sans-serif !important;
+                    font-size: ${ptToPx(sec.fontSize || s.bodyFontSize || 14)}px !important;
+                }
+                
+                [data-section-id="${sec.id}"][data-type="question-block"] {
+                    line-height: ${cLineGap} !important;
+                    margin-bottom: ${cQuestionGap}px !important;
+                }
+                
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-question-layout {
+                    gap: 0px !important;
+                }
+                
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-stimulus-block {
+                    margin-bottom: 0px !important;
+                }
+                
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-questions {
+                    margin-top: ${cOptionGap}px !important;
+                }
+                
+                [data-section-id="${sec.id}"][data-type="question-block"] .options-grid {
+                    row-gap: ${cOptionGap < 0 ? 0 : cOptionGap}px !important;
+                }
+                
+                [data-section-id="${sec.id}"][data-type="question-block"] .options-grid > div {
+                    margin-bottom: ${cOptionGap < 0 ? cOptionGap : 0}px !important;
+                }
+                
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-questions ol {
+                    gap: ${cOptionGap < 0 ? 0 : cOptionGap}px !important;
+                }
+                
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-questions ol li {
+                    margin-bottom: ${cOptionGap < 0 ? cOptionGap : 0}px !important;
+                }
+                
+                /* Section Header/Name, Conditions, Instructions */
+                [data-section-id="${sec.id}"].section-name,
+                [data-section-id="${sec.id}"].section-name *,
+                [data-section-id="${sec.id}"].section-conditions,
+                [data-section-id="${sec.id}"].section-conditions *,
+                [data-section-id="${sec.id}"].section-instructions,
+                [data-section-id="${sec.id}"].section-instructions * {
+                    font-family: '${sec.fontFamily || (s.language === 'ENGLISH' || sec.numberingStyle === 'en' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'))}', sans-serif !important;
+                }
                 ${sec.showConditions === false ? `[data-section-id="${sec.id}"].section-conditions { display: none !important; }` : `
                     [data-section-id="${sec.id}"].section-conditions {
                         font-weight: ${sec.condBold ? 'bold' : 'normal'};
@@ -216,9 +262,9 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 `}
                 
                 /* Ensure Headers, Instructions, and Conditions Span All Columns */
-                [data-section-id="${sec.id}"].section-name,
-                [data-section-id="${sec.id}"].section-conditions,
-                [data-section-id="${sec.id}"].section-instructions {
+                [data-section-id="${sec.id}"].section-name
+                ${sec.showConditions !== false ? `, [data-section-id="${sec.id}"].section-conditions` : ''}
+                ${sec.showInstructions !== false ? `, [data-section-id="${sec.id}"].section-instructions` : ''} {
                     column-span: all !important;
                     -webkit-column-span: all !important;
                     display: block !important;
@@ -294,11 +340,56 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             .strict-analytics-mode [data-type="question-block"] {
                 user-select: none;
             }
+
+            /* Theme Previews */
+            .theme-cream .ProseMirror {
+                color: #433422 !important;
+            }
+            .theme-dark .ProseMirror {
+                color: #f1f5f9 !important;
+            }
+            .theme-dark [data-type="question-block"]::before {
+                color: #cbd5e1 !important;
+            }
+            .theme-dark table, .theme-dark td, .theme-dark th {
+                border-color: #475569 !important;
+            }
+            .theme-dark hr {
+                border-color: #334155 !important;
+            }
+            .theme-dark .nexus-question-wrapper {
+                border-color: #334155 !important;
+            }
             
             @media print {
                 .ProseMirror {
                     zoom: ${s.printScale ? s.printScale / 100 : 1.0} !important;
                 }
+                .paper-canvas-container,
+                .paper-canvas-container * {
+                    background-color: transparent !important;
+                    background-image: none !important;
+                    color: #000000 !important;
+                    border-color: #000000 !important;
+                    box-shadow: none !important;
+                }
+                .paper-canvas-container [data-type="question-block"]::before {
+                    color: #000000 !important;
+                }
+                .paper-canvas-container.theme-dark,
+                .paper-canvas-container.theme-cream {
+                    background-color: #ffffff !important;
+                }
+            }
+
+            /* Centralized Highlight Flash Animation */
+            @keyframes highlightFlash {
+                0% { background-color: rgba(79, 70, 229, 0.15); box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1); }
+                100% { background-color: transparent; box-shadow: none; }
+            }
+            .nexus-highlight-flash {
+                animation: highlightFlash 1.5s ease-out;
+                border-radius: 8px;
             }
         `}} />
     );

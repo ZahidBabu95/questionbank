@@ -53,23 +53,25 @@ public class KnowledgeHubController {
     @GetMapping("/proxy-image")
     public ResponseEntity<byte[]> proxyImage(@RequestParam("url") String imageUrl) {
         try {
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(imageUrl))
-                    .GET()
-                    .build();
-            HttpResponse<byte[]> resp = client.send(req, HttpResponse.BodyHandlers.ofByteArray());
-            if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
-                return ResponseEntity.status(resp.statusCode()).build();
+            if (imageUrl == null || !imageUrl.startsWith("https://")) {
+                return ResponseEntity.badRequest().build();
             }
-            String contentType = resp.headers().firstValue("content-type")
-                    .orElse("image/jpeg");
+
+            byte[] imageBytes = storageService.loadFileBytes(imageUrl);
+
+            String ct = "image/jpeg";
+            String lower = imageUrl.toLowerCase();
+            if (lower.contains(".png"))  ct = "image/png";
+            else if (lower.contains(".webp")) ct = "image/webp";
+            else if (lower.contains(".gif"))  ct = "image/gif";
+            else if (lower.contains(".pdf"))  ct = "application/pdf";
+
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType(contentType));
+            headers.setContentType(MediaType.parseMediaType(ct));
             // Allow the same-origin frontend to use the response in canvas
             headers.set("Access-Control-Allow-Origin", "*");
             headers.set("Cache-Control", "public, max-age=86400");
-            return ResponseEntity.ok().headers(headers).body(resp.body());
+            return ResponseEntity.ok().headers(headers).body(imageBytes);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                     .body(("Proxy error: " + e.getMessage()).getBytes());

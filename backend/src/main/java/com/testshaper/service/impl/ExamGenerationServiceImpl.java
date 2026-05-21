@@ -221,18 +221,53 @@ public class ExamGenerationServiceImpl {
                 ? new HashSet<>(request.getTopicIds())
                 : null;
 
+        Set<UUID> currentExcludedIds = new HashSet<>(usedIds);
         List<Question> pool = new ArrayList<>();
-        pool.addAll(fetchPool(tenantId, request.getClassSubjectId(),
+
+        List<Question> easyPool = fetchPool(tenantId, request.getClassSubjectId(),
                 rule.getQuestionType(), Question.DifficultyLevel.EASY,
-                request.getLanguage(), chapterIds, topicIds, usedIds, easyCount));
-                
-        pool.addAll(fetchPool(tenantId, request.getClassSubjectId(),
+                request.getLanguage(), chapterIds, topicIds, currentExcludedIds, easyCount);
+        pool.addAll(easyPool);
+        easyPool.forEach(q -> currentExcludedIds.add(q.getId()));
+
+        List<Question> mediumPool = fetchPool(tenantId, request.getClassSubjectId(),
                 rule.getQuestionType(), Question.DifficultyLevel.MEDIUM,
-                request.getLanguage(), chapterIds, topicIds, usedIds, mediumCount));
-                
-        pool.addAll(fetchPool(tenantId, request.getClassSubjectId(),
+                request.getLanguage(), chapterIds, topicIds, currentExcludedIds, mediumCount);
+        pool.addAll(mediumPool);
+        mediumPool.forEach(q -> currentExcludedIds.add(q.getId()));
+
+        List<Question> hardPool = fetchPool(tenantId, request.getClassSubjectId(),
                 rule.getQuestionType(), Question.DifficultyLevel.HARD,
-                request.getLanguage(), chapterIds, topicIds, usedIds, hardCount));
+                request.getLanguage(), chapterIds, topicIds, currentExcludedIds, hardCount);
+        pool.addAll(hardPool);
+        hardPool.forEach(q -> currentExcludedIds.add(q.getId()));
+
+        // If the selection has deficit, check other difficulty levels of the same question type to fulfill the request.
+        if (pool.size() < total) {
+            int deficit = total - pool.size();
+            log.info("Deficit of {} questions for type {}. Attempting fallback selection from other difficulty levels.",
+                    deficit, rule.getQuestionType());
+
+            List<Question.DifficultyLevel> fallbackOrder = List.of(
+                    Question.DifficultyLevel.MEDIUM,
+                    Question.DifficultyLevel.EASY,
+                    Question.DifficultyLevel.HARD
+            );
+
+            for (Question.DifficultyLevel level : fallbackOrder) {
+                if (deficit <= 0) {
+                    break;
+                }
+                List<Question> fallbackPool = fetchPool(tenantId, request.getClassSubjectId(),
+                        rule.getQuestionType(), level,
+                        request.getLanguage(), chapterIds, topicIds, currentExcludedIds, deficit);
+                if (!fallbackPool.isEmpty()) {
+                    pool.addAll(fallbackPool);
+                    fallbackPool.forEach(q -> currentExcludedIds.add(q.getId()));
+                    deficit -= fallbackPool.size();
+                }
+            }
+        }
 
         // Build ExamQuestion entries
         List<ExamQuestion> result = new ArrayList<>();
@@ -531,10 +566,15 @@ public class ExamGenerationServiceImpl {
         }
 
         if (exam.getClassSubject() != null) {
-            if (exam.getClassSubject().getSubject() != null)
+            dto.setClassSubjectId(exam.getClassSubject().getId());
+            if (exam.getClassSubject().getSubject() != null) {
+                dto.setSubjectId(exam.getClassSubject().getSubject().getId());
                 dto.setSubjectName(exam.getClassSubject().getSubject().getName());
-            if (exam.getClassSubject().getAcademicClass() != null)
+            }
+            if (exam.getClassSubject().getAcademicClass() != null) {
+                dto.setClassId(exam.getClassSubject().getAcademicClass().getId());
                 dto.setClassName(exam.getClassSubject().getAcademicClass().getName());
+            }
         }
 
         dto.setQuestions(exam.getExamQuestions().stream().map(eq -> {
