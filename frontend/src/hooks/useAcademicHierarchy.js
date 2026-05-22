@@ -7,7 +7,8 @@ import academicService from '../services/academicService';
  *
  * Returns: state, setters, dropdown data lists, and restoreHierarchy().
  */
-const useAcademicHierarchy = () => {
+const useAcademicHierarchy = (options = {}) => {
+    const { activeOnly = true } = options;
     const [levels, setLevels] = useState([]);
     const [streams, setStreams] = useState([]);
     const [classes, setClasses] = useState([]);
@@ -58,8 +59,8 @@ const useAcademicHierarchy = () => {
         if (isRestoring.current) return;
         setChapterId(''); setTopicId('');
         setChapters([]); setTopics([]);
-        if (subjectId) academicService.getChaptersByClassSubject(subjectId).then(setChapters).catch(console.error);
-    }, [subjectId]);
+        if (subjectId) academicService.getChaptersByClassSubject(subjectId, activeOnly).then(setChapters).catch(console.error);
+    }, [subjectId, activeOnly]);
 
     // Chapter → Topics
     useEffect(() => {
@@ -81,7 +82,7 @@ const useAcademicHierarchy = () => {
                 lId  ? academicService.getStreamsByLevel(lId).catch(() => [])   : Promise.resolve([]),
                 sId  ? academicService.getClassesByStream(sId).catch(() => [])  : Promise.resolve([]),
                 cId  ? academicService.getSubjectsByClass(cId).catch(() => [])  : Promise.resolve([]),
-                csId ? academicService.getChaptersByClassSubject(csId).catch(() => []) : Promise.resolve([]),
+                csId ? academicService.getChaptersByClassSubject(csId, activeOnly).catch(() => []) : Promise.resolve([]),
                 chapId ? academicService.getTopicsByChapter(chapId).catch(() => [])    : Promise.resolve([]),
             ]);
 

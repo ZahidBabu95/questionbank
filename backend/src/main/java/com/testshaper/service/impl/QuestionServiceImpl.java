@@ -39,6 +39,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public Question createMCQ(Question question, List<QuestionOption> options) {
         // Validation
         if (options == null || options.size() < 2) {
@@ -78,6 +79,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public void createMCQBulk(List<Question> questions, List<List<QuestionOption>> optionsList) {
         if (questions == null || optionsList == null || questions.size() != optionsList.size()) {
             throw new IllegalArgumentException("Questions and options list must not be null and must have the same size.");
@@ -182,6 +184,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public Question createShortQuestion(Question question) {
         if (question.getType() == null || question.getType().isEmpty()) {
             question.setType(Question.QuestionType.SHORT.name());
@@ -197,6 +200,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public Question createCQ(Question question) {
         if (question.getType() == null || question.getType().isEmpty()) {
             question.setType(Question.QuestionType.CQ.name());
@@ -476,9 +480,16 @@ public class QuestionServiceImpl implements QuestionService {
         totalPending = statsResult[2] != null ? ((Number) statsResult[2]).longValue() : 0;
 
         if (filters != null && filters.get("subjectId") != null && !filters.get("subjectId").isEmpty()) {
-            totalSubjects = 1;
+            totalSubjects = totalQuestions > 0 ? 1 : 0;
         } else {
-            totalSubjects = questionRepository.countDistinctClassSubjectIds(); 
+            jakarta.persistence.criteria.CriteriaQuery<Long> cqSub = cb.createQuery(Long.class);
+            jakarta.persistence.criteria.Root<Question> subRoot = cqSub.from(Question.class);
+            cqSub.select(cb.countDistinct(subRoot.get("classSubject").get("id")));
+            jakarta.persistence.criteria.Predicate subPredicate = baseSpec.toPredicate(subRoot, cqSub, cb);
+            if (subPredicate != null) {
+                cqSub.where(subPredicate);
+            }
+            totalSubjects = entityManager.createQuery(cqSub).getSingleResult();
         }
 
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
@@ -491,6 +502,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public void deleteQuestion(UUID id) {
         // Options cascade delete? Or manual?
         // For now, let's assume manual since we didn't set cascade in entity (kept
@@ -515,6 +527,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public void deleteQuestionsBulk(List<UUID> ids) {
         for (UUID id : ids) {
             deleteQuestion(id);
@@ -523,6 +536,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public Question approveQuestion(UUID id, String approverId) {
         Question question = getQuestion(id);
         question.setStatus(Question.QuestionStatus.APPROVED);
@@ -538,12 +552,14 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public Question rejectQuestion(UUID id) {
         return rejectQuestion(id, null, null);
     }
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public Question rejectQuestion(UUID id, String rejectionReason, String rejectedBy) {
         Question question = getQuestion(id);
         question.setStatus(Question.QuestionStatus.REJECTED);
@@ -557,6 +573,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public Question updateQuestion(UUID id, Question questionDetails, List<QuestionOption> options) {
         Question question = getQuestion(id);
 
@@ -635,6 +652,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public void approveQuestionsBulk(List<UUID> ids, String approverId) {
         for (UUID id : ids) {
             approveQuestion(id, approverId);
@@ -643,6 +661,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public void rejectQuestionsBulk(List<UUID> ids) {
         for (UUID id : ids) {
             rejectQuestion(id);
@@ -651,6 +670,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public void updateStatusBulk(List<UUID> ids, Question.QuestionStatus status, String approverId) {
         for (UUID id : ids) {
             if (status == Question.QuestionStatus.APPROVED) {
@@ -669,6 +689,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public Question submitRevision(UUID originalQuestionId, Question revisionDraft, List<QuestionOption> options, String userEmail, String versionComment) {
         Question original = getQuestion(originalQuestionId);
         
@@ -746,6 +767,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public Question approveRevision(UUID revisionId, String approverId) {
         Question revision = getQuestion(revisionId);
         if (revision.getParentQuestionId() == null) {
@@ -832,6 +854,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
     public void updateOptionsInPlace(UUID questionId, List<QuestionOption> incomingOptions) {
         Question q = questionRepository.findById(questionId)
             .orElseThrow(() -> new RuntimeException("Question not found"));

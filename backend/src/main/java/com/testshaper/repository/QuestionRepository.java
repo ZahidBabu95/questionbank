@@ -46,6 +46,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                         "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId) " +
                         "AND q.status = 'APPROVED' " +
                         "AND q.deleted = false " +
+                        "AND (q.chapter IS NULL OR q.chapter.isActive = true OR q.chapter.isActive IS NULL) " +
                         "AND (:classSubjectId IS NULL OR cs.id = :classSubjectId) " +
                         "AND (:chapterId IS NULL OR q.chapter.id = :chapterId) " +
                         "AND (:topicId IS NULL OR q.topic.id = :topicId) " +
@@ -58,6 +59,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                         "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId) " +
                         "AND q.status = 'APPROVED' " +
                         "AND q.deleted = false " +
+                        "AND (q.chapter IS NULL OR q.chapter.isActive = true OR q.chapter.isActive IS NULL) " +
                         "AND (:classSubjectId IS NULL OR cs.id = :classSubjectId) " +
                         "AND (:chapterId IS NULL OR q.chapter.id = :chapterId) " +
                         "AND (:topicId IS NULL OR q.topic.id = :topicId) " +

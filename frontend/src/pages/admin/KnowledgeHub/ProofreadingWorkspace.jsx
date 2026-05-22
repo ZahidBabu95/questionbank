@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import {
-    Book, Database, Image as ImageIcon, Layers, Trash2, AlertCircle,
+    Book, Database, Image as ImageIcon, Layers, Trash2, Edit2, AlertCircle,
     CheckCircle, Clock, ArrowLeft, Link as LinkIcon, ZoomIn, ZoomOut, Maximize, MessageSquare,
     ChevronDown, ChevronRight, FileText, Bot, Sparkles, X, BookOpen, GraduationCap,
     Tag, XCircle, Star, RotateCcw, PanelLeftClose, PanelLeftOpen,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import axios from '../../../utils/axios';
 import academicService from '../../../services/academicService';
+import { knowledgeHubService } from '../../../services/knowledgeHubService';
 import GoldenEditor from './components/GoldenEditor';
 import LiveImageCropperModal from '../QuestionBank/components/LiveImageCropperModal';
 import FilerobotImageEditor from 'react-filerobot-image-editor';
@@ -1001,6 +1002,13 @@ const PageThumbnail = React.memo(({ page, isSelected, isCover, pageFlag, isOpenM
 /* ═══════════════════ Main Component ═══════════════════ */
 const ProofreadingWorkspace = () => {
     const { bookId } = useParams();
+
+    useEffect(() => {
+        return () => {
+            knowledgeHubService.clearCache();
+        };
+    }, []);
+
     const [pages, setPages] = useState([]);
     const [selectedPage, setSelectedPage] = useState(null);
     const [imageZoom, setImageZoom] = useState(1);
@@ -1597,6 +1605,40 @@ const ProofreadingWorkspace = () => {
         } catch (err) { console.error(err); }
     };
 
+    const [editingIndexId, setEditingIndexId] = useState(null);
+    const [editingIndexName, setEditingIndexName] = useState('');
+
+    const handleRenameIndex = async (indexId, newName) => {
+        const trimmed = newName.trim();
+        const currentIndex = indices.find(i => i.id === indexId);
+        if (!currentIndex) return;
+        if (!trimmed) {
+            setEditingIndexId(null);
+            return;
+        }
+        if (currentIndex.indexName === trimmed) {
+            setEditingIndexId(null);
+            return;
+        }
+        try {
+            const payload = { ...currentIndex, indexName: trimmed };
+            const res = await axios.put(`/v1/knowledge-hub/source-books/${bookId}/indices/${indexId}`, payload);
+            setIndices(prev => prev.map(i => i.id === indexId ? res.data : i));
+            setEditingIndexId(null);
+        } catch (err) {
+            console.error("Failed to rename index:", err);
+            alert("Failed to rename chapter index!");
+        }
+    };
+
+    const handleRenameKeyDown = (e, indexId) => {
+        if (e.key === 'Enter') {
+            handleRenameIndex(indexId, editingIndexName);
+        } else if (e.key === 'Escape') {
+            setEditingIndexId(null);
+        }
+    };
+
     const handleExtractTopics = async (indexId) => {
         try {
             setIsTopicSyncModalOpen(false);
@@ -2139,27 +2181,63 @@ const ProofreadingWorkspace = () => {
                                                         return (
                                                         <div key={idx.id} className={`bg-white border text-sm rounded-lg shadow-sm group transition-all ${selectedPage?.sourceBookIndexId === idx.id ? 'border-teal-500 ring-2 ring-teal-400' : activeTreeBChapter === idx.id ? 'border-indigo-400 ring-1 ring-indigo-200' : 'border-slate-200 hover:border-slate-300'}`}>
                                                             <div className="flex items-center justify-between p-2 cursor-pointer transition-colors"
-                                                                onClick={() => handleAssignPage(selectedPage?.sourceBookIndexId === idx.id ? null : idx.id)}>
-                                                                <div className="flex items-center gap-1.5 font-bold text-slate-700 text-xs min-w-0">
+                                                                onClick={() => {
+                                                                    if (editingIndexId !== idx.id) {
+                                                                        handleAssignPage(selectedPage?.sourceBookIndexId === idx.id ? null : idx.id);
+                                                                    }
+                                                                }}>
+                                                                <div className="flex items-center gap-1.5 font-bold text-slate-700 text-xs min-w-0 flex-1">
                                                                     <span className="text-teal-600 shrink-0">{(indexNumber + 1).toString().padStart(2, '0')}.</span>
-                                                                    <span className="truncate">{idx.indexName}</span>
-                                                                    {(idx.mappedChapterId || idx.mappedTopicId) && (
-                                                                        <LinkIcon className="w-3 h-3 text-teal-600 ml-1 shrink-0" title="Mapped to Curriculum" />
+                                                                    {editingIndexId === idx.id ? (
+                                                                        <input
+                                                                            type="text"
+                                                                            value={editingIndexName}
+                                                                            onChange={e => setEditingIndexName(e.target.value)}
+                                                                            onKeyDown={e => handleRenameKeyDown(e, idx.id)}
+                                                                            onBlur={() => handleRenameIndex(idx.id, editingIndexName)}
+                                                                            onClick={e => e.stopPropagation()}
+                                                                            className="flex-1 p-1 py-0.5 text-xs border border-teal-500 rounded outline-none focus:ring-2 focus:ring-teal-100 bg-white font-normal min-w-0"
+                                                                            autoFocus
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="truncate" onDoubleClick={(e) => { e.stopPropagation(); setEditingIndexId(idx.id); setEditingIndexName(idx.indexName); }}>{idx.indexName}</span>
                                                                     )}
-                                                                    {isVectorized && (
-                                                                        <span className="flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-gradient-to-r from-pink-500 to-indigo-600 text-white shadow-sm shrink-0" title="Vectorized (AI Synced)">
-                                                                            <Sparkles size={8} /> AI
-                                                                        </span>
+                                                                    {editingIndexId !== idx.id && (
+                                                                        <>
+                                                                            {(idx.mappedChapterId || idx.mappedTopicId) && (
+                                                                                <LinkIcon className="w-3 h-3 text-teal-600 ml-1 shrink-0" title="Mapped to Curriculum" />
+                                                                            )}
+                                                                            {isVectorized && (
+                                                                                <span className="flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-gradient-to-r from-pink-500 to-indigo-600 text-white shadow-sm shrink-0" title="Vectorized (AI Synced)">
+                                                                                    <Sparkles size={8} /> AI
+                                                                                </span>
+                                                                            )}
+                                                                        </>
                                                                     )}
                                                                 </div>
-                                                                <div className="flex items-center gap-1.5 shrink-0">
-                                                                    {idx.pageCount > 0 && (
-                                                                        <span className="px-1.5 py-0.5 bg-teal-50 text-teal-700 text-[9px] font-bold rounded border border-teal-100">{idx.pageCount}p</span>
+                                                                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                                                    {editingIndexId === idx.id ? (
+                                                                        <>
+                                                                            <button title="Save Name" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleRenameIndex(idx.id, editingIndexName); }} className="text-teal-600 hover:text-teal-800 p-0.5">
+                                                                                <Check size={14} />
+                                                                            </button>
+                                                                            <button title="Cancel" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setEditingIndexId(null); }} className="text-slate-400 hover:text-slate-600 p-0.5">
+                                                                                <X size={14} />
+                                                                            </button>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            {idx.pageCount > 0 && (
+                                                                                <span className="px-1.5 py-0.5 bg-teal-50 text-teal-700 text-[9px] font-bold rounded border border-teal-100">{idx.pageCount}p</span>
+                                                                            )}
+                                                                            <button title="Edit Chapter Name" onClick={(e) => { e.stopPropagation(); setEditingIndexId(idx.id); setEditingIndexName(idx.indexName); }} className="text-slate-300 hover:text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity p-0.5">
+                                                                                <Edit2 size={13} />
+                                                                            </button>
+                                                                            <button title="Delete Chapter Index" onClick={(e) => { e.stopPropagation(); handleDeleteIndex(idx.id); }} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5">
+                                                                                <Trash2 size={13} />
+                                                                            </button>
+                                                                        </>
                                                                     )}
-
-                                                                    <button title="Delete Chapter Index" onClick={(e) => { e.stopPropagation(); handleDeleteIndex(idx.id); }} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                        <Trash2 size={13} />
-                                                                    </button>
                                                                 </div>
                                                             </div>
                                                             {selectedPage?.sourceBookIndexId === idx.id && (

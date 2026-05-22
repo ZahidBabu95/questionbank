@@ -1,20 +1,36 @@
-import axiosInternal from '../utils/axios';
+import axios from '../utils/axios';
 
-const BASE_URL = '/knowledge-hub';
+let cachedBooks = null;
+let activeRequests = null;
 
 export const knowledgeHubService = {
-    // Fetch all books for the resource library
-    getAllBooks: async () => {
-        const response = await axiosInternal.get(`${BASE_URL}/books`);
-        return response.data;
+    // Fetch all books for the resource library with caching
+    getSourceBooks: async (bypassCache = false) => {
+        if (!bypassCache && cachedBooks) {
+            return cachedBooks;
+        }
+        if (activeRequests) {
+            return activeRequests;
+        }
+        activeRequests = axios.get('/v1/knowledge-hub/source-books')
+            .then(res => {
+                cachedBooks = res.data;
+                activeRequests = null;
+                return res.data;
+            })
+            .catch(err => {
+                activeRequests = null;
+                throw err;
+            });
+        return activeRequests;
     },
 
-    // Placeholder for future endpoints
-    uploadBookDetails: async (formData) => {
-        // Will implement the multi-part upload to backend -> R2 later
-        const response = await axiosInternal.post(`${BASE_URL}/books/upload`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        return response.data;
+    getCachedBooks: () => {
+        return cachedBooks;
+    },
+
+    clearCache: () => {
+        cachedBooks = null;
+        activeRequests = null;
     }
 };

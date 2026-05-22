@@ -24,4 +24,11 @@ public class Chapter extends BaseTenantEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_subject_id", nullable = false)
     private ClassSubject classSubject;
+
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+
+    @Column(name = "category_name")
+    private String categoryName;
 }
+

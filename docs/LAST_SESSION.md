@@ -4,7 +4,7 @@
 ---
 
 ## 📅 চলমান সেশন: 2026-05-22
-**অবস্থান:** Epic 3 - Nexus Editor & Performance Optimization
+**অবস্থান:** Epic 4 - Knowledge Hub Optimization & Calibration Upgrades
 
 ---
 
@@ -13,19 +13,20 @@
 ### 📊 Frontend Development & Performance Optimization
 | Status | Detail | File |
 | --- | --- | --- |
-| ✅ COMPLETED | **Nexus Editor Memory Leaks (Phase 1):** `PaperCanvasV2.jsx` ও `InlineGoldenEditor.jsx` ফাইলে গ্লোবাল window timeouts-কে React `useRef`-এ রিফ্যাক্টর করা হয়েছে এবং ক্যানভাস আনমাউন্ট করার সময় ডিস্ট্রয় করার ব্যবস্থা করা হয়েছে। `ResizableImageNode.jsx`-এ mouse move/up উইন্ডো লিসেনারগুলো আনমাউন্টে রিমুভ করার ব্যবস্থা করা হয়েছে। | `PaperCanvasV2.jsx`, `InlineGoldenEditor.jsx`, `ResizableImageNode.jsx`, `useCanvasSync.js` |
-| ✅ COMPLETED | **Context Render Loop Fix (Phase 2):** `NexusEditorContext.jsx` ফাইলে `updateSetting`, `updateMultiSettings` ও টোস্ট মেথডগুলোকে `useCallback` দিয়ে র‍্যাপ করা হয়েছে এবং পুরো `value` অবজেক্টকে `useMemo` দিয়ে মেমোইজ করা হয়েছে। `NexusEditor.jsx`-এ পেজ টাইটেল সেট করার `useEffect` স্প্লিট করা হয়েছে যাতে ক্রমাগত রেন্ডারিং লুপ বন্ধ হয়। | `NexusEditorContext.jsx`, `NexusEditor.jsx` |
-| ✅ COMPLETED | **Network Fetch Storm Prevention (Phase 2):** `useExamManager.js` ফাইলে এপিআই কলগুলোর জন্য মডিউল-লেভেল রিকোয়েস্ট ডিডুপ্লিকেশন এবং শর্ট-লাইভড ক্যাশিং (`3000ms`) ইমপ্লিমেন্ট করা হয়েছে (যেমন: exam, settings, templates, knowledge)। ডেটা মিউটেশন অপারেশনে (save/delete) ক্যাশ ইনভ্যালিডেশনের লজিক যুক্ত করা হয়েছে। | `useExamManager.js` |
+| ✅ COMPLETED | **AI Question Generation Prompt:** Dynamic question generation প্রম্পটের JSON স্কিমায় প্রশ্নের উত্তর এবং ব্যাখ্যার জন্য ক্ষেত্র যুক্ত করা হয়েছে। বাংলা ১ম পত্রের CQ/MCQ নিয়ম এবং ক্যাটাগরি ম্যাপিং জেনারেটর প্রস্তুত করা হয়েছে। | `DynamicQuestionCreate.jsx` |
+| ✅ COMPLETED | **Settings Categories Management:** চ্যাপ্টার ক্যাটাগরি তৈরি, এডিট (রিনেম) ও ডিলিট করার জন্য সেটিংসে ক্যাটাগরি ম্যানেজমেন্ট মডাল ও এপিআই সার্ভিস তৈরি করা হয়েছে। ক্যাটাগরি রিনেম করলে সম্পর্কিত সকল চ্যাপ্টারে তা ক্যাসকেড আপডেট হয়। | `QuestionTypes.jsx`, `academicService.js`, `settingsService.js` |
+| ✅ COMPLETED | **Sync & Library Caching System:** `/knowledge-hub/library`, `/knowledge-hub/sync-library`, ও `/knowledge-hub/mapping/` পেজে ঘন ঘন লোডিং স্পিনার লোড হওয়া বন্ধ করতে ক্লায়েন্ট-সাইড ক্যাশিং যুক্ত করা হয়েছে। ক্যাশ সার্ভিস মেথডে এপিআই কল অপ্টিমাইজ করা হয়েছে। | `knowledgeHubService.js`, `ResourceLibrary.jsx`, `SyncLibrary.jsx`, `CurriculumMappingList.jsx` |
+| ✅ COMPLETED | **Proofreading Tree Chapter Edit:** প্রুফরিডিং ওয়ার্কস্পেসের ট্রিতে থাকা চ্যাপ্টারের নাম এডিট বা রিনেম করার জন্য ডাবল-ক্লিক এবং পেন্সিল আইকন বাটন দিয়ে ইনলাইন এডিটিং সুবিধা ও এপিআই সেভিং যুক্ত করা হয়েছে। | `ProofreadingWorkspace.jsx`, `academicService.js` |
+| ✅ COMPLETED | **Enterprise PDF Page Offset Calibration:** পেজ অফসেটের dead-end বাগ (যখন TOC স্টার্ট পেজ নেই কিন্তু অফসেট সেট করা প্রয়োজন) সমাধান করতে গ্লোবাল ক্যালিব্রেশন উইজার্ড ও ডাইরেক্ট প্লাস/মাইনাস অফসেট কন্ট্রোলার যুক্ত করা হয়েছে। প্রতিটি রো-তে এন্টার বাটন দিয়ে সেভ ও ভিজ্যুয়াল টুলটিপ যুক্ত করা হয়েছে। | `KnowledgeMapWorkspace.jsx` |
 
 ---
 
 ## 🎯 পূর্ববর্তী কাজগুলো (Backlog)
-1. **Nexus Editor Inline Editing:** `STRICT_LINKED` মোডে থাকা প্রশ্নের ছোটখাটো বানান ঠিক করার জন্য ক্যানভাসে সরাসরি ডাবল-ক্লিক করে ইনলাইন এডিটিং ফিচার চালু করা।
-2. **Real-time Allocation Validation:** ড্র্যাগ-অ্যান্ড-ড্রপের সময় ক্যানভাসে টোটাল মার্কস লিমিট চেক করার সিস্টেম।
-3. **Subscription Invoice Generation:** মাল্টি-ভার্সন প্রাইসিং অনুযায়ী ইনভয়েস জেনারেট এবং পেমেন্ট গেটওয়ে ইন্টিগ্রেশন।
+1. **Auto-Link Verification:** অটো-অ্যাসাইন পেজ করার পর তৈরি হওয়া চ্যাপ্টারগুলোর ম্যাপিং ও লিংক ভেরিফিকেশন।
+2. **Dynamic Question Bank Preview:** ডায়নামিক প্রশ্নের ক্যানভাস এডিটিং এবং কাস্টম ওটিপি ভ্যালিডেশন পেজ ইন্টিগ্রেশন।
 
 ---
 
 ## 📞 পরের সেশনে প্রথম বার্তা
 
-> "আমরা Nexus Editor-এর মেমরি লিক, ক্রমাগত রেন্ডারিং লুপ এবং এপিআই নেটওয়ার্ক রিকোয়েস্টের ঝামেলার সমাধান করেছি। ক্যানভাস এডিটরটি এখন সম্পূর্ণ স্ট্যাবল এবং পেজ ওপেন রাখলে কোনো ক্র্যাশ বা রিকোয়েস্ট স্প্যামিং হবে না। আপনার পরবর্তী কাজ কী হবে?"
+> "আমরা নলেজ হাবের লাইব্রেরি ক্যাশিং সিস্টেম, প্রুফরিডিং ওয়ার্কস্পেসে চ্যাপ্টার রিনেম অপশন এবং এন্টারপ্রাইজ লেভেলের পিডিএফ পেজ অফসেট ক্যালিব্রেশন উইজার্ড সম্পূর্ণ করেছি। কোডটি সফলভাবে বিল্ড করা হয়েছে এবং গিট-এ পুশ করা হয়েছে। আপনার পরবর্তী নির্দেশনা কী?"

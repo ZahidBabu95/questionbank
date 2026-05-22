@@ -15,4 +15,5 @@ public interface ChapterRepository extends JpaRepository<Chapter, UUID> {
     java.util.List<Chapter> findByTenantIdAndClassSubjectIdOrderByChapterNumberAsc(String tenantId, UUID classSubjectId);
     Optional<Chapter> findByTenantIdAndNameIgnoreCase(String tenantId, String name);
     Optional<Chapter> findByClassSubjectIdAndNameIgnoreCase(UUID classSubjectId, String name);
+    java.util.List<Chapter> findByIsActiveFalse();
 }

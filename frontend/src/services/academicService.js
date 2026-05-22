@@ -2,41 +2,55 @@ import axios from '../utils/axios';
 
 const API_URL = '/v1/academic';
 
+// Cache states
+let cachedHierarchy = null;
+let cachedHierarchyBypass = null;
+let activeHierarchyReq = null;
+let activeHierarchyBypassReq = null;
+
+const clearHierarchyCache = () => {
+    cachedHierarchy = null;
+    cachedHierarchyBypass = null;
+    activeHierarchyReq = null;
+    activeHierarchyBypassReq = null;
+};
+
 // --- Levels ---
-const createLevel = async (data) => axios.post(`${API_URL}/levels`, data).then(res => res.data);
-const updateLevel = async (id, data) => axios.put(`${API_URL}/levels/${id}`, data).then(res => res.data);
+const createLevel = async (data) => axios.post(`${API_URL}/levels`, data).then(res => { clearHierarchyCache(); return res.data; });
+const updateLevel = async (id, data) => axios.put(`${API_URL}/levels/${id}`, data).then(res => { clearHierarchyCache(); return res.data; });
 const getAllLevels = async () => axios.get(`${API_URL}/levels`).then(res => res.data);
-const deleteLevel = async (id) => axios.delete(`${API_URL}/levels/${id}`);
+const deleteLevel = async (id) => axios.delete(`${API_URL}/levels/${id}`).then(res => { clearHierarchyCache(); return res.data; });
 
 // --- Streams ---
-const createStream = async (levelId, data) => axios.post(`${API_URL}/levels/${levelId}/streams`, data).then(res => res.data);
-const updateStream = async (id, data) => axios.put(`${API_URL}/streams/${id}`, data).then(res => res.data);
+const createStream = async (levelId, data) => axios.post(`${API_URL}/levels/${levelId}/streams`, data).then(res => { clearHierarchyCache(); return res.data; });
+const updateStream = async (id, data) => axios.put(`${API_URL}/streams/${id}`, data).then(res => { clearHierarchyCache(); return res.data; });
 const getStreamsByLevel = async (levelId) => axios.get(`${API_URL}/levels/${levelId}/streams`).then(res => res.data);
-const deleteStream = async (id) => axios.delete(`${API_URL}/streams/${id}`);
+const deleteStream = async (id) => axios.delete(`${API_URL}/streams/${id}`).then(res => { clearHierarchyCache(); return res.data; });
 
 // --- Classes ---
-const createClass = async (streamId, data) => axios.post(`${API_URL}/streams/${streamId}/classes`, data).then(res => res.data);
-const updateClass = async (id, data) => axios.put(`${API_URL}/classes/${id}`, data).then(res => res.data);
+const createClass = async (streamId, data) => axios.post(`${API_URL}/streams/${streamId}/classes`, data).then(res => { clearHierarchyCache(); return res.data; });
+const updateClass = async (id, data) => axios.put(`${API_URL}/classes/${id}`, data).then(res => { clearHierarchyCache(); return res.data; });
 const getClassesByStream = async (streamId) => axios.get(`${API_URL}/streams/${streamId}/classes`).then(res => res.data);
 const getAllClasses = async () => axios.get(`${API_URL}/classes`).then(res => res.data);
-const deleteClass = async (id) => axios.delete(`${API_URL}/classes/${id}`);
+const deleteClass = async (id) => axios.delete(`${API_URL}/classes/${id}`).then(res => { clearHierarchyCache(); return res.data; });
 
 // --- Groups (Global) ---
-const createGroup = async (data) => axios.post(`${API_URL}/groups`, data).then(res => res.data);
+const createGroup = async (data) => axios.post(`${API_URL}/groups`, data).then(res => { clearHierarchyCache(); return res.data; });
 const getAllGroups = async () => axios.get(`${API_URL}/groups`).then(res => res.data);
-const deleteGroup = async (id) => axios.delete(`${API_URL}/groups/${id}`);
+const deleteGroup = async (id) => axios.delete(`${API_URL}/groups/${id}`).then(res => { clearHierarchyCache(); return res.data; });
 
 // --- Subjects (Global) ---
-const createGlobalSubject = async (data) => axios.post(`${API_URL}/subjects`, data).then(res => res.data);
-const updateGlobalSubject = async (id, data) => axios.put(`${API_URL}/subjects/${id}`, data).then(res => res.data);
+const createGlobalSubject = async (data) => axios.post(`${API_URL}/subjects`, data).then(res => { clearHierarchyCache(); return res.data; });
+const updateGlobalSubject = async (id, data) => axios.put(`${API_URL}/subjects/${id}`, data).then(res => { clearHierarchyCache(); return res.data; });
 const getAllSubjects = async () => axios.get(`${API_URL}/subjects`).then(res => res.data);
-const deleteSubject = async (id) => axios.delete(`${API_URL}/subjects/${id}`);
+const deleteSubject = async (id) => axios.delete(`${API_URL}/subjects/${id}`).then(res => { clearHierarchyCache(); return res.data; });
 
 // --- Class Subjects (Syllabus) ---
 const createClassSubject = async (classId, groupId, data) => {
     const params = new URLSearchParams();
     if (groupId) params.append('groupId', groupId);
     const res = await axios.post(`${API_URL}/classes/${classId}/subjects?${params.toString()}`, data);
+    clearHierarchyCache();
     return res.data;
 };
 
@@ -46,6 +60,7 @@ const assignSubjectToClass = async (classId, subjectId, groupId, sessionId) => {
     if (groupId) params.append('groupId', groupId);
     if (sessionId) params.append('sessionId', sessionId);
     const res = await axios.post(`${API_URL}/classes/${classId}/subjects/assign?${params.toString()}`);
+    clearHierarchyCache();
     return res.data;
 };
 
@@ -57,14 +72,14 @@ const getSubjectsByClass = async (classId, groupId = null, sessionId = null) => 
     return res.data;
 };
 
-const updateClassSubject = async (id, data) => axios.put(`${API_URL}/class-subjects/${id}`, data).then(res => res.data);
+const updateClassSubject = async (id, data) => axios.put(`${API_URL}/class-subjects/${id}`, data).then(res => { clearHierarchyCache(); return res.data; });
 
-const deleteClassSubject = async (id) => axios.delete(`${API_URL}/class-subjects/${id}`);
+const deleteClassSubject = async (id) => axios.delete(`${API_URL}/class-subjects/${id}`).then(res => { clearHierarchyCache(); return res.data; });
 
 // --- Chapters ---
 const createChapter = async (classSubjectId, data) => axios.post(`${API_URL}/class-subjects/${classSubjectId}/chapters`, data).then(res => res.data);
 const updateChapter = async (id, data) => axios.put(`${API_URL}/chapters/${id}`, data).then(res => res.data);
-const getChaptersByClassSubject = async (classSubjectId) => axios.get(`${API_URL}/class-subjects/${classSubjectId}/chapters`).then(res => res.data);
+const getChaptersByClassSubject = async (classSubjectId, activeOnly = true) => axios.get(`${API_URL}/class-subjects/${classSubjectId}/chapters`, { params: { activeOnly } }).then(res => res.data);
 const deleteChapter = async (id) => axios.delete(`${API_URL}/chapters/${id}`);
 
 // --- Topics ---
@@ -74,7 +89,37 @@ const getTopicsByChapter = async (chapterId) => axios.get(`${API_URL}/chapters/$
 const deleteTopic = async (id) => axios.delete(`${API_URL}/topics/${id}`);
 
 // --- Batch Hierarchy (single call for entire structure — replaces 20+ individual calls) ---
-const getHierarchy = async (bypass = false) => axios.get(`${API_URL}/hierarchy`, { params: { bypass } }).then(res => res.data);
+const getHierarchy = async (bypass = false) => {
+    if (bypass) {
+        if (cachedHierarchyBypass) return cachedHierarchyBypass;
+        if (activeHierarchyBypassReq) return activeHierarchyBypassReq;
+        activeHierarchyBypassReq = axios.get(`${API_URL}/hierarchy`, { params: { bypass } })
+            .then(res => {
+                cachedHierarchyBypass = res.data;
+                activeHierarchyBypassReq = null;
+                return res.data;
+            })
+            .catch(err => {
+                activeHierarchyBypassReq = null;
+                throw err;
+            });
+        return activeHierarchyBypassReq;
+    } else {
+        if (cachedHierarchy) return cachedHierarchy;
+        if (activeHierarchyReq) return activeHierarchyReq;
+        activeHierarchyReq = axios.get(`${API_URL}/hierarchy`, { params: { bypass } })
+            .then(res => {
+                cachedHierarchy = res.data;
+                activeHierarchyReq = null;
+                return res.data;
+            })
+            .catch(err => {
+                activeHierarchyReq = null;
+                throw err;
+            });
+        return activeHierarchyReq;
+    }
+};
 
 // --- Session ---
 const getActiveSession = async () => axios.get(`/v1/sessions/active`).then(res => res.data);
@@ -88,5 +133,5 @@ export default {
     createClassSubject, assignSubjectToClass, getSubjectsByClass, updateClassSubject, deleteClassSubject,
     createChapter, updateChapter, getChaptersByClassSubject, deleteChapter,
     createTopic, updateTopic, getTopicsByChapter, deleteTopic,
-    getHierarchy, getActiveSession
+    getHierarchy, getActiveSession, clearHierarchyCache
 };

@@ -189,8 +189,10 @@ public class AcademicController {
         return ResponseEntity.ok(academicService.updateChapter(id, chapter));
     }
     @GetMapping("/class-subjects/{classSubjectId}/chapters")
-    public ResponseEntity<List<Chapter>> getChaptersByClassSubject(@PathVariable UUID classSubjectId) {
-        return ResponseEntity.ok(academicService.getChaptersByClassSubject(classSubjectId));
+    public ResponseEntity<List<Chapter>> getChaptersByClassSubject(
+            @PathVariable UUID classSubjectId,
+            @RequestParam(required = false, defaultValue = "true") boolean activeOnly) {
+        return ResponseEntity.ok(academicService.getChaptersByClassSubject(classSubjectId, activeOnly));
     }
     @DeleteMapping("/chapters/{id}")
     public ResponseEntity<Void> deleteChapter(@PathVariable UUID id) {

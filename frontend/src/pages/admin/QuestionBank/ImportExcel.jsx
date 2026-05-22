@@ -188,6 +188,7 @@ const ImportExcel = () => {
             const created = await academicService.createChapter(subjectId, {
                 name: newChapterName.trim(),
                 order: parseInt(newChapterOrder) || chapterList.length + 1,
+                isActive: true,
             });
             const updated = [...chapterList, created];
             setChapterList(updated);

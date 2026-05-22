@@ -25,7 +25,7 @@ const FormField = ({ field, value, onChange }) => {
                     />
                 </div>
             );
-            
+
         case 'textarea':
             return (
                 <div className="mb-4">
@@ -86,13 +86,13 @@ const FormField = ({ field, value, onChange }) => {
                 }
                 handleChange([...listItems, newItem]);
             };
-            
+
             const handleRemove = (index) => {
                 const newList = [...listItems];
                 newList.splice(index, 1);
                 handleChange(newList);
             };
-            
+
             const handleItemChange = (index, itemVal) => {
                 const newList = [...listItems];
                 newList[index] = itemVal;
@@ -105,8 +105,8 @@ const FormField = ({ field, value, onChange }) => {
                         <label className="block text-sm font-bold text-slate-700">
                             {label} {required && <span className="text-rose-500">*</span>}
                         </label>
-                        <button 
-                            type="button" 
+                        <button
+                            type="button"
                             onClick={handleAdd}
                             className="flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded hover:bg-indigo-200 transition-colors"
                         >
@@ -114,7 +114,7 @@ const FormField = ({ field, value, onChange }) => {
                         </button>
                     </div>
                     {description && <p className="text-[10px] text-slate-400 mb-3">{description}</p>}
-                    
+
                     {listItems.length === 0 ? (
                         <div className="text-center py-4 text-slate-400 text-xs italic">No items added.</div>
                     ) : (
@@ -125,11 +125,11 @@ const FormField = ({ field, value, onChange }) => {
                                         {Array.isArray(field.itemSchema) ? (
                                             <div className="grid grid-cols-1 gap-3">
                                                 {field.itemSchema.map(subField => (
-                                                    <FormField 
-                                                        key={subField.name} 
-                                                        field={subField} 
-                                                        value={(item || {})[subField.name]} 
-                                                        onChange={(n, v) => handleItemChange(index, { ...item, [n]: v })} 
+                                                    <FormField
+                                                        key={subField.name}
+                                                        field={subField}
+                                                        value={(item || {})[subField.name]}
+                                                        onChange={(n, v) => handleItemChange(index, { ...item, [n]: v })}
                                                     />
                                                 ))}
                                             </div>
@@ -143,8 +143,8 @@ const FormField = ({ field, value, onChange }) => {
                                             />
                                         )}
                                     </div>
-                                    <button 
-                                        type="button" 
+                                    <button
+                                        type="button"
                                         onClick={() => handleRemove(index)}
                                         className="mt-1 p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded"
                                     >
@@ -178,11 +178,11 @@ const QuestionFormEngine = ({ schema, value, onChange }) => {
     return (
         <div className="space-y-2">
             {schema.fields.map(field => (
-                <FormField 
-                    key={field.name} 
-                    field={field} 
-                    value={(value || {})[field.name]} 
-                    onChange={handleChange} 
+                <FormField
+                    key={field.name}
+                    field={field}
+                    value={(value || {})[field.name]}
+                    onChange={handleChange}
                 />
             ))}
         </div>

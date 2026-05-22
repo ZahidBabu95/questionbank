@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from '../../../utils/axios';
 import academicService from '../../../services/academicService';
+import { knowledgeHubService } from '../../../services/knowledgeHubService';
 
 const bookTypesList = ['ALL', 'TEXTBOOK', 'GUIDE', 'QUESTION_BANK', 'LECTURE_SHEET'];
 
@@ -59,7 +60,15 @@ const ResourceLibrary = () => {
 
     useEffect(() => {
         setPortalTarget(document.getElementById('topbar-actions'));
-        fetchSourceBooks();
+        
+        // Stale-While-Revalidate pattern
+        const cached = knowledgeHubService.getCachedBooks();
+        if (cached) {
+            setBooks(cached);
+            setIsLoading(false);
+        }
+        
+        fetchSourceBooks(!!cached);
         academicService.getHierarchy().then(setHierarchy).catch(console.error);
     }, []);
 
@@ -131,17 +140,15 @@ const ResourceLibrary = () => {
 
     // Intersection Observer for Infinite Scrolling
     useEffect(() => {
-        // observerTarget.current ডমে আসার জন্য এবং লোডিং শেষ হওয়ার জন্য অপেক্ষা করতে হবে
         if (isLoading || !observerTarget.current) return;
 
         const observer = new IntersectionObserver(
             entries => {
                 if (entries[0].isIntersecting) {
-                    // স্ক্রল যখন টার্গেটে পৌঁছাবে তখন ডিসপ্লে লিমিট বাড়িয়ে দেওয়া হবে
                     setDisplayLimit(prev => prev + 12);
                 }
             },
-            { rootMargin: '200px' } // কিছুটা আগে থেকেই লোড শুরু হবে স্মুথ এক্সপেরিয়েন্সের জন্য
+            { rootMargin: '200px' }
         );
         
         const currentTarget = observerTarget.current;
@@ -155,14 +162,14 @@ const ResourceLibrary = () => {
             }
             observer.disconnect();
         };
-    }, [isLoading, filteredBooks.length, displayLimit]); // এই ভেরিয়েবলগুলো চেঞ্জ হলে অবজারভার রিসেট হবে
+    }, [isLoading, filteredBooks.length, displayLimit]);
 
 
     const fetchSourceBooks = async (isSilent = false) => {
         try {
             if (!isSilent) setIsLoading(true);
-            const res = await axios.get('/v1/knowledge-hub/source-books');
-            setBooks(res.data);
+            const data = await knowledgeHubService.getSourceBooks(isSilent);
+            setBooks(data);
         } catch (error) {
             console.error('Failed to fetch source books:', error);
         } finally {
@@ -179,6 +186,7 @@ const ResourceLibrary = () => {
             } else {
                 await axios.post('/v1/knowledge-hub/source-books', formData);
             }
+            knowledgeHubService.clearCache(); // Evict cache
             closeModal();
             fetchSourceBooks();
         } catch (error) {
@@ -193,6 +201,7 @@ const ResourceLibrary = () => {
         if(!window.confirm("আপনি কি নিশ্চিত যে এই বইটি মুছে ফেলতে চান? এর সকল ডেটা হারিয়ে যাবে।")) return;
         try {
             await axios.delete(`/v1/knowledge-hub/source-books/${id}`);
+            knowledgeHubService.clearCache(); // Evict cache
             setBooks(prev => prev.filter(b => b.id !== id));
         } catch (error) {
             alert('Failed to delete book: ' + (error.response?.data?.message || error.message));

@@ -58,7 +58,9 @@ public interface AcademicService {
     Chapter createChapter(Chapter chapter, UUID classSubjectId);
     Chapter updateChapter(UUID id, Chapter chapter);
     List<Chapter> getChaptersByClassSubject(UUID classSubjectId);
+    List<Chapter> getChaptersByClassSubject(UUID classSubjectId, boolean activeOnly);
     void deleteChapter(UUID id);
+
 
     // --- Topic ---
     Topic createTopic(Topic topic, UUID chapterId);

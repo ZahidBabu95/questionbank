@@ -61,6 +61,10 @@ public class QuestionSpecification {
             // Exclude deleted ones
             predicates.add(cb.equal(root.get("deleted"), false));
 
+            // Exclude questions belonging to inactive chapters
+            jakarta.persistence.criteria.Join<Object, Object> chapterJoin = root.join("chapter", JoinType.LEFT);
+            predicates.add(cb.or(cb.isNull(root.get("chapter")), cb.equal(chapterJoin.get("isActive"), true)));
+
             // Optional FETCH to avoid N+1 for academic hierarchy details normally needed in lists
             if (Long.class != query.getResultType() && Object[].class != query.getResultType() && java.util.UUID.class != query.getResultType()) { // don't fetch on count, aggregation, or ID projection query
                 jakarta.persistence.criteria.Fetch<Object, Object> csFetch = root.fetch("classSubject", JoinType.LEFT);

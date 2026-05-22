@@ -59,7 +59,9 @@ public class GeneralSettingController {
                            role.equals("ROLE_TEACHER");
                 });
 
-        if (category != GeneralSetting.SettingCategory.BRANDING && !isAdminOrTeacher) {
+        if (category != GeneralSetting.SettingCategory.BRANDING && 
+            category != GeneralSetting.SettingCategory.GENERAL && 
+            !isAdminOrTeacher) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
         }
 

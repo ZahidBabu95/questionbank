@@ -146,9 +146,19 @@ public class PineconeVectorDatabaseServiceImpl implements VectorDatabaseService 
             requestBody.put("includeMetadata", true);
             requestBody.put("includeValues", false);
 
+            List<String> inactiveChapterIds = null;
             String namespace = "";
             if (filterMetadata != null && !filterMetadata.isEmpty()) {
-                requestBody.put("filter", filterMetadata);
+                Map<String, Object> safeFilters = new HashMap<>(filterMetadata);
+                if (safeFilters.containsKey("_inactiveChapterIds")) {
+                    Object val = safeFilters.remove("_inactiveChapterIds");
+                    if (val instanceof List) {
+                        inactiveChapterIds = (List<String>) val;
+                    }
+                }
+                if (!safeFilters.isEmpty()) {
+                    requestBody.put("filter", safeFilters);
+                }
                 if (filterMetadata.containsKey("bookId")) {
                     namespace = "book-" + filterMetadata.get("bookId").toString();
                 } else if (filterMetadata.containsKey("docId")) {
@@ -178,6 +188,18 @@ public class PineconeVectorDatabaseServiceImpl implements VectorDatabaseService 
             List<String> contextList = new ArrayList<>();
             if (matches.isArray()) {
                 for (JsonNode match : matches) {
+                    // Check if chapterId metadata exists and matches inactive chapters list
+                    if (inactiveChapterIds != null && !inactiveChapterIds.isEmpty()) {
+                        JsonNode chapIdNode = match.path("metadata").path("chapterId");
+                        if (!chapIdNode.isMissingNode() && !chapIdNode.isNull()) {
+                            String chapIdStr = chapIdNode.asText();
+                            if (inactiveChapterIds.contains(chapIdStr)) {
+                                log.debug("Filtering out search result chunk with inactive chapterId: {}", chapIdStr);
+                                continue;
+                            }
+                        }
+                    }
+
                     JsonNode textNode = match.path("metadata").path("text");
                     if (!textNode.isMissingNode() && !textNode.isNull()) {
                         contextList.add(textNode.asText());

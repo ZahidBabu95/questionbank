@@ -288,6 +288,7 @@ public class QuestionImportServiceImpl implements QuestionImportService {
                             newChap.setName(chapterName);
                             newChap.setClassSubject(classSubject);
                             newChap.setTenantId(tenantId);
+                            newChap.setIsActive(true);
                             return chapterRepository.save(newChap);
                         });
                 q.setChapter(chapter);

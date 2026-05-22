@@ -123,7 +123,7 @@ const AcademicStructure = () => {
                 const code = newItemName.substring(0, 3).toUpperCase() + '-' + Date.now().toString().substring(8);
                 await academicService.createClassSubject(parentObj.id, selectedGroupId || null, { name: newItemName, code: code });
             } else if (currentType === 'CHAPTER' && parentObj) {
-                await academicService.createChapter(parentObj.classSubjectId, { name: newItemName, chapterNumber: items.length + 1 });
+                await academicService.createChapter(parentObj.classSubjectId, { name: newItemName, chapterNumber: items.length + 1, isActive: true });
             } else if (currentType === 'TOPIC' && parentObj) {
                 await academicService.createTopic(parentObj.id, { name: newItemName });
             }

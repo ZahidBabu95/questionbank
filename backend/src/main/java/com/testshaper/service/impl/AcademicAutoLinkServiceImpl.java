@@ -55,6 +55,7 @@ public class AcademicAutoLinkServiceImpl implements AcademicAutoLinkService {
                             ch.setName(chapterName);
                             ch.setClassSubject(cs);
                             ch.setTenantId(tid);
+                            ch.setIsActive(true);
                             log.info("autoLinkPartial: auto-creating Chapter '{}'", chapterName);
                             return chapterRepo.save(ch);
                         });
@@ -193,6 +194,7 @@ public class AcademicAutoLinkServiceImpl implements AcademicAutoLinkService {
                             ch.setName(chapterName);
                             ch.setClassSubject(cs);
                             ch.setTenantId(tid);
+                            ch.setIsActive(true);
                             log.info("Auto-creating Chapter: {}", chapterName);
                             return chapterRepo.save(ch);
                         });

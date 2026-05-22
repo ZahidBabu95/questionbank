@@ -10,6 +10,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import axios from '../../../utils/axios';
+import { knowledgeHubService } from '../../../services/knowledgeHubService';
 
 /* ═══════════════════ Topic Extract Config Modal ═══════════════════ */
 const TopicExtractConfigModal = ({ book, indices, pages, onClose, onStartAll, onPreviewTopic }) => {
@@ -594,6 +595,12 @@ const DraftChunkEditor = ({ chunk, onSaved }) => {
 /* ═══════════════════ MAIN COMPONENT ═══════════════════ */
 const SyncCommandCenter = () => {
     const { bookId } = useParams();
+
+    useEffect(() => {
+        return () => {
+            knowledgeHubService.clearCache();
+        };
+    }, []);
     
     const [book, setBook] = useState(null);
     const [syncIntegrity, setSyncIntegrity] = useState(null);

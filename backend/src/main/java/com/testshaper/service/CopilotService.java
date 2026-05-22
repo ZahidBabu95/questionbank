@@ -26,6 +26,7 @@ public class CopilotService {
     private final com.testshaper.repository.ClassSubjectRepository classSubjectRepository;
     private final com.testshaper.repository.GeneralSettingRepository generalSettingRepository;
     private final ObjectMapper objectMapper;
+    private final com.testshaper.repository.ChapterRepository chapterRepository;
 
     /**
      * Executes the RAG pipeline:
@@ -92,10 +93,26 @@ public class CopilotService {
 
         List<String> contextChunks = new ArrayList<>();
 
+        // Fetch inactive chapter IDs for post-filtering in RAG pipeline
+        List<String> inactiveChapterIds = new ArrayList<>();
+        try {
+            List<com.testshaper.entity.Chapter> inactiveChaps = chapterRepository.findByIsActiveFalse();
+            if (inactiveChaps != null) {
+                for (com.testshaper.entity.Chapter c : inactiveChaps) {
+                    inactiveChapterIds.add(c.getId().toString());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch inactive chapters for RAG post-filtering: {}", e.getMessage());
+        }
+
         // 2. Resolve document IDs and Query Namespaces
         if (docId != null && !docId.isBlank()) {
             Map<String, Object> filters = new HashMap<>();
             filters.put("docId", docId);
+            if (!inactiveChapterIds.isEmpty()) {
+                filters.put("_inactiveChapterIds", inactiveChapterIds);
+            }
             contextChunks.addAll(vectorDatabaseService.similaritySearch(searchQuery, 4, filters));
         } else if (subjectClassLevelFilter != null && !subjectClassLevelFilter.isBlank()) {
             // Parse subject filter string (e.g., "৬ষ্ঠ শ্রেণি - বাংলা ১ম পত্র (১st Paper)")
@@ -127,11 +144,18 @@ public class CopilotService {
             for (int i = 0; i < limit; i++) {
                 Map<String, Object> filters = new HashMap<>();
                 filters.put("docId", docs.get(i).getId().toString());
+                if (!inactiveChapterIds.isEmpty()) {
+                    filters.put("_inactiveChapterIds", inactiveChapterIds);
+                }
                 contextChunks.addAll(vectorDatabaseService.similaritySearch(searchQuery, 25, filters));
             }
         } else {
             // Global search (if no namespace is targeted)
-            contextChunks.addAll(vectorDatabaseService.similaritySearch(searchQuery, 30, new HashMap<>()));
+            Map<String, Object> filters = new HashMap<>();
+            if (!inactiveChapterIds.isEmpty()) {
+                filters.put("_inactiveChapterIds", inactiveChapterIds);
+            }
+            contextChunks.addAll(vectorDatabaseService.similaritySearch(searchQuery, 30, filters));
         }
 
         // If strict mode, and no context found, return error

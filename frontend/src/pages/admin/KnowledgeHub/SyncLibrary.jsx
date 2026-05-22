@@ -10,6 +10,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import axios from '../../../utils/axios';
 import academicService from '../../../services/academicService';
+import { knowledgeHubService } from '../../../services/knowledgeHubService';
 
 const bookTypesList = ['ALL', 'TEXTBOOK', 'GUIDE', 'QUESTION_BANK', 'LECTURE_SHEET'];
 
@@ -40,19 +41,24 @@ const SyncLibrary = () => {
     const [loadingPreview, setLoadingPreview] = useState(false);
 
     useEffect(() => {
-        fetchSourceBooks();
+        const cached = knowledgeHubService.getCachedBooks();
+        if (cached) {
+            setBooks(cached);
+            setIsLoading(false);
+        }
+        fetchSourceBooks(!!cached);
         academicService.getHierarchy().then(setHierarchy).catch(console.error);
     }, []);
 
-    const fetchSourceBooks = async () => {
+    const fetchSourceBooks = async (isSilent = false) => {
         try {
-            setIsLoading(true);
-            const res = await axios.get(`/v1/knowledge-hub/source-books?t=${Date.now()}`);
-            setBooks(res.data);
+            if (!isSilent) setIsLoading(true);
+            const data = await knowledgeHubService.getSourceBooks(isSilent);
+            setBooks(data);
         } catch (error) {
             console.error('Failed to fetch source books:', error);
         } finally {
-            setIsLoading(false);
+            if (!isSilent) setIsLoading(false);
         }
     };
 

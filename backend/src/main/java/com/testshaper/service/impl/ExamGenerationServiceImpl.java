@@ -68,18 +68,88 @@ public class ExamGenerationServiceImpl {
         List<ExamQuestion> allExamQuestions = new ArrayList<>();
         int orderCounter = 1;
 
+        Map<String, ExamSection> sectionsMap = new LinkedHashMap<>();
+        int sectionOrderCounter = 1;
+
         for (ExamGenerationRequest.QuestionTypeRule rule : request.getQuestionTypeRules()) {
             List<ExamQuestion> selected = selectQuestionsForRule(
                     exam, rule, request, usedQuestionIds, orderCounter);
+            
+            // If sectionName is specified, associate the questions with that section
+            if (rule.getSectionName() != null && !rule.getSectionName().trim().isEmpty()) {
+                String secName = rule.getSectionName().trim();
+                ExamSection section = sectionsMap.get(secName);
+                if (section == null) {
+                    section = new ExamSection();
+                    section.setExam(exam);
+                    section.setSectionName(secName);
+                    section.setSectionOrder(sectionOrderCounter++);
+                    section.setQuestions(new ArrayList<>());
+                    sectionsMap.put(secName, section);
+                }
+                
+                for (ExamQuestion eq : selected) {
+                    eq.setSection(section);
+                    section.getQuestions().add(eq);
+                }
+            }
+            
             allExamQuestions.addAll(selected);
             selected.forEach(eq -> usedQuestionIds.add(eq.getQuestion().getId()));
             orderCounter += selected.size();
         }
 
+        if (!sectionsMap.isEmpty()) {
+            exam.getExamSections().addAll(sectionsMap.values());
+        }
+
         // 6. Shuffle questions if requested
         if (request.isShuffleQuestions()) {
-            Collections.shuffle(allExamQuestions, new Random());
-            // Re-assign order after shuffle
+            if (sectionsMap.isEmpty()) {
+                Collections.shuffle(allExamQuestions, new Random());
+            } else {
+                // If there are sections, shuffle questions within each section, but keep sections in order
+                for (ExamSection section : sectionsMap.values()) {
+                    List<ExamQuestion> secQuestions = new ArrayList<>();
+                    for (ExamQuestion eq : allExamQuestions) {
+                        if (eq.getSection() == section) {
+                            secQuestions.add(eq);
+                        }
+                    }
+                    Collections.shuffle(secQuestions, new Random());
+                }
+            }
+        }
+
+        // Re-assign global questionOrder grouped by section order
+        if (!sectionsMap.isEmpty()) {
+            int globalOrder = 1;
+            List<ExamQuestion> orderedQuestions = new ArrayList<>();
+            List<ExamSection> sortedSections = new ArrayList<>(sectionsMap.values());
+            sortedSections.sort(Comparator.comparing(ExamSection::getSectionOrder));
+            
+            for (ExamSection sec : sortedSections) {
+                List<ExamQuestion> secQuestions = new ArrayList<>();
+                for (ExamQuestion eq : allExamQuestions) {
+                    if (eq.getSection() == sec) {
+                        secQuestions.add(eq);
+                    }
+                }
+                for (ExamQuestion eq : secQuestions) {
+                    eq.setQuestionOrder(globalOrder++);
+                    orderedQuestions.add(eq);
+                }
+            }
+            
+            // Add any questions that don't belong to any section
+            for (ExamQuestion eq : allExamQuestions) {
+                if (eq.getSection() == null) {
+                    eq.setQuestionOrder(globalOrder++);
+                    orderedQuestions.add(eq);
+                }
+            }
+            allExamQuestions = orderedQuestions;
+        } else {
             for (int i = 0; i < allExamQuestions.size(); i++) {
                 allExamQuestions.get(i).setQuestionOrder(i + 1);
             }
@@ -214,12 +284,41 @@ public class ExamGenerationServiceImpl {
                 total, rule.getQuestionType(), easyCount, mediumCount, hardCount);
 
         String tenantId = TenantContext.getTenantId();
-        Set<UUID> chapterIds = request.getChapterIds() != null && !request.getChapterIds().isEmpty()
-                ? new HashSet<>(request.getChapterIds())
-                : null;
+        Set<UUID> chapterIds = null;
+        if (rule.getCategoryName() != null && !rule.getCategoryName().trim().isEmpty()) {
+            List<UUID> catChapterIds = entityManager.createQuery(
+                "SELECT c.id FROM Chapter c WHERE c.classSubject.id = :csId AND (c.isActive = true OR c.isActive IS NULL) AND LOWER(c.categoryName) = LOWER(:catName)", UUID.class)
+                .setParameter("csId", request.getClassSubjectId())
+                .setParameter("catName", rule.getCategoryName().trim())
+                .getResultList();
+            
+            Set<UUID> catSet = new HashSet<>(catChapterIds);
+            if (request.getChapterIds() != null && !request.getChapterIds().isEmpty()) {
+                chapterIds = new HashSet<>();
+                for (UUID id : request.getChapterIds()) {
+                    if (catSet.contains(id)) {
+                        chapterIds.add(id);
+                    }
+                }
+                if (chapterIds.isEmpty()) {
+                    chapterIds.add(UUID.randomUUID()); // dummy to yield no results
+                }
+            } else {
+                chapterIds = catSet;
+                if (chapterIds.isEmpty()) {
+                    chapterIds.add(UUID.randomUUID()); // dummy to yield no results
+                }
+            }
+        } else {
+            chapterIds = request.getChapterIds() != null && !request.getChapterIds().isEmpty()
+                    ? new HashSet<>(request.getChapterIds())
+                    : null;
+        }
+
         Set<UUID> topicIds = request.getTopicIds() != null && !request.getTopicIds().isEmpty()
                 ? new HashSet<>(request.getTopicIds())
                 : null;
+
 
         Set<UUID> currentExcludedIds = new HashSet<>(usedIds);
         List<Question> pool = new ArrayList<>();

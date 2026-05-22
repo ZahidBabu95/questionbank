@@ -466,7 +466,10 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         String curriculumData = "";
         com.testshaper.entity.ClassSubject cs = page.getSourceBook().getClassSubject();
         if (cs != null) {
-            java.util.List<com.testshaper.entity.Chapter> chapters = chapterRepository.findByClassSubjectIdOrderByChapterNumberAsc(cs.getId());
+            java.util.List<com.testshaper.entity.Chapter> chapters = chapterRepository.findByClassSubjectIdOrderByChapterNumberAsc(cs.getId())
+                .stream()
+                .filter(c -> c.getIsActive() == null || Boolean.TRUE.equals(c.getIsActive()))
+                .collect(Collectors.toList());
             if (!chapters.isEmpty()) {
                 StringBuilder sb = new StringBuilder("\n\n[SYSTEM KNOWLEDGE] Curriculum Reference Chapters:\n");
                 for (com.testshaper.entity.Chapter c : chapters) {
@@ -649,7 +652,10 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         String curriculumData = "";
         com.testshaper.entity.ClassSubject cs = page.getSourceBook().getClassSubject();
         if (cs != null) {
-            java.util.List<com.testshaper.entity.Chapter> chapters = chapterRepository.findByClassSubjectIdOrderByChapterNumberAsc(cs.getId());
+            java.util.List<com.testshaper.entity.Chapter> chapters = chapterRepository.findByClassSubjectIdOrderByChapterNumberAsc(cs.getId())
+                .stream()
+                .filter(c -> c.getIsActive() == null || Boolean.TRUE.equals(c.getIsActive()))
+                .collect(Collectors.toList());
             if (!chapters.isEmpty()) {
                 StringBuilder sb = new StringBuilder("\n\n[SYSTEM KNOWLEDGE] Curriculum Reference Chapters:\n");
                 for (com.testshaper.entity.Chapter c : chapters) {
@@ -1147,6 +1153,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     public List<com.testshaper.dto.SourceBookIndexDto> getSourceBookIndices(UUID sourceBookId) {
         return sourceBookIndexRepository.findBySourceBookIdOrderByStartPageAsc(sourceBookId)
                 .stream()
+                .filter(idx -> idx.getMappedChapter() == null || Boolean.TRUE.equals(idx.getMappedChapter().getIsActive()))
                 .map(idx -> {
                     com.testshaper.dto.SourceBookIndexDto dto = mapIndexToDto(idx);
                     dto.setPageCount(knowledgePageRepository.countBySourceBookIndexId(idx.getId()));
@@ -1223,7 +1230,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         com.testshaper.entity.SourceBookIndex index = sourceBookIndexRepository.findById(indexId)
                 .orElseThrow(() -> new RuntimeException("Index not found"));
 
-        if (index.getMappedChapter() == null) {
+        if (index.getMappedChapter() == null || Boolean.FALSE.equals(index.getMappedChapter().getIsActive())) {
             return Collections.emptyList();
         }
 
@@ -2122,6 +2129,12 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                                 }
                             }
                             
+                            if (!"MCQ".equals(q.getType()) && !"CQ".equals(q.getType()) && !"SHORT".equals(q.getType()) && !"TRUE_FALSE".equals(q.getType())) {
+                                try {
+                                    q.setDynamicData(objectMapper.writeValueAsString(qNode));
+                                } catch (Exception ignored) {}
+                            }
+
                             questionRepository.save(q);
                             
                             com.fasterxml.jackson.databind.JsonNode sourcesNode = rootNode.hasNonNull("sources") ? rootNode.get("sources") : qNode.get("sources");

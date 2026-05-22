@@ -51,6 +51,22 @@ public class CacheConfig {
                 .recordStats()
                 .build());
 
+        // Question bank overview stats: 120 seconds TTL
+        manager.registerCustomCache("questionStats",
+            Caffeine.newBuilder()
+                .expireAfterWrite(120, TimeUnit.SECONDS)
+                .maximumSize(500)
+                .recordStats()
+                .build());
+
+        // Source tags suggestions count: 120 seconds TTL
+        manager.registerCustomCache("sourceTags",
+            Caffeine.newBuilder()
+                .expireAfterWrite(120, TimeUnit.SECONDS)
+                .maximumSize(500)
+                .recordStats()
+                .build());
+
         // Scrape result cache (file hash → questions JSON): 1 hour TTL
         // Prevents re-processing the same PDF/image
         manager.registerCustomCache("scrapeResultCache",

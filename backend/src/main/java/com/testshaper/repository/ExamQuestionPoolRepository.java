@@ -26,6 +26,7 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             "AND q.difficulty = :difficulty " +
             "AND q.language = :language " +
             "AND (:chapterIds IS NULL OR q.chapter.id IN :chapterIds) " +
+            "AND (q.chapter IS NULL OR q.chapter.isActive = true OR q.chapter.isActive IS NULL) " +
             "AND (q.id NOT IN :excludedIds) " +
             "AND q.deleted = false")
     List<UUID> findEligibleQuestionIds(
@@ -46,6 +47,7 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             "AND q.difficulty = :difficulty " +
             "AND q.language = :language " +
             "AND (:topicIds IS NULL OR q.topic.id IN :topicIds) " +
+            "AND (q.chapter IS NULL OR q.chapter.isActive = true OR q.chapter.isActive IS NULL) " +
             "AND (q.id NOT IN :excludedIds) " +
             "AND q.deleted = false")
     List<UUID> findEligibleQuestionIdsByTopic(
@@ -62,6 +64,7 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId OR q.tenantId = :globalTenantId OR q.tenantId IS NULL OR q.tenantId = '') " +
             "AND q.status = 'APPROVED' " +
             "AND q.classSubject.id = :classSubjectId " +
+            "AND (q.chapter IS NULL OR q.chapter.isActive = true OR q.chapter.isActive IS NULL) " +
             "AND q.deleted = false")
     long countAvailableQuestions(@Param("tenantId") String tenantId,
             @Param("classSubjectId") UUID classSubjectId);

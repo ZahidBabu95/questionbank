@@ -135,7 +135,7 @@ public class AcademicServiceImpl implements AcademicService {
 
     // ═══ Cache Eviction Helper ═══
     // Called by all create/update/delete methods to keep cache consistent
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public void evictHierarchyCache() {
         log.debug("Academic hierarchy cache evicted");
     }
@@ -143,13 +143,13 @@ public class AcademicServiceImpl implements AcademicService {
     // --- Level ---
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public AcademicLevel createLevel(AcademicLevel level) {
         return levelRepository.save(level);
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public AcademicLevel updateLevel(UUID id, AcademicLevel level) {
         AcademicLevel existing = levelRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Level not found"));
         if (level.getName() != null) existing.setName(level.getName());
@@ -168,7 +168,7 @@ public class AcademicServiceImpl implements AcademicService {
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public void deleteLevel(UUID id) {
         levelRepository.deleteById(id);
     }
@@ -176,7 +176,7 @@ public class AcademicServiceImpl implements AcademicService {
     // --- Stream ---
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public AcademicStream createStream(UUID levelId, AcademicStream stream) {
         AcademicLevel level = levelRepository.findById(levelId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Level not found"));
         stream.setLevel(level);
@@ -184,7 +184,7 @@ public class AcademicServiceImpl implements AcademicService {
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public AcademicStream updateStream(UUID id, AcademicStream stream) {
         AcademicStream existing = streamRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Stream not found"));
         if (stream.getName() != null) existing.setName(stream.getName());
@@ -203,7 +203,7 @@ public class AcademicServiceImpl implements AcademicService {
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public void deleteStream(UUID id) {
         streamRepository.deleteById(id);
     }
@@ -211,7 +211,7 @@ public class AcademicServiceImpl implements AcademicService {
     // --- Class ---
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public AcademicClass createClass(UUID streamId, AcademicClass academicClass) {
         AcademicStream stream = streamRepository.findById(streamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Stream not found"));
         academicClass.setStream(stream);
@@ -219,7 +219,7 @@ public class AcademicServiceImpl implements AcademicService {
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public AcademicClass updateClass(UUID id, AcademicClass cls) {
         AcademicClass existing = classRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found"));
         if (cls.getName() != null) existing.setName(cls.getName());
@@ -248,7 +248,7 @@ public class AcademicServiceImpl implements AcademicService {
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public void deleteClass(UUID id) {
         classRepository.deleteById(id);
     }
@@ -256,7 +256,7 @@ public class AcademicServiceImpl implements AcademicService {
     // --- Group ---
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public AcademicGroup createGroup(AcademicGroup group) {
         return groupRepository.save(group);
     }
@@ -273,13 +273,13 @@ public class AcademicServiceImpl implements AcademicService {
     // --- Subject ---
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public Subject createSubject(Subject subject) {
         return subjectRepository.save(subject);
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public Subject updateSubject(UUID id, Subject subject) {
         Subject existing = subjectRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Subject not found"));
         if (subject.getName() != null) existing.setName(subject.getName());
@@ -292,7 +292,7 @@ public class AcademicServiceImpl implements AcademicService {
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public void deleteSubject(UUID id) {
         subjectRepository.deleteById(id);
     }
@@ -300,7 +300,7 @@ public class AcademicServiceImpl implements AcademicService {
     // --- ClassSubject mapping ---
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public ClassSubject assignSubjectToClass(UUID classId, UUID subjectId, UUID groupId, UUID sessionId) {
         AcademicClass cls = classRepository.findById(classId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found"));
         Subject sub = subjectRepository.findById(subjectId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Subject not found"));
@@ -317,7 +317,7 @@ public class AcademicServiceImpl implements AcademicService {
 
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public ClassSubject createAndAssignSubject(UUID classId, UUID groupId, Subject subject) {
         AcademicClass cls = classRepository.findById(classId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Class not found"));
         AcademicSession session = sessionRepository.findByIsActiveTrue().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
@@ -338,7 +338,7 @@ public class AcademicServiceImpl implements AcademicService {
 
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public void updateClassSubject(UUID id, com.testshaper.dto.ClassSubjectDTO dto) {
         ClassSubject cs = classSubjectRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "ClassSubject mapping not found"));
         if (dto.getSubjectName() != null) {
@@ -415,7 +415,7 @@ public class AcademicServiceImpl implements AcademicService {
 
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public void deleteClassSubject(UUID id) {
         classSubjectRepository.deleteById(id);
     }
@@ -428,25 +428,39 @@ public class AcademicServiceImpl implements AcademicService {
     // --- Chapter ---
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public Chapter createChapter(Chapter chapter, UUID classSubjectId) {
         ClassSubject cs = classSubjectRepository.findById(classSubjectId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "ClassSubject not found"));
         chapter.setClassSubject(cs);
+        if (chapter.getIsActive() == null) {
+            chapter.setIsActive(true);
+        }
+        if (chapter.getCategoryName() != null) {
+            chapter.setCategoryName(chapter.getCategoryName().trim().isEmpty() ? null : chapter.getCategoryName().trim());
+        }
         return chapterRepository.save(chapter);
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public Chapter updateChapter(UUID id, Chapter chapter) {
         Chapter existing = chapterRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Chapter not found"));
         if (chapter.getName() != null) existing.setName(chapter.getName());
         if (chapter.getChapterNumber() != null) existing.setChapterNumber(chapter.getChapterNumber());
+        if (chapter.getIsActive() != null) existing.setIsActive(chapter.getIsActive());
+        if (chapter.getCategoryName() != null) {
+            existing.setCategoryName(chapter.getCategoryName().trim().isEmpty() ? null : chapter.getCategoryName().trim());
+        }
         return chapterRepository.save(existing);
     }
     @Override
-    @Cacheable(value = "academicHierarchy", key = "'chapters_' + #classSubjectId")
     public List<Chapter> getChaptersByClassSubject(UUID classSubjectId) {
-        System.out.println("DEBUG: Fetching chapters for classSubjectId=" + classSubjectId);
+        return getChaptersByClassSubject(classSubjectId, true);
+    }
+    @Override
+    @Cacheable(value = "academicHierarchy", key = "'chapters_' + #classSubjectId + '_' + #activeOnly")
+    public List<Chapter> getChaptersByClassSubject(UUID classSubjectId, boolean activeOnly) {
+        System.out.println("DEBUG: Fetching chapters for classSubjectId=" + classSubjectId + ", activeOnly=" + activeOnly);
         String currentTenant = com.testshaper.security.TenantContext.getTenantId();
         System.out.println("DEBUG: Current TenantContext: " + currentTenant);
         
@@ -486,11 +500,18 @@ public class AcademicServiceImpl implements AcademicService {
         chapters.addAll(specificChaps);
         
         System.out.println("DEBUG: Total distinct chapters returned: " + chapters.stream().distinct().count());
-        return chapters.stream().distinct().collect(Collectors.toList());
+        List<Chapter> result = chapters.stream().distinct().collect(Collectors.toList());
+        if (activeOnly) {
+            result = result.stream()
+                           .filter(c -> c.getIsActive() == null || Boolean.TRUE.equals(c.getIsActive()))
+                           .collect(Collectors.toList());
+        }
+        return result;
     }
+
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public void deleteChapter(UUID id) {
         try {
             // FORCE DELETE: Nullify all references to topics in this chapter
@@ -525,7 +546,7 @@ public class AcademicServiceImpl implements AcademicService {
     // --- Topic ---
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public Topic createTopic(Topic topic, UUID chapterId) {
         Chapter c = chapterRepository.findById(chapterId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Chapter not found"));
         topic.setChapter(c);
@@ -533,7 +554,7 @@ public class AcademicServiceImpl implements AcademicService {
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public Topic updateTopic(UUID id, Topic topic) {
         Topic existing = topicRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Topic not found"));
         if (topic.getName() != null) existing.setName(topic.getName());
@@ -547,7 +568,7 @@ public class AcademicServiceImpl implements AcademicService {
     }
     @Override
     @Transactional
-    @CacheEvict(value = "academicHierarchy", allEntries = true)
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public void deleteTopic(UUID id) {
         try {
             // FORCE DELETE: Nullify foreign keys before deleting

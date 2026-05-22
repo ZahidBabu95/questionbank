@@ -16,7 +16,7 @@ const AutoExamGenerator = () => {
         levelId, streamId, classId, subjectId,
         setLevelId, setStreamId, setClassId, setSubjectId,
         restoreHierarchy
-    } = useAcademicHierarchy();
+    } = useAcademicHierarchy({ activeOnly: true });
 
     const location = useLocation();
 
@@ -81,6 +81,151 @@ const AutoExamGenerator = () => {
     const [topicsLoading, setTopicsLoading] = useState({});
 
     const [difficulty, setDifficulty] = useState({ easy: 30, medium: 50, hard: 20 });
+
+    const [expandedCategories, setExpandedCategories] = useState([]);
+
+    // Group chapters by category
+    const groupedChapters = React.useMemo(() => {
+        const groups = {};
+        chapters.forEach(ch => {
+            const cat = ch.categoryName || 'অন্যান্য';
+            if (!groups[cat]) {
+                groups[cat] = [];
+            }
+            groups[cat].push(ch);
+        });
+        return groups;
+    }, [chapters]);
+
+    // Initialize expanded categories when chapters load
+    useEffect(() => {
+        if (chapters.length > 0) {
+            const categories = [...new Set(chapters.map(ch => ch.categoryName || 'অন্যান্য'))];
+            setExpandedCategories(categories);
+        }
+    }, [chapters]);
+
+    const toggleCategoryExpand = (categoryName) => {
+        if (expandedCategories.includes(categoryName)) {
+            setExpandedCategories(expandedCategories.filter(cat => cat !== categoryName));
+        } else {
+            setExpandedCategories([...expandedCategories, categoryName]);
+        }
+    };
+
+    const getCategoryStyles = (category) => {
+        switch (category) {
+            case 'গদ্য':
+                return {
+                    border: 'border-emerald-200',
+                    bg: 'bg-emerald-50/50',
+                    text: 'text-emerald-800',
+                    badge: 'bg-emerald-100 text-emerald-700',
+                    accent: 'from-emerald-500 to-teal-600',
+                    iconBg: 'bg-emerald-100 text-emerald-600',
+                    sidebar: 'border-l-emerald-500'
+                };
+            case 'পদ্য':
+            case 'কবিতা':
+                return {
+                    border: 'border-rose-200',
+                    bg: 'bg-rose-50/50',
+                    text: 'text-rose-800',
+                    badge: 'bg-rose-100 text-rose-700',
+                    accent: 'from-rose-500 to-pink-600',
+                    iconBg: 'bg-rose-100 text-rose-600',
+                    sidebar: 'border-l-rose-500'
+                };
+            case 'উপন্যাস':
+            case 'সহপাঠ':
+                return {
+                    border: 'border-violet-200',
+                    bg: 'bg-violet-50/50',
+                    text: 'text-violet-800',
+                    badge: 'bg-violet-100 text-violet-700',
+                    accent: 'from-violet-500 to-purple-600',
+                    iconBg: 'bg-violet-100 text-violet-600',
+                    sidebar: 'border-l-violet-500'
+                };
+            case 'নাটক':
+                return {
+                    border: 'border-amber-200',
+                    bg: 'bg-amber-50/50',
+                    text: 'text-amber-800',
+                    badge: 'bg-amber-100 text-amber-700',
+                    accent: 'from-amber-500 to-orange-600',
+                    iconBg: 'bg-amber-100 text-amber-600',
+                    sidebar: 'border-l-amber-500'
+                };
+            case 'অন্যান্য':
+                return {
+                    border: 'border-slate-200',
+                    bg: 'bg-slate-50/50',
+                    text: 'text-slate-800',
+                    badge: 'bg-slate-100 text-slate-700',
+                    accent: 'from-slate-500 to-slate-600',
+                    iconBg: 'bg-slate-100 text-slate-600',
+                    sidebar: 'border-l-slate-500'
+                };
+            default:
+                // Generate a stable color scheme based on category name hash
+                let hash = 0;
+                if (category) {
+                    for (let i = 0; i < category.length; i++) {
+                        hash = category.charCodeAt(i) + ((hash << 5) - hash);
+                    }
+                }
+                const colorPalettes = [
+                    {
+                        border: 'border-indigo-200',
+                        bg: 'bg-indigo-50/50',
+                        text: 'text-indigo-800',
+                        badge: 'bg-indigo-100 text-indigo-700',
+                        accent: 'from-indigo-500 to-blue-600',
+                        iconBg: 'bg-indigo-100 text-indigo-600',
+                        sidebar: 'border-l-indigo-500'
+                    },
+                    {
+                        border: 'border-teal-200',
+                        bg: 'bg-teal-50/50',
+                        text: 'text-teal-800',
+                        badge: 'bg-teal-100 text-teal-700',
+                        accent: 'from-teal-500 to-emerald-600',
+                        iconBg: 'bg-teal-100 text-teal-600',
+                        sidebar: 'border-l-teal-500'
+                    },
+                    {
+                        border: 'border-sky-200',
+                        bg: 'bg-sky-50/50',
+                        text: 'text-sky-800',
+                        badge: 'bg-sky-100 text-sky-700',
+                        accent: 'from-sky-500 to-blue-500',
+                        iconBg: 'bg-sky-100 text-sky-600',
+                        sidebar: 'border-l-sky-500'
+                    },
+                    {
+                        border: 'border-orange-200',
+                        bg: 'bg-orange-50/50',
+                        text: 'text-orange-800',
+                        badge: 'bg-orange-100 text-orange-700',
+                        accent: 'from-orange-500 to-amber-600',
+                        iconBg: 'bg-orange-100 text-orange-600',
+                        sidebar: 'border-l-orange-500'
+                    },
+                    {
+                        border: 'border-pink-200',
+                        bg: 'bg-pink-50/50',
+                        text: 'text-pink-800',
+                        badge: 'bg-pink-100 text-pink-700',
+                        accent: 'from-pink-500 to-rose-600',
+                        iconBg: 'bg-pink-100 text-pink-600',
+                        sidebar: 'border-l-pink-500'
+                    }
+                ];
+                const index = Math.abs(hash) % colorPalettes.length;
+                return colorPalettes[index];
+        }
+    };
 
     // Calculate Targets
     const targetTotals = Object.entries(userStructure).reduce((acc, [type, struct]) => {
@@ -477,75 +622,114 @@ const AutoExamGenerator = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                             
                             {/* Chapters & Topics List */}
-                            <div className="lg:col-span-8 space-y-4">
+                            <div className="lg:col-span-8 space-y-6">
                                 {chapters.length === 0 ? (
                                     <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 font-medium">No chapters found for this subject.</div>
-                                ) : chapters.map(ch => {
-                                    const isExpanded = expandedChapters.includes(ch.id);
-                                    return (
-                                        <div key={ch.id} className={`bg-white rounded-2xl border transition-all overflow-hidden ${isExpanded ? 'border-violet-300 shadow-md shadow-violet-500/5' : 'border-slate-200 hover:border-slate-300'}`}>
-                                            
-                                            {/* Chapter Header */}
-                                            <div className="p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50" onClick={() => toggleChapterExpand(ch.id)}>
-                                                <div className="flex items-center gap-3 flex-1">
-                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isExpanded ? 'bg-violet-100 text-violet-600' : 'bg-slate-100 text-slate-400'}`}>
-                                                        {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                                                    </div>
-                                                    <h4 className={`font-bold ${isExpanded ? 'text-violet-900' : 'text-slate-700'}`}>{ch.name}</h4>
-                                                </div>
+                                ) : (
+                                    Object.entries(groupedChapters).map(([category, catChapters]) => {
+                                        const isCatExpanded = expandedCategories.includes(category);
+                                        const styles = getCategoryStyles(category);
+                                        
+                                        return (
+                                            <div key={category} className={`bg-white rounded-[2rem] border ${styles.border} shadow-[0_8px_30px_rgb(0,0,0,0.02)] overflow-hidden transition-all duration-300`}>
                                                 
-                                                {/* Chapter Level Allocation */}
-                                                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                                                    {activeSections.map(sec => (
-                                                        <div key={sec.type} className="flex flex-col items-center w-16">
-                                                            <span className="text-[9px] font-black text-slate-400 uppercase">{sec.type}</span>
-                                                            <input 
-                                                                type="number" 
-                                                                min="0"
-                                                                value={allocations[ch.id]?.[sec.type] || ''} 
-                                                                onChange={(e) => handleAllocationChange(ch.id, sec.type, e.target.value)}
-                                                                placeholder="0"
-                                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-center text-sm font-black text-slate-800 outline-none focus:border-violet-500 focus:bg-white" 
-                                                            />
+                                                {/* Category Header */}
+                                                <div 
+                                                    onClick={() => toggleCategoryExpand(category)}
+                                                    className={`p-6 flex items-center justify-between cursor-pointer select-none bg-gradient-to-r ${styles.bg} border-b ${styles.border} transition-colors duration-200 hover:bg-opacity-80`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all bg-white shadow-sm ${styles.text}`}>
+                                                            {isCatExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                                                         </div>
-                                                    ))}
+                                                        <div>
+                                                            <h3 className={`text-lg font-black tracking-tight ${styles.text}`}>{category}</h3>
+                                                            <p className="text-xs font-bold text-slate-400 mt-0.5">{catChapters.length}টি সক্রিয় অধ্যায়</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${styles.badge} shadow-sm`}>
+                                                        {category} বিভাগ
+                                                    </span>
                                                 </div>
-                                            </div>
 
-                                            {/* Topics List (Expanded) */}
-                                            {isExpanded && (
-                                                <div className="border-t border-slate-100 bg-slate-50/50 p-4 pl-12 space-y-3">
-                                                    {topicsLoading[ch.id] ? (
-                                                        <div className="flex items-center gap-2 text-violet-500 text-sm font-bold py-2"><Loader2 size={16} className="animate-spin"/> Loading topics...</div>
-                                                    ) : chapterTopics[ch.id]?.length > 0 ? (
-                                                        chapterTopics[ch.id].map(top => (
-                                                            <div key={top.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
-                                                                <span className="text-sm font-bold text-slate-600 truncate mr-4">{top.name}</span>
-                                                                <div className="flex gap-2">
-                                                                    {activeSections.map(sec => (
-                                                                        <div key={sec.type} className="flex items-center gap-2 w-20">
-                                                                            <span className="text-[9px] font-black text-slate-400 uppercase w-6">{sec.type}</span>
-                                                                            <input 
-                                                                                type="number" 
-                                                                                min="0"
-                                                                                value={allocations[top.id]?.[sec.type] || ''} 
-                                                                                onChange={(e) => handleAllocationChange(top.id, sec.type, e.target.value)}
-                                                                                placeholder="0"
-                                                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-center text-sm font-black text-slate-800 outline-none focus:border-violet-500 focus:bg-white" 
-                                                                            />
+                                                {/* Category Chapters Container */}
+                                                {isCatExpanded && (
+                                                    <div className="p-6 space-y-4 bg-slate-50/20">
+                                                        {catChapters.map(ch => {
+                                                            const isExpanded = expandedChapters.includes(ch.id);
+                                                            return (
+                                                                <div key={ch.id} className={`bg-white rounded-2xl border border-slate-150 transition-all duration-200 overflow-hidden shadow-sm ${isExpanded ? 'border-violet-300 ring-4 ring-violet-500/5' : 'hover:border-slate-300'}`}>
+                                                                    
+                                                                    {/* Chapter Header */}
+                                                                    <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/50" onClick={() => toggleChapterExpand(ch.id)}>
+                                                                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isExpanded ? 'bg-violet-100 text-violet-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                                                {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                                                            </div>
+                                                                            <div className="truncate">
+                                                                                <h4 className={`font-bold text-sm sm:text-base ${isExpanded ? 'text-violet-900' : 'text-slate-700'}`}>{ch.name}</h4>
+                                                                                {ch.chapterNumber && <p className="text-[10px] font-bold text-slate-400 uppercase">অধ্যায় {ch.chapterNumber}</p>}
+                                                                            </div>
                                                                         </div>
-                                                                    ))}
+                                                                        
+                                                                        {/* Chapter Level Allocation */}
+                                                                        <div className="flex gap-3 justify-end sm:justify-start" onClick={e => e.stopPropagation()}>
+                                                                            {activeSections.map(sec => (
+                                                                                <div key={sec.type} className="flex flex-col items-center w-16">
+                                                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{sec.type}</span>
+                                                                                    <input 
+                                                                                        type="number" 
+                                                                                        min="0"
+                                                                                        value={allocations[ch.id]?.[sec.type] || ''} 
+                                                                                        onChange={(e) => handleAllocationChange(ch.id, sec.type, e.target.value)}
+                                                                                        placeholder="0"
+                                                                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-center text-sm font-black text-slate-800 outline-none focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-500/10 transition-all" 
+                                                                                    />
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Topics List (Expanded) */}
+                                                                    {isExpanded && (
+                                                                        <div className="border-t border-slate-100 bg-slate-50/50 p-4 pl-6 sm:pl-12 space-y-3">
+                                                                            {topicsLoading[ch.id] ? (
+                                                                                <div className="flex items-center gap-2 text-violet-500 text-sm font-bold py-2"><Loader2 size={16} className="animate-spin"/> Loading topics...</div>
+                                                                            ) : chapterTopics[ch.id]?.length > 0 ? (
+                                                                                chapterTopics[ch.id].map(top => (
+                                                                                    <div key={top.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-white border border-slate-150 rounded-xl shadow-sm gap-2">
+                                                                                        <span className="text-sm font-bold text-slate-600 truncate mr-4">{top.name}</span>
+                                                                                        <div className="flex gap-3 justify-end">
+                                                                                            {activeSections.map(sec => (
+                                                                                                <div key={sec.type} className="flex items-center gap-2 w-24">
+                                                                                                    <span className="text-[9px] font-black text-slate-400 uppercase w-8 text-right">{sec.type}</span>
+                                                                                                    <input 
+                                                                                                        type="number" 
+                                                                                                        min="0"
+                                                                                                        value={allocations[top.id]?.[sec.type] || ''} 
+                                                                                                        onChange={(e) => handleAllocationChange(top.id, sec.type, e.target.value)}
+                                                                                                        placeholder="0"
+                                                                                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-center text-sm font-black text-slate-800 outline-none focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-500/10 transition-all" 
+                                                                                                    />
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ))
+                                                                            ) : (
+                                                                                <div className="text-xs font-bold text-slate-400 py-2 italic text-center sm:text-left">কোন টপিক পাওয়া যায়নি। উপরের অধ্যায়ে সরাসরি প্রশ্ন বরাদ্দ করুন।</div>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
-                                                            </div>
-                                                        ))
-                                                    ) : (
-                                                        <div className="text-xs font-bold text-slate-400 py-2 italic">No topics found. Add allocation to the chapter above.</div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )
-                                })}
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                )}
                             </div>
 
                             {/* RIGHT: Difficulty & Status */}

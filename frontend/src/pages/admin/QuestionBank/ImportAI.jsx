@@ -144,7 +144,7 @@ const ImportAI = () => {
         if (!newChapterName.trim() || !subjectId) return;
         setCreatingChapter(true);
         try {
-            const created = await academicService.createChapter(subjectId, { name: newChapterName.trim(), order: localChapters.length + 1 });
+            const created = await academicService.createChapter(subjectId, { name: newChapterName.trim(), order: localChapters.length + 1, isActive: true });
             setLocalChapters(p => [...p, created]);
             setChapterId(created.id);
             setNewChapterName(''); setShowNewChapter(false);

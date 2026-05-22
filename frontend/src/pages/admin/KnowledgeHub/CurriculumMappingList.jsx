@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { BookOpen, Search, Layers, ChevronRight, BookText } from 'lucide-react';
 import axios from '../../../utils/axios';
 import academicService from '../../../services/academicService';
+import { knowledgeHubService } from '../../../services/knowledgeHubService';
 
 const bookTypesList = ['ALL', 'TEXTBOOK', 'GUIDE', 'QUESTION_BANK', 'LECTURE_SHEET'];
 
@@ -23,19 +24,24 @@ const CurriculumMappingList = () => {
 
     useEffect(() => {
         setPortalTarget(document.getElementById('topbar-actions'));
-        fetchBooks();
+        const cached = knowledgeHubService.getCachedBooks();
+        if (cached) {
+            setBooks(cached || []);
+            setIsLoading(false);
+        }
+        fetchBooks(!!cached);
         academicService.getHierarchy().then(setHierarchy).catch(console.error);
     }, []);
 
-    const fetchBooks = async () => {
+    const fetchBooks = async (isSilent = false) => {
         try {
-            setIsLoading(true);
-            const res = await axios.get('/v1/knowledge-hub/source-books');
-            setBooks(res.data || []);
+            if (!isSilent) setIsLoading(true);
+            const data = await knowledgeHubService.getSourceBooks(isSilent);
+            setBooks(data || []);
         } catch (error) {
             console.error("Failed to fetch books", error);
         } finally {
-            setIsLoading(false);
+            if (!isSilent) setIsLoading(false);
         }
     };
 

@@ -75,13 +75,15 @@ const DynamicQuestionViewer = ({ q, mode = 'list', showAnswer = false, showExpla
     const entries = Object.entries(data);
     const questionFields = [];
     const answerFields = [];
+    const explanationFields = [];
 
     entries.forEach(([key, value]) => {
         if (!value || (Array.isArray(value) && value.length === 0)) return;
         const lowerKey = key.toLowerCase();
-        if (lowerKey.includes('explanation')) return; // Handled by parent
 
-        if (lowerKey.includes('answer') || lowerKey.includes('solution') || lowerKey.includes('correct')) {
+        if (lowerKey.includes('explanation') || lowerKey.includes('rationale')) {
+            explanationFields.push([key, value]);
+        } else if (lowerKey.includes('answer') || lowerKey.includes('solution') || lowerKey.includes('correct')) {
             answerFields.push([key, value]);
         } else {
             questionFields.push([key, value]);
@@ -105,6 +107,12 @@ const DynamicQuestionViewer = ({ q, mode = 'list', showAnswer = false, showExpla
             {showAnswer && answerFields.length > 0 && (
                 <div className="mt-4 p-3 bg-emerald-50 border border-emerald-300 rounded-lg">
                     {answerFields.map(([key, value]) => renderValue(key, value, true))}
+                </div>
+            )}
+
+            {showExplanation && explanationFields.length > 0 && (
+                <div className="mt-4 p-3 bg-blue-50/50 border border-blue-200 rounded-lg">
+                    {explanationFields.map(([key, value]) => renderValue(key, value, false))}
                 </div>
             )}
         </div>

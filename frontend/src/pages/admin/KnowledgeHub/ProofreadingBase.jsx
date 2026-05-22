@@ -35,7 +35,7 @@ const DynamicNode = ({ node, type }) => {
                     const session = await academicService.getActiveSession();
                     data = await academicService.getSubjectsByClass(id, null, session?.id);
                 }
-                else if (childType === 'CHAPTER') data = await academicService.getChaptersByClassSubject(id);
+                else if (childType === 'CHAPTER') data = await academicService.getChaptersByClassSubject(id, false);
                 else if (childType === 'TOPIC') data = await academicService.getTopicsByChapter(id);
                 
                 setChildren(data || []);

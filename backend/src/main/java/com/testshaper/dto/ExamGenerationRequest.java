@@ -82,5 +82,8 @@ public class ExamGenerationRequest {
         @NotNull
         @Positive
         private Double marksPerQuestion;
+
+        private String sectionName; // e.g. "ক-বিভাগ (গদ্য)"
+        private String categoryName; // e.g. "গদ্য"
     }
 }
