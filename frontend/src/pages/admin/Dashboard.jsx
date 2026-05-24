@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Users, BookOpen, FileQuestion, Activity,
     TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Calendar,
-    Zap, Target, Clock, Plus, ExternalLink, Loader2, FileText, Layers, Sparkles
+    Zap, Target, Clock, Plus, ExternalLink, Loader2, FileText, Layers, Sparkles, X
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -14,10 +14,11 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { motion } from 'framer-motion';
 
 /* ─── Mobile-first KPI Card ─── */
-const KPICard = ({ title, count, trend, icon: Icon, gradient, iconBg }) => (
+const KPICard = ({ title, count, subValue, trend, icon: Icon, gradient, iconBg, onClick }) => (
     <motion.div 
-        whileHover={{ y: -4, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }}
-        className="bg-white/80 backdrop-blur-xl p-4 md:p-6 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-white/50 hover:border-slate-200 transition-all duration-300 group relative overflow-hidden"
+        whileHover={onClick ? { y: -4, scale: 1.01, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' } : { y: -4, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }}
+        onClick={onClick}
+        className={`bg-white/80 backdrop-blur-xl p-4 md:p-6 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-white/50 hover:border-slate-200 transition-all duration-300 group relative overflow-hidden ${onClick ? 'cursor-pointer active:scale-[0.99]' : ''}`}
     >
         <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-transparent to-slate-100/50 rounded-full blur-2xl group-hover:bg-blue-50/50 transition-colors"></div>
         <div className="flex items-center gap-4 md:gap-5 relative z-10">
@@ -26,7 +27,12 @@ const KPICard = ({ title, count, trend, icon: Icon, gradient, iconBg }) => (
             </div>
             <div className="flex-1 min-w-0">
                 <p className="text-xs md:text-sm font-semibold text-slate-500 mb-1 truncate tracking-wide">{title}</p>
-                <h3 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight leading-none">{count}</h3>
+                <div className="flex items-baseline gap-1.5 flex-wrap">
+                    <h3 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight leading-none">{count}</h3>
+                    {subValue !== undefined && subValue !== null && (
+                        <span className="text-[10px] md:text-xs font-bold text-slate-400">/ {subValue} total</span>
+                    )}
+                </div>
             </div>
             {trend !== 0 && (
                 <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0 shadow-sm ${trend > 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' : 'bg-rose-50 text-rose-600 border border-rose-100/50'}`}>
@@ -69,10 +75,11 @@ const CustomTooltip = ({ active, payload, label }) => {
     return null;
 };
 
-const Dashboard = () => {
+const Dashboard = ({ view = 'overview' }) => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
+    const [showSubjectsModal, setShowSubjectsModal] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -100,13 +107,27 @@ const Dashboard = () => {
         if (!user) return;
 
         const fetchStats = async () => {
+            setLoading(true);
             try {
                 let data;
-                if (user.roles.includes('SUPER_ADMIN') || user.permissions?.includes('ROLES_PERMISSIONS_VIEW') || user.permissions?.includes('SUBSCRIPTION_PACKAGE_VIEW')) {
+                let activeRoleViewLoc = view;
+                if (view === 'overview') {
+                    if (user.roles.includes('SUPER_ADMIN') || user.permissions?.includes('ROLES_PERMISSIONS_VIEW') || user.permissions?.includes('SUBSCRIPTION_PACKAGE_VIEW')) {
+                        activeRoleViewLoc = 'admin';
+                    } else if (user.roles.includes('INSTITUTE_ADMIN') || user.permissions?.includes('ALL_INSTITUTES_VIEW')) {
+                        activeRoleViewLoc = 'institute';
+                    } else if (user.roles.includes('TEACHER') || user.permissions?.includes('ADD_QUESTION_VIEW')) {
+                        activeRoleViewLoc = 'teacher';
+                    } else {
+                        activeRoleViewLoc = 'student';
+                    }
+                }
+
+                if (activeRoleViewLoc === 'admin') {
                     data = await dashboardService.getAdminStats();
-                } else if (user.roles.includes('INSTITUTE_ADMIN') || user.permissions?.includes('ALL_INSTITUTES_VIEW')) {
+                } else if (activeRoleViewLoc === 'institute') {
                     data = await dashboardService.getInstituteStats();
-                } else if (user.roles.includes('TEACHER') || user.permissions?.includes('ADD_QUESTION_VIEW')) {
+                } else if (activeRoleViewLoc === 'teacher') {
                     data = await dashboardService.getTeacherStats();
                 } else {
                     data = await dashboardService.getStudentStats();
@@ -119,7 +140,7 @@ const Dashboard = () => {
             }
         };
         fetchStats();
-    }, [user]);
+    }, [user, view]);
 
     const formatTime = (timeStr) => {
         try {
@@ -145,7 +166,9 @@ const Dashboard = () => {
         activeInstitutes = 0, instituteTrend = 0,
         totalQuestions = 0, questionTrend = 0,
         examsConducted = 0, examTrend = 0,
-        questionTypes = [], activityAnalytics = [], recentActivities = []
+        approvedQuestionsCount = 0, globalQuestionsCount = 0,
+        questionTypes = [], activityAnalytics = [], recentActivities = [],
+        subjectQuestions = []
     } = stats || {};
 
     const hasPerm = (permId, action = 'VIEW') => {
@@ -154,8 +177,26 @@ const Dashboard = () => {
         return user.permissions?.includes(`${permId}_${action}`);
     };
 
-    const isAdminView = user?.roles?.includes('SUPER_ADMIN') || user?.permissions?.includes('ROLES_PERMISSIONS_VIEW');
-    const isStudentView = !user?.roles?.includes('SUPER_ADMIN') && !user?.permissions?.includes('QUESTION_BANK_ADD_QUESTION_MCQ_VIEW');
+    let activeRoleView = view;
+    if (view === 'overview' && user) {
+        if (user.roles.includes('SUPER_ADMIN') || user.permissions?.includes('ROLES_PERMISSIONS_VIEW') || user.permissions?.includes('SUBSCRIPTION_PACKAGE_VIEW')) {
+            activeRoleView = 'admin';
+        } else if (user.roles.includes('INSTITUTE_ADMIN') || user.permissions?.includes('ALL_INSTITUTES_VIEW')) {
+            activeRoleView = 'institute';
+        } else if (user.roles.includes('TEACHER') || user.permissions?.includes('ADD_QUESTION_VIEW')) {
+            activeRoleView = 'teacher';
+        } else {
+            activeRoleView = 'student';
+        }
+    }
+
+    const isAdminView = activeRoleView === 'admin';
+    const isStudentView = activeRoleView === 'student';
+
+    const isSuperAdminUser = user?.roles?.some(r => {
+        const roleName = typeof r === 'string' ? r : (r.name || '');
+        return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
+    }) || user?.email === 'admin';
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -191,9 +232,19 @@ const Dashboard = () => {
                             <Sparkles size={14} className="text-amber-500" />
                             {currentDate}
                         </span>
+                        {view !== 'overview' && (
+                            <span className="px-3 py-1 bg-blue-100 rounded-full text-xs font-bold text-blue-700 shadow-sm border border-blue-200 capitalize">
+                                {view === 'admin' ? 'Super Admin' : view === 'institute' ? 'Institute Admin' : view === 'teacher' ? 'Teacher' : 'Student'} View
+                            </span>
+                        )}
                     </div>
                     <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight">Welcome back, {user?.name || 'there'}! 👋</h1>
-                    <p className="text-slate-500 text-sm md:text-base mt-2 max-w-xl leading-relaxed">Ready to shape some minds today? Here's an overview of your academic workspace.</p>
+                    <p className="text-slate-500 text-sm md:text-base mt-2 max-w-xl leading-relaxed">
+                        {activeRoleView === 'admin' && "Here's the global system overview and metrics across all institutes."}
+                        {activeRoleView === 'institute' && "Here's the administrative summary for your institute."}
+                        {activeRoleView === 'teacher' && "Monitor your questions, class activities, and exam metrics."}
+                        {activeRoleView === 'student' && "Track your progress, practice exams, and lectures."}
+                    </p>
                 </div>
                 <div className="flex items-center gap-3">
                     <button className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-slate-200/60 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm active:scale-[0.97]">
@@ -209,42 +260,93 @@ const Dashboard = () => {
                 </div>
             </motion.div>
 
+            {/* ─── AI Workspace Banner ─── */}
+            <motion.div 
+                variants={itemVariants} 
+                className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 p-6 md:p-8 text-white shadow-xl shadow-indigo-100/30 border border-white/10"
+            >
+                {/* Decorative blur elements */}
+                <div className="absolute -right-12 -top-12 w-48 h-48 bg-white/15 rounded-full blur-2xl pointer-events-none animate-pulse"></div>
+                <div className="absolute -left-12 -bottom-12 w-48 h-48 bg-indigo-400/20 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="space-y-3 max-w-2xl">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] md:text-xs font-bold tracking-wider uppercase">
+                            <Sparkles size={12} className="text-amber-300 animate-pulse" />
+                            <span>Next-Gen AI Assistant</span>
+                        </div>
+                        <h2 className="text-xl md:text-2xl lg:text-3xl font-extrabold tracking-tight">
+                            AI Co-Pilot Workspace
+                        </h2>
+                        <p className="text-white/80 text-xs md:text-sm leading-relaxed max-w-xl">
+                            Create exams instantly, auto-generate standard question banks, search smart content, and optimize your teaching workflow with our advanced AI tools.
+                        </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                        <Link 
+                            to="/ai-workspace"
+                            className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-white text-indigo-700 font-extrabold text-sm rounded-2xl hover:bg-indigo-50 hover:shadow-lg hover:shadow-white/20 active:scale-[0.98] transition-all duration-300 group"
+                        >
+                            <span>Launch AI Workspace</span>
+                            <Zap size={16} className="text-amber-500 fill-amber-500 group-hover:scale-110 transition-transform duration-300" />
+                        </Link>
+                    </div>
+                </div>
+            </motion.div>
+
             {/* ─── KPI Cards ─── */}
             <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
-                {hasPerm('USER_MANAGEMENT', 'VIEW') && (
-                    <KPICard title={isAdminView ? "Total Users" : "Total Teachers"} count={totalUsers.toLocaleString()} trend={userTrend} icon={Users} gradient="bg-gradient-to-br from-blue-500 to-primary" />
+                {(activeRoleView === 'admin' || activeRoleView === 'institute') && (
+                    <KPICard title="Total Users" count={totalUsers.toLocaleString()} trend={userTrend} icon={Users} gradient="bg-gradient-to-br from-blue-500 to-primary" />
                 )}
-                {hasPerm('INSTITUTE_MANAGEMENT', 'VIEW') && (
+                {activeRoleView === 'admin' && (
                     <KPICard title="Active Institutes" count={activeInstitutes.toLocaleString()} trend={instituteTrend} icon={BookOpen} gradient="bg-gradient-to-br from-indigo-500 to-secondary" />
                 )}
-                {hasPerm('QUESTION_BANK', 'VIEW') && (
-                    <KPICard title={isStudentView ? "My Questions" : "Total Questions"} count={totalQuestions.toLocaleString()} trend={questionTrend || 0} icon={FileQuestion} gradient="bg-gradient-to-br from-violet-500 to-purple-600" />
-                )}
-                {hasPerm('EXAM_PAPER', 'VIEW') && (
-                    <KPICard title={isStudentView ? "My Exams" : "Exams Conducted"} count={examsConducted.toLocaleString()} trend={examTrend || 0} icon={Activity} gradient="bg-gradient-to-br from-emerald-500 to-teal-600" />
-                )}
+                <KPICard 
+                    title="Active Approved Questions" 
+                    count={approvedQuestionsCount.toLocaleString()} 
+                    subValue={globalQuestionsCount.toLocaleString()}
+                    trend={questionTrend || 0} 
+                    icon={FileQuestion} 
+                    gradient="bg-gradient-to-br from-violet-500 to-purple-600" 
+                    onClick={() => setShowSubjectsModal(true)}
+                />
+                <KPICard 
+                    title={activeRoleView === 'student' ? "My Exams" : activeRoleView === 'teacher' ? "My Exams" : "Exams Conducted"} 
+                    count={examsConducted.toLocaleString()} 
+                    trend={examTrend || 0} 
+                    icon={Activity} 
+                    gradient="bg-gradient-to-br from-emerald-500 to-teal-600" 
+                    onClick={() => navigate('/exams/generate/saved')}
+                />
             </motion.div>
 
             {/* ─── Quick Actions ─── */}
             <motion.div variants={itemVariants}>
                 <h3 className="text-sm font-extrabold text-slate-500 uppercase tracking-[0.2em] mb-4 pl-1">Quick Actions</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
-                    {/* Admin/Teacher Quick Actions */}
-                    {hasPerm('QUESTION_BANK_ADD_QUESTION_MCQ', 'VIEW') && <QuickAction icon={Plus} label="Add MCQ" to="/questions/create/mcq" color="bg-blue-500" />}
-                    {hasPerm('EXAM_PAPER_GENERATOR_AUTO_GENERATE', 'VIEW') && <QuickAction icon={Zap} label="Auto Exam" to="/exams/generate/auto" color="bg-indigo-500" />}
-                    {hasPerm('REPORTS_USAGE_SUMMARY', 'VIEW') && <QuickAction icon={Target} label="Reports" to="/reports/usage" color="bg-violet-500" />}
-                    {hasPerm('QUESTION_BANK_REPOSITORY_PENDING', 'VIEW') && <QuickAction icon={Clock} label="Pending Review" to="/questions/pending" color="bg-amber-500" />}
-                    
-                    {/* Student/Basic Quick Actions */}
-                    {hasPerm('EXAM_PAPER', 'VIEW') && !hasPerm('REPORTS_USAGE_SUMMARY', 'VIEW') && <QuickAction icon={FileText} label="Practice Exam" to="/exams/generate/auto" color="bg-blue-500" />}
-                    {hasPerm('LECTURES_MANAGE_ATTACHMENTS', 'VIEW') && !hasPerm('QUESTION_BANK_REPOSITORY_PENDING', 'VIEW') && <QuickAction icon={Layers} label="Lecture Sheets" to="/lectures/attach" color="bg-indigo-500" />}
-                    {hasPerm('QUESTION_BANK_REPOSITORY_APPROVED', 'VIEW') && !hasPerm('QUESTION_BANK_ADD_QUESTION_MCQ', 'VIEW') && <QuickAction icon={FileQuestion} label="Q-Bank" to="/questions" color="bg-violet-500" />}
-                    {hasPerm('REPORTS_PERFORMANCE_INSIGHTS', 'VIEW') && !hasPerm('REPORTS_USAGE_SUMMARY', 'VIEW') && <QuickAction icon={Target} label="My Progress" to="/reports/performance" color="bg-emerald-500" />}
+                    {/* Admin/Institute/Teacher Quick Actions */}
+                    {activeRoleView !== 'student' ? (
+                        <>
+                            <QuickAction icon={FileText} label="Manual Exam" to="/exams/generate/manual" color="bg-blue-500" />
+                            <QuickAction icon={Zap} label="Auto Exam Generator" to="/exams/generate/auto" color="bg-indigo-500" />
+                            <QuickAction icon={BookOpen} label="Question Bank" to="/questions/approved" color="bg-violet-500" />
+                            <QuickAction icon={Clock} label="Pending Review" to="/questions/pending" color="bg-amber-500" />
+                        </>
+                    ) : (
+                        /* Student Quick Actions */
+                        <>
+                            <QuickAction icon={FileText} label="Practice Exam" to="/exams/generate/auto" color="bg-blue-500" />
+                            <QuickAction icon={Layers} label="Lecture Sheets" to="/lectures/attach" color="bg-indigo-500" />
+                            <QuickAction icon={FileQuestion} label="Q-Bank" to="/questions" color="bg-violet-500" />
+                            <QuickAction icon={Target} label="My Progress" to="/reports/performance" color="bg-emerald-500" />
+                        </>
+                    )}
                 </div>
             </motion.div>
 
             {/* ─── Charts Section ─── */}
-            {hasPerm('REPORTS', 'VIEW') && (
+            {activeRoleView !== 'student' && hasPerm('REPORTS', 'VIEW') && (
                 <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-6">
                     {/* Growth Chart */}
                     <div className="bg-white/80 backdrop-blur-xl p-5 md:p-7 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-white lg:col-span-2 relative overflow-hidden">
@@ -382,7 +484,7 @@ const Dashboard = () => {
             )}
 
             {/* ─── Recent Activity ─── */}
-            {hasPerm('DASHBOARD', 'VIEW') && (
+            {isSuperAdminUser && (
             <motion.div variants={itemVariants} className="bg-white/80 backdrop-blur-xl p-5 md:p-7 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-white">
                 <div className="flex items-center justify-between mb-6">
                     <h3 className="text-sm md:text-base font-bold text-slate-900">Recent Activity</h3>
@@ -451,6 +553,79 @@ const Dashboard = () => {
                     ))}
                 </div>
             </motion.div>
+            )}
+
+            {/* Subject Breakdown Modal */}
+            {showSubjectsModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full p-6 relative overflow-hidden"
+                    >
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900">Approved Questions</h3>
+                                <p className="text-xs text-slate-500 mt-1">Breakdown by Subject</p>
+                            </div>
+                            <button 
+                                onClick={() => setShowSubjectsModal(false)}
+                                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* List */}
+                        <div className="max-h-[300px] overflow-y-auto space-y-4 pr-1">
+                            {subjectQuestions && subjectQuestions.length > 0 ? (
+                                subjectQuestions.map((sub, index) => {
+                                    const total = subjectQuestions.reduce((acc, curr) => acc + curr.count, 0);
+                                    const percent = total > 0 ? Math.round((sub.count / total) * 100) : 0;
+                                    
+                                    const colors = ['bg-blue-500', 'bg-indigo-500', 'bg-violet-500', 'bg-purple-500', 'bg-emerald-500'];
+                                    const colorClass = colors[index % colors.length];
+
+                                    return (
+                                        <div key={index} className="space-y-1.5 p-3 rounded-2xl bg-slate-50/50 border border-slate-100/50 hover:bg-slate-50 transition-colors">
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div>
+                                                    <span className="font-bold text-slate-800 text-xs md:text-sm leading-tight block">{sub.subjectName}</span>
+                                                    <span className="text-[10px] text-slate-400 font-semibold mt-1 block">
+                                                        {sub.version} • {sub.levelName} • {sub.className}
+                                                    </span>
+                                                </div>
+                                                <span className="font-extrabold text-slate-900 text-xs md:text-sm">{sub.count.toLocaleString()}</span>
+                                            </div>
+                                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
+                                                <div 
+                                                    className={`h-full rounded-full ${colorClass} transition-all duration-500`}
+                                                    style={{ width: `${percent}%` }}
+                                                ></div>
+                                            </div>
+                                            <div className="text-[9px] text-slate-400 font-semibold text-right mt-1">{percent}% of total approved</div>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <div className="text-center py-8 text-slate-400 font-medium">
+                                    No subject metrics available
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
+                            <button 
+                                onClick={() => setShowSubjectsModal(false)}
+                                className="px-5 py-2 bg-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
             )}
         </motion.div>
     );

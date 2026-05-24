@@ -66,6 +66,17 @@ public class PublicLandingController {
         return ResponseEntity.ok(branding);
     }
 
+    @GetMapping("/settings/languages")
+    public ResponseEntity<Map<String, String>> getPublicLanguages() {
+        Map<String, String> generalSettings = generalSettingService
+                .getGlobalSettings(GeneralSetting.SettingCategory.GENERAL);
+        
+        Map<String, String> response = new java.util.HashMap<>();
+        response.put("defaultLanguage", generalSettings.getOrDefault("landing_default_language", "en"));
+        response.put("enabledLanguages", generalSettings.getOrDefault("landing_enabled_languages", "en,bn"));
+        return ResponseEntity.ok(response);
+    }
+
     // --- Image Proxy (solves CORS for canvas operations) ---
     @GetMapping("/proxy-image")
     public ResponseEntity<byte[]> proxyImage(@RequestParam("url") String imageUrl) {

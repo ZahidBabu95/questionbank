@@ -18,6 +18,7 @@ import java.util.UUID;
 public class CmsLandingController {
 
     private final CmsService cmsService;
+    private final com.testshaper.service.AIQuestionService aiQuestionService;
 
     @GetMapping("/sections")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
@@ -35,5 +36,41 @@ public class CmsLandingController {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<CmsSectionDTO> updateStatus(@PathVariable UUID id, @RequestBody Map<String, String> payload) {
         return ResponseEntity.ok(cmsService.updateStatus(id, payload.get("status")));
+    }
+
+    @PostMapping("/translate")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<Map<String, String>> translate(@RequestBody Map<String, String> payload) {
+        String text = payload.get("text");
+        String targetLang = payload.get("targetLang");
+        if (text == null || text.isBlank() || targetLang == null || targetLang.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        try {
+            String targetLangName = getLanguageName(targetLang);
+            String prompt = String.format("Translate the following marketing/educational text to %s. Detect the source language automatically. Output ONLY the translated text, do not include any explanations, surrounding quotes, or conversational phrases.\n\nText: \"%s\"", targetLangName, text);
+            String translated = aiQuestionService.generateRawCompletion(prompt, null);
+            if (translated != null) {
+                translated = translated.trim();
+                // Strip leading/trailing quotes if the model added them
+                if (translated.startsWith("\"") && translated.endsWith("\"")) {
+                    translated = translated.substring(1, translated.length() - 1);
+                }
+            }
+            return ResponseEntity.ok(Map.of("translation", translated));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private String getLanguageName(String langCode) {
+        if (langCode == null) return "English";
+        switch (langCode.toLowerCase()) {
+            case "bn": return "Bengali";
+            case "hi": return "Hindi";
+            case "ar": return "Arabic";
+            case "es": return "Spanish";
+            default: return langCode;
+        }
     }
 }

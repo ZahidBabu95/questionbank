@@ -18,8 +18,67 @@ import CanvasStyleInjector from './CanvasStyleInjector';
 import { useCanvasSync } from '../hooks/useCanvasSync';
 import { usePageCountObserver } from '../hooks/usePageCountObserver';
 import { formatDurationString } from '../../../../../utils/formatUtils';
-// Custom Extension to handle "Locked Question Blocks" in Strict Mode
-// In future, this will be expanded to a NodeView to render CQ/MCQ UI
+const getDisplayQuestionText = (q) => {
+    if (!q) return '';
+    let text = q.questionText || '';
+    const cleanText = text.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+    const isPlaceholder = cleanText.startsWith('generated question') || 
+                          cleanText.startsWith('dynamic question') || 
+                          cleanText.startsWith('ডায়নামিক প্রশ্ন') || 
+                          cleanText.startsWith('ডায়নামিক প্রশ্ন') || 
+                          cleanText === '';
+    if (isPlaceholder) {
+        let dynamicData = q.dynamicData;
+        if (dynamicData) {
+            if (typeof dynamicData === 'string') {
+                try {
+                    dynamicData = JSON.parse(dynamicData);
+                } catch (e) {
+                    dynamicData = null;
+                }
+            }
+            if (dynamicData) {
+                const keys = ['text', 'question', 'questionText', 'question_text', 'content'];
+                for (const key of keys) {
+                    const val = dynamicData[key];
+                    if (val && typeof val === 'string') {
+                        const cleanVal = val.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+                        if (cleanVal && !cleanVal.startsWith('generated question') && !cleanVal.startsWith('dynamic question') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন')) {
+                            return val;
+                        }
+                    }
+                }
+                
+                // Fallback for CQ_DESCRIPTIVE/sub_parts
+                if (Array.isArray(dynamicData.sub_parts) && dynamicData.sub_parts.length > 0) {
+                    const partsTexts = [];
+                    dynamicData.sub_parts.forEach((part, pIdx) => {
+                        if (part && typeof part === 'object') {
+                            const subKeys = ['questionText', 'text', 'question', 'content'];
+                            for (const key of subKeys) {
+                                const val = part[key];
+                                if (val && typeof val === 'string') {
+                                    const cleanVal = val.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+                                    if (cleanVal && !cleanVal.startsWith('generated question') && !cleanVal.startsWith('dynamic question') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন')) {
+                                        const partLabel = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
+                                        partsTexts.push(`(${partLabel}) ${val}`);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    if (partsTexts.length > 0) {
+                        return partsTexts.join(' ');
+                    }
+                }
+            }
+        }
+        return '';
+    }
+    return text;
+};
+
 const PaperCanvasV2 = React.memo(({ 
     editorMode, rawContent, setRawContent, 
     docSettings, zoom = 100,
@@ -589,19 +648,56 @@ const PaperCanvasV2 = React.memo(({
                                     </h5>
                                     <div className="space-y-4">
                                         {nonMcqQuestions.map(({ q, displayNum }) => {
-                                            const content = q.attrs?.questionText || q.attrs?.content || '';
+                                            const content = getDisplayQuestionText(q.attrs);
                                             const ansText = q.attrs?.answer || 'N/A';
                                             const qFontSize = q.attrs?.fontSize || s.bodyFontSize || 12;
+                                            
+                                            let dynamicDataParsed = null;
+                                            if (q.attrs?.dynamicData) {
+                                                try {
+                                                    dynamicDataParsed = typeof q.attrs.dynamicData === 'string'
+                                                        ? JSON.parse(q.attrs.dynamicData)
+                                                        : q.attrs.dynamicData;
+                                                } catch (e) {
+                                                    console.error("Failed to parse dynamicData in PaperCanvasV2:", e);
+                                                }
+                                            }
+                                            const hasSubParts = dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.length > 0;
+
                                             return (
                                                 <div key={displayNum} className="border-b border-slate-100 pb-2 last:border-b-0 break-inside-avoid" style={{ fontSize: ptToPx(qFontSize) }}>
                                                     <div className="flex gap-2">
                                                         <span className="font-bold text-slate-700">{displayNum}.</span>
                                                         <div className="font-semibold text-slate-800 inline-block" dangerouslySetInnerHTML={{ __html: content }} />
                                                     </div>
-                                                    <div className="pl-6 mt-1 text-indigo-700 font-bold">
-                                                        <span className="text-xs text-slate-500 font-normal mr-1.5">{s.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
-                                                        <div className="inline" dangerouslySetInnerHTML={{ __html: ansText }} />
-                                                    </div>
+                                                    {hasSubParts ? (
+                                                        <div className="pl-6 mt-1.5 space-y-2 text-indigo-700 font-bold">
+                                                            {dynamicDataParsed.sub_parts.map((part, pIdx) => {
+                                                                const label = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
+                                                                return (
+                                                                    <div key={pIdx} className="flex flex-col gap-0.5 pb-1 border-b border-indigo-50/30 last:border-0 last:pb-0">
+                                                                        {part.answer && (
+                                                                            <div className="flex items-start gap-1 font-bold">
+                                                                                <span className="text-xs text-slate-800 font-bold shrink-0">({label}) {s.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
+                                                                                <div className="inline font-bold text-indigo-700" dangerouslySetInnerHTML={{ __html: part.answer }} />
+                                                                            </div>
+                                                                        )}
+                                                                        {part.explanation && (
+                                                                            <div className="flex items-start gap-1 pl-4 text-xs font-normal text-slate-600">
+                                                                                <span className="font-semibold shrink-0 text-emerald-700">{!part.answer ? `(${label}) ` : ''}{s.language === 'ENGLISH' ? 'Explanation:' : 'ব্যাখ্যা:'}</span>
+                                                                                <div className="inline text-slate-700 font-normal" dangerouslySetInnerHTML={{ __html: part.explanation }} />
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="pl-6 mt-1 text-indigo-700 font-bold">
+                                                            <span className="text-xs text-slate-500 font-normal mr-1.5">{s.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
+                                                            <div className="inline" dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                        </div>
+                                                    )}
                                                 </div>
                                             );
                                         })}

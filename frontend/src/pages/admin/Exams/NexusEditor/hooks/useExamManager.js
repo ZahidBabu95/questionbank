@@ -305,6 +305,7 @@ export const useExamManager = () => {
                             const stimulusText = q.stimulus ? q.stimulus.replace(/"/g, "&quot;") : "";
                             const explanationText = q.explanation ? q.explanation.replace(/"/g, "&quot;") : "";
                             const answerText = q.correctAnswer ? q.correctAnswer.replace(/"/g, "&quot;") : "";
+                            const dynamicDataJson = q.dynamicData ? (typeof q.dynamicData === 'object' ? JSON.stringify(q.dynamicData).replace(/'/g, "&#39;") : q.dynamicData.replace(/'/g, "&#39;")) : "";
                             return `
                                 <div data-type="question-block" 
                                      questionid="${q.originalQuestionId || q.id}"
@@ -324,7 +325,8 @@ export const useExamManager = () => {
                                      optionstyle="${sec?.optionStyle || 'bn'}"
                                      optiondecoration="${sec?.optionDecoration || 'rightBracket'}"
                                      data-statements='${statementsJson}'
-                                     data-options='${optionsJson}'>
+                                     data-options='${optionsJson}'
+                                     data-dynamic-data='${dynamicDataJson}'>
                                 </div>`;
                         };
 

@@ -102,6 +102,16 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         return new RestTemplate(factory);
     }
 
+    private boolean isPlaceholderText(String text) {
+        if (text == null) return true;
+        String clean = text.replaceAll("<[^>]*>", "").replaceAll("&nbsp;", " ").trim().toLowerCase();
+        return clean.isEmpty() || 
+               clean.startsWith("generated question") || 
+               clean.startsWith("dynamic question") || 
+               clean.startsWith("ডায়নামিক প্রশ্ন") || 
+               clean.startsWith("ডায়নামিক প্রশ্ন");
+    }
+
     @Override
     @org.springframework.scheduling.annotation.Async
     public void processUploadsBackground(UUID sourceBookId, java.util.List<java.io.File> localFiles, int startPage) {
@@ -1994,7 +2004,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                             if (qText.isBlank() && !qNode.path("stimulus").asText().isBlank()) {
                                 // If there is a stimulus but no question text, we can leave it blank
                             } else if (qText.isBlank()) {
-                                qText = "Generated Question";
+                                qText = "";
                             }
                             qText = qText.replaceFirst("^\\s*(?:\\(|\\[)?\\s*(?:[\\d০-৯]+|[a-zA-Zক-ষ]+)\\s*(?:\\)|\\]|[\\.\\-:])\\s*", "");
                             
@@ -2003,18 +2013,23 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                             if (rootNode.hasNonNull("sub_parts") && rootNode.get("sub_parts").isArray()) {
                                 StringBuilder stemHtmlBuilder = new StringBuilder();
                                 
-                                String stemSource = qText;
+                                String stemSource = "";
                                 if (qNode.hasNonNull("stimulus") && !qNode.get("stimulus").asText().isBlank()) {
                                     stemSource = qNode.get("stimulus").asText();
                                 } else if (rootNode.hasNonNull("stimulus") && !rootNode.get("stimulus").asText().isBlank()) {
                                     stemSource = rootNode.get("stimulus").asText();
+                                } else if (!qText.isBlank() && !isPlaceholderText(qText)) {
+                                    stemSource = qText;
                                 }
                                 
-                                // Format the stem inside cq-stem struct, just like CQCreate.jsx
-                                stemHtmlBuilder.append("<div class=\"cq-stem\">").append(stemSource).append("</div>");
-                                
-                                // Explicitly set it on q.setStimulus
-                                q.setStimulus(stemSource); 
+                                if (stemSource != null && !stemSource.isBlank() && !isPlaceholderText(stemSource)) {
+                                    // Format the stem inside cq-stem struct, just like CQCreate.jsx
+                                    stemHtmlBuilder.append("<div class=\"cq-stem\">").append(stemSource).append("</div>");
+                                    // Explicitly set it on q.setStimulus
+                                    q.setStimulus(stemSource);
+                                } else {
+                                    q.setStimulus(null);
+                                } 
 
                                 StringBuilder cqBuilder = new StringBuilder();
                                 cqBuilder.append(stemHtmlBuilder).append("<div class=\"cq-questions\"><ol type=\"a\">");
@@ -2066,10 +2081,16 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                             q.setQuestionText(qText);
                             
                             if (q.getStimulus() == null || q.getStimulus().isBlank()) {
-                                if (qNode.hasNonNull("stimulus")) {
-                                    q.setStimulus(qNode.get("stimulus").asText());
-                                } else if (rootNode.hasNonNull("stimulus")) {
-                                    q.setStimulus(rootNode.get("stimulus").asText());
+                                String stimVal = null;
+                                if (qNode.hasNonNull("stimulus") && !qNode.get("stimulus").asText().isBlank()) {
+                                    stimVal = qNode.get("stimulus").asText();
+                                } else if (rootNode.hasNonNull("stimulus") && !rootNode.get("stimulus").asText().isBlank()) {
+                                    stimVal = rootNode.get("stimulus").asText();
+                                }
+                                if (stimVal != null && !stimVal.isBlank() && !isPlaceholderText(stimVal)) {
+                                    q.setStimulus(stimVal);
+                                } else {
+                                    q.setStimulus(null);
                                 }
                             }
 

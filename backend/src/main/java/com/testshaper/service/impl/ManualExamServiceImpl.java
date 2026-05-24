@@ -391,6 +391,7 @@ public class ManualExamServiceImpl {
                     qDto.setDifficulty(q.getDifficulty());
                     qDto.setBloomLevel(q.getBloomLevel());
                     qDto.setLanguage(q.getLanguage());
+                    qDto.setDynamicData(q.getDynamicData());
                     if (q.getOptions() != null) {
                         qDto.setOptions(q.getOptions().stream().map(opt -> {
                             ExamDTO.OptionDTO odto = new ExamDTO.OptionDTO();
@@ -418,6 +419,7 @@ public class ManualExamServiceImpl {
         dto.setBloomLevel(q.getBloomLevel());
         dto.setLanguage(q.getLanguage());
         dto.setMarks(q.getMarks());
+        dto.setDynamicData(q.getDynamicData());
         if (q.getOptions() != null) {
             dto.setOptions(q.getOptions().stream().map(opt -> {
                 ExamDTO.OptionDTO odto = new ExamDTO.OptionDTO();

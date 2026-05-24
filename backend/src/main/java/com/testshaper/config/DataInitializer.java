@@ -33,6 +33,8 @@ public class DataInitializer implements CommandLineRunner {
     private final GeneralSettingRepository generalSettingRepository;
     private final BillingPackageRepository billingPackageRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final CmsSectionRepository cmsSectionRepository;
+    private final QuestionRepository questionRepository;
 
     @Override
     public void run(String... args) throws Exception {
@@ -114,6 +116,8 @@ public class DataInitializer implements CommandLineRunner {
 
             // 4.5 Create Default Settings
             createGeneralSettingIfNotFound(GeneralSetting.SettingCategory.AI, "ai_queue_cleanup_days", "30");
+            createGeneralSettingIfNotFound(GeneralSetting.SettingCategory.GENERAL, "landing_default_language", "en");
+            createGeneralSettingIfNotFound(GeneralSetting.SettingCategory.GENERAL, "landing_enabled_languages", "en,bn");
             
             // Storage Settings (Cloudflare R2 defaults)
             createGeneralSettingIfNotFound(GeneralSetting.SettingCategory.STORAGE, "storage_provider", "CLOUDFLARE_R2");
@@ -144,6 +148,7 @@ public class DataInitializer implements CommandLineRunner {
             // createClassSubjectIfNotFound(class10, math, currentSession);
             // createClassSubjectIfNotFound(class10, physics, currentSession);
 
+            seedCmsSectionsIfEmpty();
             log.info("Data Initialization Completed.");
     }
 
@@ -279,6 +284,149 @@ public class DataInitializer implements CommandLineRunner {
             
             billingPackageRepository.save(pkg);
             log.info("Created Beta User Package: {}", code);
+        }
+    }
+
+    private void seedCmsSectionsIfEmpty() {
+        // 1. HERO_SECTION
+        if (cmsSectionRepository.findBySectionKeyAndDeletedFalse("HERO_SECTION").isEmpty()) {
+            log.info("Seeding default HERO_SECTION...");
+            CmsSection hero = new CmsSection();
+            hero.setSectionName("Hero Section");
+            hero.setSectionKey("HERO_SECTION");
+            hero.setStatus(CmsSection.SectionStatus.ACTIVE);
+            hero.setSortOrder(1);
+
+            CmsSectionContent heroBadge = new CmsSectionContent();
+            heroBadge.setContentKey("BADGE_TEXT");
+            heroBadge.setContentValue("নতুন সংস্করণ ২.০ রিলিজ হয়েছে");
+            heroBadge.setContentType(CmsSectionContent.ContentType.TEXT);
+            hero.addContent(heroBadge);
+
+            CmsSectionContent heroTitle = new CmsSectionContent();
+            heroTitle.setContentKey("TITLE");
+            heroTitle.setContentValue("প্রশ্নপত্র তৈরি ও মূল্যায়ন করুন নিমিষেই");
+            heroTitle.setContentType(CmsSectionContent.ContentType.TEXT);
+            hero.addContent(heroTitle);
+
+            CmsSectionContent heroDesc = new CmsSectionContent();
+            heroDesc.setContentKey("DESCRIPTION");
+            heroDesc.setContentValue("এআই চালিত প্রশ্ন জেনারেটর এবং পারফরম্যান্স অ্যানালিটিক্সের মাধ্যমে আপনার প্রতিষ্ঠানকে আধুনিক করে তুলুন।");
+            heroDesc.setContentType(CmsSectionContent.ContentType.TEXT);
+            hero.addContent(heroDesc);
+
+            cmsSectionRepository.save(hero);
+        }
+
+        // 2. FEATURES_SECTION
+        if (cmsSectionRepository.findBySectionKeyAndDeletedFalse("FEATURES_SECTION").isEmpty()) {
+            log.info("Seeding default FEATURES_SECTION...");
+            CmsSection features = new CmsSection();
+            features.setSectionName("Features Section");
+            features.setSectionKey("FEATURES_SECTION");
+            features.setStatus(CmsSection.SectionStatus.ACTIVE);
+            features.setSortOrder(2);
+
+            CmsSectionContent featTitle = new CmsSectionContent();
+            featTitle.setContentKey("SECTION_TITLE");
+            featTitle.setContentValue("আমাদের মূল সেবাসমূহ");
+            featTitle.setContentType(CmsSectionContent.ContentType.TEXT);
+            features.addContent(featTitle);
+
+            CmsSectionContent f1Title = new CmsSectionContent();
+            f1Title.setContentKey("F1_TITLE");
+            f1Title.setContentValue("সমৃদ্ধ প্রশ্ন ব্যাংক");
+            f1Title.setContentType(CmsSectionContent.ContentType.TEXT);
+            features.addContent(f1Title);
+
+            CmsSectionContent f1Desc = new CmsSectionContent();
+            f1Desc.setContentKey("F1_DESC");
+            f1Desc.setContentValue("শ্রেণী, বিষয় এবং টপিক অনুসারে গোছানো হাজারো সৃজনশীল ও বহুনির্বাচনী প্রশ্ন।");
+            f1Desc.setContentType(CmsSectionContent.ContentType.TEXT);
+            features.addContent(f1Desc);
+
+            CmsSectionContent f2Title = new CmsSectionContent();
+            f2Title.setContentKey("F2_TITLE");
+            f2Title.setContentValue("এআই অটো জেনারেটর");
+            f2Title.setContentType(CmsSectionContent.ContentType.TEXT);
+            features.addContent(f2Title);
+
+            CmsSectionContent f2Desc = new CmsSectionContent();
+            f2Desc.setContentKey("F2_DESC");
+            f2Desc.setContentValue("কঠিনতা ও সিলেবাসের মান বজায় রেখে মাত্র কয়েক সেকেন্ডে ব্যালেন্সড প্রশ্নপত্র তৈরি করুন।");
+            f2Desc.setContentType(CmsSectionContent.ContentType.TEXT);
+            features.addContent(f2Desc);
+
+            CmsSectionContent f3Title = new CmsSectionContent();
+            f3Title.setContentKey("F3_TITLE");
+            f3Title.setContentValue("মাল্টি-টেন্যান্ট সাপোর্ট");
+            f3Title.setContentType(CmsSectionContent.ContentType.TEXT);
+            features.addContent(f3Title);
+
+            CmsSectionContent f3Desc = new CmsSectionContent();
+            f3Desc.setContentKey("F3_DESC");
+            f3Desc.setContentValue("কোচিং সেন্টার এবং স্কুল-কলেজ চেইনের জন্য একাধিক শাখা বা ইনস্টিটিউট ম্যানেজমেন্ট সুবিধা।");
+            f3Desc.setContentType(CmsSectionContent.ContentType.TEXT);
+            features.addContent(f3Desc);
+
+            cmsSectionRepository.save(features);
+        }
+
+        // 3. CTA_SECTION
+        if (cmsSectionRepository.findBySectionKeyAndDeletedFalse("CTA_SECTION").isEmpty()) {
+            log.info("Seeding default CTA_SECTION...");
+            CmsSection cta = new CmsSection();
+            cta.setSectionName("CTA Section");
+            cta.setSectionKey("CTA_SECTION");
+            cta.setStatus(CmsSection.SectionStatus.ACTIVE);
+            cta.setSortOrder(3);
+
+            CmsSectionContent ctaTitle = new CmsSectionContent();
+            ctaTitle.setContentKey("TITLE");
+            ctaTitle.setContentValue("আপনার শিক্ষাপ্রতিষ্ঠানকে আধুনিক করতে প্রস্তুত তো?");
+            ctaTitle.setContentType(CmsSectionContent.ContentType.TEXT);
+            cta.addContent(ctaTitle);
+
+            CmsSectionContent ctaBtn = new CmsSectionContent();
+            ctaBtn.setContentKey("BTN_TEXT");
+            ctaBtn.setContentValue("আজই বিনামূল্যে শুরু করুন");
+            ctaBtn.setContentType(CmsSectionContent.ContentType.TEXT);
+            cta.addContent(ctaBtn);
+
+            cmsSectionRepository.save(cta);
+        }
+
+        // 4. TRUSTED_SECTION
+        if (cmsSectionRepository.findBySectionKeyAndDeletedFalse("TRUSTED_SECTION").isEmpty()) {
+            log.info("Seeding default TRUSTED_SECTION...");
+            CmsSection trusted = new CmsSection();
+            trusted.setSectionName("Trusted Institutions");
+            trusted.setSectionKey("TRUSTED_SECTION");
+            trusted.setStatus(CmsSection.SectionStatus.ACTIVE);
+            trusted.setSortOrder(4);
+
+            CmsSectionContent trustedHeading = new CmsSectionContent();
+            trustedHeading.setContentKey("HEADING");
+            trustedHeading.setContentValue("শীর্ষস্থানীয় শিক্ষাপ্রতিষ্ঠান দ্বারা বিশ্বস্ত");
+            trustedHeading.setContentType(CmsSectionContent.ContentType.TEXT);
+            trusted.addContent(trustedHeading);
+
+            String[] defaultNames = {"NDCC", "DHAKA COLLEGE", "IDEAL SCHOOL", "VIQARUNNISA", "RAJUK COLLEGE"};
+            for (int i = 1; i <= 5; i++) {
+                CmsSectionContent nameContent = new CmsSectionContent();
+                nameContent.setContentKey("PARTNER_" + i + "_NAME");
+                nameContent.setContentValue(defaultNames[i - 1]);
+                nameContent.setContentType(CmsSectionContent.ContentType.TEXT);
+                trusted.addContent(nameContent);
+
+                CmsSectionContent logoContent = new CmsSectionContent();
+                logoContent.setContentKey("PARTNER_" + i + "_LOGO");
+                logoContent.setContentValue(""); // Empty initially, can upload logo image url in CMS
+                logoContent.setContentType(CmsSectionContent.ContentType.IMAGE);
+                trusted.addContent(logoContent);
+            }
+
+            cmsSectionRepository.save(trusted);
         }
     }
 }

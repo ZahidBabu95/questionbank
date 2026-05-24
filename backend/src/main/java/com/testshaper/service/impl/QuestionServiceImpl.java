@@ -58,7 +58,11 @@ public class QuestionServiceImpl implements QuestionService {
         if (question.getType() == null || question.getType().isEmpty()) {
             question.setType(Question.QuestionType.MCQ.name());
         }
-        question.setStatus(Question.QuestionStatus.PENDING); // Default status
+        if (Boolean.TRUE.equals(question.getAiGenerated())) {
+            question.setStatus(Question.QuestionStatus.DRAFT);
+        } else {
+            question.setStatus(Question.QuestionStatus.PENDING); // Default status
+        }
         
         if (question.getSources() != null) {
             for (com.testshaper.entity.QuestionSource source : question.getSources()) {
@@ -157,6 +161,8 @@ public class QuestionServiceImpl implements QuestionService {
                 question.setStatus(Question.QuestionStatus.REJECTED);
                 String oldExp = question.getExplanation() != null ? question.getExplanation() : "";
                 question.setExplanation(errorNote + oldExp);
+            } else if (Boolean.TRUE.equals(question.getAiGenerated())) {
+                question.setStatus(Question.QuestionStatus.DRAFT);
             } else {
                 question.setStatus(Question.QuestionStatus.PENDING); // Default status
             }
@@ -189,7 +195,11 @@ public class QuestionServiceImpl implements QuestionService {
         if (question.getType() == null || question.getType().isEmpty()) {
             question.setType(Question.QuestionType.SHORT.name());
         }
-        question.setStatus(Question.QuestionStatus.PENDING);
+        if (Boolean.TRUE.equals(question.getAiGenerated())) {
+            question.setStatus(Question.QuestionStatus.DRAFT);
+        } else {
+            question.setStatus(Question.QuestionStatus.PENDING);
+        }
         if (question.getSources() != null) {
             for (com.testshaper.entity.QuestionSource source : question.getSources()) {
                 source.setQuestion(question);
@@ -205,7 +215,11 @@ public class QuestionServiceImpl implements QuestionService {
         if (question.getType() == null || question.getType().isEmpty()) {
             question.setType(Question.QuestionType.CQ.name());
         }
-        question.setStatus(Question.QuestionStatus.PENDING);
+        if (Boolean.TRUE.equals(question.getAiGenerated())) {
+            question.setStatus(Question.QuestionStatus.DRAFT);
+        } else {
+            question.setStatus(Question.QuestionStatus.PENDING);
+        }
         if (question.getSources() != null) {
             for (com.testshaper.entity.QuestionSource source : question.getSources()) {
                 source.setQuestion(question);

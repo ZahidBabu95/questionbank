@@ -9,6 +9,77 @@ import { useAcademicFilters } from '../../hooks/useAcademicFilters';
 import questionService from '../../../../../../services/questionService';
 import QuestionEdit from '../../../../QuestionBank/QuestionEdit';
 
+const isPlaceholderText = (text) => {
+    if (!text) return true;
+    const clean = text.toString().replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+    return clean === '' || 
+           clean.startsWith('generated question') || 
+           clean.startsWith('dynamic question') || 
+           clean.startsWith('ডায়নামিক প্রশ্ন') || 
+           clean.startsWith('ডায়নামিক প্রশ্ন');
+};
+
+const getDisplayQuestionText = (q) => {
+    if (!q) return '';
+    let text = q.questionText || '';
+    const cleanText = text.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+    const isPlaceholder = cleanText.startsWith('generated question') || 
+                          cleanText.startsWith('dynamic question') || 
+                          cleanText.startsWith('ডায়নামিক প্রশ্ন') || 
+                          cleanText.startsWith('ডায়নামিক প্রশ্ন') || 
+                          cleanText === '';
+    if (isPlaceholder) {
+        let dynamicData = q.dynamicData;
+        if (dynamicData) {
+            if (typeof dynamicData === 'string') {
+                try {
+                    dynamicData = JSON.parse(dynamicData);
+                } catch (e) {
+                    dynamicData = null;
+                }
+            }
+            if (dynamicData) {
+                const keys = ['text', 'question', 'questionText', 'question_text', 'content'];
+                for (const key of keys) {
+                    const val = dynamicData[key];
+                    if (val && typeof val === 'string') {
+                        const cleanVal = val.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+                        if (cleanVal && !cleanVal.startsWith('generated question') && !cleanVal.startsWith('dynamic question') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন')) {
+                            return val;
+                        }
+                    }
+                }
+                
+                // Fallback for CQ_DESCRIPTIVE/sub_parts
+                if (Array.isArray(dynamicData.sub_parts) && dynamicData.sub_parts.length > 0) {
+                    const partsTexts = [];
+                    dynamicData.sub_parts.forEach((part, pIdx) => {
+                        if (part && typeof part === 'object') {
+                            const subKeys = ['questionText', 'text', 'question', 'content'];
+                            for (const key of subKeys) {
+                                const val = part[key];
+                                if (val && typeof val === 'string') {
+                                    const cleanVal = val.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+                                    if (cleanVal && !cleanVal.startsWith('generated question') && !cleanVal.startsWith('dynamic question') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন')) {
+                                        const partLabel = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
+                                        partsTexts.push(`(${partLabel}) ${val}`);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    if (partsTexts.length > 0) {
+                        return partsTexts.join(' ');
+                    }
+                }
+            }
+        }
+        return '';
+    }
+    return text;
+};
+
 const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
     const navigate = useNavigate();
     const { 
@@ -60,6 +131,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                 optionLayout: targetSec.optionLayout || 'col1',
                 optionStyle: targetSec.optionStyle || 'bn',
                 optionDecoration: targetSec.optionDecoration || 'rightBracket',
+                dynamicData: q.dynamicData || null,
                 options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : []
             }
         }));
@@ -96,6 +168,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                 optionLayout: targetSec.optionLayout || 'col1',
                 optionStyle: targetSec.optionStyle || 'bn',
                 optionDecoration: targetSec.optionDecoration || 'rightBracket',
+                dynamicData: q.dynamicData || null,
                 options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : []
             }
         });
@@ -132,6 +205,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                 optionGap: swapTarget.attrs.optionGap,
                 questionGap: swapTarget.attrs.questionGap,
                 textAlign: swapTarget.attrs.textAlign,
+                dynamicData: q.dynamicData || null,
                 options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : []
             }
         });
@@ -208,6 +282,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                             optionGap: attrs.optionGap,
                             questionGap: attrs.questionGap,
                             textAlign: attrs.textAlign,
+                            dynamicData: q.dynamicData || null,
                             options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : []
                         }
                     });
@@ -341,8 +416,13 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                                         <span className="text-[10px] font-bold text-slate-400">{q.chapterName || q.subjectName || 'General'}</span>
                                     </div>
                                     
-                                    {q.stimulus && <div className="mb-2 p-2 bg-amber-50 rounded text-xs text-slate-700 italic border border-amber-100/50" dangerouslySetInnerHTML={{__html: q.stimulus}}></div>}
-                                    <div className={`text-xs text-slate-700 font-medium ${q.type === 'CQ' ? 'line-clamp-none' : 'line-clamp-3'}`} dangerouslySetInnerHTML={{__html: q.questionText}}></div>
+                                    {q.stimulus && !isPlaceholderText(q.stimulus) && <div className="mb-2 p-2 bg-amber-50 rounded text-xs text-slate-700 italic border border-amber-100/50" dangerouslySetInnerHTML={{__html: q.stimulus}}></div>}
+                                    {(() => {
+                                        const cleanText = getDisplayQuestionText(q);
+                                        return cleanText ? (
+                                            <div className={`text-xs text-slate-700 font-medium ${q.type === 'CQ' ? 'line-clamp-none' : 'line-clamp-3'}`} dangerouslySetInnerHTML={{__html: cleanText}}></div>
+                                        ) : null;
+                                    })()}
                                     
                                     {q.statements && q.statements.length > 0 && (
                                         <div className="mt-2 mb-2 pl-2 space-y-1 border-l-2 border-indigo-200">
@@ -408,7 +488,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                                     <div key={`${q.attrs.questionId}-${idx}`} className="bg-white border border-slate-200 rounded-lg p-3 hover:border-indigo-300 transition-colors group relative">
                                         <div className="flex items-start gap-2 mb-2">
                                             <span className="shrink-0 bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded">{idx + 1}</span>
-                                            <div className="text-xs font-medium text-slate-700 line-clamp-2 leading-relaxed" dangerouslySetInnerHTML={{__html: (q.attrs.questionText || '').replace(/<[^>]*>?/gm, '')}} />
+                                            <div className="text-xs font-medium text-slate-700 line-clamp-2 leading-relaxed" dangerouslySetInnerHTML={{__html: (getDisplayQuestionText(q.attrs) || '').replace(/<[^>]*>?/gm, '')}} />
                                         </div>
                                         <div className="flex items-center justify-end gap-1.5 mt-2 pt-2 border-t border-slate-100 opacity-50 group-hover:opacity-100 transition-opacity">
                                             <button onClick={() => setRevisingQuestionNode(q)} className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded" title="Revise Options"><RotateCcw size={14} /></button>

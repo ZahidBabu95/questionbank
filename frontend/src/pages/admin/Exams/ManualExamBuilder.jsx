@@ -41,6 +41,7 @@ const ManualExamBuilder = () => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [examId, setExamId] = useState(null);
+    const [activeTab, setActiveTab] = useState('results'); // 'filters' | 'results' | 'cart'
 
     const {
         levels, streams, classes, subjects, chapters: subjectChapters,
@@ -250,36 +251,57 @@ const ManualExamBuilder = () => {
 
     const selectCls = "w-full bg-white/50 border border-slate-200 rounded-xl p-3.5 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all disabled:opacity-40 hover:border-slate-300";
     const inputCls = "w-full bg-white/50 border border-slate-200 rounded-xl p-3.5 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all hover:border-slate-300";
-
     // --- STEP 2: DUAL PANE BUILDER ---
     if (step === 2) {
         return (
             <div className="min-h-screen bg-slate-50 font-outfit text-slate-800 flex flex-col h-screen overflow-hidden">
-                <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 flex justify-between items-center shadow-sm shrink-0 z-40">
-                    <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                            <LayoutGrid size={20} />
+                <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-3.5 flex flex-col sm:flex-row justify-between items-stretch sm:items-center shadow-sm shrink-0 z-40 gap-3">
+                    <div className="flex items-center gap-2.5 sm:gap-4">
+                        <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30 shrink-0">
+                            <LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
-                        <div>
-                            <h1 className="text-xl font-black text-slate-800 leading-tight">{examInfo.title}</h1>
-                            <p className="text-xs font-bold text-emerald-600 tracking-wide uppercase">Manual Selection Mode</p>
+                        <div className="min-w-0">
+                            <h1 className="text-sm sm:text-xl font-black text-slate-800 leading-tight truncate">{examInfo.title}</h1>
+                            <p className="text-[10px] sm:text-xs font-bold text-emerald-600 tracking-wide uppercase">Manual Selection Mode</p>
                         </div>
                     </div>
                     
-                    <div className="flex items-center gap-4">
-                        <div className="flex flex-col items-end">
-                            <div className="text-[10px] font-black uppercase text-slate-400">Cart Target</div>
-                            <div className="text-sm font-black text-slate-700">{cart.length} / {targetTotals.qs} Qs <span className="text-slate-300 mx-1">•</span> <span className="text-emerald-600">{currentMarks} / {targetTotals.marks} Marks</span></div>
+                    <div className="flex items-center justify-between sm:justify-end gap-4">
+                        <div className="flex flex-col items-start sm:items-end">
+                            <div className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400">Cart Target</div>
+                            <div className="text-[11px] sm:text-sm font-black text-slate-700">{cart.length} / {targetTotals.qs} Qs <span className="text-slate-300 mx-0.5 sm:mx-1">•</span> <span className="text-emerald-600">{currentMarks} / {targetTotals.marks} Marks</span></div>
                         </div>
-                        <button onClick={handlePublish} disabled={loading || cart.length === 0} className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-md ${cart.length > 0 && !loading ? 'bg-slate-800 hover:bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
-                            {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Publish Paper
+                        <button onClick={handlePublish} disabled={loading || cart.length === 0} className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 transition-all shadow-md ${cart.length > 0 && !loading ? 'bg-slate-800 hover:bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                            {loading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Publish Paper
                         </button>
                     </div>
                 </div>
 
+                {/* Mobile Tab Swapper Bar */}
+                <div className="lg:hidden flex border-b border-slate-200 bg-white shrink-0">
+                    <button
+                        onClick={() => setActiveTab('filters')}
+                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${activeTab === 'filters' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/20' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Filters
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('results')}
+                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all relative ${activeTab === 'results' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/20' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Questions ({searchResults.length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('cart')}
+                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all relative ${activeTab === 'cart' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/20' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Cart ({cart.length})
+                    </button>
+                </div>
+
                 <div className="flex-1 flex gap-4 overflow-hidden relative p-4 max-w-[1600px] w-full mx-auto">
                     {/* LEFT: Search Panel */}
-                    <div className="w-80 bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col shrink-0 overflow-hidden">
+                    <div className={`w-full lg:w-80 bg-white rounded-2xl lg:rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col shrink-0 overflow-hidden ${activeTab === 'filters' ? 'flex' : 'hidden lg:flex'}`}>
                         <div className="p-5 border-b border-slate-100 bg-slate-50/50">
                             <h2 className="font-black text-slate-800 flex items-center gap-2"><Search size={18} className="text-emerald-500" /> Question Bank</h2>
                         </div>
@@ -331,7 +353,7 @@ const ManualExamBuilder = () => {
                     </div>
 
                     {/* MIDDLE: Search Results */}
-                    <div className="flex-1 bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col min-w-0 overflow-hidden">
+                    <div className={`flex-1 bg-white rounded-2xl lg:rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col min-w-0 overflow-hidden ${activeTab === 'results' ? 'flex' : 'hidden lg:flex'}`}>
                         <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                             <h2 className="font-black text-slate-800 flex items-center gap-2"><Target size={18} className="text-violet-500" /> Results</h2>
                             <span className="text-[11px] bg-slate-200 text-slate-700 px-3 py-1 rounded-full font-black uppercase tracking-wider">{searchResults.length} found</span>
@@ -414,7 +436,7 @@ const ManualExamBuilder = () => {
                     </div>
 
                     {/* RIGHT: Blueprint Cart */}
-                    <div className="w-80 bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col shrink-0 overflow-hidden relative">
+                    <div className={`w-full lg:w-80 bg-white rounded-2xl lg:rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col shrink-0 overflow-hidden relative ${activeTab === 'cart' ? 'flex' : 'hidden lg:flex'}`}>
                         <div className="h-2 w-full bg-gradient-to-r from-emerald-400 to-teal-500"></div>
                         <div className="p-5 border-b border-slate-100 bg-white">
                             <h2 className="font-black flex items-center gap-2 text-slate-800 text-lg mb-4">
@@ -443,7 +465,7 @@ const ManualExamBuilder = () => {
                                             <div className="text-[13px] font-bold text-slate-700 truncate" dangerouslySetInnerHTML={{ __html: q.questionText?.substring(0, 40) + '...' }} />
                                             <div className="text-[10px] font-black text-slate-400 uppercase mt-0.5">{q.type} <span className="text-slate-300 mx-1">•</span> {q.marks} Marks</div>
                                         </div>
-                                        <button onClick={() => handleRemoveQuestion(q.originalQuestionId)} className="w-8 h-8 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                                        <button onClick={() => handleRemoveQuestion(q.originalQuestionId)} className="w-8 h-8 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 flex items-center justify-center opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all shrink-0">
                                             <Trash2 size={16} />
                                         </button>
                                     </div>
@@ -454,17 +476,17 @@ const ManualExamBuilder = () => {
                 </div>
 
                 {/* Floating Action Bar for Step 2 */}
-                <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/90 border-t border-slate-200 p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
-                    <div className="max-w-[1600px] w-full mx-auto flex justify-between items-center">
-                        <div className="text-sm font-bold text-slate-500">
-                            {cart.length} questions selected out of {targetTotals.qs}
+                <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/90 border-t border-slate-200 p-3 sm:p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
+                    <div className="max-w-[1600px] w-full mx-auto flex justify-between items-center gap-3">
+                        <div className="text-xs sm:text-sm font-bold text-slate-500">
+                            {cart.length} selected of {targetTotals.qs}
                         </div>
                         <button 
                             onClick={handlePublish} 
                             disabled={loading || cart.length === 0} 
-                            className={`px-8 py-3.5 rounded-xl font-black flex items-center gap-3 transition-all shadow-xl hover:-translate-y-0.5 ${cart.length > 0 && !loading ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-500/30' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                            className={`px-4 sm:px-8 py-2.5 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-1.5 sm:gap-3 transition-all shadow-xl hover:-translate-y-0.5 ${cart.length > 0 && !loading ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-500/30' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
                         >
-                            {loading ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />} 
+                            {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} 
                             {loading ? 'Creating Exam...' : 'Create & Open in Editor'}
                         </button>
                     </div>
@@ -476,15 +498,15 @@ const ManualExamBuilder = () => {
     // --- STEP 1 (WIZARD) ---
     return (
         <div className="min-h-screen bg-slate-50 font-outfit pb-24">
-            <div className="bg-white border-b border-slate-200 sticky top-0 z-40 px-4 md:px-8 py-5 shadow-sm">
-                <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                            <LayoutGrid size={24} />
+            <div className="bg-white border-b border-slate-200 sticky top-0 z-40 px-4 md:px-8 py-3.5 sm:py-5 shadow-sm">
+                <div className="max-w-6xl mx-auto flex flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-2.5 sm:gap-4">
+                        <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-emerald-50 to-teal-600 text-white rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30 shrink-0">
+                            <LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">Manual Exam Builder</h1>
-                            <p className="text-sm font-bold text-emerald-600 tracking-wide uppercase">Handpick Questions</p>
+                            <h1 className="text-base sm:text-2xl font-black text-slate-800 tracking-tight">Manual Exam Builder</h1>
+                            <p className="text-[10px] sm:text-sm font-bold text-emerald-600 tracking-wide uppercase">Handpick Questions</p>
                         </div>
                     </div>
                 </div>
@@ -495,7 +517,7 @@ const ManualExamBuilder = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                         {/* LEFT: Basic Info */}
                         <div className="lg:col-span-7 space-y-6">
-                            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
+                            <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
                                 <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2 mb-6">
                                     <Layers className="text-emerald-500" /> Exam Configuration
                                 </h2>
@@ -504,7 +526,7 @@ const ManualExamBuilder = () => {
                                         <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Exam Title</label>
                                         <input type="text" value={examInfo.title} onChange={e => setExamInfo({...examInfo, title: e.target.value})} className={inputCls} placeholder="e.g. Weekly Manual Test" />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Level</label><select value={levelId} onChange={e => setLevelId(e.target.value)} className={selectCls}><option value="">Select Level</option>{levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
                                         <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Stream</label><select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!levelId} className={selectCls}><option value="">Select Stream</option>{streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
                                         <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Class</label><select value={classId} onChange={e => setClassId(e.target.value)} disabled={!streamId} className={selectCls}><option value="">Select Class</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
@@ -517,7 +539,7 @@ const ManualExamBuilder = () => {
 
                             {/* RIGHT: Blueprint Structure */}
                             <div className="lg:col-span-5 space-y-6">
-                                <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col h-full relative overflow-hidden">
+                                <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col h-full relative overflow-hidden">
                                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-100 rounded-bl-full -mr-10 -mt-10 opacity-50 z-0"></div>
                                     <div className="relative z-10">
                                         <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2 mb-2"><Target className="text-emerald-500" /> Target Blueprint</h2>
@@ -558,15 +580,15 @@ const ManualExamBuilder = () => {
                 </div>
             </div>
 
-            <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/80 border-t border-slate-200 p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
+            <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/80 border-t border-slate-200 p-3 sm:p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
                 <div className="max-w-6xl w-full mx-auto flex justify-end items-center">
                     <button 
                         onClick={handleCreateDraft}
                         disabled={loading || !subjectId || targetTotals.qs === 0}
-                        className="px-10 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
+                        className="px-6 sm:px-10 py-2.5 sm:py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 transition-all shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : <span>Start Manual Selection</span>}
-                        {!loading && <ChevronRight size={20} />}
+                        {loading ? <Loader2 className="animate-spin" size={16} /> : <span>Start Manual Selection</span>}
+                        {!loading && <ChevronRight size={16} />}
                     </button>
                 </div>
             </div>

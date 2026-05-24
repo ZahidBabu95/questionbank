@@ -41,13 +41,44 @@ public class DashboardServiceImpl implements DashboardService {
         @org.springframework.context.annotation.Lazy
         private ExamRepository examRepository;
 
+        private long getApprovedQuestionsCountForUser(User currentUser) {
+                if (currentUser == null) return 0;
+                
+                // Super Admin check
+                boolean isSuperAdmin = currentUser.getRoles().stream()
+                        .anyMatch(r -> r.getName().equals("SUPER_ADMIN") || r.getName().equals("ROLE_SUPER_ADMIN")) 
+                        || "admin".equalsIgnoreCase(currentUser.getEmail());
+                
+                if (isSuperAdmin) {
+                        return questionRepository.countApprovedQuestions();
+                }
+                
+                if (currentUser.getInstitute() != null) {
+                        java.util.Set<com.testshaper.entity.ClassSubject> assignedSubjects = currentUser.getInstitute().getAssignedSubjects();
+                        if (assignedSubjects != null && !assignedSubjects.isEmpty()) {
+                                java.util.List<UUID> subjectIds = assignedSubjects.stream()
+                                                .map(com.testshaper.entity.ClassSubject::getId)
+                                                .collect(Collectors.toList());
+                                return questionRepository.countApprovedQuestionsForSubjects(subjectIds);
+                        } else {
+                                return questionRepository.countApprovedQuestionsForTenant(currentUser.getInstitute().getCode());
+                        }
+                }
+                return 0;
+        }
+
         @Override
         public DashboardStatsDTO getAdminDashboardStats() {
+                User currentUser = getCurrentUser();
                 long totalUsers = userRepository.count();
                 long totalInstitutes = instituteRepository.count();
                 long totalQuestions = questionRepository.count();
                 long totalExams = examRepository.count();
-                return buildFullStats(totalUsers, totalInstitutes, totalQuestions, totalExams, null, null);
+                
+                long approvedQuestionsCount = getApprovedQuestionsCountForUser(currentUser);
+                long globalQuestionsCount = questionRepository.count();
+                
+                return buildFullStats(totalUsers, totalInstitutes, totalQuestions, totalExams, null, null, approvedQuestionsCount, globalQuestionsCount);
         }
 
         @Override
@@ -63,7 +94,10 @@ public class DashboardServiceImpl implements DashboardService {
                 long totalQuestions = questionRepository.countByTenantId(tenantId);
                 long totalExams = examRepository.countByTenantId(tenantId);
 
-                return buildFullStats(totalUsers, 1, totalQuestions, totalExams, tenantId, null);
+                long approvedQuestionsCount = getApprovedQuestionsCountForUser(currentUser);
+                long globalQuestionsCount = questionRepository.count();
+
+                return buildFullStats(totalUsers, 1, totalQuestions, totalExams, tenantId, null, approvedQuestionsCount, globalQuestionsCount);
         }
 
         @Override
@@ -76,12 +110,19 @@ public class DashboardServiceImpl implements DashboardService {
                 String tenantId = (currentUser.getInstitute() != null) ? currentUser.getInstitute().getCode() : null;
                 long myQuestions = questionRepository.countByCreatedBy(creatorEmail);
                 long myExams = examRepository.countByCreatedBy(creatorEmail);
-                return buildFullStats(0, 0, myQuestions, myExams, tenantId, creatorEmail);
+
+                long approvedQuestionsCount = getApprovedQuestionsCountForUser(currentUser);
+                long globalQuestionsCount = questionRepository.count();
+
+                return buildFullStats(0, 0, myQuestions, myExams, tenantId, creatorEmail, approvedQuestionsCount, globalQuestionsCount);
         }
 
         @Override
         public DashboardStatsDTO getStudentDashboardStats() {
-                return buildFullStats(0, 0, 0, 0, null, null);
+                User currentUser = getCurrentUser();
+                long approvedQuestionsCount = getApprovedQuestionsCountForUser(currentUser);
+                long globalQuestionsCount = questionRepository.count();
+                return buildFullStats(0, 0, 0, 0, null, null, approvedQuestionsCount, globalQuestionsCount);
         }
 
         private User getCurrentUser() {
@@ -97,7 +138,7 @@ public class DashboardServiceImpl implements DashboardService {
                                 .build();
         }
 
-        private DashboardStatsDTO buildFullStats(long users, long institutes, long questions, long exams, String tenantId, String creatorEmail) {
+        private DashboardStatsDTO buildFullStats(long users, long institutes, long questions, long exams, String tenantId, String creatorEmail, long approvedQuestionsCount, long globalQuestionsCount) {
                 // Map question types
                 List<Object[]> typeCounts;
                 if (creatorEmail != null) {
@@ -184,14 +225,54 @@ public class DashboardServiceImpl implements DashboardService {
                         activityTrend.add(DashboardStatsDTO.ActivityStat.builder().name(monthName).questions((int) qCount).exams((int) eCount).build());
                 }
 
+                User currentUser = getCurrentUser();
+                List<Object[]> subjectQueryResults = new ArrayList<>();
+                if (currentUser != null) {
+                        boolean isSuperAdmin = currentUser.getRoles().stream()
+                                .anyMatch(r -> r.getName().equals("SUPER_ADMIN") || r.getName().equals("ROLE_SUPER_ADMIN")) 
+                                || "admin".equalsIgnoreCase(currentUser.getEmail());
+                        if (isSuperAdmin) {
+                                subjectQueryResults = questionRepository.countApprovedQuestionsGroupedBySubject();
+                        } else if (currentUser.getInstitute() != null) {
+                                java.util.Set<com.testshaper.entity.ClassSubject> assignedSubjects = currentUser.getInstitute().getAssignedSubjects();
+                                if (assignedSubjects != null && !assignedSubjects.isEmpty()) {
+                                        java.util.List<UUID> subjectIds = assignedSubjects.stream()
+                                                        .map(com.testshaper.entity.ClassSubject::getId)
+                                                        .collect(Collectors.toList());
+                                        subjectQueryResults = questionRepository.countApprovedQuestionsGroupedBySubjectForSubjectIds(subjectIds);
+                                } else {
+                                        subjectQueryResults = questionRepository.countApprovedQuestionsGroupedBySubjectForTenant(currentUser.getInstitute().getCode());
+                                }
+                        }
+                }
+
+                List<DashboardStatsDTO.SubjectQuestionStat> subjectQuestions = subjectQueryResults.stream().map(result -> {
+                        String name = (result[0] != null) ? (String) result[0] : "Unassigned";
+                        String className = (result[1] != null) ? (String) result[1] : "Unknown Class";
+                        String levelName = (result[2] != null) ? (String) result[2] : "Unknown Level";
+                        Boolean isEng = (result[3] != null) ? (Boolean) result[3] : false;
+                        String version = isEng ? "English Version" : "Bangla Version";
+                        long count = ((Number) result[4]).longValue();
+                        return DashboardStatsDTO.SubjectQuestionStat.builder()
+                                        .subjectName(name)
+                                        .className(className)
+                                        .levelName(levelName)
+                                        .version(version)
+                                        .count(count)
+                                        .build();
+                }).collect(Collectors.toList());
+
                 return DashboardStatsDTO.builder()
                                 .totalUsers(users).userTrend(5.0)
                                 .activeInstitutes(institutes).instituteTrend(2.0)
                                 .totalQuestions(questions).questionTrend(10.0)
                                 .examsConducted(exams).examTrend(15.0)
+                                .approvedQuestionsCount(approvedQuestionsCount)
+                                .globalQuestionsCount(globalQuestionsCount)
                                 .questionTypes(questionTypes)
                                 .activityAnalytics(activityTrend)
                                 .recentActivities(activities)
+                                .subjectQuestions(subjectQuestions)
                                 .build();
         }
 }

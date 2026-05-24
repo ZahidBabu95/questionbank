@@ -65,6 +65,7 @@ public class ExamDTO {
         private String language;
         private String explanation;
         private String correctAnswer;
+        private String dynamicData;
         private UUID sectionId;
         private List<OptionDTO> options;
     }

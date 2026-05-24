@@ -20,6 +20,14 @@ const cmsService = {
     getPublicPackages: async () => {
         const res = await axios.get('/v1/public/packages');
         return res.data;
+    },
+    getPublicLanguages: async () => {
+        const res = await axios.get('/v1/public/settings/languages');
+        return res.data;
+    },
+    translateText: async (text, targetLang) => {
+        const res = await axios.post('/v1/cms/landing/translate', { text, targetLang });
+        return res.data;
     }
 };
 

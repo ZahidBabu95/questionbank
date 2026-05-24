@@ -72,8 +72,8 @@ public class ExamGenerationRequest {
     @Data
     public static class QuestionTypeRule {
 
-        @NotNull
-        private Question.QuestionType questionType;
+        @NotBlank
+        private String questionType;
 
         @NotNull
         @Positive

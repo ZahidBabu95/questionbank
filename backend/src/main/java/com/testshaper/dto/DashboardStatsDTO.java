@@ -21,9 +21,23 @@ public class DashboardStatsDTO {
     private long examsConducted;
     private double examTrend;
 
+    private long approvedQuestionsCount;
+    private long globalQuestionsCount;
+
     private List<QuestionTypeStat> questionTypes;
     private List<ActivityStat> activityAnalytics;
     private List<RecentActivity> recentActivities;
+    private List<SubjectQuestionStat> subjectQuestions;
+
+    @Data
+    @Builder
+    public static class SubjectQuestionStat {
+        private String subjectName;
+        private String className;
+        private String levelName;
+        private String version;
+        private long count;
+    }
 
     @Data
     @Builder

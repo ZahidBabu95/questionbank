@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Settings, Plus, Code, Box, Edit2, Trash2, Info, Eye, ArrowLeft, CheckCircle, Loader2, Play } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import axios from '../../../utils/axios';
 import Editor from '@monaco-editor/react';
 import { LiveProvider, LiveError, LivePreview } from 'react-live';
@@ -64,6 +65,7 @@ render(<CustomWidget />);
 `;
 
 const AiToolManager = () => {
+    const navigate = useNavigate();
     const [tools, setTools] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -373,13 +375,22 @@ const AiToolManager = () => {
                         Write, test, and deploy Live React JSX Components directly inside Chat Widgets.
                     </p>
                 </div>
-                <button 
-                    onClick={openNewTool}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20"
-                >
-                    <Plus size={18} />
-                    Add React Tool
-                </button>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => navigate('/ai-workspace')}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 font-medium rounded-xl hover:bg-slate-200 transition-all border border-slate-200"
+                    >
+                        <ArrowLeft size={16} />
+                        Back to Workspace
+                    </button>
+                    <button 
+                        onClick={openNewTool}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20"
+                    >
+                        <Plus size={18} />
+                        Add React Tool
+                    </button>
+                </div>
             </div>
 
             {loading ? (

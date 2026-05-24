@@ -857,7 +857,33 @@ const GeneralSettings = () => {
         }
 
         switch (activeTab) {
-            case 'GENERAL':
+            case 'GENERAL': {
+                const enabledLangs = (settings['landing_enabled_languages'] || 'en,bn').split(',');
+                
+                const toggleLanguageOption = (langCode) => {
+                    let list = [...enabledLangs];
+                    if (list.includes(langCode)) {
+                        if (list.length > 1) {
+                            list = list.filter(l => l !== langCode);
+                        }
+                    } else {
+                        list.push(langCode);
+                    }
+                    handleChange('landing_enabled_languages', list.join(','));
+                    
+                    if (!list.includes(settings['landing_default_language'] || 'en')) {
+                        handleChange('landing_default_language', list[0]);
+                    }
+                };
+
+                const AVAILABLE_LANGUAGES = [
+                    { code: 'en', label: 'English' },
+                    { code: 'bn', label: 'Bengali (\u09AC\u09BE\u0982\u09B2\u09BE)' },
+                    { code: 'hi', label: 'Hindi (\u0939\u093F\u0928\u094D\u0926\u0940)' },
+                    { code: 'ar', label: 'Arabic (\u0627\u0644\u0639\u0631\u0628\u064A\u0629)' },
+                    { code: 'es', label: 'Spanish (Espa\u00F1ol)' },
+                ];
+
                 return (
                     <div className="space-y-5 max-w-2xl">
                         {renderInput('system_name', 'System Name', 'text', 'QuestionShaper', 'The display name of your platform')}
@@ -868,6 +894,50 @@ const GeneralSettings = () => {
                             { value: 'Hindi', label: 'Hindi (\u0939\u093F\u0928\u094D\u0926\u0940)' },
                             { value: 'Arabic', label: 'Arabic (\u0627\u0644\u0639\u0631\u0628\u064A\u0629)' },
                         ])}
+                        
+                        {/* Landing Page Language Selector (Dynamic & Checkbox controls) */}
+                        <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4 shadow-sm">
+                            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                <Globe size={16} className="text-primary" /> Landing Page Languages Configuration
+                            </h3>
+                            <p className="text-[11px] text-slate-400">Enable languages for your public landing page. Administrators can translate marketing blocks for all enabled languages.</p>
+                            
+                            {/* Checkboxes */}
+                            <div className="space-y-2">
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Enabled Languages</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {AVAILABLE_LANGUAGES.map(lang => {
+                                        const isChecked = enabledLangs.includes(lang.code);
+                                        return (
+                                            <label key={lang.code} className="flex items-center gap-2 p-3 bg-white border border-slate-100 rounded-xl cursor-pointer hover:border-blue-200 transition-colors">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    onChange={() => toggleLanguageOption(lang.code)}
+                                                    className="rounded text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <span className="text-xs font-bold text-slate-700">{lang.label}</span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            
+                            {/* Default Language selector */}
+                            <div className="pt-2">
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Default Landing Language</label>
+                                <select
+                                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all cursor-pointer"
+                                    value={settings['landing_default_language'] || 'en'}
+                                    onChange={(e) => handleChange('landing_default_language', e.target.value)}
+                                >
+                                    {AVAILABLE_LANGUAGES.filter(lang => enabledLangs.includes(lang.code)).map(lang => (
+                                        <option key={lang.code} value={lang.code}>{lang.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
                         {renderSelect('default_timezone', 'Timezone', [
                             { value: '', label: 'Select timezone...' },
                             { value: 'UTC+6', label: 'UTC+6 (Bangladesh)' },
@@ -879,6 +949,7 @@ const GeneralSettings = () => {
                         {renderToggle('allow_registration', 'Allow Public Registration', 'Allow new users to self-register on the platform')}
                     </div>
                 );
+            }
             case 'BRANDING':
                 return (
                     <div className="space-y-5 max-w-2xl">

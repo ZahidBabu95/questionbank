@@ -4,6 +4,77 @@ import { X, Printer, Loader2 } from 'lucide-react';
 import questionService from '../../../../../services/questionService';
 import { formatDurationString } from '../../../../../utils/formatUtils';
 
+const isPlaceholderText = (text) => {
+    if (!text) return true;
+    const clean = text.toString().replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+    return clean === '' || 
+           clean.startsWith('generated question') || 
+           clean.startsWith('dynamic question') || 
+           clean.startsWith('ডায়নামিক প্রশ্ন') || 
+           clean.startsWith('ডায়নামিক প্রশ্ন');
+};
+
+const getDisplayQuestionText = (q) => {
+    if (!q) return '';
+    let text = q.questionText || '';
+    const cleanText = text.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+    const isPlaceholder = cleanText.startsWith('generated question') || 
+                          cleanText.startsWith('dynamic question') || 
+                          cleanText.startsWith('ডায়নামিক প্রশ্ন') || 
+                          cleanText.startsWith('ডায়নামিক প্রশ্ন') || 
+                          cleanText === '';
+    if (isPlaceholder) {
+        let dynamicData = q.dynamicData;
+        if (dynamicData) {
+            if (typeof dynamicData === 'string') {
+                try {
+                    dynamicData = JSON.parse(dynamicData);
+                } catch (e) {
+                    dynamicData = null;
+                }
+            }
+            if (dynamicData) {
+                const keys = ['text', 'question', 'questionText', 'question_text', 'content'];
+                for (const key of keys) {
+                    const val = dynamicData[key];
+                    if (val && typeof val === 'string') {
+                        const cleanVal = val.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+                        if (cleanVal && !cleanVal.startsWith('generated question') && !cleanVal.startsWith('dynamic question') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন')) {
+                            return val;
+                        }
+                    }
+                }
+                
+                // Fallback for CQ_DESCRIPTIVE/sub_parts
+                if (Array.isArray(dynamicData.sub_parts) && dynamicData.sub_parts.length > 0) {
+                    const partsTexts = [];
+                    dynamicData.sub_parts.forEach((part, pIdx) => {
+                        if (part && typeof part === 'object') {
+                            const subKeys = ['questionText', 'text', 'question', 'content'];
+                            for (const key of subKeys) {
+                                const val = part[key];
+                                if (val && typeof val === 'string') {
+                                    const cleanVal = val.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+                                    if (cleanVal && !cleanVal.startsWith('generated question') && !cleanVal.startsWith('dynamic question') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন')) {
+                                        const partLabel = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
+                                        partsTexts.push(`(${partLabel}) ${val}`);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    if (partsTexts.length > 0) {
+                        return partsTexts.join(' ');
+                    }
+                }
+            }
+        }
+        return '';
+    }
+    return text;
+};
+
 const AnswerSheetPreview = () => {
     const [isOpen, setIsOpen] = useState(false);
     const { documentQuestions, docSettings, uiLang } = useNexusEditor();
@@ -329,19 +400,54 @@ const AnswerSheetPreview = () => {
                                         </h5>
                                         <div className="space-y-4">
                                             {nonMcqQuestions.map(({ q, displayNum, realQ }) => {
-                                                const content = q.attrs?.questionText || q.attrs?.content || '';
+                                                const content = getDisplayQuestionText(q.attrs);
                                                 const ansText = (realQ ? realQ.correctAnswer : q.attrs?.answer) || 'N/A';
                                                 const qFontSize = q.attrs?.fontSize || docSettings?.bodyFontSize || 12;
+
+                                                let dynamicDataParsed = null;
+                                                if (q.attrs?.dynamicData) {
+                                                    try {
+                                                        dynamicDataParsed = typeof q.attrs.dynamicData === 'string'
+                                                            ? JSON.parse(q.attrs.dynamicData)
+                                                            : q.attrs.dynamicData;
+                                                    } catch (e) {
+                                                        console.error("Failed to parse dynamicData in AnswerSheetPreview compact:", e);
+                                                    }
+                                                }
+                                                const hasSubParts = dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.length > 0;
+
                                                 return (
                                                     <div key={displayNum} className="border-b border-slate-100 pb-2 last:border-b-0 break-inside-avoid" style={{ fontSize: ptToPx(qFontSize) }}>
                                                         <div className="flex gap-2">
                                                             <span className="font-bold text-slate-700">{displayNum}.</span>
                                                             <div className="font-semibold text-slate-800 inline-block" dangerouslySetInnerHTML={{ __html: content }} />
                                                         </div>
-                                                        <div className="pl-6 mt-1 text-indigo-700 font-bold">
-                                                            <span className="text-xs text-slate-500 font-normal mr-1.5">{docSettings?.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
-                                                            <div className="inline" dangerouslySetInnerHTML={{ __html: ansText }} />
-                                                        </div>
+                                                        {hasSubParts ? (
+                                                            <div className="pl-6 mt-1.5 space-y-2 text-indigo-700 font-bold">
+                                                                {dynamicDataParsed.sub_parts.map((part, pIdx) => {
+                                                                    const label = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
+                                                                    return (
+                                                                        <div key={pIdx} className="flex flex-col gap-0.5 pb-1 border-b border-indigo-50/50 last:border-0 last:pb-0">
+                                                                            <div className="flex items-start gap-1.5 text-xs font-bold text-slate-800">
+                                                                                <span className="text-indigo-800 font-bold shrink-0">({label}) {docSettings?.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
+                                                                                <div className="inline font-bold text-indigo-700" dangerouslySetInnerHTML={{ __html: part.answer || 'N/A' }} />
+                                                                            </div>
+                                                                            {part.explanation && (
+                                                                                <div className="flex items-start gap-1.5 pl-4 text-xs font-normal text-slate-600">
+                                                                                    <span className="font-semibold shrink-0 text-emerald-700">{docSettings?.language === 'ENGLISH' ? 'Explanation:' : 'ব্যাখ্যা:'}</span>
+                                                                                    <div className="inline text-slate-700 font-normal" dangerouslySetInnerHTML={{ __html: part.explanation }} />
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="pl-6 mt-1 text-indigo-700 font-bold">
+                                                                <span className="text-xs text-slate-500 font-normal mr-1.5">{docSettings?.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
+                                                                <div className="inline" dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 );
                                             })}
@@ -359,12 +465,12 @@ const AnswerSheetPreview = () => {
                                 const realQ = qId ? realQuestions[qId] : null;
                                 const qType = realQ ? realQ.type : (q.attrs?.type || 'MCQ');
                                 const options = realQ ? realQ.options : q.attrs?.options;
-                                const content = q.attrs?.questionText || q.attrs?.content || '';
+                                const content = getDisplayQuestionText(q.attrs);
 
                                 return (
                                     <div key={i} className="flex flex-col gap-2 break-inside-avoid">
                                         <div className="w-full flex flex-col gap-1">
-                                            {q.attrs?.stimulus && (
+                                            {q.attrs?.stimulus && !isPlaceholderText(q.attrs.stimulus) && (
                                                 <div dangerouslySetInnerHTML={{ __html: q.attrs.stimulus }} className="mb-1" />
                                             )}
                                         </div>
@@ -413,11 +519,23 @@ const AnswerSheetPreview = () => {
                             {documentQuestions.map((q, i) => {
                                 const qId = q.attrs?.questionId;
                                 const realQ = qId ? realQuestions[qId] : null;
-                                const content = q.attrs?.questionText || q.attrs?.content || '';
+                                const content = getDisplayQuestionText(q.attrs);
                                 const qType = realQ ? realQ.type : (q.attrs?.type || 'MCQ');
                                 const options = realQ ? realQ.options : q.attrs?.options;
                                 let answerHtml = '';
                                 let explanationHtml = '';
+
+                                let dynamicDataParsed = null;
+                                if (q.attrs?.dynamicData) {
+                                    try {
+                                        dynamicDataParsed = typeof q.attrs.dynamicData === 'string'
+                                            ? JSON.parse(q.attrs.dynamicData)
+                                            : q.attrs.dynamicData;
+                                    } catch (e) {
+                                        console.error("Failed to parse dynamicData in AnswerSheetPreview detailed:", e);
+                                    }
+                                }
+                                const hasSubParts = dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.length > 0;
 
                                 if (qType === 'MCQ' && options && Array.isArray(options)) {
                                     const correctOpts = [];
@@ -437,7 +555,7 @@ const AnswerSheetPreview = () => {
                                 return (
                                     <div key={i} className="flex flex-col gap-3 pb-6 border-b border-slate-100 last:border-0 break-inside-avoid">
                                         <div className="w-full flex flex-col gap-1">
-                                            {q.attrs?.stimulus && (
+                                            {q.attrs?.stimulus && !isPlaceholderText(q.attrs.stimulus) && (
                                                 <div dangerouslySetInnerHTML={{ __html: q.attrs.stimulus }} className="mb-1 text-lg" />
                                             )}
                                         </div>
@@ -460,15 +578,39 @@ const AnswerSheetPreview = () => {
                                             </div>
                                         )}
                                         <div className="pl-6 space-y-2">
-                                            <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg">
-                                                <span className="font-bold text-indigo-800 text-sm">{uiLang === 'bn' ? 'সঠিক উত্তর:' : 'Correct Answer:'} </span>
-                                                <div className="inline font-bold" dangerouslySetInnerHTML={{ __html: answerHtml || 'N/A' }} />
-                                            </div>
-                                            {explanationHtml && (
-                                                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg text-sm mt-2">
-                                                    <span className="font-bold text-emerald-800">{uiLang === 'bn' ? 'ব্যাখ্যা:' : 'Explanation:'} </span>
-                                                    <div className="mt-1" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
+                                            {hasSubParts ? (
+                                                <div className="space-y-3 w-full">
+                                                    {dynamicDataParsed.sub_parts.map((part, pIdx) => {
+                                                        const label = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
+                                                        return (
+                                                            <div key={pIdx} className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-lg space-y-1.5 text-left">
+                                                                <div className="flex items-start gap-1.5 font-bold text-slate-800 text-sm">
+                                                                    <span className="text-indigo-800 font-bold shrink-0">({label}) {uiLang === 'bn' ? 'সঠিক উত্তর:' : 'Correct Answer:'}</span>
+                                                                    <div className="inline font-bold text-indigo-700" dangerouslySetInnerHTML={{ __html: part.answer || 'N/A' }} />
+                                                                </div>
+                                                                {part.explanation && (
+                                                                    <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg text-sm mt-2">
+                                                                        <span className="font-bold text-emerald-800">{uiLang === 'bn' ? 'ব্যাখ্যা:' : 'Explanation:'} </span>
+                                                                        <div className="mt-1 font-normal text-slate-700" dangerouslySetInnerHTML={{ __html: part.explanation }} />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
+                                            ) : (
+                                                <>
+                                                    <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-lg">
+                                                        <span className="font-bold text-indigo-800 text-sm">{uiLang === 'bn' ? 'সঠিক উত্তর:' : 'Correct Answer:'} </span>
+                                                        <div className="inline font-bold" dangerouslySetInnerHTML={{ __html: answerHtml || 'N/A' }} />
+                                                    </div>
+                                                    {explanationHtml && (
+                                                        <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg text-sm mt-2">
+                                                            <span className="font-bold text-emerald-800">{uiLang === 'bn' ? 'ব্যাখ্যা:' : 'Explanation:'} </span>
+                                                            <div className="mt-1" dangerouslySetInnerHTML={{ __html: explanationHtml }} />
+                                                        </div>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </div>

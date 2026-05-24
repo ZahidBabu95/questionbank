@@ -878,7 +878,7 @@ const QuestionList = () => {
             </div>
         )}
 
-        <div className={`flex flex-col min-h-full bg-slate-50 transition-all duration-300 ${showSourceFilters ? 'pr-[320px]' : ''}`}>
+        <div className={`flex flex-col min-h-full bg-slate-50 transition-all duration-300 ${showSourceFilters ? 'md:pr-[320px]' : ''}`}>
 
             {/* OVERVIEW STATS BOARD - COMPACT */}
             {overviewStats && (
@@ -956,28 +956,8 @@ const QuestionList = () => {
                         </button>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                        {hasFullLangAccess && (
-                            <button
-                                onClick={() => setSplitScreenMode(!splitScreenMode)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                                title="Toggle Split-Screen Review Mode"
-                            >
-                                <GitCompare size={14} /> Review Mode
-                            </button>
-                        )}
-
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setShowSourceFilters(!showSourceFilters)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                                title="Toggle Filters & Tags Sidebar"
-                            >
-                                <Filter size={14} /> Filters & Tags
-                            </button>
-                        </div>
-
-                        <div className="relative w-full md:w-[300px] shrink-0">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+                        <div className="relative flex-1 md:w-[300px] shrink-0">
                             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                             <input
                                 type="text"
@@ -987,12 +967,32 @@ const QuestionList = () => {
                                 className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all placeholder:text-slate-400 font-medium"
                             />
                         </div>
+
+                        <div className="flex items-center gap-2 self-stretch sm:self-auto">
+                            {hasFullLangAccess && (
+                                <button
+                                    onClick={() => setSplitScreenMode(!splitScreenMode)}
+                                    className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                    title="Toggle Split-Screen Review Mode"
+                                >
+                                    <GitCompare size={14} /> Review Mode
+                                </button>
+                            )}
+
+                            <button
+                                onClick={() => setShowSourceFilters(!showSourceFilters)}
+                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                title="Toggle Filters & Tags Sidebar"
+                            >
+                                <Filter size={14} /> Filters & Tags
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 {/* Right Side Drawer for Source Metadata Filters */}
                 <div 
-                    className={`fixed top-[60px] right-0 h-[calc(100vh-60px)] w-[320px] bg-white border-l border-slate-200 shadow-xl z-30 flex flex-col transition-transform duration-300 ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
+                    className={`fixed top-[56px] md:top-[60px] right-0 h-[calc(100vh-56px)] md:h-[calc(100vh-60px)] w-full sm:w-[320px] bg-white border-l border-slate-200 shadow-xl z-30 flex flex-col transition-transform duration-300 ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
                 >
                     <div className="flex flex-col border-b border-slate-200 bg-slate-50 shrink-0">
                         <div className="p-4 pb-2 flex items-center justify-between">
@@ -1565,14 +1565,25 @@ const QuestionList = () => {
                                     </div>
                                 )}
 
-                                {selectedQuestion.stimulus && (
-                                    <div>
-                                        <h3 className="text-sm font-bold text-amber-600 uppercase tracking-wider mb-2">Stimulus (উদ্দীপক)</h3>
-                                        <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 text-slate-800 font-medium leading-relaxed">
-                                            <MarkdownRenderer content={selectedQuestion.stimulus} />
+                                {(() => {
+                                    if (!selectedQuestion.stimulus) return null;
+                                    const cleanStimulus = selectedQuestion.stimulus.replace(/<[^>]*>/g, '').trim().toLowerCase();
+                                    const isPlaceholder = 
+                                        cleanStimulus === '' || 
+                                        cleanStimulus === 'generated question' || 
+                                        cleanStimulus === 'dynamic question' || 
+                                        cleanStimulus === 'ডায়নামিক প্রশ্ন' ||
+                                        cleanStimulus === 'ডায়নামিক প্রশ্ন';
+                                    if (isPlaceholder) return null;
+                                    return (
+                                        <div>
+                                            <h3 className="text-sm font-bold text-amber-600 uppercase tracking-wider mb-2">Stimulus (উদ্দীপক)</h3>
+                                            <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 text-slate-800 font-medium leading-relaxed">
+                                                <MarkdownRenderer content={selectedQuestion.stimulus} />
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    );
+                                })()}
 
                                 <div>
                                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Question</h3>

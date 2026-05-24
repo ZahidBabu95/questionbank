@@ -9,19 +9,34 @@ import {
     Trash2,
     ChevronDown,
     ChevronUp,
+    ChevronRight,
     Settings,
     Eye,
     Globe,
     CheckCircle,
-    XCircle
+    XCircle,
+    Loader2
 } from 'lucide-react';
 import cmsService from '../../../services/cmsService';
+import settingsService from '../../../services/settingsService';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const LANGUAGE_LABELS = {
+    en: 'English (EN)',
+    bn: 'Bengali (BN)',
+    hi: 'Hindi (HI)',
+    ar: 'Arabic (AR)',
+    es: 'Spanish (ES)'
+};
 
 const LandingEditor = () => {
     const [sections, setSections] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeSectionId, setActiveSectionId] = useState(null);
+    const [enabledLanguages, setEnabledLanguages] = useState(['en', 'bn']);
+    const [defaultLanguage, setDefaultLanguage] = useState('en');
+    const [selectedLanguage, setSelectedLanguage] = useState('en');
+    const [translating, setTranslating] = useState(false);
 
     useEffect(() => {
         fetchSections();
@@ -30,13 +45,144 @@ const LandingEditor = () => {
     const fetchSections = async () => {
         setLoading(true);
         try {
-            const data = await cmsService.getSections();
+            const [data, settingsData] = await Promise.all([
+                cmsService.getSections(),
+                settingsService.getGlobalSettings('GENERAL').catch(() => ({}))
+            ]);
             setSections(data);
             if (data.length > 0) setActiveSectionId(data[0].id);
+
+            // Extract languages
+            const enabledKey = Object.keys(settingsData).find(k => k.toLowerCase() === 'landing_enabled_languages');
+            const defaultKey = Object.keys(settingsData).find(k => k.toLowerCase() === 'landing_default_language');
+            
+            const enabledVal = enabledKey ? settingsData[enabledKey] : 'en,bn';
+            const defaultVal = defaultKey ? settingsData[defaultKey] : 'en';
+            
+            const langList = enabledVal.split(',');
+            setEnabledLanguages(langList);
+            setDefaultLanguage(defaultVal);
+            setSelectedLanguage(defaultVal);
         } catch (err) {
-            console.error('Failed to fetch CMS sections:', err);
+            console.error('Failed to fetch CMS sections or settings:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const getTranslationValue = (contentValue, langCode) => {
+        if (!contentValue) return '';
+        try {
+            const json = JSON.parse(contentValue);
+            if (json && typeof json === 'object') {
+                return json[langCode] || '';
+            }
+        } catch (e) {
+            if (langCode === 'bn') return contentValue; // Fallback: existing string is Bengali
+        }
+        return '';
+    };
+
+    const updateTranslationValue = (sectionId, contentKey, langCode, newValue) => {
+        setSections(prev => prev.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    contents: s.contents.map(c => {
+                        if (c.contentKey === contentKey) {
+                            let json = {};
+                            try {
+                                if (c.contentValue) {
+                                    json = JSON.parse(c.contentValue);
+                                    if (typeof json !== 'object' || json === null) {
+                                        json = { bn: c.contentValue };
+                                    }
+                                }
+                            } catch (e) {
+                                json = { bn: c.contentValue };
+                            }
+                            json[langCode] = newValue;
+                            return { ...c, contentValue: JSON.stringify(json) };
+                        }
+                        return c;
+                    })
+                };
+            }
+            return s;
+        }));
+    };
+
+    const getSourceTranslation = (contentValue, targetLang) => {
+        if (!contentValue) return null;
+        try {
+            const json = JSON.parse(contentValue);
+            if (json && typeof json === 'object') {
+                const langs = ['en', defaultLanguage, ...Object.keys(json)].filter(l => l !== targetLang);
+                for (const l of langs) {
+                    if (json[l] && json[l].trim()) {
+                        return { lang: l, value: json[l] };
+                    }
+                }
+            }
+        } catch (e) {
+            if (targetLang !== 'bn') {
+                return { lang: 'bn', value: contentValue };
+            }
+        }
+        return null;
+    };
+
+    const handleAutoTranslate = async (section) => {
+        setTranslating(true);
+        try {
+            const updatedContents = [...section.contents];
+            let translatedCount = 0;
+            
+            for (let c of updatedContents) {
+                const source = getSourceTranslation(c.contentValue, selectedLanguage);
+                if (source) {
+                    if (c.contentType === 'IMAGE' || c.contentType === 'LINK') {
+                        updateTranslationValue(section.id, c.contentKey, selectedLanguage, source.value);
+                        translatedCount++;
+                        continue;
+                    }
+                    
+                    const resData = await cmsService.translateText(source.value, selectedLanguage);
+                    const translatedText = resData.translation;
+                    if (translatedText) {
+                        updateTranslationValue(section.id, c.contentKey, selectedLanguage, translatedText);
+                        translatedCount++;
+                    }
+                }
+            }
+            
+            if (translatedCount > 0) {
+                alert(`Auto-translation to ${LANGUAGE_LABELS[selectedLanguage] || selectedLanguage.toUpperCase()} completed! Review the fields and click "Save Section" to save.`);
+            } else {
+                // Check if the current tab has content that could be translated
+                let hasCurrentText = false;
+                for (let c of updatedContents) {
+                    if (c.contentType === 'TEXT') {
+                        const currentVal = getTranslationValue(c.contentValue, selectedLanguage);
+                        if (currentVal && currentVal.trim()) {
+                            hasCurrentText = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (hasCurrentText) {
+                    const currentLangLabel = LANGUAGE_LABELS[selectedLanguage] || selectedLanguage.toUpperCase();
+                    alert(`The current tab (${currentLangLabel}) has content, but other tabs are empty. To translate this content to another language (e.g., English), please switch to that language tab first, and then click "AI Auto Translate".`);
+                } else {
+                    alert('No source text found in other languages to translate from. Please enter text in at least one language first.');
+                }
+            }
+        } catch (err) {
+            console.error('Translation failed:', err);
+            alert('Auto-translation failed. Please translate manually.');
+        } finally {
+            setTranslating(false);
         }
     };
 
@@ -173,6 +319,36 @@ const LandingEditor = () => {
                                                 </div>
                                             </div>
 
+                                            {/* Dynamic Language Switcher Tabs Bar & AI Translate Button */}
+                                            <div className="px-10 py-4 bg-slate-50 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4">
+                                                <div className="flex gap-2">
+                                                    {enabledLanguages.map(lang => (
+                                                        <button
+                                                            key={lang}
+                                                            onClick={() => setSelectedLanguage(lang)}
+                                                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                                                                selectedLanguage === lang
+                                                                    ? 'bg-indigo-600 text-white shadow-md'
+                                                                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                            }`}
+                                                        >
+                                                            <Globe size={14} />
+                                                            {LANGUAGE_LABELS[lang] || lang.toUpperCase()}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {enabledLanguages.length > 1 && (
+                                                    <button
+                                                        onClick={() => handleAutoTranslate(section)}
+                                                        disabled={translating}
+                                                        className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:bg-violet-400 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+                                                    >
+                                                        {translating ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />}
+                                                        AI Auto Translate
+                                                    </button>
+                                                )}
+                                            </div>
+
                                             <div className="p-10 space-y-8">
                                                 <div className="grid grid-cols-1 gap-8">
                                                     {section.contents.map(item => (
@@ -185,19 +361,19 @@ const LandingEditor = () => {
                                                                 </label>
                                                             </div>
                                                             {item.contentType === 'TEXT' ? (
-                                                                item.contentValue?.length > 100 ? (
+                                                                (getTranslationValue(item.contentValue, selectedLanguage) || '').length > 100 ? (
                                                                     <textarea
                                                                         rows={4}
                                                                         className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-3xl text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10 transition"
-                                                                        value={item.contentValue}
-                                                                        onChange={e => handleContentUpdate(section.id, item.contentKey, e.target.value)}
+                                                                        value={getTranslationValue(item.contentValue, selectedLanguage)}
+                                                                        onChange={e => updateTranslationValue(section.id, item.contentKey, selectedLanguage, e.target.value)}
                                                                     />
                                                                 ) : (
                                                                     <input
                                                                         type="text"
                                                                         className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10 transition"
-                                                                        value={item.contentValue}
-                                                                        onChange={e => handleContentUpdate(section.id, item.contentKey, e.target.value)}
+                                                                        value={getTranslationValue(item.contentValue, selectedLanguage)}
+                                                                        onChange={e => updateTranslationValue(section.id, item.contentKey, selectedLanguage, e.target.value)}
                                                                     />
                                                                 )
                                                             ) : item.contentType === 'IMAGE' ? (
@@ -207,14 +383,14 @@ const LandingEditor = () => {
                                                                             type="text"
                                                                             placeholder="Image URL..."
                                                                             className="flex-1 px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/10 transition text-sm"
-                                                                            value={item.contentValue}
-                                                                            onChange={e => handleContentUpdate(section.id, item.contentKey, e.target.value)}
+                                                                            value={getTranslationValue(item.contentValue, selectedLanguage)}
+                                                                            onChange={e => updateTranslationValue(section.id, item.contentKey, selectedLanguage, e.target.value)}
                                                                         />
                                                                         <button className="px-6 py-4 border border-slate-200 rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-50">Upload</button>
                                                                     </div>
-                                                                    {item.contentValue && (
+                                                                    {getTranslationValue(item.contentValue, selectedLanguage) && (
                                                                         <div className="w-40 h-24 rounded-2xl border border-slate-100 overflow-hidden bg-slate-50">
-                                                                            <img src={item.contentValue} alt="Preview" className="w-full h-full object-cover" />
+                                                                            <img src={getTranslationValue(item.contentValue, selectedLanguage)} alt="Preview" className="w-full h-full object-cover" />
                                                                         </div>
                                                                     )}
                                                                 </div>
@@ -223,8 +399,8 @@ const LandingEditor = () => {
                                                                     type="text"
                                                                     placeholder="Link (e.g. /signup)..."
                                                                     className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/10 transition"
-                                                                    value={item.contentValue}
-                                                                    onChange={e => handleContentUpdate(section.id, item.contentKey, e.target.value)}
+                                                                    value={getTranslationValue(item.contentValue, selectedLanguage)}
+                                                                    onChange={e => updateTranslationValue(section.id, item.contentKey, selectedLanguage, e.target.value)}
                                                                 />
                                                             )}
                                                         </div>

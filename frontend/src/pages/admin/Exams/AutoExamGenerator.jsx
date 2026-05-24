@@ -439,27 +439,27 @@ const AutoExamGenerator = () => {
         <div className="min-h-screen bg-slate-50 font-outfit pb-24">
             
             {/* Header / Stepper Progress */}
-            <div className="bg-white border-b border-slate-200 sticky top-0 z-40 px-4 md:px-8 py-5 shadow-sm">
-                <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-violet-600 to-indigo-700 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-violet-500/30">
-                            <Sparkles size={24} />
+            <div className="bg-white border-b border-slate-200 sticky top-0 z-40 px-4 md:px-8 py-3.5 sm:py-5 shadow-sm">
+                <div className="max-w-6xl mx-auto flex flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-2.5 sm:gap-4">
+                        <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-violet-600 to-indigo-700 text-white rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shadow-violet-500/30 shrink-0">
+                            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">AI Exam Generator</h1>
-                            <p className="text-sm font-bold text-violet-600 tracking-wide uppercase">Dynamic Wizard</p>
+                            <h1 className="text-base sm:text-2xl font-black text-slate-800 tracking-tight">AI Exam Generator</h1>
+                            <p className="text-[10px] sm:text-sm font-bold text-violet-600 tracking-wide uppercase">Dynamic Wizard</p>
                         </div>
                     </div>
                     
-                    <div className="flex items-center gap-3">
-                        <div className={`flex flex-col items-center gap-1 ${step === 1 ? 'opacity-100' : 'opacity-40'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${step >= 1 ? 'bg-violet-600 text-white' : 'bg-slate-200 text-slate-500'}`}>1</div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Config</span>
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                        <div className={`flex flex-col items-center gap-0.5 sm:gap-1 ${step === 1 ? 'opacity-100' : 'opacity-40'}`}>
+                            <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${step >= 1 ? 'bg-violet-600 text-white' : 'bg-slate-200 text-slate-500'}`}>1</div>
+                            <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-500">Config</span>
                         </div>
-                        <div className="w-10 h-0.5 bg-slate-200 mt-[-15px]"></div>
-                        <div className={`flex flex-col items-center gap-1 ${step === 2 ? 'opacity-100' : step > 2 ? 'opacity-40' : 'opacity-40'}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${step >= 2 ? 'bg-violet-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2</div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Syllabus</span>
+                        <div className="w-6 sm:w-10 h-0.5 bg-slate-200 mt-[-10px] sm:mt-[-15px]"></div>
+                        <div className={`flex flex-col items-center gap-0.5 sm:gap-1 ${step === 2 ? 'opacity-100' : 'opacity-40'}`}>
+                            <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${step >= 2 ? 'bg-violet-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2</div>
+                            <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-500">Syllabus</span>
                         </div>
                     </div>
                 </div>
@@ -474,7 +474,7 @@ const AutoExamGenerator = () => {
                             
                             {/* LEFT: Basic Info */}
                             <div className="lg:col-span-7 space-y-6">
-                                <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
+                                <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
                                     <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2 mb-6">
                                         <LayoutGrid className="text-violet-500" /> Exam Configuration
                                     </h2>
@@ -484,7 +484,7 @@ const AutoExamGenerator = () => {
                                             <input type="text" value={examInfo.title} onChange={e => setExamInfo({...examInfo, title: e.target.value})} className={inputCls} placeholder="e.g. Final Term Examination - 2026" />
                                         </div>
                                         
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Level</label>
                                                 <select value={levelId} onChange={e => setLevelId(e.target.value)} className={selectCls}>
@@ -532,7 +532,7 @@ const AutoExamGenerator = () => {
 
                             {/* RIGHT: Blueprint Structure */}
                             <div className="lg:col-span-5 space-y-6">
-                                <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col h-full relative overflow-hidden">
+                                <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col h-full relative overflow-hidden">
                                     <div className="absolute top-0 right-0 w-32 h-32 bg-violet-100 rounded-bl-full -mr-10 -mt-10 opacity-50 z-0"></div>
                                     
                                     <div className="relative z-10">
@@ -591,15 +591,16 @@ const AutoExamGenerator = () => {
                     <div className="animate-in fade-in slide-in-from-right-8 duration-500 space-y-6">
                         
                         {/* Tracker Top Bar */}
-                        <div className="bg-white rounded-2xl p-5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-200 sticky top-24 z-30 flex flex-col md:flex-row justify-between items-center gap-4">
+                        {/* Tracker Top Bar */}
+                        <div className="bg-white rounded-2xl p-3.5 md:p-5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-200 sticky top-[65px] md:top-24 z-30 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4">
                             <div>
-                                <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg">
-                                    <ListChecks className="text-violet-600" /> Syllabus Allocation Tracker
+                                <h3 className="font-black text-slate-800 flex items-center gap-2 text-base sm:text-lg">
+                                    <ListChecks className="text-violet-600 shrink-0" size={18} /> Syllabus Allocation Tracker
                                 </h3>
-                                <p className="text-xs font-bold text-slate-500">Allocate your target questions across chapters and topics.</p>
+                                <p className="text-[11px] sm:text-xs font-bold text-slate-500">Allocate your target questions across chapters and topics.</p>
                             </div>
                             
-                            <div className="flex gap-4">
+                            <div className="flex flex-wrap gap-2 justify-center md:justify-end">
                                 {activeSections.map(sec => {
                                     const target = targetTotals[sec.type] || 0;
                                     const alloc = allocatedTotals[sec.type] || 0;
@@ -607,11 +608,11 @@ const AutoExamGenerator = () => {
                                     const isOver = alloc > target;
                                     
                                     return (
-                                        <div key={sec.type} className={`px-4 py-2 rounded-xl border flex flex-col items-center min-w-[90px] ${isComplete ? 'bg-emerald-50 border-emerald-200' : isOver ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-200'}`}>
-                                            <span className={`text-[10px] font-black uppercase tracking-wider ${isComplete ? 'text-emerald-600' : isOver ? 'text-rose-600' : 'text-slate-500'}`}>{sec.type}</span>
-                                            <div className="flex items-baseline gap-1">
-                                                <span className={`text-lg font-black ${isComplete ? 'text-emerald-700' : isOver ? 'text-rose-700' : 'text-slate-800'}`}>{alloc}</span>
-                                                <span className="text-xs font-bold text-slate-400">/ {target}</span>
+                                        <div key={sec.type} className={`px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl border flex flex-col items-center min-w-[75px] sm:min-w-[90px] flex-1 sm:flex-none ${isComplete ? 'bg-emerald-50 border-emerald-200' : isOver ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-200'}`}>
+                                            <span className={`text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${isComplete ? 'text-emerald-600' : isOver ? 'text-rose-600' : 'text-slate-500'}`}>{sec.type}</span>
+                                            <div className="flex items-baseline gap-0.5 sm:gap-1">
+                                                <span className={`text-base sm:text-lg font-black ${isComplete ? 'text-emerald-700' : isOver ? 'text-rose-700' : 'text-slate-800'}`}>{alloc}</span>
+                                                <span className="text-[10px] sm:text-xs font-bold text-slate-400">/ {target}</span>
                                             </div>
                                         </div>
                                     )
@@ -622,7 +623,7 @@ const AutoExamGenerator = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                             
                             {/* Chapters & Topics List */}
-                            <div className="lg:col-span-8 space-y-6">
+                            <div className="lg:col-span-8 space-y-6 order-2 lg:order-1">
                                 {chapters.length === 0 ? (
                                     <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 font-medium">No chapters found for this subject.</div>
                                 ) : (
@@ -631,23 +632,23 @@ const AutoExamGenerator = () => {
                                         const styles = getCategoryStyles(category);
                                         
                                         return (
-                                            <div key={category} className={`bg-white rounded-[2rem] border ${styles.border} shadow-[0_8px_30px_rgb(0,0,0,0.02)] overflow-hidden transition-all duration-300`}>
+                                            <div key={category} className={`bg-white rounded-2xl sm:rounded-[2rem] border ${styles.border} shadow-[0_8px_30px_rgb(0,0,0,0.02)] overflow-hidden transition-all duration-300`}>
                                                 
                                                 {/* Category Header */}
                                                 <div 
                                                     onClick={() => toggleCategoryExpand(category)}
-                                                    className={`p-6 flex items-center justify-between cursor-pointer select-none bg-gradient-to-r ${styles.bg} border-b ${styles.border} transition-colors duration-200 hover:bg-opacity-80`}
+                                                    className={`p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between cursor-pointer select-none bg-gradient-to-r ${styles.bg} border-b ${styles.border} transition-colors duration-200 hover:bg-opacity-80 gap-3`}
                                                 >
                                                     <div className="flex items-center gap-3">
-                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all bg-white shadow-sm ${styles.text}`}>
-                                                            {isCatExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                                                        <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all bg-white shadow-sm shrink-0 ${styles.text}`}>
+                                                            {isCatExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                                                         </div>
                                                         <div>
-                                                            <h3 className={`text-lg font-black tracking-tight ${styles.text}`}>{category}</h3>
-                                                            <p className="text-xs font-bold text-slate-400 mt-0.5">{catChapters.length}টি সক্রিয় অধ্যায়</p>
+                                                            <h3 className={`text-base sm:text-lg font-black tracking-tight ${styles.text}`}>{category}</h3>
+                                                            <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-0.5">{catChapters.length}টি সক্রিয় অধ্যায়</p>
                                                         </div>
                                                     </div>
-                                                    <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${styles.badge} shadow-sm`}>
+                                                    <span className={`text-[10px] sm:text-xs font-bold px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full ${styles.badge} shadow-sm self-start sm:self-auto`}>
                                                         {category} বিভাগ
                                                     </span>
                                                 </div>
@@ -661,19 +662,19 @@ const AutoExamGenerator = () => {
                                                                 <div key={ch.id} className={`bg-white rounded-2xl border border-slate-150 transition-all duration-200 overflow-hidden shadow-sm ${isExpanded ? 'border-violet-300 ring-4 ring-violet-500/5' : 'hover:border-slate-300'}`}>
                                                                     
                                                                     {/* Chapter Header */}
-                                                                    <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/50" onClick={() => toggleChapterExpand(ch.id)}>
+                                                                    <div className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/50" onClick={() => toggleChapterExpand(ch.id)}>
                                                                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isExpanded ? 'bg-violet-100 text-violet-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${isExpanded ? 'bg-violet-100 text-violet-600' : 'bg-slate-100 text-slate-400'}`}>
                                                                                 {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                                                             </div>
-                                                                            <div className="truncate">
-                                                                                <h4 className={`font-bold text-sm sm:text-base ${isExpanded ? 'text-violet-900' : 'text-slate-700'}`}>{ch.name}</h4>
+                                                                            <div className="min-w-0 flex-1">
+                                                                                <h4 className={`font-bold text-sm sm:text-base break-words ${isExpanded ? 'text-violet-900' : 'text-slate-700'}`}>{ch.name}</h4>
                                                                                 {ch.chapterNumber && <p className="text-[10px] font-bold text-slate-400 uppercase">অধ্যায় {ch.chapterNumber}</p>}
                                                                             </div>
                                                                         </div>
                                                                         
                                                                         {/* Chapter Level Allocation */}
-                                                                        <div className="flex gap-3 justify-end sm:justify-start" onClick={e => e.stopPropagation()}>
+                                                                        <div className="flex gap-3 justify-start sm:justify-start w-full sm:w-auto pl-11 sm:pl-0" onClick={e => e.stopPropagation()}>
                                                                             {activeSections.map(sec => (
                                                                                 <div key={sec.type} className="flex flex-col items-center w-16">
                                                                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{sec.type}</span>
@@ -697,12 +698,12 @@ const AutoExamGenerator = () => {
                                                                                 <div className="flex items-center gap-2 text-violet-500 text-sm font-bold py-2"><Loader2 size={16} className="animate-spin"/> Loading topics...</div>
                                                                             ) : chapterTopics[ch.id]?.length > 0 ? (
                                                                                 chapterTopics[ch.id].map(top => (
-                                                                                    <div key={top.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-white border border-slate-150 rounded-xl shadow-sm gap-2">
-                                                                                        <span className="text-sm font-bold text-slate-600 truncate mr-4">{top.name}</span>
-                                                                                        <div className="flex gap-3 justify-end">
+                                                                                    <div key={top.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-white border border-slate-150 rounded-xl shadow-sm gap-2.5">
+                                                                                        <span className="text-sm font-bold text-slate-600 break-words flex-1">{top.name}</span>
+                                                                                        <div className="flex flex-wrap gap-3 justify-start sm:justify-end w-full sm:w-auto">
                                                                                             {activeSections.map(sec => (
-                                                                                                <div key={sec.type} className="flex items-center gap-2 w-24">
-                                                                                                    <span className="text-[9px] font-black text-slate-400 uppercase w-8 text-right">{sec.type}</span>
+                                                                                                <div key={sec.type} className="flex items-center gap-2 w-20">
+                                                                                                    <span className="text-[9px] font-black text-slate-400 uppercase w-6 text-right shrink-0">{sec.type}</span>
                                                                                                     <input 
                                                                                                         type="number" 
                                                                                                         min="0"
@@ -733,8 +734,8 @@ const AutoExamGenerator = () => {
                             </div>
 
                             {/* RIGHT: Difficulty & Status */}
-                            <div className="lg:col-span-4 space-y-6">
-                                <div className="bg-white p-6 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
+                            <div className="lg:col-span-4 space-y-6 order-1 lg:order-2">
+                                <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
                                     <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6">
                                         <BrainCircuit className="text-rose-500" /> Difficulty AI Prompt
                                     </h3>
@@ -777,13 +778,13 @@ const AutoExamGenerator = () => {
             </div>
 
             {/* Floating Action Bar */}
-            <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/80 border-t border-slate-200 p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
-                <div className="max-w-6xl w-full mx-auto flex justify-between items-center">
+            <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/80 border-t border-slate-200 p-3 sm:p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
+                <div className="max-w-6xl w-full mx-auto flex justify-between items-center gap-3">
                     <button 
                         onClick={() => setStep(1)}
-                        className={`px-6 py-3.5 rounded-xl font-bold transition-all flex items-center gap-2 ${step === 1 ? 'opacity-0 pointer-events-none' : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200'}`}
+                        className={`px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-1 sm:gap-2 shrink-0 ${step === 1 ? 'opacity-0 pointer-events-none' : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200'}`}
                     >
-                        <ChevronLeft size={20} /> Back
+                        <ChevronLeft size={16} /> Back
                     </button>
                     
                     {step === 1 ? (
@@ -794,17 +795,17 @@ const AutoExamGenerator = () => {
                                 setStep(2);
                             }}
                             disabled={loadingBlueprint}
-                            className="px-10 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg hover:-translate-y-0.5"
+                            className="px-4 sm:px-8 py-2.5 sm:py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 transition-all shadow-lg hover:-translate-y-0.5 disabled:opacity-50"
                         >
-                            Next: Syllabus Allocation <ChevronRight size={20} />
+                            Next: Syllabus Allocation <ChevronRight size={16} />
                         </button>
                     ) : (
                         <button 
                             onClick={handleGenerate}
                             disabled={loading}
-                            className="px-10 py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl font-black flex items-center gap-3 transition-all shadow-xl shadow-violet-500/30 hover:-translate-y-0.5"
+                            className="px-4 sm:px-8 py-2.5 sm:py-3.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 sm:gap-3 transition-all shadow-xl shadow-violet-500/30 hover:-translate-y-0.5"
                         >
-                            {loading ? <Loader2 className="animate-spin" size={20} /> : <BrainCircuit size={20} />}
+                            {loading ? <Loader2 className="animate-spin" size={16} /> : <BrainCircuit size={16} />}
                             {loading ? 'Processing AI Models...' : 'Generate Exam Paper'}
                         </button>
                     )}

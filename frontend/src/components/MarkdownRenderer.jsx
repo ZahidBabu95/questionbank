@@ -6,10 +6,25 @@ import rehypeRaw from 'rehype-raw';
 import 'katex/dist/katex.min.css';
 
 const MarkdownRenderer = ({ content, className = '' }) => {
-    if (!content) return null;
+    if (content === null || content === undefined) return null;
+
+    let contentStr = '';
+    if (typeof content === 'string') {
+        contentStr = content;
+    } else if (typeof content === 'object') {
+        try {
+            contentStr = JSON.stringify(content);
+        } catch (e) {
+            contentStr = String(content);
+        }
+    } else {
+        contentStr = String(content);
+    }
+
+    if (!contentStr.trim()) return null;
 
     // Fix line breaks for math blocks
-    let processedContent = content
+    let processedContent = contentStr
         .replace(/\n\$\$/g, '\n\n$$')
         .replace(/\$\$\n/g, '$$\n\n');
 

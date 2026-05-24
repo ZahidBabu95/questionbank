@@ -27,9 +27,8 @@ public class ExamGenerationRule {
     @JoinColumn(name = "exam_id", nullable = false)
     private Exam exam;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "question_type", nullable = false)
-    private Question.QuestionType questionType;
+    private String questionType;
 
     @Column(name = "question_count", nullable = false)
     private Integer questionCount;

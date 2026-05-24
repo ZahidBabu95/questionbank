@@ -70,10 +70,85 @@ const formatMarksDigits = (marksVal, numberingStyle) => {
     return str;
 };
 
+const isPlaceholderText = (text) => {
+    if (!text) return true;
+    const clean = text.toString().replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+    return clean === '' || 
+           clean.startsWith('generated question') || 
+           clean.startsWith('dynamic question') || 
+           clean.startsWith('ডায়নামিক প্রশ্ন') || 
+           clean.startsWith('ডায়নামিক প্রশ্ন');
+};
+
+const cleanPlaceholderText = (html) => {
+    if (!html) return '';
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Remove empty stem if it contains placeholder text
+        const stem = doc.querySelector('.cq-stem');
+        if (stem) {
+            const stemText = (stem.textContent || stem.innerText || '').trim().toLowerCase();
+            if (stemText.startsWith('generated question') || 
+                stemText.startsWith('dynamic question') || 
+                stemText.startsWith('ডায়নামিক প্রশ্ন') || 
+                stemText.startsWith('ডায়নামিক প্রশ্ন') || 
+                stemText === '') {
+                stem.remove();
+            }
+        }
+
+        const walk = (node) => {
+            if (node.nodeType === 3) { // TEXT_NODE
+                let txt = node.nodeValue;
+                txt = txt
+                    .replace(/generated\s+question/gi, '')
+                    .replace(/dynamic\s+question/gi, '')
+                    .replace(/ডায়নামিক\s+প্রশ্ন/g, '')
+                    .replace(/ডায়নামিক\s+প্রশ্ন/g, '');
+                
+                // Strip leftover numbering/punctuation at the beginning of the text node
+                txt = txt.replace(/^\s*[০-৯\d\s\.\,\-\:\)\(\[\]\{\}\/\\।]+/, '');
+                node.nodeValue = txt;
+            } else {
+                for (let child of node.childNodes) {
+                    walk(child);
+                }
+            }
+        };
+        
+        walk(doc.body);
+        
+        // Now check if the remaining body has any actual text content
+        const bodyText = (doc.body.textContent || doc.body.innerText || '').trim();
+        const onlyPunct = /^[০-৯\d\s\.\,\-\:\)\(\[\]\{\}\/\\।]*$/;
+        if (onlyPunct.test(bodyText)) {
+            return '';
+        }
+        
+        return doc.body.innerHTML;
+    } catch (e) {
+        console.error("Error in cleanPlaceholderText:", e);
+        let clean = html
+            .replace(/generated\s+question/gi, '')
+            .replace(/dynamic\s+question/gi, '')
+            .replace(/ডায়নামিক\s+প্রশ্ন/g, '')
+            .replace(/ডায়নামিক\s+প্রশ্ন/g, '');
+        
+        clean = clean.replace(/^\s*[০-৯\d\s\.\,\-\:\)\(\[\]\{\}\/\\।]+/, '');
+        const plainText = clean.replace(/<[^>]*>?/gm, '').trim();
+        if (/^[০-৯\d\s\.\,\-\:\)\(\[\]\{\}\/\\।]*$/.test(plainText)) {
+            return '';
+        }
+        return clean;
+    }
+};
+
 
     const QuestionComponent = ({ node, editor, deleteNode, updateAttributes, getPos, selected }) => {
         // Strict mode lock removed as per user request to make it fully usable
-        const isStrict = editor.view.dom.classList.contains('strict-analytics-mode');
+        const isStrict = editor?.view?.dom?.classList?.contains('strict-analytics-mode') || false;
         
         // Convert 0, 1, 2, 3 to ক, খ, গ, ঘ
         const getBanglaOptionLabel = (idx) => {
@@ -96,31 +171,78 @@ const formatMarksDigits = (marksVal, numberingStyle) => {
         // Auto-sync missing fields from DB for old saved questions
         React.useEffect(() => {
             const attrs = node.attrs;
-            if (!attrs.questionId || attrs.syncedFromDb) return;
+            if (!attrs.questionId) return;
+
+            const isMCQ = attrs.type === 'MCQ';
             
-            // Check if we need to sync (missing explanation or missing correct flags in options)
-            const isMissingData = !attrs.explanation || 
-                                  (attrs.type === 'MCQ' && attrs.options && attrs.options.length > 0 && !attrs.options.some(o => o.isCorrect !== undefined || o.correct !== undefined));
+            // We need to sync if it hasn't been synced from DB, or if dynamicData is missing/null,
+            // or if it's MCQ and option correct flags are missing.
+            const needsBasicSync = !attrs.syncedFromDb;
+            const needsDynamicSync = !attrs.dynamicDataSynced && !attrs.dynamicData;
             
-            if (isMissingData) {
+            if (needsBasicSync || needsDynamicSync) {
                 questionService.getQuestionById(attrs.questionId).then(q => {
                     if (q) {
-                        updateAttributes({
+                        const updateObj = {
                             syncedFromDb: true,
-                            explanation: q.explanation || '',
-                            answer: q.correctAnswer || '',
-                            language: q.language || 'Bangla',
-                            options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : attrs.options
-                        });
+                            dynamicDataSynced: true
+                        };
+                        
+                        // Sync explanation/answer if missing
+                        if (!attrs.explanation && q.explanation) {
+                            updateObj.explanation = q.explanation;
+                        }
+                        if (!attrs.answer && q.correctAnswer) {
+                            updateObj.answer = q.correctAnswer;
+                        }
+                        if (!attrs.language && q.language) {
+                            updateObj.language = q.language;
+                        }
+                        
+                        // Sync dynamicData if missing
+                        if (!attrs.dynamicData && q.dynamicData) {
+                            updateObj.dynamicData = q.dynamicData;
+                        }
+                        
+                        // Sync stimulus if missing
+                        if (!attrs.stimulus && q.stimulus) {
+                            updateObj.stimulus = q.stimulus;
+                        }
+                        
+                        // Sync questionText if missing or placeholder
+                        const cleanCurrentText = (attrs.questionText || '').replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+                        const isTextPlaceholder = cleanCurrentText.startsWith('generated question') || 
+                                                  cleanCurrentText.startsWith('dynamic question') || 
+                                                  cleanCurrentText.startsWith('ডায়নামিক প্রশ্ন') || 
+                                                  cleanCurrentText.startsWith('ডায়নামিক প্রশ্ন') || 
+                                                  cleanCurrentText === '';
+                        if (isTextPlaceholder && q.questionText) {
+                            updateObj.questionText = q.questionText;
+                        }
+
+                        // Sync options if MCQ and missing correct flags
+                        if (isMCQ && q.options) {
+                            const hasCorrectFlag = attrs.options && attrs.options.some(o => o.isCorrect !== undefined || o.correct !== undefined);
+                            if (!hasCorrectFlag) {
+                                updateObj.options = q.options.map(opt => ({
+                                    id: opt.id,
+                                    optionText: opt.optionText,
+                                    correct: opt.isCorrect || opt.correct
+                                }));
+                            }
+                        }
+
+                        updateAttributes(updateObj);
+                    } else {
+                        // Question not found in DB, mark as synced to prevent loops
+                        updateAttributes({ syncedFromDb: true, dynamicDataSynced: true });
                     }
                 }).catch(err => {
                     console.error("Failed to sync question data for ID:", attrs.questionId, err);
-                    updateAttributes({ syncedFromDb: true }); // Prevent infinite retry
+                    updateAttributes({ syncedFromDb: true, dynamicDataSynced: true }); // Prevent infinite retry
                 });
-            } else {
-                updateAttributes({ syncedFromDb: true });
             }
-        }, [node.attrs.questionId, node.attrs.syncedFromDb, updateAttributes]);
+        }, [node.attrs.questionId, node.attrs.syncedFromDb, node.attrs.dynamicDataSynced, node.attrs.dynamicData, updateAttributes]);
 
         const handleImageMouseDown = (e) => {
             if (e.target.tagName === 'IMG' && e.target.hasAttribute('data-img-index')) {
@@ -224,7 +346,7 @@ const formatMarksDigits = (marksVal, numberingStyle) => {
 
         const handleClick = (e) => {
             if (e.target.tagName === 'IMG') return;
-            const isStrict = editor.view.dom.classList.contains('strict-analytics-mode');
+            const isStrict = editor?.view?.dom?.classList?.contains('strict-analytics-mode') || false;
             if (isStrict) {
                 // Just open the setup panel for the section, or do nothing.
                 window.dispatchEvent(new CustomEvent('nexusOpenTab', { detail: 'questionSetup' }));
@@ -233,33 +355,33 @@ const formatMarksDigits = (marksVal, numberingStyle) => {
 
         const getRenderedQuestionText = () => {
             let html = node.attrs.questionText || '';
-            if (node.attrs.type === 'CQ' || html.includes('cq-stem') || html.includes('cq-marks')) {
-                try {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    const stem = doc.querySelector('.cq-stem');
-                    if (stem) {
-                        stem.remove();
+            if (!html) return '';
+
+            try {
+                const cleanedHtml = cleanPlaceholderText(html);
+                if (!cleanedHtml) return '';
+
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(cleanedHtml, 'text/html');
+
+                // Format cq-marks
+                const cqMarks = doc.querySelectorAll('.cq-marks');
+                cqMarks.forEach(span => {
+                    let text = span.textContent || '';
+                    const match = text.match(/[\d\.০-৯]+/);
+                    if (match) {
+                        const originalNum = match[0];
+                        const targetStyle = (node.attrs.language === 'English' || node.attrs.numberingStyle === 'en') ? 'en' : 'bn';
+                        const formattedNum = formatMarksDigits(originalNum, targetStyle);
+                        span.textContent = formattedNum;
                     }
-                    
-                    const cqMarks = doc.querySelectorAll('.cq-marks');
-                    cqMarks.forEach(span => {
-                        let text = span.textContent || '';
-                        const match = text.match(/[\d\.০-৯]+/);
-                        if (match) {
-                            const originalNum = match[0];
-                            const targetStyle = (node.attrs.language === 'English' || node.attrs.numberingStyle === 'en') ? 'en' : 'bn';
-                            const formattedNum = formatMarksDigits(originalNum, targetStyle);
-                            span.textContent = formattedNum;
-                        }
-                    });
-                    
-                    html = doc.body.innerHTML;
-                } catch (e) {
-                    console.error("Failed to strip cq-stem or format cq-marks", e);
-                }
+                });
+
+                return doc.body.innerHTML;
+            } catch (e) {
+                console.error("Failed to parse and clean questionText HTML", e);
+                return cleanPlaceholderText(html);
             }
-            return html;
         };
 
         const cleanHtml = (html) => {
@@ -277,6 +399,133 @@ const formatMarksDigits = (marksVal, numberingStyle) => {
                     .trim();
             } while (cleaned !== prev);
             return cleaned;
+        };
+
+        let dynamicDataParsed = null;
+        let hideSubParts = false;
+        if (node.attrs.dynamicData) {
+            try {
+                dynamicDataParsed = typeof node.attrs.dynamicData === 'string' 
+                    ? JSON.parse(node.attrs.dynamicData) 
+                    : node.attrs.dynamicData;
+                const isDescriptiveCQ = node.attrs.type === 'CQ_DESCRIPTIVE';
+                hideSubParts = dynamicDataParsed && (dynamicDataParsed.hideSubPartsTable === true || dynamicDataParsed.hide_sub_parts === true || isDescriptiveCQ);
+            } catch (e) {
+                console.error("Failed to parse dynamicData in QuestionComponent:", e);
+            }
+        }
+
+        const questionFields = [];
+        const answerFields = [];
+        const explanationFields = [];
+
+        const hasSubPartsAnswers = dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.some(part => part.answer);
+        const hasSubPartsExplanations = dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.some(part => part.explanation);
+
+        if (dynamicDataParsed) {
+            const entries = Object.entries(dynamicDataParsed);
+
+            const metadataKeys = [
+                'questiontype', 'question_type', 'type',
+                'sources', 'source',
+                'stimulus',
+                'difficulty',
+                'marks',
+                'language',
+                'bloomlevel', 'bloom_level'
+            ];
+
+            entries.forEach(([key, value]) => {
+                if (!value || (Array.isArray(value) && value.length === 0)) return;
+                const lowerKey = key.toLowerCase();
+                if (metadataKeys.includes(lowerKey)) return;
+                if (lowerKey === 'sub_parts' && hideSubParts) return;
+
+                if (lowerKey.includes('explanation') || lowerKey.includes('rationale')) {
+                    if (!hasSubPartsExplanations) {
+                        explanationFields.push([key, value]);
+                    }
+                } else if (lowerKey.includes('answer') || lowerKey.includes('solution') || lowerKey.includes('correct')) {
+                    if (!hasSubPartsAnswers) {
+                        answerFields.push([key, value]);
+                    }
+                } else {
+                    questionFields.push([key, value]);
+                }
+            });
+        }
+
+        const renderDynamicValue = (key, value, isAnswerBlock = false) => {
+            if (!value || (Array.isArray(value) && value.length === 0)) return null;
+
+            if (typeof value === 'string') {
+                const cleanVal = value.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+                if (cleanVal.startsWith('generated question') || cleanVal.startsWith('dynamic question') || cleanVal.startsWith('ডায়নামিক প্রশ্ন') || cleanVal.startsWith('ডায়নামিক প্রশ্ন') || cleanVal === '') {
+                    return null;
+                }
+            }
+
+            const lowerKey = key.toLowerCase();
+            const hideLabel = lowerKey === 'text' || lowerKey === 'question' || lowerKey === 'questiontext' || lowerKey === 'question_text' || lowerKey === 'content';
+
+            if (typeof value === 'string') {
+                return (
+                    <div key={key} className="mb-2 last:mb-0 w-full">
+                        {!isStrict && !hideLabel && (
+                            <div className={`text-[10px] font-bold uppercase tracking-wider select-none mb-0.5 ${
+                                isAnswerBlock ? 'text-emerald-600' : 'text-slate-400'
+                            }`}>
+                                {key.replace(/_/g, ' ')}
+                            </div>
+                        )}
+                        <div className={isAnswerBlock ? 'text-emerald-800 font-medium' : 'text-slate-900'}
+                             style={{ lineHeight: safeLineGap }}
+                             dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(value, key)) }}
+                        />
+                    </div>
+                );
+            } else if (Array.isArray(value)) {
+                return (
+                    <div key={key} className="mb-3 last:mb-0 w-full">
+                        {!isStrict && !hideLabel && (
+                            <div className={`text-[10px] font-bold uppercase tracking-wider select-none mb-1 ${
+                                isAnswerBlock ? 'text-emerald-600' : 'text-slate-400'
+                            }`}>
+                                {key.replace(/_/g, ' ')}
+                            </div>
+                        )}
+                        <div className="space-y-1.5 w-full">
+                            {value.map((item, idx) => (
+                                <div key={idx} className={`p-2 rounded-lg border ${
+                                    isAnswerBlock ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50/50 border-slate-200'
+                                }`}>
+                                    {typeof item === 'object' ? (
+                                        <div className="flex flex-wrap gap-3">
+                                            {Object.entries(item).map(([k, v]) => (
+                                                <div key={k} className="flex-1 min-w-[120px]">
+                                                    <span className={`text-[9px] font-bold block mb-0.5 uppercase ${
+                                                        isAnswerBlock ? 'text-emerald-600' : 'text-slate-400'
+                                                    }`}>
+                                                        {k.replace(/_/g, ' ')}
+                                                    </span>
+                                                    <div className={isAnswerBlock ? 'text-emerald-800' : 'text-slate-800'}
+                                                         dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(v || '-', k)) }}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className={isAnswerBlock ? 'text-emerald-800' : 'text-slate-800'}
+                                             dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(item, `${key}-${idx}`)) }}
+                                        />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            }
+            return null;
         };
 
         return (
@@ -302,27 +551,75 @@ const formatMarksDigits = (marksVal, numberingStyle) => {
                 </div>
 
                 <div className="flex flex-col items-start gap-1 w-full cq-question-layout">
-                    {node.attrs.stimulus && (
+                    {node.attrs.stimulus && !isPlaceholderText(node.attrs.stimulus) && (
                         <div className="w-full mb-1 text-slate-800 cq-stimulus-block" 
                              style={{ textAlign: node.attrs.textAlign || 'left', lineHeight: safeLineGap }}
                              dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(node.attrs.stimulus, 'stimulus')) }} 
                         />
                     )}
                     
-                    <div className="flex items-start justify-between gap-4 w-full">
-                        <div className="text-slate-900 font-medium flex-1 w-full" 
-                             style={{ textAlign: node.attrs.textAlign || 'left' }}
-                             dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(getRenderedQuestionText(), 'questionText')) }} 
-                        />
-                        {node.attrs.marksConfig !== 'hide' && node.attrs.marks && (
-                            <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 mt-0.5 select-none"
-                                  style={{ fontSize: fSize ? `${fSize * 0.9}px` : '0.9em' }}>
-                                {node.attrs.marksConfig === 'showBracket' 
-                                    ? `(${formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)})` 
-                                    : formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)}
-                            </span>
-                        )}
-                    </div>
+                    {getRenderedQuestionText() ? (
+                        <div className="flex items-start justify-between gap-4 w-full">
+                            <div className="text-slate-900 font-medium flex-1 w-full" 
+                                 style={{ textAlign: node.attrs.textAlign || 'left' }}
+                                 dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(getRenderedQuestionText(), 'questionText')) }} 
+                            />
+                            {node.attrs.marksConfig !== 'hide' && node.attrs.marks && (
+                                <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 mt-0.5 select-none"
+                                      style={{ fontSize: fSize ? `${fSize * 0.9}px` : '0.9em' }}>
+                                    {node.attrs.marksConfig === 'showBracket' 
+                                        ? `(${formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)})` 
+                                        : formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)}
+                                </span>
+                            )}
+                        </div>
+                    ) : (
+                        node.attrs.marksConfig !== 'hide' && node.attrs.marks && (
+                            <div className="flex justify-end w-full">
+                                <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 mt-0.5 select-none"
+                                      style={{ fontSize: fSize ? `${fSize * 0.9}px` : '0.9em' }}>
+                                    {node.attrs.marksConfig === 'showBracket' 
+                                        ? `(${formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)})` 
+                                        : formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)}
+                                </span>
+                            </div>
+                        )
+                    )}
+
+                    {dynamicDataParsed && questionFields.length > 0 && (
+                        <div className="w-full flex flex-col gap-2">
+                            {questionFields.map(([key, value]) => renderDynamicValue(key, value, false))}
+                        </div>
+                    )}
+
+                    {dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.length > 0 && !hideSubParts && (
+                        <div className="w-full mt-2 pl-4 flex flex-col gap-2 cq-subparts-list">
+                            {dynamicDataParsed.sub_parts.map((part, pIdx) => {
+                                const partLabel = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
+                                const labelText = `(${partLabel})`;
+                                const partMarks = part.marks !== undefined && part.marks !== null ? part.marks : (pIdx + 1);
+                                return (
+                                    <div key={pIdx} className="flex items-start justify-between gap-4 w-full cq-subpart-item" style={{ fontSize: fSize ? `${fSize * 0.95}px` : '0.95em' }}>
+                                        <div className="flex gap-2 flex-1 items-start text-slate-800">
+                                            <span className="font-semibold select-none">{labelText}</span>
+                                            <div 
+                                                className="font-normal inline text-slate-800 cq-subpart-question-text"
+                                                dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(part.questionText || '', `subpart-q-${pIdx}`)) }} 
+                                            />
+                                        </div>
+                                        {node.attrs.marksConfig !== 'hide' && partMarks && (
+                                            <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 select-none"
+                                                  style={{ fontSize: fSize ? `${fSize * 0.85}px` : '0.85em' }}>
+                                                {node.attrs.marksConfig === 'showBracket' 
+                                                    ? `(${formatMarksDigits(partMarks, node.attrs.numberingStyle)})` 
+                                                    : formatMarksDigits(partMarks, node.attrs.numberingStyle)}
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                     
                     {node.attrs.statements && Array.isArray(node.attrs.statements) && node.attrs.statements.length > 0 && (
                         <div className="w-full mt-[0.2em] mb-[0.2em] pl-[1.5em]">
@@ -435,35 +732,82 @@ const formatMarksDigits = (marksVal, numberingStyle) => {
                 {/* Inline Detailed Answer Block */}
                 <div className="nexus-detailed-answer-block mt-2 break-inside-avoid w-full hidden"
                      style={{ fontSize: node.attrs.fontSize ? `${node.attrs.fontSize}pt` : 'inherit', fontFamily: 'inherit' }}>
-                    <div className="flex items-start gap-1 font-bold text-slate-800 nexus-answer-line">
-                        <span className="shrink-0 answer-label-text">উত্তর:</span>
-                        <div className="nexus-answer-content text-indigo-700" dangerouslySetInnerHTML={{ __html: (() => {
-                            if (node.attrs.type === 'CQ' || !node.attrs.options || node.attrs.options.length === 0) {
-                                return node.attrs.answer || 'N/A';
-                            }
-                            const correctOpts = [];
-                            node.attrs.options.forEach((opt, idx) => {
-                                if (opt.correct === true || opt.isCorrect === true || String(opt.correct) === 'true' || String(opt.isCorrect) === 'true') {
-                                    const optStyle = node.attrs.optionStyle || 'bn';
-                                    const optLabel = optStyle === 'en' 
-                                        ? String.fromCharCode(97 + idx) 
-                                        : optStyle === 'roman'
-                                        ? ['i', 'ii', 'iii', 'iv', 'v'][idx]
-                                        : optStyle === 'num_en'
-                                        ? `${idx + 1}`
-                                        : optStyle === 'num_bn'
-                                        ? ['১', '২', '৩', '৪', '৫'][idx]
-                                        : getBanglaOptionLabel(idx);
-                                    correctOpts.push(`${optLabel}. ${stripOptionPrefix(opt.optionText || opt.text || '')}`);
+                    
+                    {/* Standard Answer */}
+                    {(!dynamicDataParsed || (answerFields.length === 0 && (!dynamicDataParsed.sub_parts || dynamicDataParsed.sub_parts.length === 0))) && (
+                        <div className="flex items-start gap-1 font-bold text-slate-800 nexus-answer-line">
+                            <span className="shrink-0 answer-label-text">উত্তর:</span>
+                            <div className="nexus-answer-content text-indigo-700" dangerouslySetInnerHTML={{ __html: (() => {
+                                if (node.attrs.type === 'CQ' || !node.attrs.options || node.attrs.options.length === 0) {
+                                    return node.attrs.answer || 'N/A';
                                 }
-                            });
-                            return correctOpts.length > 0 ? correctOpts.join('<br/>') : (node.attrs.answer || 'N/A');
-                        })() }} />
-                    </div>
-                    {node.attrs.explanation && (
+                                const correctOpts = [];
+                                node.attrs.options.forEach((opt, idx) => {
+                                    if (opt.correct === true || opt.isCorrect === true || String(opt.correct) === 'true' || String(opt.isCorrect) === 'true') {
+                                        const optStyle = node.attrs.optionStyle || 'bn';
+                                        const optLabel = optStyle === 'en' 
+                                            ? String.fromCharCode(97 + idx) 
+                                            : optStyle === 'roman'
+                                            ? ['i', 'ii', 'iii', 'iv', 'v'][idx]
+                                            : optStyle === 'num_en'
+                                            ? `${idx + 1}`
+                                            : optStyle === 'num_bn'
+                                            ? ['১', '২', '৩', '৪', '৫'][idx]
+                                            : getBanglaOptionLabel(idx);
+                                        correctOpts.push(`${optLabel}. ${stripOptionPrefix(opt.optionText || opt.text || '')}`);
+                                    }
+                                });
+                                return correctOpts.length > 0 ? correctOpts.join('<br/>') : (node.attrs.answer || 'N/A');
+                            })() }} />
+                        </div>
+                    )}
+
+                    {/* Dynamic Answer Fields */}
+                    {dynamicDataParsed && answerFields.length > 0 && (
+                        <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg space-y-2 mt-1">
+                            {answerFields.map(([key, value]) => renderDynamicValue(key, value, true))}
+                        </div>
+                    )}
+
+                    {/* Sub Parts Answers and Explanations (CQ_DESCRIPTIVE) */}
+                    {dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.length > 0 && (hasSubPartsAnswers || hasSubPartsExplanations) && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg space-y-3 mt-1 text-slate-800">
+                            {dynamicDataParsed.sub_parts.map((part, pIdx) => {
+                                const label = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
+                                return (
+                                    <div key={pIdx} className="flex flex-col gap-1 border-b border-emerald-100 last:border-0 pb-2 last:pb-0">
+                                        {part.answer && (
+                                            <div className="flex items-start gap-1.5 text-sm">
+                                                <span className="shrink-0 text-emerald-800 font-bold">({label}) উত্তর:</span>
+                                                <div className="text-indigo-700 font-medium" dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(part.answer, `subpart-ans-${pIdx}`)) }} />
+                                            </div>
+                                        )}
+                                        {part.explanation && (
+                                            <div className="flex items-start gap-1.5 mt-0.5 text-xs pl-4">
+                                                <span className="font-bold shrink-0 text-emerald-700">
+                                                    {!part.answer ? `(${label}) ব্যাখ্যা:` : 'ব্যাখ্যা:'}
+                                                </span>
+                                                <div className="text-slate-700 font-normal" dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(part.explanation, `subpart-exp-${pIdx}`)) }} />
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Standard Explanation */}
+                    {(!dynamicDataParsed || (explanationFields.length === 0 && (!dynamicDataParsed.sub_parts || dynamicDataParsed.sub_parts.length === 0))) && node.attrs.explanation && (
                         <div className="explanation-block text-slate-800 mt-1 flex items-start gap-1 p-2 bg-slate-50 border border-slate-200 rounded">
                             <span className="font-bold shrink-0 text-emerald-700">ব্যাখ্যা:</span>
                             <div dangerouslySetInnerHTML={{ __html: node.attrs.explanation }} />
+                        </div>
+                    )}
+
+                    {/* Dynamic Explanation Fields */}
+                    {dynamicDataParsed && explanationFields.length > 0 && (
+                        <div className="p-2 bg-blue-50/50 border border-blue-200 rounded-lg space-y-2 mt-1">
+                            {explanationFields.map(([key, value]) => renderDynamicValue(key, value, false))}
                         </div>
                     )}
                 </div>
@@ -525,7 +869,9 @@ export const QuestionBlockNode = Node.create({
             smartFit: { default: true },
             pageCols: { default: 1 },
             firstInSection: { default: false },
-            questionNumber: { default: null }
+            questionNumber: { default: null },
+            dynamicData: { default: null },
+            dynamicDataSynced: { default: false }
         };
     },
 
@@ -576,6 +922,8 @@ export const QuestionBlockNode = Node.create({
                     pageCols: Number(dom.getAttribute('pagecols')) || 1,
                     firstInSection: dom.getAttribute('data-first-in-section') === 'true',
                     questionNumber: dom.getAttribute('data-question-number') ? Number(dom.getAttribute('data-question-number')) : null,
+                    dynamicData: dom.getAttribute('data-dynamic-data') || null,
+                    dynamicDataSynced: dom.getAttribute('data-dynamic-data-synced') === 'true',
                     options
                 };
             }
@@ -583,7 +931,7 @@ export const QuestionBlockNode = Node.create({
     },
 
     renderHTML({ HTMLAttributes }) {
-        const { options, statements, ...restAttrs } = HTMLAttributes;
+        const { options, statements, dynamicData, ...restAttrs } = HTMLAttributes;
         const qNum = HTMLAttributes.questionNumber;
         const styleString = restAttrs.style || '';
         const counterResetStyle = qNum ? `counter-reset: question-counter ${qNum - 1} !important;` : '';
@@ -613,7 +961,9 @@ export const QuestionBlockNode = Node.create({
             'pagecols': HTMLAttributes.pageCols || 1,
             'data-first-in-section': HTMLAttributes.firstInSection ? 'true' : null,
             'data-question-number': qNum || null,
-            'style': finalStyle || null
+            'style': finalStyle || null,
+            'data-dynamic-data': HTMLAttributes.dynamicData || null,
+            'data-dynamic-data-synced': HTMLAttributes.dynamicDataSynced ? 'true' : 'false'
         })];
     },
 

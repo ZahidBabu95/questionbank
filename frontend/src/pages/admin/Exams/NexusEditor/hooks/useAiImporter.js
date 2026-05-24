@@ -49,6 +49,7 @@ export const useAiImporter = () => {
                             const explanationText = q.explanation ? q.explanation.replace(/"/g, "&quot;") : "";
                             const answerText = q.answer ? q.answer.replace(/"/g, "&quot;") : "";
                             const qIdAttr = q.originalQuestionId ? q.originalQuestionId : `ai-${Math.random()}`;
+                            const dynamicDataJson = q.dynamicData ? (typeof q.dynamicData === 'object' ? JSON.stringify(q.dynamicData).replace(/'/g, "&#39;") : q.dynamicData.replace(/'/g, "&#39;")) : "";
                             
                             return `
                             <div data-type="question-block" 
@@ -67,7 +68,8 @@ export const useAiImporter = () => {
                                  optionstyle="${sec?.optionStyle || 'bn'}"
                                  optiondecoration="${sec?.optionDecoration || 'rightBracket'}"
                                  data-statements='${statementsJson}'
-                                 data-options='${optionsJson}'>
+                                 data-options='${optionsJson}'
+                                 data-dynamic-data='${dynamicDataJson}'>
                             </div>`;
                         };
 

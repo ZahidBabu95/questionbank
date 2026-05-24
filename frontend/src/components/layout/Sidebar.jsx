@@ -19,7 +19,13 @@ export const MENU_ITEMS = [
         title: 'Dashboard',
         icon: <LayoutDashboard size={20} strokeWidth={1.8} />,
         path: '/dashboard',
-        roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT']
+        roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
+        submenu: [
+            { id: 'DASHBOARD_OVERVIEW', title: 'Overview', path: '/dashboard', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] },
+            { id: 'DASHBOARD_ADMIN', title: 'Institute Admin', path: '/dashboard/admin', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'] },
+            { id: 'DASHBOARD_TEACHER', title: 'Teacher Metrics', path: '/dashboard/teacher', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'] },
+            { id: 'DASHBOARD_STUDENT', title: 'Student Performance', path: '/dashboard/student', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'] }
+        ]
     },
     {
         id: 'AI_WORKSPACE',
@@ -386,7 +392,24 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
         const generatedId = generateMenuId(item, parentId);
         const requiredPermission = `${generatedId}_VIEW`;
 
-        return userPermissions.includes(requiredPermission);
+        // If the specific permission exists in user's permissions, use it!
+        if (userPermissions.includes(requiredPermission)) return true;
+
+        // Fallback: If it's a dashboard submenu, and the user has the parent DASHBOARD_VIEW permission,
+        // and NONE of the dashboard submenus are explicitly present in the user's permissions array:
+        // we grant default access based on the item's role array.
+        // This ensures out-of-the-box functionality before the admin manually configures the submenus.
+        if (generatedId.startsWith('DASHBOARD_') && userPermissions.includes('DASHBOARD_VIEW')) {
+            const hasAnyDashboardSubmenuPermission = userPermissions.some(p => p.startsWith('DASHBOARD_') && p !== 'DASHBOARD_VIEW');
+            if (!hasAnyDashboardSubmenuPermission) {
+                // No submenu permissions have been saved for this user yet, so fallback to default roles check
+                if (item.roles && item.roles.some(role => userRoles.includes(role))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     };
 
     const filterMenuItems = (items, parentId = '') => {

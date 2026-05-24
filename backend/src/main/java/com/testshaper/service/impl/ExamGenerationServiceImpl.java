@@ -381,7 +381,7 @@ public class ExamGenerationServiceImpl {
     }
 
     private List<Question> fetchPool(String tenantId, UUID classSubjectId,
-            Question.QuestionType type,
+            String type,
             Question.DifficultyLevel difficulty,
             String language,
             Set<UUID> chapterIds,
@@ -405,7 +405,7 @@ public class ExamGenerationServiceImpl {
                 : excludedIds;
 
         Set<UUID> eligibleIdsSet = new HashSet<>();
-        String typeStr = type != null ? type.name() : null;
+        String typeStr = type;
 
         if (chapterIds == null && topicIds == null) {
             eligibleIdsSet.addAll(questionPoolRepository.findEligibleQuestionIds(
@@ -703,6 +703,7 @@ public class ExamGenerationServiceImpl {
             qDto.setLanguage(q.getLanguage());
             qDto.setExplanation(q.getExplanation());
             qDto.setCorrectAnswer(q.getCorrectAnswer());
+            qDto.setDynamicData(q.getDynamicData());
 
             if (q.getType().equals(Question.QuestionType.MCQ.name())) {
                 java.util.List<ExamDTO.OptionDTO> optionDTOs = null;

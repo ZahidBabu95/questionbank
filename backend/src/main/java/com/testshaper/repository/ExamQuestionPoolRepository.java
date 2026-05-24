@@ -24,7 +24,7 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             "AND q.classSubject.id = :classSubjectId " +
             "AND q.type = :type " +
             "AND q.difficulty = :difficulty " +
-            "AND q.language = :language " +
+            "AND (q.language = :language OR q.language = 'Bilingual' OR :language = 'Bilingual' OR q.language IS NULL OR q.language = '') " +
             "AND (:chapterIds IS NULL OR q.chapter.id IN :chapterIds) " +
             "AND (q.chapter IS NULL OR q.chapter.isActive = true OR q.chapter.isActive IS NULL) " +
             "AND (q.id NOT IN :excludedIds) " +
@@ -45,7 +45,7 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             "AND q.classSubject.id = :classSubjectId " +
             "AND q.type = :type " +
             "AND q.difficulty = :difficulty " +
-            "AND q.language = :language " +
+            "AND (q.language = :language OR q.language = 'Bilingual' OR :language = 'Bilingual' OR q.language IS NULL OR q.language = '') " +
             "AND (:topicIds IS NULL OR q.topic.id IN :topicIds) " +
             "AND (q.chapter IS NULL OR q.chapter.isActive = true OR q.chapter.isActive IS NULL) " +
             "AND (q.id NOT IN :excludedIds) " +

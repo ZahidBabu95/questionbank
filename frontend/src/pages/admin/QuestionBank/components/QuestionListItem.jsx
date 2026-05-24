@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, Edit, Trash2, CheckCircle, FileText, ThumbsUp, Bookmark, BookmarkCheck, GitCompare, MoreHorizontal, Layers } from 'lucide-react';
 import MarkdownRenderer from '../../../../components/MarkdownRenderer';
@@ -10,6 +10,23 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
     const [showAnswer, setShowAnswer] = useState(false);
     const [showExplanation, setShowExplanation] = useState(false);
     const [isLiked, setIsLiked] = useState(false);
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setIsMenuOpen(false);
+            }
+        };
+        if (isMenuOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isMenuOpen]);
 
     const difficultyStyle = {
         EASY: 'bg-emerald-50 text-emerald-700',
@@ -75,16 +92,21 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 </div>
 
                 {/* Actions Menu (Three-Dot) */}
-                <div className="flex items-center gap-1 shrink-0 relative group">
-                    <button className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors">
+                <div ref={menuRef} className="flex items-center gap-1 shrink-0 relative">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }}
+                        className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
+                    >
                         <MoreHorizontal size={16} />
                     </button>
-                    <div className="absolute right-0 top-full w-36 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 py-1 flex flex-col">
-                        <button onClick={(e) => { e.stopPropagation(); onView(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Eye size={12}/> View Detail</button>
-                        {hasPerm && hasPerm('EDIT') && <button onClick={(e) => { e.stopPropagation(); navigate(`/questions/edit/${q.id}`); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Edit size={12}/> Edit Source</button>}
-                        {q.status === 'REVISED' && isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); onReview(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><GitCompare size={12}/> Review Changes</button>}
-                        {isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); onDelete(q.id); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><Trash2 size={12}/> Delete</button>}
-                    </div>
+                    {isMenuOpen && (
+                        <div className="absolute right-0 top-full w-36 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1 flex flex-col animate-in fade-in slide-in-from-top-1 duration-150">
+                            <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onView(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Eye size={12}/> View Detail</button>
+                            {hasPerm && hasPerm('EDIT') && <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); navigate(`/questions/edit/${q.id}`); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Edit size={12}/> Edit Source</button>}
+                            {q.status === 'REVISED' && isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onReview(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><GitCompare size={12}/> Review Changes</button>}
+                            {isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onDelete(q.id); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><Trash2 size={12}/> Delete</button>}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -99,11 +121,22 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             )}
 
             {/* ── Stimulus ── */}
-            {q.stimulus && (
-                <div className="mx-4 mb-2 px-4 py-3 bg-slate-50 border border-slate-200 border-l-4 border-l-indigo-400 rounded-r-lg text-[13px] text-slate-700 font-medium leading-relaxed">
-                    <MarkdownRenderer content={q.stimulus} />
-                </div>
-            )}
+            {(() => {
+                if (!q.stimulus) return null;
+                const cleanStimulus = q.stimulus.replace(/<[^>]*>/g, '').trim().toLowerCase();
+                const isPlaceholder = 
+                    cleanStimulus === '' || 
+                    cleanStimulus === 'generated question' || 
+                    cleanStimulus === 'dynamic question' || 
+                    cleanStimulus === 'ডায়নামিক প্রশ্ন' ||
+                    cleanStimulus === 'ডায়নামিক প্রশ্ন';
+                if (isPlaceholder) return null;
+                return (
+                    <div className="mx-4 mb-2 px-4 py-3 bg-slate-50 border border-slate-200 border-l-4 border-l-indigo-400 rounded-r-lg text-[13px] text-slate-700 font-medium leading-relaxed">
+                        <MarkdownRenderer content={q.stimulus} />
+                    </div>
+                );
+            })()}
 
             {/* ── Question Text ── */}
             <div className="mx-4 mb-2 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
@@ -155,7 +188,7 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             )}
 
             {/* Non-MCQ: show correct answer block after Show Answer click */}
-            {showAnswer && q.type !== 'MCQ' && (q.type !== 'CQ' || !isStructuredCQAnswer) && q.correctAnswer && hasCQAnswer && (
+            {showAnswer && q.type !== 'MCQ' && !q.dynamicData && (q.type !== 'CQ' || !isStructuredCQAnswer) && q.correctAnswer && hasCQAnswer && (
                 <div className="mx-4 mb-2 px-3 py-2.5 bg-emerald-50 border border-emerald-300 rounded-lg text-[12px] text-emerald-900 font-semibold leading-snug flex items-start gap-2">
                     <CheckCircle size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -164,7 +197,7 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                     </div>
                 </div>
             )}
-            {showAnswer && q.type === 'CQ' && (!q.correctAnswer || !hasCQAnswer) && (
+            {showAnswer && q.type === 'CQ' && !q.dynamicData && (!q.correctAnswer || !hasCQAnswer) && (
                 <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No answer available.</div>
             )}
 
@@ -198,7 +231,7 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
 
 
             {/* ── Explanation Block ── */}
-            {showExplanation && (q.type !== 'CQ' || !isStructuredCQExplanation) && finalExplanation && hasCQExplanation && (
+            {showExplanation && !q.dynamicData && (q.type !== 'CQ' || !isStructuredCQExplanation) && finalExplanation && hasCQExplanation && (
                 <div className="mx-4 mb-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-[12px] text-blue-900 leading-snug">
                     <div className="flex-1 min-w-0">
                         {q.type === 'CQ' && <span className="block text-[10px] font-bold text-blue-600 uppercase tracking-wide mb-1">সৃজনশীল ব্যাখ্যা (পুরাতন/আনস্ট্রাকচার্ড ফরম্যাট):</span>}
@@ -206,15 +239,15 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                     </div>
                 </div>
             )}
-            {showExplanation && q.type === 'CQ' && (!finalExplanation || !hasCQExplanation) && (
+            {showExplanation && q.type === 'CQ' && !q.dynamicData && (!finalExplanation || !hasCQExplanation) && (
                 <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No explanation available.</div>
             )}
-            {showExplanation && q.type !== 'CQ' && !finalExplanation && (
+            {showExplanation && q.type !== 'CQ' && !q.dynamicData && !finalExplanation && (
                 <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No explanation available.</div>
             )}
 
             {/* ── Source / Action Footer ── */}
-            <div className="flex items-center justify-between px-4 pb-3 pt-1.5 border-t border-slate-100 gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 pb-3 pt-1.5 border-t border-slate-100 gap-3">
                 {/* Source — no truncation, allow wrapping */}
                 <div className="flex items-center gap-1.5 text-[10.5px] flex-1 min-w-0 flex-wrap">
                     {q.classSubject ? (
@@ -237,30 +270,31 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
 
                 {/* Action Buttons (Only Primary Footer Actions) */}
                 {!splitScreenMode && (
-                <div className="flex items-center gap-2 shrink-0">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onRevise(q); }}
-                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10.5px] font-bold transition-all border bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:text-primary hover:border-primary/30`}
-                        title="Quick Revise"
-                    >
-                        <Edit size={12} /> <span>Revise</span>
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setIsLiked(!isLiked); }}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all border ${isLiked ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-rose-400'}`}
-                        title="Like"
-                    >
-                        <ThumbsUp size={11} className={isLiked ? 'fill-current' : ''} />
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onSave(q.id); }}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all border ${isSaved ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-amber-500'}`}
-                        title={isSaved ? 'Remove from Saved' : 'Save'}
-                    >
-                        {isSaved ? <BookmarkCheck size={11} className="fill-current" /> : <Bookmark size={11} />}
-                        <span>Save</span>
-                    </button>
-                </div>
+                    <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto shrink-0 border-t border-slate-100 sm:border-0 pt-2 sm:pt-0">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onRevise(q); }}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:text-primary hover:border-primary/30"
+                            title="Quick Revise"
+                        >
+                            <Edit size={12} /> <span>Revise</span>
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setIsLiked(!isLiked); }}
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${isLiked ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-rose-400'}`}
+                            title="Like"
+                        >
+                            <ThumbsUp size={12} className={isLiked ? 'fill-current' : ''} />
+                            <span>Like</span>
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onSave(q.id); }}
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${isSaved ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-amber-500'}`}
+                            title={isSaved ? 'Remove from Saved' : 'Save'}
+                        >
+                            {isSaved ? <BookmarkCheck size={12} className="fill-current" /> : <Bookmark size={12} />}
+                            <span>Save</span>
+                        </button>
+                    </div>
                 )}
             </div>
         </div>

@@ -6,7 +6,7 @@ import {
     User, GraduationCap, Zap, Sun, Moon, 
     PanelLeftClose, PanelLeftOpen, Trash2, MoreHorizontal,
     FileText, Image, Mic, Paperclip, Copy, ThumbsUp, ThumbsDown, RotateCcw,
-    LogOut, Settings, Box, Bell, Wand2, Archive, Brain, Upload, ChevronRight, ArrowUp, Layout, X, CheckCircle
+    LogOut, Settings, Box, Bell, Wand2, Archive, Brain, Upload, ChevronRight, ArrowUp, ArrowLeft, Layout, X, CheckCircle, Menu
 } from 'lucide-react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -36,10 +36,11 @@ const AiWorkspace = () => {
     const [botTone, setBotTone] = useState('professional');
     const [customTones, setCustomTones] = useState([]);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024);
     const [isTyping, setIsTyping] = useState(false);
     const [activeSessionId, setActiveSessionId] = useState(null);
     const [searchParams, setSearchParams] = useSearchParams();
+    const isEmbedded = searchParams.get('embedded') === 'true' || window.location.search.includes('embedded=true');
     
     // Derive activeTool from URL
     const activeToolTarget = searchParams.get('tool_url');
@@ -62,6 +63,7 @@ const AiWorkspace = () => {
     const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || '{}'));
     const [toolsExpanded, setToolsExpanded] = useState(true);
     const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+    const [activeWorkspaceWidget, setActiveWorkspaceWidget] = useState(null);
 
     // Sidebar Resizer state (default to 1/3 of screen)
     const [toolsHeight, setToolsHeight] = useState(() => Math.max(150, window.innerHeight / 3));
@@ -140,6 +142,18 @@ const AiWorkspace = () => {
         };
         fetchUpdatedUser();
         // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth < 1024) {
+                setSidebarOpen(false);
+            } else {
+                setSidebarOpen(true);
+            }
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
     }, []);
 
     const handleLogout = () => {
@@ -320,14 +334,11 @@ const AiWorkspace = () => {
         if (WidgetRegistry[tool.id]) {
             setSearchParams({});
             setActiveTool(null);
-            const newMsg = {
-                id: Date.now(),
-                role: 'ai',
-                isWidget: true,
-                widgetType: tool.id,
-                content: `Welcome to ${tool.name}! Select your preferences below:`
-            };
-            setMessages(prev => [...prev, newMsg]);
+            setActiveWorkspaceWidget({
+                id: tool.id,
+                title: tool.name,
+                schemaJson: null
+            });
             if (window.innerWidth < 1024) {
                 setSidebarOpen(false);
             }
@@ -608,32 +619,63 @@ const AiWorkspace = () => {
             {/* ─── Sidebar ─── */}
             <AnimatePresence>
             {sidebarOpen && (
-                <motion.aside 
-                    initial={{ width: 0, opacity: 0 }}
-                    animate={{ width: 280, opacity: 1 }}
-                    exit={{ width: 0, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: 'easeInOut' }}
-                    className={`shrink-0 flex flex-col border-r overflow-hidden ${t.sidebar}`}
-                >
+                <>
+                    {/* Mobile Backdrop Overlay */}
+                    <div 
+                        className="fixed inset-0 bg-black/45 backdrop-blur-[2px] z-40 lg:hidden"
+                        onClick={() => setSidebarOpen(false)}
+                    />
+                    <motion.aside 
+                        initial={window.innerWidth < 1024 ? { x: -280, opacity: 0 } : { width: 0, opacity: 0 }}
+                        animate={window.innerWidth < 1024 ? { x: 0, opacity: 1 } : { width: 280, opacity: 1 }}
+                        exit={window.innerWidth < 1024 ? { x: -280, opacity: 0 } : { width: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: 'easeInOut' }}
+                        className={`shrink-0 flex flex-col border-r overflow-hidden h-full z-50 fixed inset-y-0 left-0 lg:static w-[280px] lg:w-[280px] ${t.sidebar}`}
+                    >
                     <div className="flex flex-col h-full p-3">
-                        {/* Logo Header */}
-                        <div 
-                            onClick={() => { setSearchParams({}); setMessages([]); }}
-                            className={`flex items-center justify-center py-3 mb-2 border-b cursor-pointer transition-opacity hover:opacity-80 ${isDark ? 'border-[#1e1e2e]' : 'border-slate-100'}`}
-                        >
-                            {branding?.logo_url ? (
-                                <img src={branding.logo_url} alt="Logo" className="h-9 max-w-[200px] w-auto object-contain" />
-                            ) : (
-                                <div className="flex items-center gap-2.5">
-                                    <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center shadow-md text-white shrink-0">
-                                        <Box strokeWidth={2.5} size={14} />
+                        {/* Logo Header (Web-only) / Mobile Header */}
+                        {!isEmbedded ? (
+                            <div 
+                                onClick={() => { setSearchParams({}); setMessages([]); }}
+                                className={`flex items-center justify-center py-3 mb-2 border-b cursor-pointer transition-opacity hover:opacity-80 ${isDark ? 'border-[#1e1e2e]' : 'border-slate-100'}`}
+                            >
+                                {branding?.logo_url ? (
+                                    <img src={branding.logo_url} alt="Logo" className="h-9 max-w-[200px] w-auto object-contain" />
+                                ) : (
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center shadow-md text-white shrink-0">
+                                            <Box strokeWidth={2.5} size={14} />
+                                        </div>
+                                        <span className={`text-[14px] font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-800'}`}>
+                                            {branding?.system_name || 'Question Shaper'}
+                                        </span>
                                     </div>
-                                    <span className={`text-[14px] font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-800'}`}>
-                                        {branding?.system_name || 'Question Shaper'}
-                                    </span>
+                                )}
+                            </div>
+                        ) : (
+                            /* Beautiful Mobile Drawer Top Header */
+                            <div className="flex items-center justify-between pb-3.5 mb-3 border-b border-slate-100 dark:border-[#1e1e2e]">
+                                <div className="flex items-center gap-2.5 pl-1.5">
+                                    <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                                        <Brain size={16} />
+                                    </div>
+                                    <div>
+                                        <p className={`text-[13px] font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Workspace Menu</p>
+                                        <p className="text-[9px] text-slate-400 font-semibold leading-none">History & Tools</p>
+                                    </div>
                                 </div>
-                            )}
-                        </div>
+                                <button 
+                                    onClick={() => setSidebarOpen(false)}
+                                    className={`p-1.5 rounded-full border transition-all active:scale-95 ${
+                                        isDark 
+                                            ? 'border-[#2a2a3d] text-slate-400 hover:bg-[#2a2a3d] hover:text-white' 
+                                            : 'border-slate-200 text-slate-500 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    <X size={15} />
+                                </button>
+                            </div>
+                        )}
 
                         {/* ─── Tools Section (Dynamic Menu Access) ─── */}
                         {filteredTools.length > 0 && (
@@ -654,7 +696,7 @@ const AiWorkspace = () => {
                                         <button
                                             key={tool.id}
                                             onClick={() => handleToolClick(tool)}
-                                            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium transition-all active:scale-[0.98] shrink-0 ${
+                                            className={`flex items-center gap-2.5 ${isEmbedded ? 'px-3.5 py-3 text-[14px]' : 'px-3 py-2 text-[13px]'} rounded-xl font-medium transition-all active:scale-[0.98] shrink-0 ${
                                                 activeTool?.id === tool.id
                                                     ? isDark 
                                                         ? 'bg-primary/20 text-primary border border-primary/20 shadow-sm' 
@@ -690,7 +732,7 @@ const AiWorkspace = () => {
                                 setActiveSessionId(null);
                                 setMessages([]); 
                             }}
-                            className={`flex items-center gap-2.5 w-full px-4 py-3 rounded-xl text-[13px] font-semibold transition-all active:scale-[0.98] border ${
+                            className={`flex items-center gap-2.5 w-full ${isEmbedded ? 'px-4 py-3.5 text-[14px]' : 'px-4 py-3 text-[13px]'} rounded-xl font-semibold transition-all active:scale-[0.98] border ${
                                 isDark 
                                     ? 'border-[#2a2a3d] text-slate-300 hover:bg-[#1a1a28] hover:border-indigo-500/30' 
                                     : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-primary/30'
@@ -724,7 +766,7 @@ const AiWorkspace = () => {
                                             <div key={chat.id} className="group relative flex items-center">
                                                 <button 
                                                     onClick={() => setActiveSessionId(chat.id)}
-                                                    className={`flex items-center gap-2.5 w-full pl-3 pr-8 py-2 text-left rounded-lg text-[13px] transition-all ${
+                                                    className={`flex items-center gap-2.5 w-full pl-3 pr-8 ${isEmbedded ? 'py-3 text-[14px]' : 'py-2 text-[13px]'} text-left rounded-lg transition-all ${
                                                         activeSessionId === chat.id 
                                                             ? (isDark ? 'bg-[#1a1a28] text-white' : 'bg-primary/5 text-primary') 
                                                             : `${t.textSecondary} ${t.hover}`
@@ -757,39 +799,44 @@ const AiWorkspace = () => {
                         </div>
 
                         {/* Token Usage */}
-                        <div className={`mt-3 p-3 rounded-xl border ${t.card}`}>
-                            <div className="flex items-center justify-between mb-2">
-                                <span className={`text-[10px] font-bold uppercase tracking-wider ${t.textMuted}`}>AI Credits</span>
-                                <Zap size={12} className="text-amber-500" />
+                        {!isEmbedded && (
+                            <div className={`mt-3 p-3 rounded-xl border ${t.card}`}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${t.textMuted}`}>AI Credits</span>
+                                    <Zap size={12} className="text-amber-500" />
+                                </div>
+                                <div className={`w-full rounded-full h-1 overflow-hidden ${isDark ? 'bg-[#0a0a0f]' : 'bg-slate-100'}`}>
+                                    <div className="bg-primary h-1 rounded-full" style={{ width: `${Math.min(100, (aiUsage.used / aiUsage.limit) * 100)}%` }}></div>
+                                </div>
+                                <p className={`text-[10px] mt-1.5 font-medium ${t.textMuted}`}>{aiUsage.used.toLocaleString()} / {aiUsage.limit.toLocaleString()} tokens used</p>
                             </div>
-                            <div className={`w-full rounded-full h-1 overflow-hidden ${isDark ? 'bg-[#0a0a0f]' : 'bg-slate-100'}`}>
-                                <div className="bg-primary h-1 rounded-full" style={{ width: `${Math.min(100, (aiUsage.used / aiUsage.limit) * 100)}%` }}></div>
-                            </div>
-                            <p className={`text-[10px] mt-1.5 font-medium ${t.textMuted}`}>{aiUsage.used.toLocaleString()} / {aiUsage.limit.toLocaleString()} tokens used</p>
-                        </div>
+                        )}
 
                         {/* User Profile */}
-                        <div className={`mt-2 p-2 rounded-xl border ${t.card}`}>
-                            <div className="relative group">
-                                <Link to={isDefaultInstitute ? "/profile" : "/ai-workspace?tool_url=/profile"} className={`flex items-center gap-2.5 p-1.5 rounded-lg transition-colors ${t.hover}`}>
-                                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold shadow-md shrink-0">
-                                        {user?.name?.charAt(0) || 'U'}
+                        {!isEmbedded && (
+                            <div className={`mt-2 p-2 rounded-xl border ${t.card}`}>
+                                <div className="relative group">
+                                    <Link to={isDefaultInstitute ? "/profile" : "/ai-workspace?tool_url=/profile"} className={`flex items-center gap-2.5 p-1.5 rounded-lg transition-colors ${t.hover}`}>
+                                        <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold shadow-md shrink-0">
+                                            {user?.name?.charAt(0) || 'U'}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`text-[12px] font-semibold truncate ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{user?.name || 'User'}</p>
+                                            <p className={`text-[10px] truncate ${t.textMuted}`}>{user?.roles?.[0] || user?.email || 'Member'}</p>
+                                        </div>
+                                        <MoreHorizontal size={14} className={t.textMuted} />
+                                    </Link>
+                                    <div className={`absolute bottom-full left-0 mb-2 w-full rounded-xl shadow-xl border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 ${isDark ? 'bg-[#111118] border-[#2a2a3d]' : 'bg-white border-slate-200'}`}>
+                                        <button onClick={handleLogout} className="w-full text-left px-4 py-3 hover:bg-rose-50 hover:text-rose-600 text-[13px] font-semibold text-rose-500 flex items-center gap-2 rounded-xl transition-colors">
+                                            <LogOut size={14} /> Sign Out
+                                        </button>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className={`text-[12px] font-semibold truncate ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{user?.name || 'User'}</p>
-                                        <p className={`text-[10px] truncate ${t.textMuted}`}>{user?.roles?.[0] || user?.email || 'Member'}</p>
-                                    </div>
-                                    <MoreHorizontal size={14} className={t.textMuted} />
-                                </Link>
-                                <div className={`absolute bottom-full left-0 mb-2 w-full rounded-xl shadow-xl border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 ${isDark ? 'bg-[#111118] border-[#2a2a3d]' : 'bg-white border-slate-200'}`}>
-                                    <button onClick={handleLogout} className="w-full text-left px-4 py-3 hover:bg-rose-50 hover:text-rose-600 text-[13px] font-semibold text-rose-500 flex items-center gap-2 rounded-xl transition-colors">
-                                        <LogOut size={14} /> Sign Out
-                                    </button>
                                 </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 </motion.aside>
+                </>
             )}
             </AnimatePresence>
 
@@ -813,7 +860,7 @@ const AiWorkspace = () => {
                             onClick={() => setSidebarOpen(!sidebarOpen)}
                             className={`p-2 rounded-lg transition-colors ${isDark ? 'text-slate-400 hover:text-white hover:bg-[#1a1a28]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'}`}
                         >
-                            {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+                            {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
                         </button>
 
                         <div className={`h-5 w-px ${isDark ? 'bg-[#1e1e2e]' : 'bg-slate-200'}`} />
@@ -822,7 +869,7 @@ const AiWorkspace = () => {
                         <div className="relative">
                             <button 
                                 onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors max-w-[250px] ${
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors max-w-[130px] sm:max-w-[250px] ${
                                     isDark ? 'text-slate-300 hover:bg-[#1a1a28]' : 'text-slate-600 hover:bg-slate-50'
                                 }`}
                             >
@@ -886,42 +933,48 @@ const AiWorkspace = () => {
                         <div className={`flex items-center p-0.5 rounded-lg border ${isDark ? 'bg-[#111118] border-[#1e1e2e]' : 'bg-slate-100 border-slate-200/50'}`}>
                             <button 
                                 onClick={() => setMode('Teacher')}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-semibold transition-all ${
+                                className={`flex items-center gap-1.5 px-2 py-1 sm:px-2.5 rounded-md text-[12px] font-semibold transition-all ${
                                     mode === 'Teacher' 
                                         ? (isDark ? 'bg-indigo-500/15 text-indigo-400' : 'bg-white shadow-sm text-primary') 
                                         : `${t.textMuted} hover:${isDark ? 'text-slate-300' : 'text-slate-600'}`
                                 }`}
                             >
-                                <User size={13} /> Teacher
+                                <User size={13} /> <span className="hidden sm:inline">Teacher</span>
                             </button>
                             <button 
                                 onClick={() => setMode('Student')}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-semibold transition-all ${
+                                className={`flex items-center gap-1.5 px-2 py-1 sm:px-2.5 rounded-md text-[12px] font-semibold transition-all ${
                                     mode === 'Student' 
                                         ? (isDark ? 'bg-emerald-500/15 text-emerald-400' : 'bg-white shadow-sm text-emerald-600') 
                                         : `${t.textMuted} hover:${isDark ? 'text-slate-300' : 'text-slate-600'}`
                                 }`}
                             >
-                                <GraduationCap size={13} /> Student
+                                <GraduationCap size={13} /> <span className="hidden sm:inline">Student</span>
                             </button>
                         </div>
                         
-                        <button 
-                            onClick={() => setIsDark(!isDark)}
-                            className={`p-2 rounded-lg transition-colors ${isDark ? 'text-amber-400 hover:bg-[#1a1a28]' : 'text-slate-500 hover:bg-slate-100'}`}
-                            title="Toggle Theme"
-                        >
-                            {isDark ? <Sun size={16} /> : <Moon size={16} />}
-                        </button>
+                        {!isEmbedded && (
+                            <>
+                                <button 
+                                    onClick={() => setIsDark(!isDark)}
+                                    className={`p-2 rounded-lg transition-colors hidden md:flex ${isDark ? 'text-amber-400 hover:bg-[#1a1a28]' : 'text-slate-500 hover:bg-slate-100'}`}
+                                    title="Toggle Theme"
+                                >
+                                    {isDark ? <Sun size={16} /> : <Moon size={16} />}
+                                </button>
 
-                        <div className={`h-5 w-px ${isDark ? 'bg-[#1e1e2e]' : 'bg-slate-200'}`} />
+                                <div className={`h-5 w-px hidden md:block ${isDark ? 'bg-[#1e1e2e]' : 'bg-slate-200'}`} />
 
-                        {/* Notifications */}
-                        <button className={`p-2 rounded-lg relative transition-colors ${isDark ? 'text-slate-400 hover:text-white hover:bg-[#1a1a28]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'}`}>
-                            <Bell size={16} />
-                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-primary rounded-full"></span>
-                        </button>
+                                {/* Notifications */}
+                                <button className={`p-2 rounded-lg relative transition-colors hidden md:flex ${isDark ? 'text-slate-400 hover:text-white hover:bg-[#1a1a28]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'}`}>
+                                    <Bell size={16} />
+                                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-primary rounded-full"></span>
+                                </button>
 
+                                <div className={`h-5 w-px hidden md:block ${isDark ? 'bg-[#1e1e2e]' : 'bg-slate-200'}`} />
+                            </>
+                        )}
+                        
                         {/* Chatbot Settings */}
                         <div className="relative">
                             <button 
@@ -969,19 +1022,21 @@ const AiWorkspace = () => {
                         </div>
 
                         {/* User Avatar */}
-                        <div className="relative group flex items-center">
-                            <div className="flex items-center gap-2 cursor-pointer ml-0.5">
-                                <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold shadow-md">
-                                    {user?.name?.charAt(0) || 'U'}
+                        {!isEmbedded && (
+                            <div className="relative group flex items-center">
+                                <div className="flex items-center gap-2 cursor-pointer ml-0.5">
+                                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold shadow-md">
+                                        {user?.name?.charAt(0) || 'U'}
+                                    </div>
+                                </div>
+                                <div className={`absolute top-full right-0 mt-2 w-48 rounded-xl shadow-xl border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 ${isDark ? 'bg-[#111118] border-[#2a2a3d]' : 'bg-white border-slate-200'}`}>
+                                    <Link to={isDefaultInstitute ? "/profile" : "/ai-workspace?tool_url=/profile"} className={`block px-4 py-2 text-[13px] font-semibold rounded-t-xl transition-colors ${isDark ? 'hover:bg-[#1a1a28] text-slate-300' : 'hover:bg-slate-50 text-slate-700'}`}>Profile</Link>
+                                    <button onClick={handleLogout} className={`w-full text-left px-4 py-2 text-[13px] font-semibold flex items-center gap-2 rounded-b-xl transition-colors ${isDark ? 'hover:bg-[#1a1a28] text-rose-400' : 'hover:bg-slate-50 text-rose-600'}`}>
+                                        <LogOut size={14} /> Sign Out
+                                    </button>
                                 </div>
                             </div>
-                            <div className={`absolute top-full right-0 mt-2 w-48 rounded-xl shadow-xl border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 ${isDark ? 'bg-[#111118] border-[#2a2a3d]' : 'bg-white border-slate-200'}`}>
-                                <Link to={isDefaultInstitute ? "/profile" : "/ai-workspace?tool_url=/profile"} className={`block px-4 py-2 text-[13px] font-semibold rounded-t-xl transition-colors ${isDark ? 'hover:bg-[#1a1a28] text-slate-300' : 'hover:bg-slate-50 text-slate-700'}`}>Profile</Link>
-                                <button onClick={handleLogout} className={`w-full text-left px-4 py-2 text-[13px] font-semibold flex items-center gap-2 rounded-b-xl transition-colors ${isDark ? 'hover:bg-[#1a1a28] text-rose-400' : 'hover:bg-slate-50 text-rose-600'}`}>
-                                    <LogOut size={14} /> Sign Out
-                                </button>
-                            </div>
-                        </div>
+                        )}
                     </div>
                 </header>
 
@@ -996,12 +1051,74 @@ const AiWorkspace = () => {
                 ) : (
                 <div className="flex-1 flex overflow-hidden min-h-0 relative">
                 {/* ─── Left Side (Chat & Input) ─── */}
-                <div className={`flex flex-col h-full transition-all duration-300 ease-in-out ${splitArtifact ? 'w-1/2 border-r ' + (isDark ? 'border-[#1e1e2e]' : 'border-slate-200') : 'w-full'}`}>
-                {/* ─── Chat Content Area ─── */}
-                <div className={`flex-1 overflow-y-auto z-10 custom-scrollbar flex flex-col ${messages.length === 0 ? 'justify-center items-center px-4' : ''}`}>
-                    {messages.length === 0 ? (
+                <div className={`flex flex-col h-full transition-all duration-300 ease-in-out ${splitArtifact ? 'w-full lg:w-1/2 border-r ' + (isDark ? 'border-[#1e1e2e]' : 'border-slate-200') : 'w-full'}`}>
+                    {activeWorkspaceWidget ? (
+                        <div className={`flex-1 flex flex-col h-full overflow-y-auto ${isEmbedded ? 'p-1.5' : 'p-4 sm:p-6'} custom-scrollbar animate-in fade-in duration-200`}>
+                            <div className="max-w-4xl w-full mx-auto flex flex-col items-center">
+                                {/* Widget Top Action Bar */}
+                                <div className="w-full flex items-center justify-between mb-6 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveWorkspaceWidget(null)}
+                                        className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl border transition-all active:scale-[0.97] ${
+                                            isDark 
+                                                ? 'bg-[#1b1b2f]/80 border-[#28283f] text-slate-300 hover:bg-[#202035] hover:text-white' 
+                                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-primary shadow-sm'
+                                        }`}
+                                    >
+                                        <ArrowLeft size={14} />
+                                        Back to Chat
+                                    </button>
+                                    <div className="flex items-center gap-1.5 bg-indigo-500/10 px-3 py-1.5 rounded-full border border-indigo-500/20 shadow-sm">
+                                        <Sparkles size={12} className="text-indigo-400 fill-indigo-400 animate-pulse" />
+                                        <span className="text-[11px] font-extrabold text-indigo-400 uppercase tracking-wider">Active Workspace Tool</span>
+                                    </div>
+                                </div>
+
+                                {/* Widget Render Zone */}
+                                {(() => {
+                                    const toolId = activeWorkspaceWidget.id;
+                                    
+                                    // Handle Raw JSX Tool (from the React Tool Studio)
+                                    if (activeWorkspaceWidget.schemaJson) {
+                                        return (
+                                            <div className={`w-full max-w-3xl bg-white dark:bg-[#12121a] rounded-3xl border border-slate-200/60 dark:border-[#252538]/60 ${isEmbedded ? 'p-3' : 'p-6'} shadow-xl shadow-indigo-500/5`}>
+                                                <div className="flex gap-2 items-center mb-4 text-sm text-slate-600 dark:text-slate-300 font-bold border-b pb-3 border-slate-100 dark:border-[#252538]/50">
+                                                    <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center">
+                                                        <Sparkles size={12} className="text-white fill-white" />
+                                                    </div>
+                                                    Welcome to {activeWorkspaceWidget.title}!
+                                                </div>
+                                                <LiveProvider code={activeWorkspaceWidget.schemaJson} scope={scope} noInline={true}>
+                                                    <LivePreview />
+                                                    <LiveError className="text-red-500 text-[11px] mt-3 bg-red-50 dark:bg-red-950/20 p-3 rounded-lg font-mono whitespace-pre-wrap border border-red-100 dark:border-red-950/30" />
+                                                </LiveProvider>
+                                            </div>
+                                        );
+                                    }
+                                    
+                                    // Native registered widgets
+                                    const ActiveWidget = WidgetRegistry[toolId];
+                                    if (!ActiveWidget) return null;
+
+                                    return (
+                                        <div className="w-full flex justify-center">
+                                            <ActiveWidget 
+                                                userSubjects={userSubjects} 
+                                                isDark={isDark} 
+                                            />
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                    ) : (
                         <>
-                            <h2 className={`text-3xl font-medium mb-8 text-center ${isDark ? 'text-white' : 'text-slate-800'}`}>
+                            {/* ─── Chat Content Area ─── */}
+                            <div className={`flex-1 overflow-y-auto z-10 custom-scrollbar flex flex-col ${messages.length === 0 ? 'justify-center items-center px-4' : ''}`}>
+                                {messages.length === 0 ? (
+                                    <>
+                            <h2 className={`text-xl sm:text-2xl md:text-3xl font-medium mb-8 text-center px-4 ${isDark ? 'text-white' : 'text-slate-800'}`}>
                                 {(() => {
                                     const hour = new Date().getHours();
                                     const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -1010,7 +1127,7 @@ const AiWorkspace = () => {
                                 })()}
                             </h2>
                             
-                            <div className="w-full max-w-[1024px]">
+                            <div className="w-full max-w-[1024px] px-2 sm:px-4">
                                 {(() => {
                                     return (
                                         <form onSubmit={handleSend} className="relative w-full">
@@ -1039,49 +1156,96 @@ const AiWorkspace = () => {
                                                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                                                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
                                                                 transition={{ duration: 0.15 }}
-                                                                className={`absolute bottom-full left-0 mb-3 w-56 rounded-xl border shadow-xl z-50 overflow-hidden ${
+                                                                className={`absolute bottom-full left-0 mb-3 w-72 sm:w-80 rounded-2xl border shadow-xl z-50 overflow-hidden ${
                                                                     isDark ? 'bg-[#1e1e2d] border-[#2a2a3d]' : 'bg-white border-slate-200'
                                                                 }`}
                                                             >
-                                                                <div className={`px-3 py-2 text-xs font-bold uppercase tracking-wider border-b ${isDark ? 'text-slate-500 border-[#2a2a3d]' : 'text-slate-400 border-slate-100'}`}>
-                                                                    Connected AI Tools
+                                                                <div className={`px-4 py-3 text-xs font-bold uppercase tracking-wider border-b flex items-center justify-between ${isDark ? 'text-slate-500 border-[#2a2a3d]' : 'text-slate-400 border-slate-100'}`}>
+                                                                    <span>Connected AI Tools</span>
+                                                                    <Sparkles size={12} className="text-amber-500" />
                                                                 </div>
-                                                                <div className="p-1">
+                                                                <div className="p-1.5 space-y-1">
                                                                     {workspaceTools.filter(t => !t.permId || hasPermission(t.permId)).length > 0 ? (
-                                                                        workspaceTools.filter(t => !t.permId || hasPermission(t.permId)).map((tool, idx) => (
-                                                                            <button
-                                                                                key={idx}
-                                                                                onClick={() => {
-                                                                                    setPlusMenuOpen(false);
-                                                                                    if (WidgetRegistry[tool.id] || tool.schemaJson) {
-                                                                                        const newMsg = {
-                                                                                            id: Date.now(),
-                                                                                            role: 'ai',
-                                                                                            isWidget: true,
-                                                                                            widgetType: tool.id,
-                                                                                            content: `Welcome to ${tool.title}! Select your preferences below:`
-                                                                                        };
-                                                                                        setMessages(prev => [...prev, newMsg]);
-                                                                                    } else if (tool.path) {
-                                                                                        navigate(tool.path);
-                                                                                    } else {
-                                                                                        console.warn("Tool has no widget, schema, or path:", tool.title);
-                                                                                    }
-                                                                                }}
-                                                                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-left transition-colors ${
-                                                                                    isDark ? 'text-slate-300 hover:bg-[#2a2a3d]' : 'text-slate-700 hover:bg-slate-50 hover:text-primary'
-                                                                                }`}
-                                                                            >
-                                                                                <span className={`${isDark ? 'text-slate-400' : 'text-slate-400'}`}>{tool.icon}</span>
-                                                                                <span className="font-medium">{tool.title}</span>
-                                                                            </button>
-                                                                        ))
+                                                                        workspaceTools.filter(t => !t.permId || hasPermission(t.permId)).map((tool, idx) => {
+                                                                            const isExamGen = tool.id === 'AUTO_EXAM_GENERATOR';
+                                                                            const isLecture = tool.id === 'LECTURE_SHEET_MAKER';
+                                                                            const isNexus = tool.id === 'NEXUS_PAPER_ENGINE';
+                                                                            
+                                                                            let accentBg = 'bg-amber-500/10 text-amber-500 dark:bg-amber-500/20 dark:text-amber-400';
+                                                                            let tooltipDesc = tool.description || 'Launch customized AI assistant tool';
+                                                                            
+                                                                            if (isExamGen) {
+                                                                                accentBg = 'bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-400';
+                                                                                tooltipDesc = 'Instantly build exam blueprints with dynamic syllabus chapters';
+                                                                            } else if (isLecture) {
+                                                                                accentBg = 'bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20 dark:text-emerald-400';
+                                                                                tooltipDesc = 'Generate structured lecture sheets and class materials';
+                                                                            } else if (isNexus) {
+                                                                                accentBg = 'bg-sky-500/10 text-sky-500 dark:bg-sky-500/20 dark:text-sky-400';
+                                                                                tooltipDesc = 'Access advanced Nexus WYSIWYG paper editor canvas';
+                                                                            }
+
+                                                                            return (
+                                                                                <button
+                                                                                    key={idx}
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        setPlusMenuOpen(false);
+                                                                                        if (WidgetRegistry[tool.id] || tool.schemaJson) {
+                                                                                            setActiveWorkspaceWidget({
+                                                                                                id: tool.id,
+                                                                                                title: tool.title,
+                                                                                                schemaJson: tool.schemaJson || null
+                                                                                            });
+                                                                                        } else if (tool.path) {
+                                                                                            navigate(tool.path);
+                                                                                        } else {
+                                                                                            console.warn("Tool has no widget, schema, or path:", tool.title);
+                                                                                        }
+                                                                                    }}
+                                                                                    className={`w-full flex items-start gap-3.5 px-3 py-3 rounded-2xl text-left transition-all active:scale-[0.98] ${
+                                                                                        isDark 
+                                                                                            ? 'hover:bg-[#252538] text-slate-300 hover:text-white' 
+                                                                                            : 'hover:bg-indigo-50/50 text-slate-700 hover:text-primary'
+                                                                                    }`}
+                                                                                >
+                                                                                    <div className={`p-2.5 rounded-xl shrink-0 ${accentBg}`}>
+                                                                                        {tool.icon}
+                                                                                    </div>
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <p className="font-bold text-[13px] leading-snug">{tool.title}</p>
+                                                                                        <p className={`text-[10px] mt-0.5 leading-snug font-normal truncate ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                                                                                            {tooltipDesc}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                </button>
+                                                                            );
+                                                                        })
                                                                     ) : (
                                                                         <div className="px-3 py-3 text-xs text-center text-slate-500">
-                                                                            No extra tools authorized.
+                                                                            No connected tools available.
                                                                         </div>
                                                                     )}
                                                                 </div>
+                                                                {isSuperAdmin && (
+                                                                    <div className={`px-3 py-2.5 border-t text-center ${isDark ? 'border-[#2a2a3d] bg-[#171724]/40' : 'border-slate-100 bg-slate-50/50'}`}>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setPlusMenuOpen(false);
+                                                                                navigate('/ai-workspace/admin/tools');
+                                                                            }}
+                                                                            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all active:scale-[0.98] ${
+                                                                                isDark 
+                                                                                    ? 'bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300' 
+                                                                                    : 'bg-indigo-50 text-primary hover:bg-indigo-100/70 hover:text-primary-dark'
+                                                                            }`}
+                                                                        >
+                                                                            <Settings size={13} />
+                                                                            Manage AI Workspace Tools
+                                                                        </button>
+                                                                    </div>
+                                                                )}
                                                             </motion.div>
                                                         </>
                                                     )}
@@ -1126,19 +1290,26 @@ const AiWorkspace = () => {
                                 })()}
                             </div>
 
-                            <div className="flex flex-wrap justify-center gap-3 mt-6 max-w-[1024px]">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6 max-w-[800px] w-full px-4 sm:px-6">
                                 {suggestedPrompts.map((sp, idx) => (
                                     <button
                                         key={idx}
                                         onClick={() => handleSuggestedPrompt(sp.text)}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-full border text-[13px] font-medium transition-all ${
+                                        className={`flex items-start gap-3 p-3.5 rounded-2xl border text-left text-xs font-semibold transition-all active:scale-[0.98] ${
                                             isDark 
-                                                ? 'bg-transparent border-[#2a2a3d] text-slate-300 hover:bg-[#1a1a28]' 
-                                                : 'bg-transparent border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                ? 'bg-[#16161f]/60 border-[#252535] text-slate-300 hover:bg-[#1a1a28] hover:border-indigo-500/20' 
+                                                : 'bg-white border-slate-200/80 text-slate-600 hover:bg-slate-50 hover:border-primary/20'
                                         }`}
                                     >
-                                        <span className={t.textMuted}>{sp.icon}</span>
-                                        {sp.text}
+                                        <div className={`p-2 rounded-xl shrink-0 ${
+                                            isDark ? 'bg-[#252535] text-indigo-400' : 'bg-[#f8f9fb] text-primary'
+                                        }`}>
+                                            {sp.icon}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`font-semibold truncate ${isDark ? 'text-white' : 'text-slate-800'}`}>{sp.text}</p>
+                                            <p className={`text-[10px] mt-0.5 font-normal ${t.textMuted}`}>Click to generate instantly</p>
+                                        </div>
                                     </button>
                                 ))}
                             </div>
@@ -1403,52 +1574,96 @@ const AiWorkspace = () => {
                                                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                                                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
                                                                 transition={{ duration: 0.15 }}
-                                                                className={`absolute bottom-full left-0 mb-3 w-56 rounded-xl border shadow-xl z-50 overflow-hidden ${
+                                                                className={`absolute bottom-full left-0 mb-3 w-72 sm:w-80 rounded-2xl border shadow-xl z-50 overflow-hidden ${
                                                                     isDark ? 'bg-[#1e1e2d] border-[#2a2a3d]' : 'bg-white border-slate-200'
                                                                 }`}
                                                             >
-                                                                <div className={`px-3 py-2 text-xs font-bold uppercase tracking-wider border-b ${isDark ? 'text-slate-500 border-[#2a2a3d]' : 'text-slate-400 border-slate-100'}`}>
-                                                                    Connected AI Tools
+                                                                <div className={`px-4 py-3 text-xs font-bold uppercase tracking-wider border-b flex items-center justify-between ${isDark ? 'text-slate-500 border-[#2a2a3d]' : 'text-slate-400 border-slate-100'}`}>
+                                                                    <span>Connected AI Tools</span>
+                                                                    <Sparkles size={12} className="text-amber-500" />
                                                                 </div>
-                                                                <div className="p-1">
+                                                                <div className="p-1.5 space-y-1">
                                                                     {workspaceTools.filter(t => !t.permId || hasPermission(t.permId)).length > 0 ? (
-                                                                        workspaceTools.filter(t => !t.permId || hasPermission(t.permId)).map((tool, idx) => (
-                                                                            <button
-                                                                                key={idx}
-                                                                                type="button"
-                                                                                onClick={() => {
-                                                                                    setPlusMenuOpen(false);
-                                                                                    if (WidgetRegistry[tool.id] || tool.schemaJson) {
-                                                                                        const newMsg = {
-                                                                                            id: Date.now(),
-                                                                                            role: 'ai',
-                                                                                            isWidget: true,
-                                                                                            widgetType: tool.id,
-                                                                                            content: `Welcome to ${tool.title}! Select your preferences below:`
-                                                                                        };
-                                                                                        setMessages(prev => [...prev, newMsg]);
-                                                                                    } else if (tool.path) {
-                                                                                        navigate(tool.path);
-                                                                                    } else {
-                                                                                        console.warn("Tool has no widget, schema, or path:", tool.title);
-                                                                                    }
-                                                                                }}
-                                                                                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-semibold transition-colors text-left ${
-                                                                                    isDark ? 'text-slate-300 hover:bg-[#2a2a3d] hover:text-white' : 'text-slate-700 hover:bg-slate-100 hover:text-primary'
-                                                                                }`}
-                                                                            >
-                                                                                <div className={`p-1.5 rounded-md ${isDark ? 'bg-[#16161f] text-indigo-400' : 'bg-white shadow-sm border border-slate-200/60 text-primary'}`}>
-                                                                                    {tool.icon}
-                                                                                </div>
-                                                                                {tool.title}
-                                                                            </button>
-                                                                        ))
+                                                                        workspaceTools.filter(t => !t.permId || hasPermission(t.permId)).map((tool, idx) => {
+                                                                            const isExamGen = tool.id === 'AUTO_EXAM_GENERATOR';
+                                                                            const isLecture = tool.id === 'LECTURE_SHEET_MAKER';
+                                                                            const isNexus = tool.id === 'NEXUS_PAPER_ENGINE';
+                                                                            
+                                                                            let accentBg = 'bg-amber-500/10 text-amber-500 dark:bg-amber-500/20 dark:text-amber-400';
+                                                                            let tooltipDesc = tool.description || 'Launch customized AI assistant tool';
+                                                                            
+                                                                            if (isExamGen) {
+                                                                                accentBg = 'bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-400';
+                                                                                tooltipDesc = 'Instantly build exam blueprints with dynamic syllabus chapters';
+                                                                            } else if (isLecture) {
+                                                                                accentBg = 'bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20 dark:text-emerald-400';
+                                                                                tooltipDesc = 'Generate structured lecture sheets and class materials';
+                                                                            } else if (isNexus) {
+                                                                                accentBg = 'bg-sky-500/10 text-sky-500 dark:bg-sky-500/20 dark:text-sky-400';
+                                                                                tooltipDesc = 'Access advanced Nexus WYSIWYG paper editor canvas';
+                                                                            }
+
+                                                                            return (
+                                                                                <button
+                                                                                    key={idx}
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        setPlusMenuOpen(false);
+                                                                                        if (WidgetRegistry[tool.id] || tool.schemaJson) {
+                                                                                            setActiveWorkspaceWidget({
+                                                                                                id: tool.id,
+                                                                                                title: tool.title,
+                                                                                                schemaJson: tool.schemaJson || null
+                                                                                            });
+                                                                                        } else if (tool.path) {
+                                                                                            navigate(tool.path);
+                                                                                        } else {
+                                                                                            console.warn("Tool has no widget, schema, or path:", tool.title);
+                                                                                        }
+                                                                                    }}
+                                                                                    className={`w-full flex items-start gap-3.5 px-3 py-3 rounded-2xl text-left transition-all active:scale-[0.98] ${
+                                                                                        isDark 
+                                                                                            ? 'hover:bg-[#252538] text-slate-300 hover:text-white' 
+                                                                                            : 'hover:bg-indigo-50/50 text-slate-700 hover:text-primary'
+                                                                                    }`}
+                                                                                >
+                                                                                    <div className={`p-2.5 rounded-xl shrink-0 ${accentBg}`}>
+                                                                                        {tool.icon}
+                                                                                    </div>
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <p className="font-bold text-[13px] leading-snug">{tool.title}</p>
+                                                                                        <p className={`text-[10px] mt-0.5 leading-snug font-normal truncate ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                                                                                            {tooltipDesc}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                </button>
+                                                                            );
+                                                                        })
                                                                     ) : (
-                                                                        <div className={`px-3 py-3 text-xs text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                                                                        <div className="px-3 py-3 text-xs text-center text-slate-500">
                                                                             No connected tools available.
                                                                         </div>
                                                                     )}
                                                                 </div>
+                                                                {isSuperAdmin && (
+                                                                    <div className={`px-3 py-2.5 border-t text-center ${isDark ? 'border-[#2a2a3d] bg-[#171724]/40' : 'border-slate-100 bg-slate-50/50'}`}>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setPlusMenuOpen(false);
+                                                                                navigate('/ai-workspace/admin/tools');
+                                                                            }}
+                                                                            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all active:scale-[0.98] ${
+                                                                                isDark 
+                                                                                    ? 'bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300' 
+                                                                                    : 'bg-indigo-50 text-primary hover:bg-indigo-100/70 hover:text-primary-dark'
+                                                                            }`}
+                                                                        >
+                                                                            <Settings size={13} />
+                                                                            Manage AI Workspace Tools
+                                                                        </button>
+                                                                    </div>
+                                                                )}
                                                             </motion.div>
                                                         </>
                                                     )}
@@ -1498,16 +1713,18 @@ const AiWorkspace = () => {
                         </div>
                     </div>
                 )}
-                </div> {/* End Left Side */}
+            </>
+        )}
+    </div> {/* End Left Side */}
 
                 {/* ─── Right Side (Split Artifact View) ─── */}
                 <AnimatePresence>
                     {splitArtifact && (
                         <motion.div
-                            initial={{ opacity: 0, x: 20, width: 0 }}
-                            animate={{ opacity: 1, x: 0, width: '50%' }}
-                            exit={{ opacity: 0, x: 20, width: 0 }}
-                            className={`h-full flex flex-col shadow-xl z-20 ${isDark ? 'bg-[#0a0a0f]' : 'bg-white'}`}
+                            initial={window.innerWidth < 1024 ? { opacity: 0, x: '100%', width: '100%' } : { opacity: 0, x: 20, width: 0 }}
+                            animate={window.innerWidth < 1024 ? { opacity: 1, x: 0, width: '100%' } : { opacity: 1, x: 0, width: '50%' }}
+                            exit={window.innerWidth < 1024 ? { opacity: 0, x: '100%', width: '100%' } : { opacity: 0, x: 20, width: 0 }}
+                            className={`h-full flex flex-col shadow-xl z-30 fixed inset-y-0 right-0 lg:static ${isDark ? 'bg-[#0a0a0f]' : 'bg-white'}`}
                         >
                             <div className={`flex items-center justify-between p-4 border-b shrink-0 ${isDark ? 'border-[#1e1e2e] bg-[#111118]' : 'border-slate-100 bg-slate-50'}`}>
                                 <h3 className={`font-bold flex items-center gap-2 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>

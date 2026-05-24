@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from '../utils/axios';
-import { Mail, Lock, User, ArrowRight, CheckCircle, Smartphone, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, CheckCircle, Smartphone, Eye, EyeOff, Circle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useBranding } from '../context/BrandingContext';
 
@@ -21,6 +21,14 @@ const Signup = () => {
     const navigate = useNavigate();
     const branding = useBranding();
 
+    const passwordRules = {
+        length: formData.password.length >= 8,
+        uppercase: /[A-Z]/.test(formData.password),
+        lowercase: /[a-z]/.test(formData.password),
+        number: /[0-9]/.test(formData.password),
+        special: /[!@#$%^&*(),.?":{}|<>]/.test(formData.password)
+    };
+    const isPasswordValid = Object.values(passwordRules).every(Boolean);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -29,6 +37,11 @@ const Signup = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+
+        if (!isPasswordValid) {
+            setError("Password does not meet all security requirements.");
+            return;
+        }
 
         if (formData.password !== formData.confirmPassword) {
             setError("Passwords don't match");
@@ -298,7 +311,7 @@ const Signup = () => {
                                             value={formData.password}
                                             onChange={handleChange}
                                             required
-                                            minLength={6}
+                                            minLength={8}
                                         />
                                         <button
                                             type="button"
@@ -335,6 +348,39 @@ const Signup = () => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Password Requirements Guidance */}
+                            {formData.password && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-2.5"
+                                >
+                                    <p className="font-bold text-slate-600">Password Requirements:</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                        <div className={`flex items-center gap-2 font-semibold transition-colors duration-200 ${passwordRules.length ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                            {passwordRules.length ? <CheckCircle size={14} className="shrink-0" /> : <Circle size={14} className="shrink-0 opacity-50" />}
+                                            At least 8 characters
+                                        </div>
+                                        <div className={`flex items-center gap-2 font-semibold transition-colors duration-200 ${passwordRules.uppercase ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                            {passwordRules.uppercase ? <CheckCircle size={14} className="shrink-0" /> : <Circle size={14} className="shrink-0 opacity-50" />}
+                                            One uppercase letter (A-Z)
+                                        </div>
+                                        <div className={`flex items-center gap-2 font-semibold transition-colors duration-200 ${passwordRules.lowercase ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                            {passwordRules.lowercase ? <CheckCircle size={14} className="shrink-0" /> : <Circle size={14} className="shrink-0 opacity-50" />}
+                                            One lowercase letter (a-z)
+                                        </div>
+                                        <div className={`flex items-center gap-2 font-semibold transition-colors duration-200 ${passwordRules.number ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                            {passwordRules.number ? <CheckCircle size={14} className="shrink-0" /> : <Circle size={14} className="shrink-0 opacity-50" />}
+                                            One number (0-9)
+                                        </div>
+                                        <div className={`flex items-center gap-2 font-semibold transition-colors duration-200 ${passwordRules.special ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                            {passwordRules.special ? <CheckCircle size={14} className="shrink-0" /> : <Circle size={14} className="shrink-0 opacity-50" />}
+                                            One special char (e.g. !@#$)
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
 
                             <div className="flex items-start ml-1">
                                 <div className="flex items-center h-5">

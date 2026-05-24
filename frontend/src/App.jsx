@@ -125,7 +125,10 @@ function App() {
 
                     {/* Protected App Routes */}
                     <Route element={<AppLayout />}>
-                        <Route path="/dashboard" element={<Dashboard />} />
+                        <Route path="/dashboard" element={<Dashboard view="overview" />} />
+                        <Route path="/dashboard/admin" element={<Dashboard view="institute" />} />
+                        <Route path="/dashboard/teacher" element={<Dashboard view="teacher" />} />
+                        <Route path="/dashboard/student" element={<Dashboard view="student" />} />
                         <Route path="/ai-workspace" element={<AiWorkspace />} />
                         <Route path="/ai-workspace/admin/settings" element={<AiCommandSettings />} />
                         <Route path="/ai-workspace/admin/tools" element={<AiToolManager />} />

@@ -52,7 +52,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                         "AND (:topicId IS NULL OR q.topic.id = :topicId) " +
                         "AND (:type IS NULL OR q.type = :type) " +
                         "AND (:difficulty IS NULL OR q.difficulty = :difficulty) " +
-                        "AND (:language IS NULL OR q.language = :language) " +
+                        "AND (:language IS NULL OR q.language = :language OR q.language = 'Bilingual' OR :language = 'Bilingual' OR q.language IS NULL OR q.language = '') " +
                         "AND (:keyword IS NULL OR LOWER(q.questionText) LIKE LOWER(CONCAT('%', :keyword, '%')))",
                countQuery = "SELECT COUNT(q) FROM Question q " +
                         "LEFT JOIN q.classSubject cs " +
@@ -65,7 +65,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                         "AND (:topicId IS NULL OR q.topic.id = :topicId) " +
                         "AND (:type IS NULL OR q.type = :type) " +
                         "AND (:difficulty IS NULL OR q.difficulty = :difficulty) " +
-                        "AND (:language IS NULL OR q.language = :language) " +
+                        "AND (:language IS NULL OR q.language = :language OR q.language = 'Bilingual' OR :language = 'Bilingual' OR q.language IS NULL OR q.language = '') " +
                         "AND (:keyword IS NULL OR LOWER(q.questionText) LIKE LOWER(CONCAT('%', :keyword, '%')))")
         Page<Question> searchApproved(
                         @Param("tenantId") String tenantId,
@@ -99,4 +99,43 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                "LEFT JOIN FETCH q.options " +
                "WHERE q.parentQuestionId IN :parentIds AND q.createdBy = :createdBy AND q.status = 'REVISED'")
         List<Question> findPendingRevisionsByParentIdsAndCreator(@Param("parentIds") List<UUID> parentIds, @Param("createdBy") String createdBy);
+
+        @Query("SELECT COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false AND q.classSubject.id IN :subjectIds")
+        long countApprovedQuestionsForSubjects(@Param("subjectIds") java.util.Collection<UUID> subjectIds);
+
+        @Query("SELECT COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false")
+        long countApprovedQuestions();
+
+        @Query("SELECT COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false AND (q.tenantId = :tenantId OR q.tenantId = 'DEFAULT')")
+        long countApprovedQuestionsForTenant(@Param("tenantId") String tenantId);
+
+        @Query("SELECT cs.subject.name, ac.name, lvl.name, cs.subject.isEnglishVersion, COUNT(q) " +
+               "FROM Question q " +
+               "JOIN q.classSubject cs " +
+               "LEFT JOIN cs.academicClass ac " +
+               "LEFT JOIN ac.stream str " +
+               "LEFT JOIN str.level lvl " +
+               "WHERE q.status = 'APPROVED' AND q.deleted = false " +
+               "GROUP BY cs.subject.name, ac.name, lvl.name, cs.subject.isEnglishVersion")
+        List<Object[]> countApprovedQuestionsGroupedBySubject();
+
+        @Query("SELECT cs.subject.name, ac.name, lvl.name, cs.subject.isEnglishVersion, COUNT(q) " +
+               "FROM Question q " +
+               "JOIN q.classSubject cs " +
+               "LEFT JOIN cs.academicClass ac " +
+               "LEFT JOIN ac.stream str " +
+               "LEFT JOIN str.level lvl " +
+               "WHERE q.status = 'APPROVED' AND q.deleted = false AND cs.id IN :subjectIds " +
+               "GROUP BY cs.subject.name, ac.name, lvl.name, cs.subject.isEnglishVersion")
+        List<Object[]> countApprovedQuestionsGroupedBySubjectForSubjectIds(@Param("subjectIds") java.util.Collection<UUID> subjectIds);
+
+        @Query("SELECT cs.subject.name, ac.name, lvl.name, cs.subject.isEnglishVersion, COUNT(q) " +
+               "FROM Question q " +
+               "JOIN q.classSubject cs " +
+               "LEFT JOIN cs.academicClass ac " +
+               "LEFT JOIN ac.stream str " +
+               "LEFT JOIN str.level lvl " +
+               "WHERE q.status = 'APPROVED' AND q.deleted = false AND (q.tenantId = :tenantId OR q.tenantId = 'DEFAULT') " +
+               "GROUP BY cs.subject.name, ac.name, lvl.name, cs.subject.isEnglishVersion")
+        List<Object[]> countApprovedQuestionsGroupedBySubjectForTenant(@Param("tenantId") String tenantId);
 }
