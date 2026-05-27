@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal, Sparkles, AlignLeft, CheckSquare } from 'lucide-react';
+import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal } from 'lucide-react';
 import questionService from '../../../services/questionService';
 import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
@@ -546,34 +546,20 @@ const QuestionList = () => {
     };
 
     const prevSearchRef = useRef(searchQuery);
-    const prevBoardsRef = useRef(selectedBoards);
-    const prevYearsRef = useRef(selectedYears);
-    const prevSchoolsRef = useRef(selectedSchools);
 
     // Refetch whenever filters or pagination change
     useEffect(() => {
         const isSearchChange = prevSearchRef.current !== searchQuery;
         prevSearchRef.current = searchQuery;
 
-        const isBoardsChange = JSON.stringify(prevBoardsRef.current) !== JSON.stringify(selectedBoards);
-        prevBoardsRef.current = selectedBoards;
-
-        const isYearsChange = JSON.stringify(prevYearsRef.current) !== JSON.stringify(selectedYears);
-        prevYearsRef.current = selectedYears;
-
-        const isSchoolsChange = JSON.stringify(prevSchoolsRef.current) !== JSON.stringify(selectedSchools);
-        prevSchoolsRef.current = selectedSchools;
-
-        const needsDebounce = isSearchChange || isBoardsChange || isYearsChange || isSchoolsChange;
-
-        if (needsDebounce) {
+        if (isSearchChange) {
             const timer = setTimeout(() => {
                 fetchQuestions();
                 fetchOverviewStats();
-            }, 400); // 400ms debounce for typing & clicking multiple checkboxes
+            }, 300); // 300ms debounce only for search query typing
             return () => clearTimeout(timer);
         } else {
-            // Pagination and academic dropdown filters trigger instantly
+            // Pagination and other filters trigger instantly
             fetchQuestions();
             if (currentPage === 1) fetchOverviewStats();
         }
@@ -803,7 +789,7 @@ const QuestionList = () => {
 
     const typeTabs = useMemo(() => {
         const baseTabs = [
-            { id: 'ALL', label: 'All Types' },
+            { id: 'ALL', label: 'All' },
             { id: 'MCQ', label: 'MCQ' },
             { id: 'CQ', label: 'Creative (CQ)' },
             { id: 'SHORT', label: 'Short Q' },
@@ -822,22 +808,6 @@ const QuestionList = () => {
             return count > 0;
         });
     }, [overviewStats, dynamicTypes, filterType]);
-
-    const getTabIcon = (tabId, isActive) => {
-        const iconClass = `shrink-0 transition-colors duration-300 ${isActive ? 'text-white' : ''}`;
-        switch (tabId) {
-            case 'ALL':
-                return <Layers size={13} className={iconClass} />;
-            case 'MCQ':
-                return <CheckSquare size={13} className={`${iconClass} ${!isActive ? 'text-emerald-500' : ''}`} />;
-            case 'CQ':
-                return <Sparkles size={13} className={`${iconClass} ${!isActive ? 'text-amber-500' : ''}`} />;
-            case 'SHORT':
-                return <AlignLeft size={13} className={`${iconClass} ${!isActive ? 'text-indigo-500' : ''}`} />;
-            default:
-                return <FileText size={13} className={`${iconClass} ${!isActive ? 'text-slate-400' : ''}`} />;
-        }
-    };
 
     const getStatusBadge = (status) => {
         switch (status) {
@@ -874,7 +844,7 @@ const QuestionList = () => {
 
     const [isSelectingAll, setIsSelectingAll] = useState(false);
     const [showSourceFilters, setShowSourceFilters] = useState(true);
-    const [activeSidebarTab, setActiveSidebarTab] = useState('academic');
+    const [activeSidebarTab, setActiveSidebarTab] = useState(isDefaultOrSuperAdmin ? 'source' : 'academic');
 
     const handleSelectAllGlobal = async () => {
         setIsSelectingAll(true);
@@ -978,11 +948,12 @@ const QuestionList = () => {
                     </div>
                 </div>
             )}
+
             {/* STICKY COMPACT FILTER HEADER */}
             <div className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 md:px-6 pt-3 pb-3 shadow-sm space-y-3">
                 
                 {/* Top Row: Navigation Tabs & Search */}
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                     <div className="flex bg-slate-100 p-1 rounded-lg self-start shrink-0 overflow-x-auto custom-scrollbar w-full md:w-auto">
                         <button
                             onClick={() => { setViewMode('ALL'); setFilterStatus('ALL'); setCurrentPage(1); }}
@@ -1016,51 +987,44 @@ const QuestionList = () => {
                         )}
                     </div>
 
-                    <div className="flex items-center gap-2 w-full md:w-auto">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
                         <div className="relative flex-1 md:w-[300px] shrink-0">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                             <input
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search question text..."
-                                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all placeholder:text-slate-400 font-medium"
+                                placeholder="Search explicitly by question text..."
+                                className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all placeholder:text-slate-400 font-medium"
                             />
                         </div>
 
-                        {hasFullLangAccess && (
-                            <button
-                                onClick={() => setSplitScreenMode(!splitScreenMode)}
-                                className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                                title="Toggle Split-Screen Review Mode"
-                            >
-                                <GitCompare size={14} /> <span className="hidden md:inline">Review Mode</span>
-                            </button>
-                        )}
+                        <div className="flex items-center gap-2 self-stretch sm:self-auto">
+                            {hasFullLangAccess && (
+                                <button
+                                    onClick={() => setSplitScreenMode(!splitScreenMode)}
+                                    className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                    title="Toggle Split-Screen Review Mode"
+                                >
+                                    <GitCompare size={14} /> Review Mode
+                                </button>
+                            )}
 
-                        <button
-                            onClick={() => setShowSourceFilters(!showSourceFilters)}
-                            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                            title="Toggle Filters & Tags Sidebar"
-                        >
-                            <Filter size={14} /> <span>Filters</span>
-                        </button>
+                            <button
+                                onClick={() => setShowSourceFilters(!showSourceFilters)}
+                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                title="Toggle Filters & Tags Sidebar"
+                            >
+                                <Filter size={14} /> Filters & Tags
+                            </button>
+                        </div>
                     </div>
                 </div>
-            
 
-            {/* Backdrop for Mobile Drawer */}
-            {showSourceFilters && (
+                {/* Right Side Drawer for Source Metadata Filters */}
                 <div 
-                    className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-30 transition-opacity duration-300 md:hidden"
-                    onClick={() => setShowSourceFilters(false)}
-                />
-            )}
-
-            {/* Right Side Drawer for Source Metadata Filters */}
-            <div 
-                className={`fixed top-0 md:top-[60px] right-0 h-full md:h-[calc(100vh-60px)] w-[80%] sm:w-[320px] bg-white border-l border-slate-200 shadow-2xl z-40 flex flex-col transition-transform duration-300 ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
-            >
+                    className={`fixed top-[56px] md:top-[60px] right-0 h-[calc(100vh-56px)] md:h-[calc(100vh-60px)] w-full sm:w-[320px] bg-white border-l border-slate-200 shadow-xl z-30 flex flex-col transition-transform duration-300 ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
+                >
                     <div className="flex flex-col border-b border-slate-200 bg-slate-50 shrink-0">
                         <div className="p-4 pb-2 flex items-center justify-between">
                             <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
@@ -1070,20 +1034,22 @@ const QuestionList = () => {
                                 <X size={16} />
                             </button>
                         </div>
-                        <div className="flex w-full mt-2 px-2">
-                            <button 
-                                onClick={() => setActiveSidebarTab('academic')}
-                                className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'academic' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                            >
-                                Academic
-                            </button>
-                            <button 
-                                onClick={() => setActiveSidebarTab('source')}
-                                className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'source' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                            >
-                                Source Tags
-                            </button>
-                        </div>
+                        {isDefaultOrSuperAdmin && (
+                            <div className="flex w-full mt-2 px-2">
+                                <button 
+                                    onClick={() => setActiveSidebarTab('academic')}
+                                    className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'academic' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    Academic
+                                </button>
+                                <button 
+                                    onClick={() => setActiveSidebarTab('source')}
+                                    className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'source' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    Source Tags
+                                </button>
+                            </div>
+                        )}
                     </div>
                     
                     <div className="p-5 flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-6">
@@ -1329,25 +1295,19 @@ const QuestionList = () => {
 
                 {/* Third Row: Formats, Check All & Bulk Actions */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto custom-scrollbar pb-2 md:pb-0">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-2 shrink-0"><ListFilter size={12} className="inline mr-1" />Format:</span>
-                        {typeTabs.map(type => {
-                            const isActive = filterType === type.id;
-                            return (
-                                <button
-                                    key={type.id}
-                                    onClick={() => setFilterType(type.id)}
-                                    className={`px-3 py-1.5 text-[11px] font-extrabold rounded-full transition-all duration-300 whitespace-nowrap border flex items-center gap-1.5 shadow-sm transform hover:-translate-y-[1px] active:translate-y-0 ${
-                                        isActive
-                                            ? 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-500 text-white border-indigo-400/20 shadow-md shadow-indigo-200/50 font-black'
-                                            : 'bg-white/80 hover:bg-white text-slate-600 hover:text-slate-900 border-slate-200 hover:border-slate-300'
+                    <div className="flex items-center gap-2.5 overflow-x-auto w-full md:w-auto custom-scrollbar pb-2 md:pb-0">
+                        {typeTabs.map(type => (
+                            <button
+                                key={type.id}
+                                onClick={() => setFilterType(type.id)}
+                                className={`px-4 py-1.5 text-[11.5px] font-black rounded-xl transition-all duration-300 whitespace-nowrap border active:scale-[0.97] ${filterType === type.id
+                                    ? 'bg-gradient-to-r from-primary to-secondary text-white border-transparent shadow-[0_4px_12px_rgba(233,30,140,0.25)] hover:shadow-[0_6px_16px_rgba(233,30,140,0.35)] scale-105'
+                                    : 'bg-gradient-to-b from-white to-slate-50 text-slate-600 border-slate-200/80 hover:bg-slate-100 hover:text-slate-800 hover:shadow-sm'
                                     }`}
-                                >
-                                    {getTabIcon(type.id, isActive)}
-                                    {type.label}
-                                </button>
-                            );
-                        })}
+                            >
+                                {type.label}
+                            </button>
+                        ))}
                         {isSuperAdmin && (!overviewStats || overviewStats.unansweredCount > 0 || filterUnanswered) && (
                             <button
                                 onClick={() => {
@@ -1367,88 +1327,90 @@ const QuestionList = () => {
                         )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 w-full md:w-auto overflow-x-auto justify-end shrink-0">
+                    {isDefaultOrSuperAdmin && (
+                        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto overflow-x-auto justify-end shrink-0">
 
 
-                        {isDefaultOrSuperAdmin && totalElements > questions.length && (
-                            <button
-                                onClick={handleSelectAllGlobal}
-                                disabled={isSelectingAll}
-                                className="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100 text-indigo-700 transition-colors shrink-0 disabled:opacity-50"
-                            >
-                                <CheckCircle size={14} />
-                                <span className="text-[10px] font-bold uppercase tracking-widest whitespace-nowrap select-none">
-                                    {isSelectingAll ? 'Selecting...' : `Select All ${totalElements}`}
-                                </span>
-                            </button>
-                        )}
-
-                        {selectedIds.length > 0 && (
-                            <div className="flex items-center gap-1.5 shrink-0">
-                                {(() => {
-                                    const selectedQs = questions.filter(q => selectedIds.includes(q.id));
-                                    const counts = { MCQ: 0, CQ: 0, SHORT: 0, OTHER: 0 };
-                                    selectedQs.forEach(q => {
-                                        if (q.type === 'MCQ') counts.MCQ++;
-                                        else if (q.type === 'CQ' || q.type === 'CREATIVE') counts.CQ++;
-                                        else if (q.type === 'SHORT' || q.type === 'SHORT_ANSWER') counts.SHORT++;
-                                        else counts.OTHER++;
-                                    });
-                                    const unseenCount = selectedIds.length - selectedQs.length;
-                                    
-                                    const textParts = [];
-                                    if (counts.MCQ > 0) textParts.push(`${counts.MCQ} MCQ`);
-                                    if (counts.CQ > 0) textParts.push(`${counts.CQ} CQ`);
-                                    if (counts.SHORT > 0) textParts.push(`${counts.SHORT} Short`);
-                                    if (counts.OTHER > 0) textParts.push(`${counts.OTHER} Other`);
-                                    if (unseenCount > 0) textParts.push(`+${unseenCount} off-page`);
-                                    
-                                    return (
-                                        <div className="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg flex items-center shrink-0">
-                                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                                                Selected: <span className="text-slate-800">{textParts.length > 0 ? textParts.join(', ') : selectedIds.length}</span>
-                                            </span>
-                                        </div>
-                                    );
-                                })()}
-                                <button 
-                                    onClick={handleCreateExamFromSelection}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 font-bold rounded-lg border border-violet-200 hover:bg-violet-100 transition-all text-[11px] uppercase tracking-wide shadow-sm"
-                                    title="Create Exam with Selected Questions"
+                            {totalElements > questions.length && (
+                                <button
+                                    onClick={handleSelectAllGlobal}
+                                    disabled={isSelectingAll}
+                                    className="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100 text-indigo-700 transition-colors shrink-0 disabled:opacity-50"
                                 >
-                                    <FileText size={12} /> Create Exam
+                                    <CheckCircle size={14} />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest whitespace-nowrap select-none">
+                                        {isSelectingAll ? 'Selecting...' : `Select All ${totalElements}`}
+                                    </span>
                                 </button>
-                                {isSuperAdmin && (
-                                    <>
-                                        <button onClick={() => handleUpdateStatusBulk('APPROVED')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 font-bold rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-all text-[11px] uppercase tracking-wide">
-                                            <ThumbsUp size={12} /> Approve
-                                        </button>
-                                        <button onClick={() => handleUpdateStatusBulk('REJECTED')} className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 font-bold rounded-lg border border-rose-200 hover:bg-rose-100 transition-all text-[11px] uppercase tracking-wide">
-                                            <ThumbsDown size={12} /> Reject
-                                        </button>
-                                        <div className="relative group">
-                                            <button className="flex items-center gap-1.5 px-2 py-1.5 bg-white text-slate-700 font-bold rounded-lg border border-slate-200 hover:bg-slate-50 transition-all text-[11px] uppercase tracking-wide shadow-sm">
-                                                <ChevronDown size={12} className="text-slate-500" />
-                                            </button>
-                                            <div className="absolute top-full right-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden py-1">
-                                                <button onClick={() => handleUpdateStatusBulk('PENDING')} className="w-full text-left px-4 py-2 text-[11px] uppercase tracking-wider text-amber-600 hover:bg-amber-50 font-bold flex items-center gap-2 transition-colors">
-                                                    <Clock size={12} /> Pending
-                                                </button>
-                                                <button onClick={() => handleUpdateStatusBulk('DRAFT')} className="w-full text-left px-4 py-2 text-[11px] uppercase tracking-wider text-slate-600 hover:bg-slate-50 font-bold flex items-center gap-2 transition-colors">
-                                                    <Edit size={12} /> Draft
-                                                </button>
+                            )}
+
+                            {selectedIds.length > 0 && (
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    {(() => {
+                                        const selectedQs = questions.filter(q => selectedIds.includes(q.id));
+                                        const counts = { MCQ: 0, CQ: 0, SHORT: 0, OTHER: 0 };
+                                        selectedQs.forEach(q => {
+                                            if (q.type === 'MCQ') counts.MCQ++;
+                                            else if (q.type === 'CQ' || q.type === 'CREATIVE') counts.CQ++;
+                                            else if (q.type === 'SHORT' || q.type === 'SHORT_ANSWER') counts.SHORT++;
+                                            else counts.OTHER++;
+                                        });
+                                        const unseenCount = selectedIds.length - selectedQs.length;
+                                        
+                                        const textParts = [];
+                                        if (counts.MCQ > 0) textParts.push(`${counts.MCQ} MCQ`);
+                                        if (counts.CQ > 0) textParts.push(`${counts.CQ} CQ`);
+                                        if (counts.SHORT > 0) textParts.push(`${counts.SHORT} Short`);
+                                        if (counts.OTHER > 0) textParts.push(`${counts.OTHER} Other`);
+                                        if (unseenCount > 0) textParts.push(`+${unseenCount} off-page`);
+                                        
+                                        return (
+                                            <div className="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg flex items-center shrink-0">
+                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                                                    Selected: <span className="text-slate-800">{textParts.length > 0 ? textParts.join(', ') : selectedIds.length}</span>
+                                                </span>
                                             </div>
-                                        </div>
-                                    </>
-                                )}
-                                {isDefaultOrSuperAdmin && hasPerm('DELETE') && (
-                                    <button onClick={handleBulkDelete} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 font-bold rounded-lg border border-slate-200 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all text-[11px] uppercase tracking-wide ml-1">
-                                        <Trash2 size={12} />
+                                        );
+                                    })()}
+                                    <button 
+                                        onClick={handleCreateExamFromSelection}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 font-bold rounded-lg border border-violet-200 hover:bg-violet-100 transition-all text-[11px] uppercase tracking-wide shadow-sm"
+                                        title="Create Exam with Selected Questions"
+                                    >
+                                        <FileText size={12} /> Create Exam
                                     </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                                    {isSuperAdmin && (
+                                        <>
+                                            <button onClick={() => handleUpdateStatusBulk('APPROVED')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 font-bold rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-all text-[11px] uppercase tracking-wide">
+                                                <ThumbsUp size={12} /> Approve
+                                            </button>
+                                            <button onClick={() => handleUpdateStatusBulk('REJECTED')} className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 font-bold rounded-lg border border-rose-200 hover:bg-rose-100 transition-all text-[11px] uppercase tracking-wide">
+                                                <ThumbsDown size={12} /> Reject
+                                            </button>
+                                            <div className="relative group">
+                                                <button className="flex items-center gap-1.5 px-2 py-1.5 bg-white text-slate-700 font-bold rounded-lg border border-slate-200 hover:bg-slate-50 transition-all text-[11px] uppercase tracking-wide shadow-sm">
+                                                    <ChevronDown size={12} className="text-slate-500" />
+                                                </button>
+                                                <div className="absolute top-full right-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden py-1">
+                                                    <button onClick={() => handleUpdateStatusBulk('PENDING')} className="w-full text-left px-4 py-2 text-[11px] uppercase tracking-wider text-amber-600 hover:bg-amber-50 font-bold flex items-center gap-2 transition-colors">
+                                                        <Clock size={12} /> Pending
+                                                    </button>
+                                                    <button onClick={() => handleUpdateStatusBulk('DRAFT')} className="w-full text-left px-4 py-2 text-[11px] uppercase tracking-wider text-slate-600 hover:bg-slate-50 font-bold flex items-center gap-2 transition-colors">
+                                                        <Edit size={12} /> Draft
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                    {hasPerm('DELETE') && (
+                                        <button onClick={handleBulkDelete} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 font-bold rounded-lg border border-slate-200 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all text-[11px] uppercase tracking-wide ml-1">
+                                            <Trash2 size={12} />
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 

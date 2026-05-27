@@ -19,18 +19,23 @@ const MainLayout = () => {
     const branding = useBranding();
 
     const userData = JSON.parse(localStorage.getItem('user') || '{}');
-    const isSuperAdmin = userData?.roles?.some(r => {
+    const userRoles = (userData?.roles || []).map(r => {
         const roleName = typeof r === 'string' ? r : (r.name || '');
-        return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
-    }) || userData?.email === 'admin';
-    const isDefaultInstitute = isSuperAdmin || userData?.instituteName === 'DEFAULT' || userData?.instituteName === 'Default Institute';
+        return roleName;
+    });
+    const isSuperAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('ROLE_SUPER_ADMIN') || userData?.email === 'admin' || userData?.email?.includes('admin@');
+    const isDefaultInstitute = isSuperAdmin || userData?.instituteName?.toUpperCase() === 'DEFAULT' || userData?.instituteName === 'Default Institute';
 
     // Robustly check if running inside an iframe, so embedding state is preserved across navigations within the iframe
     const searchParams = new URLSearchParams(location.search);
     const embeddedParam = searchParams.get('embedded');
     if (embeddedParam === 'true') {
         sessionStorage.setItem('embedded', 'true');
-    } else if (embeddedParam === 'false') {
+    } else if (
+        embeddedParam === 'false' || 
+        location.pathname === '/dashboard' || 
+        (window.innerWidth >= 1024 && !embeddedParam)
+    ) {
         sessionStorage.removeItem('embedded');
     }
     const isEmbedded = window !== window.parent || 
@@ -219,7 +224,7 @@ const MainLayout = () => {
 
     
     
-    // Sidebar is visible to all users
+    // Sidebar is always visible for all users
     const hideSidebar = false;
 
     const isAiWorkspace = location.pathname.startsWith('/ai-workspace');

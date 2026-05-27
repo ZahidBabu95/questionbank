@@ -71,14 +71,16 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             className={`border border-slate-200 rounded-xl transition-all duration-300 transform hover:-translate-y-[2px] hover:shadow-lg cursor-pointer relative hover:z-10 ${
             isViewing ? 'bg-indigo-50 border-indigo-400 ring-1 ring-indigo-400' 
             : q.status === 'REVISED' ? 'bg-rose-50/50 border-rose-300'
-            : isSelected ? 'bg-blue-50/40 border-blue-300 ring-1 ring-blue-200' : 'bg-white hover:border-indigo-200'
+            : isSelected && isDefaultOrSuperAdmin ? 'bg-blue-50/40 border-blue-300 ring-1 ring-blue-200' : 'bg-white hover:border-indigo-200'
         }`}>
 
             {/* ── Header Row ── */}
             <div className="flex items-start justify-between px-4 pt-3 pb-2 gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                    <input type="checkbox" checked={isSelected} onChange={() => onSelect(q.id)}
-                        className="w-4 h-4 text-primary border-slate-300 rounded cursor-pointer shrink-0 mt-0.5" />
+                    {isDefaultOrSuperAdmin && (
+                        <input type="checkbox" checked={isSelected} onChange={() => onSelect(q.id)}
+                            className="w-4 h-4 text-primary border-slate-300 rounded cursor-pointer shrink-0 mt-0.5" />
+                    )}
                     <span className="text-[12px] font-black text-slate-600 whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">Q #{index}</span>
                     <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold border border-slate-200 whitespace-nowrap">{typeLabel}</span>
                     
@@ -87,7 +89,7 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                     {q.status === 'REJECTED' && <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Rejected</span>}
                     {q.status === 'PENDING' && <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Pending</span>}
                     {q.status === 'REVISED' && <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-md text-[10px] font-bold uppercase whitespace-nowrap animate-pulse">Revised</span>}
-                    {q.aiGenerated && <span className="px-2 py-0.5 bg-violet-50 text-violet-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">AI Synced</span>}
+                    {q.aiGenerated && isDefaultOrSuperAdmin && <span className="px-2 py-0.5 bg-violet-50 text-violet-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">AI Synced</span>}
                     
                     <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase whitespace-nowrap ${difficultyStyle[q.difficulty] || 'bg-slate-50 text-slate-600'}`}>
                         {q.difficulty}
@@ -207,15 +209,18 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No answer available.</div>
             )}
 
-            {/* ── Show Answer + Explanation Buttons ── */}
-            <div className="mx-4 mb-2 grid grid-cols-2 gap-2">
+            <div className="mx-4 mb-2 grid grid-cols-2 gap-3">
                 {/* Show Answer — always gradient, green when active */}
                 <button
                     onClick={() => setShowAnswer(!showAnswer)}
-                    className="flex items-center justify-center gap-2 py-2 text-[12px] font-bold text-white rounded-lg transition-all duration-300 shadow-sm hover:shadow-md active:scale-[0.98]"
-                    style={{ background: showAnswer
-                        ? '#10b981'
-                        : 'linear-gradient(to right, var(--primary-color, #e91e8c), var(--secondary-color, #a855f7))'
+                    className="flex items-center justify-center gap-2 py-2 px-4 text-[12px] font-extrabold text-white rounded-xl transition-all duration-300 active:scale-[0.97] border border-white/10"
+                    style={{ 
+                        background: showAnswer
+                            ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                            : 'linear-gradient(135deg, #e91e8c 0%, #a855f7 100%)',
+                        boxShadow: showAnswer
+                            ? '0 4px 14px rgba(16, 185, 129, 0.35)'
+                            : '0 4px 14px rgba(168, 85, 247, 0.35)'
                     }}
                 >
                     <Eye size={14} /> {showAnswer ? 'Hide Answer' : 'Show Answer'}
@@ -224,14 +229,19 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 {/* Explanation — plain when inactive, reverse gradient when active */}
                 <button
                     onClick={() => setShowExplanation(!showExplanation)}
-                    className="flex items-center justify-center gap-2 py-2 text-[12px] font-bold rounded-lg transition-all duration-300 shadow-sm hover:shadow-md active:scale-[0.98]"
-                    style={{ background: showExplanation
-                        ? 'linear-gradient(to left, var(--primary-color, #e91e8c), var(--secondary-color, #a855f7))'
-                        : '#f1f5f9'
+                    className="flex items-center justify-center gap-2 py-2 px-4 text-[12px] font-extrabold rounded-xl transition-all duration-300 active:scale-[0.97] border"
+                    style={{ 
+                        background: showExplanation
+                            ? 'linear-gradient(135deg, #a855f7 0%, #e91e8c 100%)'
+                            : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                        borderColor: showExplanation ? 'rgba(255,255,255,0.1)' : '#e2e8f0',
+                        boxShadow: showExplanation
+                            ? '0 4px 14px rgba(168, 85, 247, 0.35)'
+                            : '0 2px 6px rgba(0,0,0,0.02)',
                     }}
                 >
                     <FileText size={14} className={showExplanation ? 'text-white' : 'text-slate-600'} />
-                    <span className={showExplanation ? 'text-white' : 'text-slate-600'}>Explanation</span>
+                    <span className={showExplanation ? 'text-white font-extrabold' : 'text-slate-600'}>Explanation</span>
                 </button>
             </div>
 
@@ -269,18 +279,18 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                         <div className="flex flex-wrap items-center gap-1.5 px-2 py-1 bg-violet-50/80 border border-violet-100 rounded-md text-violet-700 font-semibold">
                             <FileText size={11} className="text-violet-400 shrink-0" />
                             <span className="font-bold">{q.sourceReference}</span>
-                            {q.aiGenerated && <span className="text-[9px] bg-violet-100 text-violet-800 border border-violet-200 px-1.5 py-px rounded font-black uppercase shrink-0">AI Synced</span>}
+                            {q.aiGenerated && isDefaultOrSuperAdmin && <span className="text-[9px] bg-violet-100 text-violet-800 border border-violet-200 px-1.5 py-px rounded font-black uppercase shrink-0">AI Synced</span>}
                         </div>
                     ) : null}
                 </div>
 
                 {/* Action Buttons (Only Primary Footer Actions) */}
                 {!splitScreenMode && (
-                    <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto shrink-0 border-t border-slate-100 sm:border-0 pt-2 sm:pt-0">
+                    <div className="flex items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto shrink-0 border-t border-slate-100 sm:border-0 pt-2 sm:pt-0">
                         {isDefaultOrSuperAdmin && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onRevise(q); }}
-                                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:text-primary hover:border-primary/30"
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-extrabold transition-all duration-300 border bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:text-primary hover:border-primary/40 hover:-translate-y-px active:scale-[0.97]"
                                 title="Quick Revise"
                             >
                                 <Edit size={12} /> <span>Revise</span>
@@ -288,7 +298,7 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                         )}
                         <button
                             onClick={(e) => { e.stopPropagation(); setIsLiked(!isLiked); }}
-                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${isLiked ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-rose-400'}`}
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-extrabold transition-all duration-300 border ${isLiked ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white border-transparent shadow-[0_3px_10px_rgba(244,63,94,0.3)] hover:shadow-[0_4px_14px_rgba(244,63,94,0.4)] hover:-translate-y-px active:scale-[0.97]' : 'bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-rose-500 hover:border-rose-200 hover:-translate-y-px active:scale-[0.97]'}`}
                             title="Like"
                         >
                             <ThumbsUp size={12} className={isLiked ? 'fill-current' : ''} />
@@ -296,7 +306,7 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                         </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); onSave(q.id); }}
-                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${isSaved ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-amber-500'}`}
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-extrabold transition-all duration-300 border ${isSaved ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent shadow-[0_3px_10px_rgba(245,158,11,0.3)] hover:shadow-[0_4px_14px_rgba(245,158,11,0.4)] hover:-translate-y-px active:scale-[0.97]' : 'bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-amber-500 hover:border-amber-200 hover:-translate-y-px active:scale-[0.97]'}`}
                             title={isSaved ? 'Remove from Saved' : 'Save'}
                         >
                             {isSaved ? <BookmarkCheck size={12} className="fill-current" /> : <Bookmark size={12} />}

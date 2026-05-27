@@ -32,21 +32,6 @@ const QUESTION_TYPES = [
 
 const ImportAI = () => {
     const navigate = useNavigate();
-    const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : null;
-    const isSuperAdmin = user?.roles?.some(r => {
-        const roleName = typeof r === 'string' ? r : (r.name || '');
-        return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
-    }) || user?.email === 'admin' || user?.email?.includes('admin@');
-    const isDefaultInstitute = user?.instituteName?.toUpperCase() === 'DEFAULT' || user?.instituteName === 'Default Institute';
-    const isDefaultOrSuperAdmin = isSuperAdmin || isDefaultInstitute;
-
-    React.useEffect(() => {
-        if (!isDefaultOrSuperAdmin) {
-            navigate('/dashboard');
-        }
-    }, [isDefaultOrSuperAdmin, navigate]);
-
     const [activeTab, setActiveTab] = useState('scraper');
     const [file, setFile] = useState(null);
     const [dragging, setDragging] = useState(false);
@@ -834,10 +819,6 @@ const ImportAI = () => {
     ];
 
     const showMetaPanel = metadata && META_FIELDS.some(f => metadata[f.key]);
-
-    if (!isDefaultOrSuperAdmin) {
-        return null;
-    }
 
     return (
         <div className="w-full">
