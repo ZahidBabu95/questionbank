@@ -47,16 +47,32 @@ const examService = {
         return res.data;
     },
     downloadPdf: async (examId, params) => {
-        const queryString = new URLSearchParams(params).toString();
+        const token = localStorage.getItem('token');
+        const combinedParams = { ...params };
+        
+        if (window.ReactNativeWebView) {
+            if (token) combinedParams.token = token;
+            const queryString = new URLSearchParams(combinedParams).toString();
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'download_pdf',
+                examId: examId,
+                queryString: queryString
+            }));
+            return;
+        }
+        
+        // Desktop web app flow: DO NOT attach raw token to query params to prevent request line overflow (HTTP 400 Bad Request)
+        // The authorization header is automatically attached by our custom axios interceptor.
+        const queryString = new URLSearchParams(combinedParams).toString();
         const response = await axios.get(`/v1/exams/download/pdf/${examId}?${queryString}`, { responseType: 'blob' });
-        const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+        const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
         link.href = url;
-        link.download = `exam-${examId}.pdf`;
+        link.setAttribute('download', `exam-${examId}.pdf`);
         document.body.appendChild(link);
         link.click();
         link.remove();
-        URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(url);
     },
     downloadWord: async (examId, params) => {
         const queryString = new URLSearchParams(params).toString();

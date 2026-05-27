@@ -145,6 +145,48 @@ const cleanPlaceholderText = (html) => {
     }
 };
 
+const getFormattedNumber = (num, numberingStyle, language) => {
+    const n = Number(num);
+    if (!n || isNaN(n)) return '';
+    const defaultStyle = language === 'English' || language === 'ENGLISH' ? 'en' : 'bn';
+    const style = numberingStyle || defaultStyle;
+    
+    if (style === 'bn') {
+        const enToBn = { '0': '০', '1': '১', '2': '২', '3': '৩', '4': '৪', '5': '৫', '6': '৬', '7': '৭', '8': '৮', '9': '৯' };
+        const numStr = n.toString().replace(/[0-9]/g, m => enToBn[m]);
+        return `${numStr}.`;
+    }
+    if (style === 'en') {
+        return `${n}.`;
+    }
+    if (style === 'roman') {
+        const romanMap = [
+            { v: 50, c: 'l' },
+            { v: 40, c: 'xl' },
+            { v: 10, c: 'x' },
+            { v: 9, c: 'ix' },
+            { v: 5, c: 'v' },
+            { v: 4, c: 'iv' },
+            { v: 1, c: 'i' }
+        ];
+        let remaining = n;
+        let roman = '';
+        romanMap.forEach(pair => {
+            while (remaining >= pair.v) {
+                roman += pair.c;
+                remaining -= pair.v;
+            }
+        });
+        return `${roman || n}.`;
+    }
+    if (style === 'alpha') {
+        const code = 97 + (n - 1) % 26;
+        const char = String.fromCharCode(code);
+        return `${char})`;
+    }
+    return `${n}.`;
+};
+
 
     const QuestionComponent = ({ node, editor, deleteNode, updateAttributes, getPos, selected }) => {
         // Strict mode lock removed as per user request to make it fully usable
@@ -546,6 +588,21 @@ const cleanPlaceholderText = (html) => {
                 onMouseDown={handleMouseDown}
                 onClick={handleClick}
             >
+                {/* Programmatic Question Number for html2canvas and layout consistency */}
+                <span 
+                    className="absolute left-0 top-[2px] font-bold text-slate-900 select-none print:text-black"
+                    style={{
+                        width: '2.2em',
+                        textAlign: 'right',
+                        paddingRight: '0.4em',
+                        whiteSpace: 'nowrap',
+                        fontSize: '1em',
+                        fontFamily: 'inherit'
+                    }}
+                >
+                    {getFormattedNumber(node.attrs.questionNumber, node.attrs.numberingStyle, node.attrs.language)}
+                </span>
+
                 <div className="relative transition-all">
                     {/* Action buttons moved to sidebar */}
                 </div>

@@ -423,7 +423,15 @@ public class KnowledgeHubController {
 
     @PostMapping("/jobs/topic-extract/{jobId}/resume")
     public ResponseEntity<com.testshaper.entity.AiTopicExtractionJob> resumeAiTopicExtractionQueue(@PathVariable UUID jobId) {
-        return ResponseEntity.ok(knowledgeHubService.resumeAiTopicExtractionQueue(jobId));
+        com.testshaper.entity.AiTopicExtractionJob job = knowledgeHubService.resumeAiTopicExtractionQueue(jobId);
+        java.util.List<UUID> targetIndexIds = knowledgeHubService.getIndicesWithProofreadPages(job.getSourceBook().getId());
+        if (!targetIndexIds.isEmpty()) {
+            topicExtractorService.processBulkTopicExtractionJob(job.getId(), targetIndexIds);
+        } else {
+            job.setStatus(com.testshaper.entity.AiTopicExtractionJob.JobStatus.COMPLETED);
+            knowledgeHubService.saveTopicExtractionJob(job);
+        }
+        return ResponseEntity.ok(job);
     }
 
     @PostMapping("/jobs/topic-extract/{jobId}/cancel")

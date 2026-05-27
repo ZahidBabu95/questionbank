@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { BookOpen, Search, Layers, ChevronRight, BookText } from 'lucide-react';
+import { BookOpen, Search, Layers, ChevronRight, BookText, AlertCircle } from 'lucide-react';
 import axios from '../../../utils/axios';
 import academicService from '../../../services/academicService';
 import { knowledgeHubService } from '../../../services/knowledgeHubService';
@@ -21,6 +21,19 @@ const CurriculumMappingList = () => {
     const [filterStream, setFilterStream] = useState('');
     const [filterClass, setFilterClass] = useState('');
     const [filterSubject, setFilterSubject] = useState('');
+    const [filterMedium, setFilterMedium] = useState('ALL'); // ALL, Bangla, English, Bilingual, MISMATCHED
+
+    const hasLanguageMismatch = (book) => {
+        if (!book.classSubjectId || !hierarchy.classSubjects || !hierarchy.subjects) return false;
+        const cs = hierarchy.classSubjects.find(c => c.id === book.classSubjectId);
+        if (!cs) return false;
+        const subject = hierarchy.subjects.find(s => s.id === cs._subjectId);
+        if (!subject) return false;
+        const isSubjectEnglish = subject.isEnglishVersion || subject.englishVersion || false;
+        if (book.language === 'English' && !isSubjectEnglish) return true;
+        if (book.language === 'Bangla' && isSubjectEnglish) return true;
+        return false;
+    };
 
     useEffect(() => {
         setPortalTarget(document.getElementById('topbar-actions'));
@@ -57,7 +70,23 @@ const CurriculumMappingList = () => {
 
     const filteredStreams = hierarchy.streams?.filter(s => !filterLevel || s._levelId === filterLevel) || [];
     const filteredClasses = hierarchy.classes?.filter(c => !filterStream || c._streamId === filterStream) || [];
-    const filteredClassSubjects = hierarchy.classSubjects?.filter(cs => !filterClass || cs._classId === filterClass) || [];
+    const filteredClassSubjects = useMemo(() => {
+        if (!hierarchy.classSubjects) return [];
+        return hierarchy.classSubjects.filter(cs => {
+            if (filterClass && cs._classId !== filterClass) return false;
+            
+            const subject = hierarchy.subjects?.find(s => s.id === cs._subjectId);
+            if (!subject) return true;
+            
+            const isSubjectEnglish = subject.isEnglishVersion || subject.englishVersion || false;
+            if (filterMedium === 'English') {
+                return isSubjectEnglish === true;
+            } else if (filterMedium === 'Bangla') {
+                return isSubjectEnglish === false;
+            }
+            return true;
+        });
+    }, [hierarchy.classSubjects, hierarchy.subjects, filterClass, filterMedium]);
 
     const filteredBooks = books.filter(b => {
         const matchesSearch = b.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -82,7 +111,17 @@ const CurriculumMappingList = () => {
             matchesHierarchy = validSubjects.includes(b.classSubjectId);
         }
 
-        return matchesSearch && matchesType && matchesHierarchy;
+        // Medium Filter
+        let matchesMedium = true;
+        if (filterMedium !== 'ALL') {
+            if (filterMedium === 'MISMATCHED') {
+                matchesMedium = hasLanguageMismatch(b);
+            } else {
+                matchesMedium = b.language === filterMedium;
+            }
+        }
+
+        return matchesSearch && matchesType && matchesHierarchy && matchesMedium;
     });
 
     return (
@@ -110,6 +149,17 @@ const CurriculumMappingList = () => {
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col lg:flex-row gap-3 w-full bg-white p-3 rounded-2xl shadow-sm border border-slate-200">
                     <div className="flex flex-1 flex-wrap lg:flex-nowrap gap-3">
+                        <select 
+                            value={filterMedium} 
+                            onChange={e => setFilterMedium(e.target.value)} 
+                            className={`flex-1 min-w-[120px] border text-sm font-semibold rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none cursor-pointer ${filterMedium === 'MISMATCHED' ? 'border-rose-300 text-rose-700 bg-rose-50' : 'bg-slate-50 border-slate-200 text-slate-700'}`}
+                        >
+                            <option value="ALL">All Versions</option>
+                            <option value="Bangla">Bangla Version</option>
+                            <option value="English">English Version</option>
+                            <option value="Bilingual">Bilingual / Mixed</option>
+                            <option value="MISMATCHED">⚠️ Mismatched Mappings</option>
+                        </select>
                         <select 
                             value={filterLevel} 
                             onChange={e => { setFilterLevel(e.target.value); setFilterStream(''); setFilterClass(''); setFilterSubject(''); }} 
@@ -144,8 +194,9 @@ const CurriculumMappingList = () => {
                         >
                             <option value="">All Subjects (বিষয়)</option>
                             {filteredClassSubjects.map(cs => {
-                                const subjectName = hierarchy.subjects?.find(s => s.id === cs._subjectId)?.name || 'Unknown';
-                                return <option key={cs.id} value={cs.id}>{subjectName}</option>;
+                                const subject = hierarchy.subjects?.find(s => s.id === cs._subjectId);
+                                const isEng = subject?.isEnglishVersion || subject?.englishVersion || false;
+                                return <option key={cs.id} value={cs.id}>{subject?.name || 'Unknown'} {isEng ? '[EN]' : '[BN]'}</option>;
                             })}
                         </select>
                     </div>
@@ -194,17 +245,31 @@ const CurriculumMappingList = () => {
                                     ) : (
                                         <BookOpen className="w-8 h-8 text-slate-300" />
                                     )}
+                                    {hasLanguageMismatch(book) && (
+                                        <div className="absolute top-1 right-1 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-full p-1.5 shadow-lg border border-red-500 animate-bounce" title="Language Version Mismatch Alert!">
+                                            <AlertCircle size={10} strokeWidth={3} />
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="w-full min-w-0">
                                     <h3 className="text-[15px] font-bold text-slate-800 leading-snug line-clamp-2 mb-1 group-hover:text-indigo-600 transition-colors">
                                         {book.title}
                                     </h3>
-                                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 truncate px-2">
+                                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 truncate px-2">
                                         {book.mappedClassName || 'Unmapped'} &bull; {book.mappedSubjectName || ''}
                                     </p>
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getBadgeStyle(book.bookType)}`}>
-                                        {book.bookType}
-                                    </span>
+                                    <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getBadgeStyle(book.bookType)}`}>
+                                            {book.bookType}
+                                        </span>
+                                        {book.language === 'English' && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold text-indigo-500 bg-indigo-50 border border-indigo-200">EN</span>}
+                                        {book.language === 'Bangla' && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200">BN</span>}
+                                        {hasLanguageMismatch(book) && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 border border-rose-200 text-rose-600 animate-pulse">
+                                                Mismatch
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <div className="border-t border-slate-100 bg-slate-50/50 p-2.5 flex justify-center">

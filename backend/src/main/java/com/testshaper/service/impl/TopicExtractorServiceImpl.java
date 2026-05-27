@@ -77,7 +77,8 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
         int MAX_PAGES_PER_BATCH = 4;
         for (UUID indexId : targetIndexIds) {
             long proofreadCount = knowledgePageRepository.findBySourceBookIndexId(indexId).stream()
-                .filter(p -> p.getExtractionStatus() == KnowledgePage.ExtractionStatus.PROOFREAD)
+                .filter(p -> p.getExtractionStatus() == KnowledgePage.ExtractionStatus.PROOFREAD
+                          || p.getExtractionStatus() == KnowledgePage.ExtractionStatus.FAILED)
                 .count();
             totalBatches += (int) Math.ceil((double) proofreadCount / MAX_PAGES_PER_BATCH);
         }
@@ -150,7 +151,8 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
 
         List<KnowledgePage> pages = knowledgePageRepository.findBySourceBookIndexId(sourceBookIndexId)
                 .stream()
-                .filter(p -> p.getExtractionStatus() == KnowledgePage.ExtractionStatus.PROOFREAD)
+                .filter(p -> p.getExtractionStatus() == KnowledgePage.ExtractionStatus.PROOFREAD
+                          || p.getExtractionStatus() == KnowledgePage.ExtractionStatus.FAILED)
                 .sorted(Comparator.comparing(KnowledgePage::getPageNumber))
                 .toList();
 
@@ -161,7 +163,73 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
 
         int MAX_PAGES_PER_BATCH = 4;
         int totalBatches = (pages.size() + MAX_PAGES_PER_BATCH - 1) / MAX_PAGES_PER_BATCH;
+        mappedChapterId = metadata.mappedChapterId();
+        if (mappedChapterId == null) {
+            log.info("SourceBookIndex '{}' is not mapped to any Chapter. Auto-resolving and mapping to Academic Hierarchy...", indexName);
+            try {
+                SourceBookIndex indexEntity = sourceBookIndexRepository.findById(sourceBookIndexId)
+                        .orElseThrow(() -> new RuntimeException("SourceBookIndex not found"));
+                SourceBookMaster bookEntity = indexEntity.getSourceBook();
+                ClassSubject classSubjectEntity = bookEntity.getClassSubject();
+                
+                if (classSubjectEntity == null) {
+                    throw new RuntimeException("বইটির সাথে কোনো ক্লাস-সাবজেক্ট যুক্ত নেই। অনুগ্রহ করে প্রথমে বইটির ক্লাস-সাবজেক্ট সেটিংসে গিয়ে সেট করুন।");
+                }
+                
+                com.testshaper.repository.ChapterRepository chRepo = applicationContext.getBean(com.testshaper.repository.ChapterRepository.class);
+                
+                // Let's check if a Chapter with this name already exists for this classSubject to prevent duplicates
+                Chapter autoChapter = chRepo.findByClassSubjectIdAndNameIgnoreCase(classSubjectEntity.getId(), indexName.trim())
+                        .orElse(null);
+                    
+                if (autoChapter == null) {
+                    autoChapter = new Chapter();
+                    autoChapter.setName(indexName.trim());
+                    autoChapter.setClassSubject(classSubjectEntity);
+                    autoChapter.setIsActive(true);
+                    
+                    List<Chapter> existingChapters = chRepo.findByClassSubjectId(classSubjectEntity.getId());
+                    autoChapter.setChapterNumber(existingChapters.size() + 1);
+                    
+                    if (indexEntity.getCategoryName() != null) {
+                        autoChapter.setCategoryName(indexEntity.getCategoryName());
+                    }
+                    
+                    autoChapter = chRepo.save(autoChapter);
+                    log.info("Auto-created new Chapter in Academic Hierarchy: '{}' (ID: {})", indexName, autoChapter.getId());
+                } else {
+                    log.info("Found existing Chapter in Academic Hierarchy with name '{}' (ID: {}). Reusing it.", indexName, autoChapter.getId());
+                }
+                
+                // Map the SourceBookIndex to this chapter in DB
+                indexEntity.setMappedChapter(autoChapter);
+                sourceBookIndexRepository.save(indexEntity);
+                
+                // Update mappedChapterId so the rest of the flow works smoothly
+                mappedChapterId = autoChapter.getId();
+                
+            } catch (Exception ex) {
+                String errorMsg = String.format("চ্যাপ্টার স্বয়ংক্রিয়ভাবে তৈরি করতে ব্যর্থ হয়েছে: %s", ex.getMessage());
+                log.error(errorMsg, ex);
+                
+                // Mark all PROOFREAD pages as FAILED
+                getSelf().updatePageStatusToFailed(pages);
+                
+                // Update tracking job
+                if (jobId != null) {
+                    synchronized (jobId.toString().intern()) {
+                        AiTopicExtractionJob freshJob = aiTopicExtractionJobRepository.findById(jobId).orElse(null);
+                        if (freshJob != null) {
+                            freshJob.setFailedChaptersCount(freshJob.getFailedChaptersCount() + totalBatches);
+                            aiTopicExtractionJobRepository.save(freshJob);
+                        }
+                    }
+                }
+                throw new RuntimeException(errorMsg);
+            }
+        }
         
+        final UUID finalMappedChapterId = mappedChapterId;
         String billingMode = applicationContext.getBean(com.testshaper.repository.GeneralSettingRepository.class)
                 .findByTenantIdIsNullAndKey("ai_billing_mode")
                 .map(com.testshaper.entity.GeneralSetting::getValue).orElse("FREE_POOL");
@@ -193,7 +261,7 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 boolean success = false;
                 try {
                     log.info("Processing Batch {}/{} for Index {} (Concurrent)", batchIndex + 1, totalBatches, indexName);
-                    getSelf().processBatch(sourceBookIndexId, mappedChapterId, batch, batchIndex, isTextbook);
+                    getSelf().processBatch(sourceBookIndexId, finalMappedChapterId, batch, batchIndex, isTextbook);
                     
                     // Mark only these successfully processed pages as GOLDEN_VECTORIZED
                     getSelf().updatePageStatus(batch);
@@ -400,11 +468,12 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
             
             // Only create NEW topics if it is a TEXTBOOK
             if (topic == null && isTextbook) {
+                if (mappedChapter == null) {
+                    throw new RuntimeException("Cannot create a new Topic because the mapped chapter is null. Please map this chapter to the academic hierarchy first.");
+                }
                 topic = new Topic();
                 topic.setName(normalizedTopicName);
-                if (mappedChapter != null) {
-                    topic.setChapter(mappedChapter);
-                }
+                topic.setChapter(mappedChapter);
                 topic = topicRepository.save(topic);
             }
 

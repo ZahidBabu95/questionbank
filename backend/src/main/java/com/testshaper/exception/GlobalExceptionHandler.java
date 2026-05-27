@@ -57,12 +57,25 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<Map<String, Object>> handleAccessDeniedException(AccessDeniedException ex) {
+    public ResponseEntity<Map<String, Object>> handleAccessDeniedException(AccessDeniedException ex, jakarta.servlet.http.HttpServletRequest request) {
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        String username = auth != null ? auth.getName() : "anonymousUser";
+        Object authorities = auth != null ? auth.getAuthorities() : "none";
+        System.out.println("=== SECURITY 403 ACCESS DENIED ===");
+        System.out.println("Request URI: " + request.getMethod() + " " + request.getRequestURI());
+        System.out.println("User: " + username);
+        System.out.println("Authorities: " + authorities);
+        System.out.println("Exception message: " + ex.getMessage());
+        System.out.println("==================================");
+
         Map<String, Object> errorDetails = new HashMap<>();
         errorDetails.put("timestamp", LocalDateTime.now());
         errorDetails.put("status", HttpStatus.FORBIDDEN.value());
         errorDetails.put("error", "Access Denied");
         errorDetails.put("message", ex.getMessage());
+        errorDetails.put("debug_uri", request.getRequestURI());
+        errorDetails.put("debug_user", username);
+        errorDetails.put("debug_authorities", authorities.toString());
 
         return new ResponseEntity<>(errorDetails, HttpStatus.FORBIDDEN);
     }

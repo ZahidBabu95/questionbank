@@ -59,7 +59,16 @@ public class ExamPdfService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
 
         // 2. Tenant isolation
-        if (!exam.getTenantId().equals(TenantContext.getTenantId())) {
+        boolean isSuperAdmin = false;
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                isSuperAdmin = auth.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN") || a.getAuthority().equals("SUPER_ADMIN"));
+            }
+        } catch (Exception ignored) {}
+
+        if (!isSuperAdmin && !exam.getTenantId().equals(TenantContext.getTenantId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
 
@@ -94,13 +103,13 @@ public class ExamPdfService {
         Document doc = new Document(pageSize, 50, 50, 60, 50);
         PdfWriter writer = PdfWriter.getInstance(doc, baos);
 
-        // Header / Footer renderer
-        writer.setPageEvent(new ExamHeaderFooter(exam, opts));
-
-        doc.open();
-
         // Load fonts
         BaseFont baseFont = loadFont();
+
+        // Header / Footer renderer
+        writer.setPageEvent(new ExamHeaderFooter(exam, opts, baseFont));
+
+        doc.open();
 
         Font titleFont = new Font(baseFont, HEADER_FONT_SIZE, Font.BOLD, DARK);
         Font sectionFont = new Font(baseFont, SECTION_FONT_SIZE, Font.BOLD, ACCENT);
@@ -683,16 +692,12 @@ public class ExamPdfService {
     private static class ExamHeaderFooter extends PdfPageEventHelper {
         private final Exam exam;
         private final PdfDownloadOptions opts;
+        private final BaseFont bf;
         private PdfTemplate total;
-        private BaseFont bf;
 
         @Override
         public void onOpenDocument(PdfWriter writer, Document document) {
             total = writer.getDirectContent().createTemplate(30, 16);
-            try {
-                bf = BaseFont.createFont(BaseFont.HELVETICA, BaseFont.CP1252, BaseFont.NOT_EMBEDDED);
-            } catch (Exception ignored) {
-            }
         }
 
         @Override

@@ -344,7 +344,12 @@ const PackageManagement = () => {
                                                                                                         const checked = e.target.checked;
                                                                                                         let newSubjects = [...(formData.pricingRules?.subjects || [])];
                                                                                                         if (checked) {
-                                                                                                            newSubjects.push({ classSubjectId: cs.id, price: 0, versions: ['Bangla', 'English', 'Bilingual'] });
+                                                                                                            const isEng = subject.isEnglishVersion || subject.englishVersion || false;
+                                                                                                            newSubjects.push({ 
+                                                                                                                classSubjectId: cs.id, 
+                                                                                                                price: 0, 
+                                                                                                                versions: isEng ? ['English'] : ['Bangla'] 
+                                                                                                            });
                                                                                                         } else {
                                                                                                             newSubjects = newSubjects.filter(s => s.classSubjectId !== cs.id);
                                                                                                         }
@@ -356,7 +361,7 @@ const PackageManagement = () => {
                                                                                                     className="w-5 h-5 rounded text-indigo-600 border-slate-300 cursor-pointer"
                                                                                                 />
                                                                                                 <span className={`text-sm font-black ${isSelected ? 'text-indigo-900' : 'text-slate-600'}`}>
-                                                                                                    {subject.name} {subject.paper ? <span className="text-indigo-500 ml-1">({subject.paper})</span> : ''}
+                                                                                                    {subject.name} {subject.paper ? <span className="text-indigo-500 ml-1">({subject.paper})</span> : ''} {(subject.isEnglishVersion || subject.englishVersion) ? '[EN]' : '[BN]'}
                                                                                                 </span>
                                                                                                 
                                                                                                 {isSelected && <span className="ml-auto text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold uppercase tracking-wider">Active in Package</span>}
@@ -378,58 +383,6 @@ const PackageManagement = () => {
                                                                                                             }}
                                                                                                             className="w-24 px-3 py-1.5 rounded-lg border border-slate-300 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 shadow-sm"
                                                                                                         />
-                                                                                                    </div>
-                                                                                                    <div className="w-px h-8 bg-slate-200 hidden md:block"></div>
-                                                                                                    <div className="flex items-center gap-4">
-                                                                                                        <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Allowed Versions</span>
-                                                                                                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer hover:text-indigo-600 transition">
-                                                                                                            <input 
-                                                                                                                type="checkbox" 
-                                                                                                                checked={currentRule.versions?.includes('Bangla')}
-                                                                                                                onChange={(e) => {
-                                                                                                                    const checked = e.target.checked;
-                                                                                                                    const versions = currentRule.versions || [];
-                                                                                                                    const newVersions = checked ? [...versions, 'Bangla'] : versions.filter(v => v !== 'Bangla');
-                                                                                                                    const newSubjects = formData.pricingRules.subjects.map(s => 
-                                                                                                                        s.classSubjectId === cs.id ? { ...s, versions: newVersions } : s
-                                                                                                                    );
-                                                                                                                    setFormData({ ...formData, pricingRules: { ...formData.pricingRules, subjects: newSubjects } });
-                                                                                                                }}
-                                                                                                                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
-                                                                                                            /> Bangla
-                                                                                                        </label>
-                                                                                                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer hover:text-indigo-600 transition">
-                                                                                                            <input 
-                                                                                                                type="checkbox" 
-                                                                                                                checked={currentRule.versions?.includes('English')}
-                                                                                                                onChange={(e) => {
-                                                                                                                    const checked = e.target.checked;
-                                                                                                                    const versions = currentRule.versions || [];
-                                                                                                                    const newVersions = checked ? [...versions, 'English'] : versions.filter(v => v !== 'English');
-                                                                                                                    const newSubjects = formData.pricingRules.subjects.map(s => 
-                                                                                                                        s.classSubjectId === cs.id ? { ...s, versions: newVersions } : s
-                                                                                                                    );
-                                                                                                                    setFormData({ ...formData, pricingRules: { ...formData.pricingRules, subjects: newSubjects } });
-                                                                                                                }}
-                                                                                                                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
-                                                                                                            /> English
-                                                                                                        </label>
-                                                                                                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer hover:text-indigo-600 transition">
-                                                                                                            <input 
-                                                                                                                type="checkbox" 
-                                                                                                                checked={currentRule.versions?.includes('Bilingual')}
-                                                                                                                onChange={(e) => {
-                                                                                                                    const checked = e.target.checked;
-                                                                                                                    const versions = currentRule.versions || [];
-                                                                                                                    const newVersions = checked ? [...versions, 'Bilingual'] : versions.filter(v => v !== 'Bilingual');
-                                                                                                                    const newSubjects = formData.pricingRules.subjects.map(s => 
-                                                                                                                        s.classSubjectId === cs.id ? { ...s, versions: newVersions } : s
-                                                                                                                    );
-                                                                                                                    setFormData({ ...formData, pricingRules: { ...formData.pricingRules, subjects: newSubjects } });
-                                                                                                                }}
-                                                                                                                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
-                                                                                                            /> Bilingual
-                                                                                                        </label>
                                                                                                     </div>
                                                                                                 </div>
                                                                                             )}

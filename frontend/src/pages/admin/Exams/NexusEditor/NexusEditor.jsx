@@ -9,6 +9,8 @@ import RightSidebar from './components/Layout/RightSidebar';
 import PaperCanvasV2 from './components/PaperCanvasV2';
 import ToastContainer from './components/Layout/ToastContainer';
 import CanvasControlBar from './components/Layout/CanvasControlBar';
+import DownloadProgressOverlay from './components/Layout/DownloadProgressOverlay';
+import FilenameModal from './components/Layout/FilenameModal';
 import { PanelLeftOpen, PanelRightOpen, Database, Settings2 } from 'lucide-react';
 
 const NexusEditorContent = () => {
@@ -86,6 +88,8 @@ const NexusEditorContent = () => {
     return (
         <div className="flex flex-col h-full bg-[#f8fafc] font-outfit overflow-hidden print:overflow-visible">
             <style>{`
+                .no-scrollbar::-webkit-scrollbar { display: none !important; }
+                .no-scrollbar { -ms-overflow-style: none !important; scrollbar-width: none !important; }
                 @media print {
                     @page { size: ${docSettings.pageSize === 'A4' ? 'A4' : docSettings.pageSize === 'Legal' ? 'legal' : 'letter'} ${docSettings.orientation === 'landscape' || docSettings.orientation === 'Landscape' ? 'landscape' : 'portrait'}; margin: ${docSettings.marginTop || 20}mm ${docSettings.marginRight || 20}mm ${docSettings.marginBottom || 20}mm ${docSettings.marginLeft || 25}mm !important; }
                     body { margin: 0; padding: 0; background: #fff; overflow: visible !important; }
@@ -101,11 +105,19 @@ const NexusEditorContent = () => {
             
             <NexusHeader />
             
-            <div className={`flex-1 flex overflow-hidden print:block print:w-full print:h-auto print:overflow-visible ${(resizingL || resizingR) ? 'select-none' : ''}`}>
+            <div className={`flex-1 flex relative overflow-hidden print:block print:w-full print:h-auto print:overflow-visible ${(resizingL || resizingR) ? 'select-none' : ''}`}>
                 
+                {/* Backdrop Overlays for Mobile viewports */}
+                {isLeftPanelOpen && (
+                    <div className="absolute inset-0 bg-slate-900/35 z-20 lg:hidden transition-all duration-300 animate-in fade-in" onClick={() => setIsLeftPanelOpen(false)} />
+                )}
+                {isRightPanelOpen && (
+                    <div className="absolute inset-0 bg-slate-900/35 z-20 lg:hidden transition-all duration-300 animate-in fade-in" onClick={() => setIsRightPanelOpen(false)} />
+                )}
+
                 {/* Closed Left Sidebar Docking Tray */}
                 {!isLeftPanelOpen && (
-                    <div className="w-12 bg-white border-r border-slate-200 shadow-sm flex flex-col items-center py-4 gap-4 z-10 print:hidden transition-all duration-300">
+                    <div className="w-12 bg-white border-r border-slate-200 shadow-sm hidden lg:flex flex-col items-center py-4 gap-4 z-10 print:hidden transition-all duration-300">
                         <button 
                              onClick={() => setIsLeftPanelOpen(true)}
                             className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100/80 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-sm border border-indigo-100 animate-in slide-in-from-left duration-200"
@@ -152,7 +164,7 @@ const NexusEditorContent = () => {
 
                 {/* Closed Right Sidebar Docking Tray */}
                 {!isRightPanelOpen && (
-                    <div className="w-12 bg-white border-l border-slate-200 shadow-sm flex flex-col items-center py-4 gap-4 z-10 print:hidden transition-all duration-300">
+                    <div className="w-12 bg-white border-l border-slate-200 shadow-sm hidden lg:flex flex-col items-center py-4 gap-4 z-10 print:hidden transition-all duration-300">
                         <button 
                             onClick={() => setIsRightPanelOpen(true)}
                             className="p-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100/80 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-sm border border-indigo-100 animate-in slide-in-from-right duration-200"
@@ -175,11 +187,44 @@ const NexusEditorContent = () => {
                 )}
             </div>
 
+            {/* Mobile panel floating toggle triggers */}
+            <div className="lg:hidden fixed bottom-6 left-4 z-40 print:hidden flex flex-col gap-2">
+                <button
+                    onClick={() => {
+                        setIsLeftPanelOpen(prev => !prev);
+                        if (isRightPanelOpen) setIsRightPanelOpen(false);
+                    }}
+                    className={`p-3 text-white rounded-full shadow-2xl transition-all hover:scale-105 active:scale-95 flex items-center justify-center border ${isLeftPanelOpen ? 'bg-slate-800 border-slate-700 animate-pulse' : 'bg-indigo-600 border-indigo-500 shadow-indigo-500/20'}`}
+                    title={isLeftPanelOpen ? "Close Left Panel" : "Open Question Bank"}
+                >
+                    <PanelLeftOpen size={18} className="stroke-[2.5]" />
+                </button>
+            </div>
+
+            <div className="lg:hidden fixed bottom-6 right-4 z-40 print:hidden flex flex-col gap-2">
+                <button
+                    onClick={() => {
+                        setIsRightPanelOpen(prev => !prev);
+                        if (isLeftPanelOpen) setIsLeftPanelOpen(false);
+                    }}
+                    className={`p-3 text-white rounded-full shadow-2xl transition-all hover:scale-105 active:scale-95 flex items-center justify-center border ${isRightPanelOpen ? 'bg-slate-800 border-slate-700 animate-pulse' : 'bg-indigo-600 border-indigo-500 shadow-indigo-500/20'}`}
+                    title={isRightPanelOpen ? "Close Right Panel" : "Open Settings"}
+                >
+                    <PanelRightOpen size={18} className="stroke-[2.5]" />
+                </button>
+            </div>
+
             {/* Float control bar for zoom and canvas themes */}
             <CanvasControlBar />
 
             {/* Custom toast alerts */}
             <ToastContainer />
+
+            {/* Premium Download Progress Overlay */}
+            <DownloadProgressOverlay />
+
+            {/* Premium Custom Filename Input Modal */}
+            <FilenameModal />
         </div>
     );
 };

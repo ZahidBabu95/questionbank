@@ -189,16 +189,16 @@ const AnswerSheetPreview = () => {
                     fontFamily: docSettings?.language === 'ENGLISH' 
                         ? (docSettings?.enFont ? `'${docSettings.enFont}', sans-serif` : 'inherit')
                         : (docSettings?.bnFont ? `'${docSettings.bnFont}', sans-serif` : 'inherit'), 
-                    borderBottom: docSettings?.headerStyle === 'ডাবল বর্ডার' ? '3px double #000' : 
+                    borderBottom: docSettings?.headerStyle === 'ডাবল বর্ডার' ? 'none' : 
                                   docSettings?.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 
                                   docSettings?.headerStyle === 'থিক টপ লাইন' ? '3px solid #000' : 
-                                  (docSettings?.showDivider ? (docSettings?.dividerStyle === 'double' ? '3px double #000' : docSettings?.dividerStyle === 'dashed' ? '1px dashed #000' : '1px solid #000') : 'none'),
+                                  (docSettings?.showDivider ? (docSettings?.dividerStyle === 'double' ? 'none' : docSettings?.dividerStyle === 'dashed' ? '1px dashed #000' : '1px solid #000') : 'none'),
                     borderTop: docSettings?.headerStyle === 'থিক টপ লাইন' ? '3px solid #000' : 
                                docSettings?.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 'none',
                     borderLeft: docSettings?.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 'none',
                     borderRight: docSettings?.headerStyle === 'বক্স স্টাইল' ? '1px solid #000' : 'none',
                     padding: docSettings?.headerStyle === 'বক্স স্টাইল' ? '10px' : '0 0 4px 0',
-                    marginBottom: 20
+                    marginBottom: (docSettings?.headerStyle === 'ডাবল বর্ডার' || (docSettings?.showDivider && docSettings?.dividerStyle === 'double')) ? 12 : 20
                 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', minHeight: '28px', marginBottom: 4, width: '100%' }}>
                         {/* Left: Subject Code */}
@@ -279,6 +279,13 @@ const AnswerSheetPreview = () => {
                                     )}
                                 </>
                             )}
+                        </div>
+                    )}
+                    {/* Double line emulation for html2canvas compatibility */}
+                    {(docSettings?.headerStyle === 'ডাবল বর্ডার' || (docSettings?.headerStyle !== 'বক্স স্টাইল' && docSettings?.headerStyle !== 'থিক টপ লাইন' && docSettings?.showDivider && docSettings?.dividerStyle === 'double')) && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '100%', marginTop: '4px', marginBottom: '0px' }}>
+                            <div style={{ borderTop: '1px solid #000', width: '100%', height: '0px' }}></div>
+                            <div style={{ borderTop: '1px solid #000', width: '100%', height: '0px' }}></div>
                         </div>
                     )}
                 </div>

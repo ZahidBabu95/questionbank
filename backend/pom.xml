@@ -17,6 +17,7 @@
 	<properties>
 		<java.version>17</java.version>
 		<jjwt.version>0.11.5</jjwt.version>
+		<frontend.skip>false</frontend.skip>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -195,6 +196,7 @@
                 <version>1.15.0</version>
                 <configuration>
                     <workingDirectory>../frontend</workingDirectory>
+                    <skip>${frontend.skip}</skip>
                 </configuration>
                 <executions>
                     <execution>

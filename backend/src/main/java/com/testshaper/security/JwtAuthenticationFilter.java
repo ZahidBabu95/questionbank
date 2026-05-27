@@ -46,6 +46,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authenticationToken);
 
+            System.out.println("DEBUG AUTH: User '" + username + "' authenticated in filter.");
+            System.out.println("DEBUG AUTH: Authorities: " + userDetails.getAuthorities());
+
             if (userDetails instanceof CustomUserDetails) {
                 TenantContext.setTenantId(((CustomUserDetails) userDetails).getTenantId());
             }
@@ -62,6 +65,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String bearerToken = request.getHeader("Authorization");
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
+        }
+        String paramToken = request.getParameter("token");
+        if (StringUtils.hasText(paramToken)) {
+            return paramToken;
         }
         return null;
     }

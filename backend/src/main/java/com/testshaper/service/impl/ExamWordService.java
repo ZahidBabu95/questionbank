@@ -34,7 +34,16 @@ public class ExamWordService {
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
 
-        if (!exam.getTenantId().equals(TenantContext.getTenantId())) {
+        boolean isSuperAdmin = false;
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                isSuperAdmin = auth.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN") || a.getAuthority().equals("SUPER_ADMIN"));
+            }
+        } catch (Exception ignored) {}
+
+        if (!isSuperAdmin && !exam.getTenantId().equals(TenantContext.getTenantId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
 

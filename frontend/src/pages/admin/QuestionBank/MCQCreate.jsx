@@ -52,6 +52,8 @@ const MCQCreate = () => {
         marks: 1, difficulty: 'MEDIUM', language: 'Bangla', explanation: ''
     });
 
+    // Reverted frontend auto-filtering logic per user request to allow simple database-driven dropdown mapping
+
     const [options, setOptions] = useState([
         { optionLabel: 'ক', optionText: '', isCorrect: false },
         { optionLabel: 'খ', optionText: '', isCorrect: false },

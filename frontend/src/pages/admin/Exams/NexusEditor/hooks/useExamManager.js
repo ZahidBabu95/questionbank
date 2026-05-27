@@ -7,6 +7,8 @@ import axios from '../../../../../utils/axios';
 import { useNexusEditor } from '../context/NexusEditorContext';
 import { DEFAULT_SETTINGS } from '../components/DocumentSettings';
 import { formatDuration, parseDurationToMinutes } from '../../../../../utils/formatUtils';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 // Module-level caches to prevent duplicate requests on rapid remounts
 const examPromises = new Map();
@@ -54,10 +56,10 @@ const deduplicatedGetSettings = (type, isGlobal = false) => {
     if (settingsPromises.has(key)) {
         return settingsPromises.get(key);
     }
-    const serviceCall = isGlobal 
+    const serviceCall = isGlobal
         ? settingsService.getGlobalSettings(type)
         : settingsService.getInstituteSettings(type);
-    
+
     const promise = serviceCall.then(res => {
         settingsCache.set(key, res);
         settingsCacheTimes.set(key, Date.now());
@@ -132,14 +134,17 @@ const deduplicatedGetKnowledge = () => {
 
 export const useExamManager = () => {
     const { id } = useParams();
-    const { 
-        examData, setExamData, 
-        editorMode, setEditorMode, 
-        rawContent, setRawContent, 
-        docSettings, setDocSettings, 
+    const {
+        examData, setExamData,
+        editorMode, setEditorMode,
+        rawContent, setRawContent,
+        docSettings, setDocSettings,
         setEditorConfig, setGenerationBlueprint,
         isSavingDocument, setIsSavingDocument,
-        uiLang 
+        uiLang, pageCount,
+        isDownloadingPdf, setIsDownloadingPdf,
+        downloadProgress, setDownloadProgress,
+        downloadStatus, setDownloadStatus
     } = useNexusEditor();
 
     const [templates, setTemplates] = useState([]);
@@ -160,16 +165,16 @@ export const useExamManager = () => {
 
     const findDefaultLayoutInSettings = (settings, className, subjectName) => {
         if (!settings || !subjectName) return null;
-        
+
         const normSubject = subjectName.toString().trim().toLowerCase().replace(/\s+/g, '');
         const normClass = className ? className.toString().trim().toLowerCase().replace(/\s+/g, '') : '';
-        
+
         const targetClassSubKey = 'subject_default_' + normClass + '_' + normSubject;
         const targetSubOnlyKey = 'subject_default_' + normSubject;
-        
+
         const settingsKeys = Object.keys(settings);
         const normalizeSettingKey = (k) => k.toString().trim().toLowerCase().replace(/\s+/g, '');
-        
+
         // 1. Try matching Class + Subject first
         if (className) {
             const matchedKey = settingsKeys.find(k => {
@@ -184,7 +189,7 @@ export const useExamManager = () => {
                 }
             }
         }
-        
+
         // 2. Try matching Subject only
         const matchedSubKey = settingsKeys.find(k => {
             const normK = normalizeSettingKey(k);
@@ -197,7 +202,7 @@ export const useExamManager = () => {
                 console.error("Failed to parse settings for key:", matchedSubKey, e);
             }
         }
-        
+
         return null;
     };
 
@@ -220,10 +225,10 @@ export const useExamManager = () => {
             const allKeys = Object.keys(settings || {})
                 .filter(k => k.startsWith('subject_default_'))
                 .map(k => k.replace('subject_default_', ''));
-            
+
             const classSubjectList = allKeys.filter(k => k.includes('_'));
             const subjectOnlyList = allKeys.filter(k => !k.includes('_'));
-            
+
             setSavedSubjectsList(subjectOnlyList);
             setSavedClassSubjectsList(classSubjectList);
         } catch (err) {
@@ -249,19 +254,19 @@ export const useExamManager = () => {
 
                     // Fetch Subject specific default setup from settings if exam has no settings of its own
                     let subjectDefaultSettings = null;
-                    const hasNoSettings = !res.data.docSettingsJson || 
-                                          res.data.docSettingsJson === 'null' || 
+                    const hasNoSettings = !res.data.docSettingsJson ||
+                                          res.data.docSettingsJson === 'null' ||
                                           res.data.docSettingsJson === 'undefined' ||
-                                          res.data.docSettingsJson === '{}' || 
+                                          res.data.docSettingsJson === '{}' ||
                                           res.data.docSettingsJson.trim() === '';
-                    
+
                     console.log("[useExamManager] Fetching exam, docSettingsJson is empty?", hasNoSettings, "subject:", res.data.subjectName, "class:", res.data.className);
-                    
+
                     if (hasNoSettings && res.data.subjectName) {
                         try {
                             const subjectName = res.data.subjectName;
                             const className = res.data.className;
-                            
+
                             // 1. Try loading from institute settings
                             try {
                                 const examSettings = await deduplicatedGetSettings('EXAM', false);
@@ -269,7 +274,7 @@ export const useExamManager = () => {
                             } catch (e) {
                                 console.warn("Failed to load institute default layout:", e);
                             }
-                            
+
                             // 2. Fallback to global settings
                             if (!subjectDefaultSettings) {
                                 try {
@@ -279,15 +284,15 @@ export const useExamManager = () => {
                                     console.warn("Failed to load global default layout:", e);
                                 }
                             }
-                            
+
                             if (subjectDefaultSettings) {
                                 console.log("[useExamManager] Found matching default layout settings:", subjectDefaultSettings);
                             }
                         } catch (schemaErr) { console.error("Failed to load subject default settings:", schemaErr); }
                     }
-                    
+
                     let finalHtml = res.data.rawContent || '';
-                    
+
                     // Generate HTML if rawContent is empty but questions exist
                     if (!finalHtml && res.data.questions && res.data.questions.length > 0) {
                         const qsByType = { MCQ: [], CQ: [], SHORT: [], OTHER: [] };
@@ -307,18 +312,18 @@ export const useExamManager = () => {
                             const answerText = q.correctAnswer ? q.correctAnswer.replace(/"/g, "&quot;") : "";
                             const dynamicDataJson = q.dynamicData ? (typeof q.dynamicData === 'object' ? JSON.stringify(q.dynamicData).replace(/'/g, "&#39;") : q.dynamicData.replace(/'/g, "&#39;")) : "";
                             return `
-                                <div data-type="question-block" 
+                                <div data-type="question-block"
                                      questionid="${q.originalQuestionId || q.id}"
                                      data-section-id="${q.sectionId || sec?.id || ''}"
-                                     type="${q.type || 'MCQ'}" 
-                                     questiontext="${qText}" 
+                                     type="${q.type || 'MCQ'}"
+                                     questiontext="${qText}"
                                      stimulus="${stimulusText}"
                                      explanation="${explanationText}"
                                      answer="${answerText}"
                                      syncedfromdb="true"
                                      language="${q.language || 'Bangla'}"
-                                     chaptername="${q.chapterName || q.subjectName || 'General'}" 
-                                     marks="${q.marks || 1}" 
+                                     chaptername="${q.chapterName || q.subjectName || 'General'}"
+                                     marks="${q.marks || 1}"
                                      numberingstyle="${sec?.numberingStyle || 'bn'}"
                                      marksconfig="${sec?.marksConfig || 'hide'}"
                                      optionlayout="${sec?.optionLayout || 'col1'}"
@@ -343,20 +348,20 @@ export const useExamManager = () => {
                                 if (type === 'MCQ') {
                                     defaultSec = baseSettings.sections.find(s => s.isMCQ === true);
                                 } else if (type === 'CQ') {
-                                    defaultSec = baseSettings.sections.find(s => 
-                                        s.isMCQ === false && 
+                                    defaultSec = baseSettings.sections.find(s =>
+                                        s.isMCQ === false &&
                                         (s.name?.includes('সৃজনশীল') || s.name?.toLowerCase().includes('cq'))
                                     ) || baseSettings.sections.find(s => s.isMCQ === false);
                                 } else if (type === 'SHORT') {
-                                    defaultSec = baseSettings.sections.find(s => 
-                                        s.isMCQ === false && 
+                                    defaultSec = baseSettings.sections.find(s =>
+                                        s.isMCQ === false &&
                                         (s.name?.includes('সংক্ষিপ্ত') || s.name?.toLowerCase().includes('short'))
                                     ) || baseSettings.sections.filter(s => s.isMCQ === false)[1]
                                       || baseSettings.sections.find(s => s.isMCQ === false);
                                 } else {
-                                    defaultSec = baseSettings.sections.find(s => 
-                                        s.isMCQ === false && 
-                                        !s.name?.includes('সৃজনশীল') && 
+                                    defaultSec = baseSettings.sections.find(s =>
+                                        s.isMCQ === false &&
+                                        !s.name?.includes('সৃজনশীল') &&
                                         !s.name?.includes('সংক্ষিপ্ত')
                                     ) || baseSettings.sections.find(s => s.isMCQ === false);
                                 }
@@ -367,7 +372,7 @@ export const useExamManager = () => {
                                 cleanName = cleanName.replace(/^[ক-হa-zA-Z\d\s-]+-বিভাগ:\s*/, '');
                                 cleanName = cleanName.replace(/^Section\s+[A-Z]:\s*/i, '');
                                 cleanName = cleanName.replace(/^বিভাগ:\s*/, '');
-                                
+
                                 if (type === 'SHORT' && !cleanName.includes('সংক্ষিপ্ত') && !cleanName.toLowerCase().includes('short')) {
                                     cleanName = sectionNames[type];
                                 } else if (type === 'CQ' && !cleanName.includes('সৃজনশীল') && !cleanName.toLowerCase().includes('cq')) {
@@ -375,10 +380,10 @@ export const useExamManager = () => {
                                 } else if (type === 'MCQ' && !cleanName.includes('বহুনির্বাচনী') && !cleanName.toLowerCase().includes('mcq')) {
                                     cleanName = sectionNames[type];
                                 }
-                                
-                                return { 
-                                    ...defaultSec, 
-                                    id: `sec-${Date.now()}-${sectionIndex}`, 
+
+                                return {
+                                    ...defaultSec,
+                                    id: `sec-${Date.now()}-${sectionIndex}`,
                                     name: `${sectionPrefixes[sectionIndex]}-বিভাগ: ${cleanName}`
                                 };
                             }
@@ -435,7 +440,7 @@ export const useExamManager = () => {
                         }
 
                         setRawContent(finalHtml);
-                        
+
                         if (!hasNoSettings) {
                             try {
                                 const parsedSettings = JSON.parse(res.data.docSettingsJson);
@@ -584,7 +589,7 @@ export const useExamManager = () => {
             try {
                 const res = await deduplicatedGetTemplates();
                 if (res?.data) setTemplates(res.data);
-            } catch (err) { console.error("Failed to load templates:", err); } 
+            } catch (err) { console.error("Failed to load templates:", err); }
             finally { setLoadingTemplates(false); }
         };
         fetchTemplates();
@@ -610,7 +615,7 @@ export const useExamManager = () => {
                 parsedSettings.time = docSettings.time;
                 parsedSettings.year = docSettings.year;
                 parsedSettings.templateId = template.id;
-                
+
                 setDocSettings(parsedSettings);
                 alert(uiLang === 'bn' ? "টেমপ্লেট স্টাইল সফলভাবে অ্যাপ্লাই হয়েছে!" : "Template styles applied successfully!");
             } catch (e) {
@@ -662,7 +667,7 @@ export const useExamManager = () => {
                 status: 'DRAFT',
                 ...(parsedMins !== null ? { durationMinutes: parsedMins } : {})
             };
-            
+
             if (id) {
                 await examService.updateExam(id, payload);
                 invalidateExamCache(id);
@@ -683,9 +688,211 @@ export const useExamManager = () => {
         } finally {
             setIsSavingDocument(false);
         }
-    };
+     };
 
-    const handleSaveAs = async () => {
+      const handleDownloadPdf = async (silent = false, customFilename = '') => {
+          if (!id) {
+              alert(uiLang === 'bn' ? "দয়া করে প্রথমে ডকুমেন্টটি সেভ করুন।" : "Please save the document first.");
+              return;
+          }
+          setIsDownloadingPdf(true);
+          setDownloadProgress(5);
+          setDownloadStatus(uiLang === 'bn' ? "ডকুমেন্ট খসড়া প্রস্তুত করা হচ্ছে..." : "Preparing draft document...");
+
+          let progressInterval = null;
+          try {
+              // 1. Silent save first to make sure any current visual edits are pushed to database before download
+              const parsedMins = parseDurationToMinutes(docSettings.time);
+              const payload = {
+                  title: docSettings.exam || "Nexus Exam",
+                  examCode: "NEXUS-" + Math.floor(Math.random() * 10000),
+                  editorMode: editorMode,
+                  rawContent: rawContent,
+                  docSettingsJson: JSON.stringify(docSettings),
+                  isAutoGenerated: true,
+                  status: 'DRAFT',
+                  ...(parsedMins !== null ? { durationMinutes: parsedMins } : {})
+              };
+              await examService.updateExam(id, payload);
+              invalidateExamCache(id);
+
+              // 2. Capture and generate PDF using html2canvas & jsPDF in the frontend
+              setDownloadProgress(20);
+              setDownloadStatus(uiLang === 'bn' ? "ক্যানভাস এলিমেন্ট সনাক্ত করা হচ্ছে..." : "Identifying canvas element...");
+
+              const element = document.querySelector('.paper-canvas-container');
+              if (!element) {
+                  throw new Error("Paper canvas element not found");
+              }
+
+              const pageSize = docSettings.pageSize === 'A4' ? 'a4' : docSettings.pageSize === 'Legal' ? 'legal' : 'letter';
+              const orientation = docSettings.orientation === 'landscape' || docSettings.orientation === 'Landscape' ? 'l' : 'p';
+
+              setDownloadProgress(30);
+              setDownloadStatus(uiLang === 'bn' ? "পৃষ্ঠাগুলো স্ক্যান করা হচ্ছে..." : "Scanning pages...");
+
+              progressInterval = setInterval(() => {
+                  setDownloadProgress(prev => {
+                      if (prev < 70) return prev + 3;
+                      return prev;
+                  });
+              }, 350);
+
+              // Calculate dynamic dimensions to reset width exactly to desktop sizing
+              const sDetails = docSettings || {};
+              const dimensions = {
+                  'A4': { w: 794, h: 1123, gap: 0 },
+                  'Legal': { w: 816, h: 1344, gap: 0 },
+                  'Letter': { w: 816, h: 1056, gap: 0 },
+                  'A5': { w: 559, h: 794, gap: 0 },
+                  'Custom': { w: (sDetails.customW || 210) * 3.7795275591, h: (sDetails.customH || 297) * 3.7795275591, gap: 0 }
+              };
+              let { w, h, gap } = dimensions[sDetails.pageSize || 'A4'] || dimensions['A4'];
+              if (sDetails.orientation === 'landscape' || sDetails.orientation === 'Landscape') {
+                  const temp = w;
+                  w = h;
+                  h = temp;
+              }
+              const totalH = h + gap;
+
+              const parent = element.parentElement;
+              const originalTransform = element.style.transform;
+              const originalTransition = element.style.transition;
+              const originalParentWidth = parent.style.width;
+              const originalParentMinHeight = parent.style.minHeight;
+              const originalBodyCssText = document.body.style.cssText;
+
+              // Enforce 100% desktop scale and prevent mobile viewport squeezing
+              element.style.transform = 'scale(1)';
+              element.style.transition = 'none';
+              if (parent) {
+                  parent.style.width = `${w}px`;
+                  parent.style.minHeight = `${(pageCount || 1) * totalH}px`;
+              }
+              document.body.style.width = `${w + 100}px`;
+              document.body.style.minWidth = `${w + 100}px`;
+              document.body.style.overflow = 'visible';
+
+              // Delay to let browser reflow and load Noto Serif Bengali correctly at scale(1)
+              await new Promise(resolve => setTimeout(resolve, 300));
+
+              const canvas = await html2canvas(element, {
+                  scale: 2, // 2x resolution guarantees ultra-crisp text and formatting!
+                  useCORS: true,
+                  allowTaint: false,
+                  backgroundColor: '#ffffff',
+                  logging: false
+              });
+
+              // Restore styles immediately
+              element.style.transform = originalTransform;
+              element.style.transition = originalTransition;
+              if (parent) {
+                  parent.style.width = originalParentWidth;
+                  parent.style.minHeight = originalParentMinHeight;
+              }
+              document.body.style.cssText = originalBodyCssText;
+
+              if (progressInterval) {
+                  clearInterval(progressInterval);
+                  progressInterval = null;
+              }
+
+              setDownloadProgress(75);
+              setDownloadStatus(uiLang === 'bn' ? "চিত্র উপাত্ত প্রস্তুত করা হচ্ছে..." : "Preparing image data...");
+
+              const imgData = canvas.toDataURL('image/jpeg', 1.0);
+
+              setDownloadProgress(80);
+              setDownloadStatus(uiLang === 'bn' ? "পিডিএফ পৃষ্ঠা তৈরি করা হচ্ছে..." : "Generating PDF pages...");
+
+              const pdf = new jsPDF({
+                  orientation: orientation,
+                  unit: 'px',
+                  format: pageSize
+              });
+
+              const pdfWidth = pdf.internal.pageSize.getWidth();
+              const pdfHeight = pdf.internal.pageSize.getHeight();
+              const totalPages = pageCount || 1;
+
+              for (let i = 0; i < totalPages; i++) {
+                  if (i > 0) {
+                      pdf.addPage(pageSize, orientation);
+                  }
+                  // Render each page portion by offsetting the Y position
+                  pdf.addImage(imgData, 'JPEG', 0, -i * pdfHeight, pdfWidth, pdfHeight * totalPages, undefined, 'FAST');
+
+                  const pageProgress = 80 + Math.round(((i + 1) / totalPages) * 15);
+                  setDownloadProgress(pageProgress);
+                  setDownloadStatus(uiLang === 'bn' ? `পৃষ্ঠা ${i + 1} যুক্ত করা হচ্ছে...` : `Adding page ${i + 1}...`);
+
+                  // Small delay to make it smooth and animated
+                  await new Promise(resolve => setTimeout(resolve, 80));
+              }
+
+              setDownloadProgress(98);
+              setDownloadStatus(uiLang === 'bn' ? "পিডিএফ ফাইল ডাউনলোড করা হচ্ছে..." : "Downloading PDF file...");
+
+              if (window.ReactNativeWebView) {
+                  setDownloadProgress(90);
+                  setDownloadStatus(uiLang === 'bn' ? "পিডিএফ সার্ভারে সিঙ্ক করা হচ্ছে..." : "Syncing PDF with server...");
+
+                  const pdfBlob = pdf.output('blob');
+                  const formData = new FormData();
+                  const saveName = customFilename ? `${customFilename}.pdf` : `${docSettings.exam || 'exam'}-${id}.pdf`;
+                  formData.append('file', pdfBlob, saveName);
+
+                  try {
+                      await axios.post(`/v1/exams/download/upload-temp/${id}`, formData, {
+                          headers: {
+                              'Content-Type': 'multipart/form-data'
+                          }
+                      });
+                  } catch (uploadErr) {
+                      console.warn("Failed to pre-upload client-side PDF to server, mobile will fall back to server-side generation:", uploadErr);
+                  }
+
+                  const token = localStorage.getItem('token') || '';
+                  const combinedParams = {
+                      pageSize: docSettings.pageSize === 'A4' ? 'A4' : docSettings.pageSize === 'Legal' ? 'Legal' : 'Letter',
+                      orientation: docSettings.orientation === 'landscape' || docSettings.orientation === 'Landscape' ? 'landscape' : 'portrait'
+                  };
+                  if (token) combinedParams.token = token;
+                  if (customFilename) combinedParams.filename = customFilename;
+                  const queryString = new URLSearchParams(combinedParams).toString();
+                  
+                  setDownloadProgress(100);
+                  setDownloadStatus(uiLang === 'bn' ? "ডাউনলোড সম্পন্ন হয়েছে!" : "Download complete!");
+                  
+                  window.ReactNativeWebView.postMessage(JSON.stringify({
+                      type: 'download_pdf',
+                      examId: id,
+                      queryString: queryString
+                  }));
+              } else {
+                  const saveName = customFilename ? `${customFilename}.pdf` : `${docSettings.exam || 'exam'}-${id}.pdf`;
+                  pdf.save(saveName);
+                  
+                  setDownloadProgress(100);
+                  setDownloadStatus(uiLang === 'bn' ? "ডাউনলোড সম্পন্ন হয়েছে!" : "Download complete!");
+              }
+
+          } catch (err) {
+              if (progressInterval) clearInterval(progressInterval);
+              console.error("Failed to download PDF:", err);
+          } finally {
+              if (progressInterval) clearInterval(progressInterval);
+              setTimeout(() => {
+                  setIsDownloadingPdf(false);
+                  setDownloadProgress(0);
+                  setDownloadStatus('');
+              }, 800);
+          }
+      };
+
+
+     const handleSaveAs = async () => {
         const title = window.prompt(uiLang === 'bn' ? "নতুন নাম দিন:" : "Enter a new title for this document/exam:");
         if (!title || title.trim() === '') return;
 
@@ -717,22 +924,22 @@ export const useExamManager = () => {
             alert(uiLang === 'bn' ? "দয়া করে প্রথমে বিষয় নির্বাচন করুন।" : "Please set a subject name first.");
             return;
         }
-        
+
         let confirmMessage = '';
         if (type === 'class_subject') {
             if (!className || className.trim() === '') {
                 alert(uiLang === 'bn' ? "দয়া করে প্রথমে শ্রেণী নির্বাচন করুন।" : "Please set a class name first.");
                 return;
             }
-            confirmMessage = uiLang === 'bn' 
-                ? `আপনি কি বর্তমান লেআউটটি '${className}' শ্রেণীর '${subjectName}' বিষয়ের ডিফল্ট লেআউট হিসেবে সেট করতে চান?` 
+            confirmMessage = uiLang === 'bn'
+                ? `আপনি কি বর্তমান লেআউটটি '${className}' শ্রেণীর '${subjectName}' বিষয়ের ডিফল্ট লেআউট হিসেবে সেট করতে চান?`
                 : `Are you sure you want to save current layout as default for Class '${className}' and Subject '${subjectName}'?`;
         } else {
-            confirmMessage = uiLang === 'bn' 
-                ? `আপনি কি বর্তমান লেআউটটি '${subjectName}' এর ডিফল্ট লেআউট হিসেবে সেট করতে চান?` 
+            confirmMessage = uiLang === 'bn'
+                ? `আপনি কি বর্তমান লেআউটটি '${subjectName}' এর ডিফল্ট লেআউট হিসেবে সেট করতে চান?`
                 : `Are you sure you want to save current layout as default for '${subjectName}'?`;
         }
-        
+
         const confirmSave = window.confirm(confirmMessage);
         if (!confirmSave) return;
 
@@ -743,7 +950,7 @@ export const useExamManager = () => {
             } else {
                 subKey = 'subject_default_' + subjectName.trim().toLowerCase();
             }
-            
+
             const userData = localStorage.getItem('user');
             let isSuper = false;
             if (userData) {
@@ -764,7 +971,7 @@ export const useExamManager = () => {
                 console.warn("Failed to get current settings, initializing empty map", err);
             }
             examSettings[subKey] = JSON.stringify(currentSettings);
-            
+
             if (isSuper) {
                 await settingsService.updateGlobalSettings('EXAM', examSettings);
             } else {
@@ -785,7 +992,7 @@ export const useExamManager = () => {
             let subjectDefaultSettings = null;
             let examSettings = null;
             let globalSettings = null;
-            
+
             // Try loading from institute settings first
             try {
                 examSettings = await deduplicatedGetSettings('EXAM', false);
@@ -803,7 +1010,7 @@ export const useExamManager = () => {
             // Helper to match using findDefaultLayoutInSettings
             const findMatch = (settings) => {
                 if (!settings) return null;
-                
+
                 // If subjectName already contains key format (e.g. from the list: "৯ম-১০ম শ্রেণি_পদার্থবিজ্ঞান")
                 if (type === 'class_subject' && subjectName.includes('_')) {
                     const parts = subjectName.split('_');
@@ -811,7 +1018,7 @@ export const useExamManager = () => {
                     const displaySubject = parts.slice(1).join('_');
                     return findDefaultLayoutInSettings(settings, displayClass, displaySubject);
                 }
-                
+
                 return findDefaultLayoutInSettings(settings, className, subjectName);
             };
 
@@ -837,8 +1044,8 @@ export const useExamManager = () => {
                 }));
                 alert(uiLang === 'bn' ? "ডিফল্ট লেআউট লোড করা হয়েছে!" : "Default layout loaded successfully!");
             } else {
-                const displayName = type === 'class_subject' 
-                    ? (subjectName.includes('_') ? subjectName.replace('_', ' - ') : `${className} - ${subjectName}`) 
+                const displayName = type === 'class_subject'
+                    ? (subjectName.includes('_') ? subjectName.replace('_', ' - ') : `${className} - ${subjectName}`)
                     : subjectName;
                 alert(uiLang === 'bn' ? `'${displayName}' এর জন্য কোনো ডিফল্ট লেআউট পাওয়া যায়নি।` : `No default layout found for '${displayName}'.`);
             }
@@ -851,7 +1058,7 @@ export const useExamManager = () => {
     const deleteSubjectDefault = async (subjectName, type, className) => {
         let targetKeySuffix = '';
         let displayName = subjectName;
-        
+
         if (type === 'class_subject') {
             if (subjectName.includes('_')) {
                 targetKeySuffix = subjectName;
@@ -869,8 +1076,8 @@ export const useExamManager = () => {
         const targetKey = 'subject_default_' + targetKeySuffix;
         const normTargetKey = targetKey.toString().trim().toLowerCase().replace(/\s+/g, '');
 
-        const confirmDelete = window.confirm(uiLang === 'bn' 
-            ? `'${displayName}' এর ডিফল্ট লেআউট কি মুছে ফেলতে চান?` 
+        const confirmDelete = window.confirm(uiLang === 'bn'
+            ? `'${displayName}' এর ডিফল্ট লেআউট কি মুছে ফেলতে চান?`
             : `Are you sure you want to delete default layout for '${displayName}'?`);
         if (!confirmDelete) return;
 
@@ -915,7 +1122,7 @@ export const useExamManager = () => {
     };
 
     return {
-        templates, loadingTemplates, isSavingTemplate,
+        templates, loadingTemplates, isSavingTemplate, isDownloadingPdf, handleDownloadPdf,
         savedSubjectsList, savedClassSubjectsList, fetchSavedSubjects, saveSubjectDefaults, loadSubjectDefaults, deleteSubjectDefault,
         applyTemplate, handleSaveTemplate,
         handleSaveDocument, handleSaveAs,

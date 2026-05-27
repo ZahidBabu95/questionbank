@@ -62,7 +62,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         // ── Public API endpoints ──────────────────────────────────
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/ws-live-updates/**").permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/ws-live-updates/**", "/api/v1/exams/download/pdf/**", "/api/v1/exams/download/word/**", "/api/v1/exams/download/upload-temp/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
                         // ── All other /api/** must be authenticated ───────────────
@@ -100,7 +100,7 @@ public class SecurityConfig {
         List<String> origins = Arrays.asList(corsAllowedOrigins.split("\\s*,\\s*"));
 
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(origins);
+        configuration.setAllowedOriginPatterns(origins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With"));
         configuration.setExposedHeaders(List.of("Authorization"));

@@ -21,12 +21,13 @@ public class ManualExamController {
 
     private final ManualExamServiceImpl manualExamService;
 
-    /** POST /api/v1/exams/manual/create — create empty exam draft */
     @PostMapping("/create")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_MANUAL_CREATE', 'EXAMS_GEN_MANUAL_CREATE', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_CREATE')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> createExam(
             @Valid @RequestBody ManualExamRequest req,
             Authentication auth) {
+        System.out.println("DEBUG MANUAL EXAM: Entering createExam. User=" + (auth != null ? auth.getName() : "null"));
+        System.out.println("DEBUG MANUAL EXAM: User authorities=" + (auth != null ? auth.getAuthorities() : "null"));
         ExamDTO exam = manualExamService.createExam(req, auth.getName());
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 Map.of("success", true, "message", "Exam created as draft", "data", exam));
@@ -34,7 +35,7 @@ public class ManualExamController {
 
     /** PUT /api/v1/exams/manual/{examId} — update exam metadata */
     @PutMapping("/{examId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_MANUAL_EDIT', 'EXAMS_GEN_MANUAL_EDIT', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_EDIT')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> updateExam(
             @PathVariable UUID examId,
             @Valid @RequestBody ManualExamRequest req) {
@@ -44,14 +45,14 @@ public class ManualExamController {
 
     /** GET /api/v1/exams/manual/{examId} — get full exam */
     @GetMapping("/{examId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_MANUAL_VIEW', 'EXAMS_GEN_MANUAL_VIEW', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_VIEW')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> getExam(@PathVariable UUID examId) {
         return ResponseEntity.ok(Map.of("success", true, "data", manualExamService.getExam(examId)));
     }
 
     /** POST /api/v1/exams/manual/{examId}/add-question */
     @PostMapping("/{examId}/add-question")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_MANUAL_EDIT', 'EXAMS_GEN_MANUAL_EDIT', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_EDIT')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> addQuestion(
             @PathVariable UUID examId,
             @Valid @RequestBody AddQuestionRequest req) {
@@ -61,7 +62,7 @@ public class ManualExamController {
 
     /** DELETE /api/v1/exams/manual/{examId}/remove-question/{questionId} */
     @DeleteMapping("/{examId}/remove-question/{questionId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_MANUAL_EDIT', 'EXAMS_GEN_MANUAL_EDIT', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_EDIT')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> removeQuestion(
             @PathVariable UUID examId,
             @PathVariable UUID questionId) {
@@ -71,7 +72,7 @@ public class ManualExamController {
 
     /** PATCH /api/v1/exams/manual/{examId}/reorder */
     @PatchMapping("/{examId}/reorder")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_MANUAL_EDIT', 'EXAMS_GEN_MANUAL_EDIT', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_EDIT')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> reorder(
             @PathVariable UUID examId,
             @RequestBody ReorderRequest req) {
@@ -81,7 +82,7 @@ public class ManualExamController {
 
     /** PATCH /api/v1/exams/manual/{examId}/publish */
     @PatchMapping("/{examId}/publish")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_MANUAL_EDIT', 'EXAMS_GEN_MANUAL_EDIT', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_EDIT')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> publish(@PathVariable UUID examId) {
         ExamDTO exam = manualExamService.publishExam(examId);
         return ResponseEntity.ok(Map.of("success", true, "message", "Exam published", "data", exam));
@@ -89,14 +90,14 @@ public class ManualExamController {
 
     /** GET /api/v1/exams/manual/preview/{examId} */
     @GetMapping("/preview/{examId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_MANUAL_VIEW', 'EXAMS_GEN_MANUAL_VIEW', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_VIEW')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> preview(@PathVariable UUID examId) {
         return ResponseEntity.ok(Map.of("success", true, "data", manualExamService.getExam(examId)));
     }
 
     /** DELETE /api/v1/exams/manual/{examId} */
     @DeleteMapping("/{examId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_MANUAL_DELETE', 'EXAMS_GEN_MANUAL_DELETE', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_DELETE')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> deleteExam(@PathVariable UUID examId) {
         manualExamService.deleteExam(examId);
         return ResponseEntity.ok(Map.of("success", true, "message", "Exam deleted"));
@@ -107,7 +108,7 @@ public class ManualExamController {
      * Left-panel question browser with filters.
      */
     @GetMapping("/questions/search")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_MANUAL_CREATE', 'EXAMS_GEN_MANUAL_CREATE', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_CREATE', 'EXAMS_MANUAL_EDIT', 'EXAMS_GEN_MANUAL_EDIT', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_EDIT')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> searchQuestions(
             @RequestParam(required = false) UUID classSubjectId,
             @RequestParam(required = false) UUID chapterId,

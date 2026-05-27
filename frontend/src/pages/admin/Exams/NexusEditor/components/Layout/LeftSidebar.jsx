@@ -83,7 +83,7 @@ const getDisplayQuestionText = (q) => {
 const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
     const navigate = useNavigate();
     const { 
-        uiLang, t, 
+        uiLang, t, isMobileApp,
         isLeftPanelOpen, setIsLeftPanelOpen,
         leftPanelWidth, 
         leftPanelTab, setLeftPanelTab,
@@ -298,13 +298,18 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
     };
 
     return (
-        <div style={{ width: isLeftPanelOpen ? 'var(--left-panel-width, 320px)' : '0px' }}
-             className={`${!isDraggingLeft ? 'transition-all duration-300 ease-in-out' : ''} bg-white border-r border-slate-200 shrink-0 flex flex-col z-10 relative print:hidden`}>
+        <div style={{ 
+            width: isMobileApp ? 'min(85vw, 340px)' : (isLeftPanelOpen ? 'var(--left-panel-width, 320px)' : '0px'),
+            transform: isMobileApp ? (isLeftPanelOpen ? 'translate3d(0, 0, 0)' : 'translate3d(-100%, 0, 0)') : 'none',
+            transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+            visibility: (isMobileApp && !isLeftPanelOpen) ? 'hidden' : 'visible'
+        }}
+             className={`${!isDraggingLeft ? 'transition-all' : ''} bg-white border-r border-slate-200/80 shrink-0 flex flex-col z-30 absolute lg:relative left-0 top-0 h-full shadow-2xl lg:shadow-none rounded-r-2xl lg:rounded-none overflow-hidden print:hidden`}>
             {/* Resize Handle */}
             <div onMouseDown={() => setIsDraggingLeft(true)}
-                 className={`absolute top-0 right-[-3px] w-[6px] h-full cursor-col-resize z-40 transition-colors hover:bg-indigo-400 ${isDraggingLeft ? 'bg-indigo-500' : 'bg-transparent'}`} />
+                 className={`absolute top-0 right-[-3px] w-[6px] h-full cursor-col-resize z-40 hidden lg:block transition-colors hover:bg-indigo-400 ${isDraggingLeft ? 'bg-indigo-500' : 'bg-transparent'}`} />
             
-            <div className={`absolute top-0 left-0 h-full flex flex-col bg-white ${!isLeftPanelOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${!isDraggingLeft ? 'transition-opacity duration-300' : ''}`} style={{ width: 'var(--left-panel-width, 320px)' }}>
+            <div className="h-full flex flex-col bg-white w-full">
                 <div className="p-4 border-b border-slate-100 shrink-0">
                     <div className="flex items-center justify-between mb-3">
                         <div className="flex bg-slate-100 p-1 rounded-lg">

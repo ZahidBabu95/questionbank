@@ -13,14 +13,23 @@ export const useNexusEditor = () => {
 };
 
 export const NexusEditorProvider = ({ children }) => {
+    // --- Mobile Screen & Embedded Mode Detection ---
+    const isMobileApp = useMemo(() => {
+        return window.innerWidth < 1024 || window.location.search.includes('embedded=true') || sessionStorage.getItem('embedded') === 'true';
+    }, []);
+
     // --- Core Document State ---
     const [editorMode, setEditorMode] = useState('STRICT_LINKED');
     const [rawContent, setRawContent] = useState('');
     const [docSettings, setDocSettings] = useState(DEFAULT_SETTINGS);
-    const [zoom, setZoom] = useState(100);
+    const [zoom, setZoom] = useState(isMobileApp ? 60 : 100);
     const [pageCount, setPageCount] = useState(1);
     const [examData, setExamData] = useState(null);
     const [isSavingDocument, setIsSavingDocument] = useState(false);
+    const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState(0);
+    const [downloadStatus, setDownloadStatus] = useState('');
+    const [showFilenameModal, setShowFilenameModal] = useState(false);
 
     // --- Schema & Blueprint ---
     const [editorConfig, setEditorConfig] = useState(null);
@@ -36,12 +45,12 @@ export const NexusEditorProvider = ({ children }) => {
     });
 
     // --- Panel States (Left) ---
-    const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
+    const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(!isMobileApp);
     const [leftPanelWidth, setLeftPanelWidth] = useState(320);
     const [leftPanelTab, setLeftPanelTab] = useState('document'); // 'auto', 'manual', 'document'
     
     // --- Panel States (Right) ---
-    const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
+    const [isRightPanelOpen, setIsRightPanelOpen] = useState(!isMobileApp);
     const [rightPanelWidth, setRightPanelWidth] = useState(420);
     const [activeTab, setActiveTab] = useState('examInfo'); // Right panel tab
     
@@ -82,6 +91,10 @@ export const NexusEditorProvider = ({ children }) => {
         pageCount, setPageCount,
         examData, setExamData,
         isSavingDocument, setIsSavingDocument,
+        isDownloadingPdf, setIsDownloadingPdf,
+        downloadProgress, setDownloadProgress,
+        downloadStatus, setDownloadStatus,
+        showFilenameModal, setShowFilenameModal,
         editor, setEditor,
         
         // Schema
@@ -89,7 +102,7 @@ export const NexusEditorProvider = ({ children }) => {
         generationBlueprint, setGenerationBlueprint,
         
         // UI
-        uiLang, setUiLang, t,
+        uiLang, setUiLang, t, isMobileApp,
         workspaceTools, setWorkspaceTools,
         toasts, addToast, removeToast,
         canvasTheme, setCanvasTheme,
@@ -112,8 +125,9 @@ export const NexusEditorProvider = ({ children }) => {
     }), [
         editorMode, rawContent, docSettings, updateSetting, updateMultiSettings,
         zoom, pageCount, examData, isSavingDocument, editor,
+        isDownloadingPdf, downloadProgress, downloadStatus, showFilenameModal,
         editorConfig, generationBlueprint,
-        uiLang, t, workspaceTools, toasts, addToast, removeToast, canvasTheme,
+        uiLang, t, isMobileApp, workspaceTools, toasts, addToast, removeToast, canvasTheme,
         isLeftPanelOpen, leftPanelWidth, leftPanelTab,
         isRightPanelOpen, rightPanelWidth, activeTab,
         pendingInsertQuestion, swapTarget, pendingSwapQuestion, selectedImageConfig, documentQuestions

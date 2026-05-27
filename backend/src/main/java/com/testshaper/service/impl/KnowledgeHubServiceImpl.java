@@ -1709,6 +1709,26 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<UUID> getIndicesWithProofreadPages(UUID sourceBookId) {
+        List<com.testshaper.entity.KnowledgePage> pages = knowledgePageRepository.findBySourceBookIdOrderByPageNumberAsc(sourceBookId);
+        return pages.stream()
+            .filter(p -> p.getExtractionStatus() == com.testshaper.entity.KnowledgePage.ExtractionStatus.PROOFREAD
+                      || p.getExtractionStatus() == com.testshaper.entity.KnowledgePage.ExtractionStatus.FAILED)
+            .map(p -> p.getSourceBookIndex())
+            .filter(idx -> idx != null)
+            .map(idx -> idx.getId())
+            .distinct()
+            .collect(java.util.stream.Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void saveTopicExtractionJob(com.testshaper.entity.AiTopicExtractionJob job) {
+        aiTopicExtractionJobRepository.save(job);
+    }
+
+    @Override
     @Transactional
     public int generateQuestionsForChunk(UUID sourceBookId, UUID chunkId, String jobConfigurationJson) throws Exception {
         com.testshaper.entity.CurriculumDocumentChunk chunk = curriculumDocumentChunkRepository.findById(chunkId)

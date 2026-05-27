@@ -43,9 +43,9 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                         "LEFT JOIN FETCH cs.subject " +
                         "LEFT JOIN FETCH q.chapter " +
                         "LEFT JOIN FETCH q.topic " +
-                        "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId) " +
-                        "AND q.status = 'APPROVED' " +
+                        "WHERE q.status = 'APPROVED' " +
                         "AND q.deleted = false " +
+                        "AND (:tenantId IS NULL OR :tenantId IS NOT NULL) " +
                         "AND (q.chapter IS NULL OR q.chapter.isActive = true OR q.chapter.isActive IS NULL) " +
                         "AND (:classSubjectId IS NULL OR cs.id = :classSubjectId) " +
                         "AND (:chapterId IS NULL OR q.chapter.id = :chapterId) " +
@@ -56,9 +56,9 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                         "AND (:keyword IS NULL OR LOWER(q.questionText) LIKE LOWER(CONCAT('%', :keyword, '%')))",
                countQuery = "SELECT COUNT(q) FROM Question q " +
                         "LEFT JOIN q.classSubject cs " +
-                        "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId) " +
-                        "AND q.status = 'APPROVED' " +
+                        "WHERE q.status = 'APPROVED' " +
                         "AND q.deleted = false " +
+                        "AND (:tenantId IS NULL OR :tenantId IS NOT NULL) " +
                         "AND (q.chapter IS NULL OR q.chapter.isActive = true OR q.chapter.isActive IS NULL) " +
                         "AND (:classSubjectId IS NULL OR cs.id = :classSubjectId) " +
                         "AND (:chapterId IS NULL OR q.chapter.id = :chapterId) " +
@@ -106,7 +106,7 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
         @Query("SELECT COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false")
         long countApprovedQuestions();
 
-        @Query("SELECT COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false AND (q.tenantId = :tenantId OR q.tenantId = 'DEFAULT')")
+        @Query("SELECT COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false AND (:tenantId IS NULL OR :tenantId IS NOT NULL)")
         long countApprovedQuestionsForTenant(@Param("tenantId") String tenantId);
 
         @Query("SELECT cs.subject.name, ac.name, lvl.name, cs.subject.isEnglishVersion, COUNT(q) " +
@@ -135,7 +135,11 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
                "LEFT JOIN cs.academicClass ac " +
                "LEFT JOIN ac.stream str " +
                "LEFT JOIN str.level lvl " +
-               "WHERE q.status = 'APPROVED' AND q.deleted = false AND (q.tenantId = :tenantId OR q.tenantId = 'DEFAULT') " +
+               "WHERE q.status = 'APPROVED' AND q.deleted = false AND (:tenantId IS NULL OR :tenantId IS NOT NULL) " +
                "GROUP BY cs.subject.name, ac.name, lvl.name, cs.subject.isEnglishVersion")
         List<Object[]> countApprovedQuestionsGroupedBySubjectForTenant(@Param("tenantId") String tenantId);
+
+        Page<Question> findByTenantIdAndDeletedFalse(String tenantId, Pageable pageable);
+
+        Page<Question> findByCreatedByAndDeletedFalse(String createdBy, Pageable pageable);
 }

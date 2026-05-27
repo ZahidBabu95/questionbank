@@ -22,6 +22,8 @@ const DynamicQuestionCreate = () => {
     const [examSources, setExamSources] = useState([]);
     const [commonData, setCommonData] = useState({ marks: 1, difficulty: 'MEDIUM', language: 'Bangla' });
 
+    // Reverted frontend auto-filtering logic per user request to allow simple database-driven dropdown mapping
+
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState(null);
 

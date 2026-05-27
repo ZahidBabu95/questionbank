@@ -24,11 +24,52 @@ const SyncLibrary = () => {
     // Filters
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilterType, setActiveFilterType] = useState('ALL');
+    const [filterMedium, setFilterMedium] = useState('ALL'); // ALL, Bangla, English, Bilingual, MISMATCHED
     const [filterLevel, setFilterLevel] = useState('');
     const [filterStream, setFilterStream] = useState('');
     const [filterClass, setFilterClass] = useState('');
     const [filterSubject, setFilterSubject] = useState('');
     const [filterSyncPercent, setFilterSyncPercent] = useState('ALL');
+
+    const subjectLanguageMap = useMemo(() => {
+        const map = {};
+        if (!hierarchy.classSubjects || !hierarchy.subjects) return map;
+        hierarchy.classSubjects.forEach(cs => {
+            const subject = hierarchy.subjects.find(s => s.id === cs._subjectId);
+            if (subject) {
+                map[cs.id] = {
+                    name: subject.name || '',
+                    isEnglish: subject.isEnglishVersion || subject.englishVersion || false
+                };
+            }
+        });
+        return map;
+    }, [hierarchy.classSubjects, hierarchy.subjects]);
+
+    const hasLanguageMismatch = (book) => {
+        if (!book.classSubjectId || !subjectLanguageMap) return false;
+        const subData = subjectLanguageMap[book.classSubjectId];
+        if (!subData) return false;
+        const isSubjectEnglish = subData.isEnglish;
+        if (book.language === 'English' && !isSubjectEnglish) return true;
+        if (book.language === 'Bangla' && isSubjectEnglish) return true;
+        return false;
+    };
+
+    // Auto-reset subject filter when language medium/version filter changes
+    useEffect(() => {
+        if (filterSubject && subjectLanguageMap) {
+            const subData = subjectLanguageMap[filterSubject];
+            if (subData) {
+                const isSubjectEnglish = subData.isEnglish;
+                if (filterMedium === 'English' && !isSubjectEnglish) {
+                    setFilterSubject('');
+                } else if (filterMedium === 'Bangla' && isSubjectEnglish) {
+                    setFilterSubject('');
+                }
+            }
+        }
+    }, [filterMedium, subjectLanguageMap, filterSubject]);
     
     // Command Center Modal State
     const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
@@ -100,9 +141,19 @@ const SyncLibrary = () => {
                 matchesHierarchy = validSubjects.includes(b.classSubjectId);
             }
 
-            return matchesSearch && matchesType && matchesHierarchy && matchesSyncPercent;
+            // Medium Filter
+            let matchesMedium = true;
+            if (filterMedium !== 'ALL') {
+                if (filterMedium === 'MISMATCHED') {
+                    matchesMedium = hasLanguageMismatch(b);
+                } else {
+                    matchesMedium = b.language === filterMedium;
+                }
+            }
+
+            return matchesSearch && matchesType && matchesHierarchy && matchesSyncPercent && matchesMedium;
         });
-    }, [books, searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, hierarchy]);
+    }, [books, searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterMedium, hierarchy]);
 
     const openCommandCenter = async (book) => {
         setSelectedBook(book);
@@ -158,7 +209,23 @@ const SyncLibrary = () => {
 
     const filteredStreams = hierarchy.streams?.filter(s => !filterLevel || s._levelId === filterLevel) || [];
     const filteredClasses = hierarchy.classes?.filter(c => !filterStream || c._streamId === filterStream) || [];
-    const filteredClassSubjects = hierarchy.classSubjects?.filter(cs => !filterClass || cs._classId === filterClass) || [];
+    const filteredClassSubjects = useMemo(() => {
+        if (!hierarchy.classSubjects) return [];
+        return hierarchy.classSubjects.filter(cs => {
+            if (filterClass && cs._classId !== filterClass) return false;
+            
+            const subData = subjectLanguageMap[cs.id];
+            if (!subData) return true;
+            
+            const isSubjectEnglish = subData.isEnglish;
+            if (filterMedium === 'English') {
+                return isSubjectEnglish === true;
+            } else if (filterMedium === 'Bangla') {
+                return isSubjectEnglish === false;
+            }
+            return true;
+        });
+    }, [hierarchy.classSubjects, filterClass, filterMedium, subjectLanguageMap]);
 
     return (
         <div className="w-full h-full flex flex-col bg-[#F8FAFC] relative font-satoshi min-h-screen">
@@ -212,7 +279,20 @@ const SyncLibrary = () => {
                 {/* ═══ Professional Filters & Search ═══ */}
                 <div className="sticky top-0 z-30 bg-[#F8FAFC]/80 backdrop-blur-md py-4 space-y-4">
                     <div className="flex flex-col xl:flex-row gap-4">
-                        <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                            <div className="relative">
+                                <span className="absolute -top-2 left-3 bg-[#F8FAFC] px-1 text-[10px] font-black text-indigo-500 uppercase z-10">Version</span>
+                                <select 
+                                    value={filterMedium} 
+                                    onChange={e => setFilterMedium(e.target.value)} 
+                                    className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-700 rounded-2xl px-4 py-3 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                >
+                                    <option value="ALL">All Versions</option>
+                                    <option value="Bangla">Bangla Version</option>
+                                    <option value="English">English Version</option>
+                                    <option value="Bilingual">Bilingual / Mixed</option>
+                                </select>
+                            </div>
                             <div className="relative">
                                 <span className="absolute -top-2 left-3 bg-[#F8FAFC] px-1 text-[10px] font-black text-indigo-500 uppercase z-10">Level</span>
                                 <select 
@@ -257,10 +337,10 @@ const SyncLibrary = () => {
                                     className="w-full bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-2xl px-4 py-3 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none disabled:opacity-50 cursor-pointer"
                                 >
                                     <option value="">All Subjects</option>
-                                    {filteredClassSubjects.map(cs => {
-                                        const subjectName = hierarchy.subjects?.find(s => s.id === cs._subjectId)?.name || 'Unknown';
-                                        return <option key={cs.id} value={cs.id}>{subjectName}</option>;
-                                    })}
+                                     {filteredClassSubjects.map(cs => {
+                                         const subData = subjectLanguageMap[cs.id];
+                                         return <option key={cs.id} value={cs.id}>{subData?.name || 'Unknown'} {subData?.isEnglish ? '[EN]' : '[BN]'}</option>;
+                                     })}
                                 </select>
                             </div>
                             <div className="relative">
@@ -353,6 +433,17 @@ const SyncLibrary = () => {
                                                 <Sparkles size={10} strokeWidth={3} className="text-indigo-100" />
                                                 <span>AI Synced</span>
                                             </span>
+                                        )}
+                                        {hasLanguageMismatch(book) && (
+                                            <motion.span 
+                                                animate={{ scale: [1, 1.06, 1], opacity: [0.9, 1, 0.9] }}
+                                                transition={{ repeat: Infinity, duration: 2 }}
+                                                className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-rose-600 to-red-500 text-white text-[9px] font-black uppercase tracking-widest rounded-lg shadow-md shadow-rose-500/40 border border-rose-500"
+                                                title="The book medium does not match the curriculum subject medium!"
+                                            >
+                                                <AlertCircle size={10} strokeWidth={3} className="animate-pulse text-rose-100" />
+                                                <span>Mismatch Alert</span>
+                                            </motion.span>
                                         )}
                                     </div>
 

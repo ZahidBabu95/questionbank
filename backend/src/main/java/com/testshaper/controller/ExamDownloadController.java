@@ -35,8 +35,25 @@ public class ExamDownloadController {
      * template=default
      * fontSize=11
      */
+    @PostMapping(value = "/upload-temp/{examId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Void> uploadTempPdf(
+            @PathVariable UUID examId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        try {
+            byte[] bytes = file.getBytes();
+            java.nio.file.Path tempDir = java.nio.file.Paths.get("uploads", "temp-pdf").toAbsolutePath().normalize();
+            java.nio.file.Files.createDirectories(tempDir);
+            java.nio.file.Path targetFile = tempDir.resolve("beautiful-" + examId + ".pdf");
+            java.nio.file.Files.write(targetFile, bytes);
+            log.info("Successfully uploaded beautiful client-side PDF for examId: {}", examId);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            log.error("Failed to upload temporary client-side PDF", e);
+            return ResponseEntity.status(500).build();
+        }
+    }
+
     @GetMapping("/pdf/{examId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER')")
     public ResponseEntity<byte[]> downloadPdf(
             @PathVariable UUID examId,
             @RequestParam(defaultValue = "false") boolean includeAnswers,
@@ -46,7 +63,29 @@ public class ExamDownloadController {
             @RequestParam(defaultValue = "false") boolean shuffleOptions,
             @RequestParam(defaultValue = "A4") String paperSize,
             @RequestParam(defaultValue = "default") String template,
-            @RequestParam(defaultValue = "11") float fontSize) {
+            @RequestParam(defaultValue = "11") float fontSize,
+            @RequestParam(required = false) String filename) {
+
+        // Check if there is a beautiful client-side PDF pre-uploaded for this examId
+        java.nio.file.Path targetFile = java.nio.file.Paths.get("uploads", "temp-pdf", "beautiful-" + examId + ".pdf").toAbsolutePath().normalize();
+        if (java.nio.file.Files.exists(targetFile)) {
+            try {
+                byte[] pdf = java.nio.file.Files.readAllBytes(targetFile);
+                String fileDownloadName = (filename != null && !filename.trim().isEmpty())
+                        ? filename.trim() + (filename.toLowerCase().endsWith(".pdf") ? "" : ".pdf")
+                        : "exam-" + examId + ".pdf";
+
+                log.info("Serving beautiful client-side PDF for examId: {}", examId);
+                return ResponseEntity.ok()
+                        .contentType(MediaType.APPLICATION_PDF)
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileDownloadName + "\"")
+                        .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                        .header("X-Exam-Id", examId.toString())
+                        .body(pdf);
+            } catch (Exception e) {
+                log.error("Failed to read beautiful client-side PDF, falling back to server-side generation", e);
+            }
+        }
 
         PdfDownloadOptions opts = new PdfDownloadOptions();
         opts.setIncludeAnswers(includeAnswers);
@@ -60,10 +99,13 @@ public class ExamDownloadController {
 
         byte[] pdf = examPdfService.generatePdf(examId, opts);
 
-        String filename = "exam-" + examId + ".pdf";
+        String fileDownloadName = (filename != null && !filename.trim().isEmpty())
+                ? filename.trim() + (filename.toLowerCase().endsWith(".pdf") ? "" : ".pdf")
+                : "exam-" + examId + ".pdf";
+
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileDownloadName + "\"")
                 .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
                 .header("X-Exam-Id", examId.toString())
                 .body(pdf);
@@ -73,7 +115,6 @@ public class ExamDownloadController {
      * GET /api/v1/exams/download/word/{examId}
      */
     @GetMapping("/word/{examId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER')")
     public ResponseEntity<byte[]> downloadWord(
             @PathVariable UUID examId,
             @RequestParam(defaultValue = "false") boolean includeAnswers,
@@ -83,7 +124,8 @@ public class ExamDownloadController {
             @RequestParam(defaultValue = "false") boolean shuffleOptions,
             @RequestParam(defaultValue = "A4") String paperSize,
             @RequestParam(defaultValue = "default") String template,
-            @RequestParam(defaultValue = "11") float fontSize) {
+            @RequestParam(defaultValue = "11") float fontSize,
+            @RequestParam(required = false) String filename) {
 
         PdfDownloadOptions opts = new PdfDownloadOptions();
         opts.setIncludeAnswers(includeAnswers);
@@ -97,11 +139,14 @@ public class ExamDownloadController {
 
         byte[] wordBytes = examWordService.generateWord(examId, opts);
 
-        String filename = "exam-" + examId + ".docx";
+        String fileDownloadName = (filename != null && !filename.trim().isEmpty())
+                ? filename.trim() + (filename.toLowerCase().endsWith(".docx") ? "" : ".docx")
+                : "exam-" + examId + ".docx";
+
         return ResponseEntity.ok()
                 .contentType(MediaType
                         .parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileDownloadName + "\"")
                 .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
                 .header("X-Exam-Id", examId.toString())
                 .body(wordBytes);

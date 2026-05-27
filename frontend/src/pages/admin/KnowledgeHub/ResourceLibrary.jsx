@@ -40,6 +40,32 @@ const ResourceLibrary = () => {
     const [filterSubject, setFilterSubject] = useState('');
     const [filterSyncPercent, setFilterSyncPercent] = useState('ALL');
     const [filterExtractPercent, setFilterExtractPercent] = useState('ALL');
+    const [filterMedium, setFilterMedium] = useState('ALL'); // ALL, Bangla, English, Bilingual, MISMATCHED
+
+    const subjectLanguageMap = useMemo(() => {
+        const map = {};
+        if (!hierarchy.classSubjects || !hierarchy.subjects) return map;
+        hierarchy.classSubjects.forEach(cs => {
+            const subject = hierarchy.subjects.find(s => s.id === cs._subjectId);
+            if (subject) {
+                map[cs.id] = {
+                    name: subject.name || '',
+                    isEnglish: subject.isEnglishVersion || subject.englishVersion || false
+                };
+            }
+        });
+        return map;
+    }, [hierarchy.classSubjects, hierarchy.subjects]);
+
+    const hasLanguageMismatch = (book) => {
+        if (!book.classSubjectId || !subjectLanguageMap) return false;
+        const subData = subjectLanguageMap[book.classSubjectId];
+        if (!subData) return false;
+        const isSubjectEnglish = subData.isEnglish;
+        if (book.language === 'English' && !isSubjectEnglish) return true;
+        if (book.language === 'Bangla' && isSubjectEnglish) return true;
+        return false;
+    };
 
     // Modal Mapping Filters
     const [modalLevel, setModalLevel] = useState('');
@@ -88,7 +114,7 @@ const ResourceLibrary = () => {
     // Auto-reset pagination limit when any filter changes
     useEffect(() => {
         setDisplayLimit(12);
-    }, [searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterExtractPercent]);
+    }, [searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterExtractPercent, filterMedium]);
 
     const filteredBooks = useMemo(() => {
         return books.filter(b => {
@@ -134,9 +160,39 @@ const ResourceLibrary = () => {
                 matchesHierarchy = validSubjects.includes(b.classSubjectId);
             }
 
-            return matchesSearch && matchesType && matchesHierarchy && matchesSyncPercent && matchesExtractPercent;
+            // Medium Filter
+            let matchesMedium = true;
+            if (filterMedium !== 'ALL') {
+                if (filterMedium === 'MISMATCHED') {
+                    matchesMedium = hasLanguageMismatch(b);
+                } else {
+                    matchesMedium = b.language === filterMedium;
+                }
+            }
+
+            return matchesSearch && matchesType && matchesHierarchy && matchesSyncPercent && matchesExtractPercent && matchesMedium;
         });
-    }, [books, searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterExtractPercent, hierarchy]);
+    }, [books, searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterExtractPercent, filterMedium, hierarchy]);
+
+    const filteredClassSubjectsForModal = useMemo(() => {
+        if (!modalClass || !hierarchy.classSubjects) return [];
+        
+        return hierarchy.classSubjects.filter(cs => {
+            if (cs._classId !== modalClass) return false;
+            
+            const subData = subjectLanguageMap[cs.id];
+            if (!subData) return true; // Safety fallback
+            
+            const isSubjectEnglish = subData.isEnglish;
+            
+            if (formData.language === 'English') {
+                return isSubjectEnglish === true;
+            } else if (formData.language === 'Bangla') {
+                return isSubjectEnglish === false;
+            }
+            return true; // Bilingual/Mixed shows both
+        });
+    }, [modalClass, hierarchy.classSubjects, formData.language, subjectLanguageMap]);
 
     // Intersection Observer for Infinite Scrolling
     useEffect(() => {
@@ -209,7 +265,7 @@ const ResourceLibrary = () => {
     };
 
     const openCreateModal = () => {
-        setFormData({ title: '', authorName: '', publisher: '', coverImageUrl: '', firstPublished: '', latestEdition: '', bookType: 'TEXTBOOK', language: 'Bangla', classSubjectId: '' });
+        setFormData({ title: '', authorName: '', publisher: '', coverImageUrl: '', firstPublished: '', latestEdition: '', bookType: 'TEXTBOOK', language: '', classSubjectId: '' });
         setIsEditMode(false);
         setEditingBookId(null);
         setModalLevel('');
@@ -311,7 +367,23 @@ const ResourceLibrary = () => {
 
     const filteredStreams = hierarchy.streams?.filter(s => !filterLevel || s._levelId === filterLevel) || [];
     const filteredClasses = hierarchy.classes?.filter(c => !filterStream || c._streamId === filterStream) || [];
-    const filteredClassSubjects = hierarchy.classSubjects?.filter(cs => !filterClass || cs._classId === filterClass) || [];
+    const filteredClassSubjects = useMemo(() => {
+        if (!hierarchy.classSubjects) return [];
+        return hierarchy.classSubjects.filter(cs => {
+            if (filterClass && cs._classId !== filterClass) return false;
+            
+            const subData = subjectLanguageMap[cs.id];
+            if (!subData) return true;
+            
+            const isSubjectEnglish = subData.isEnglish;
+            if (filterMedium === 'English') {
+                return isSubjectEnglish === true;
+            } else if (filterMedium === 'Bangla') {
+                return isSubjectEnglish === false;
+            }
+            return true;
+        });
+    }, [hierarchy.classSubjects, filterClass, filterMedium, subjectLanguageMap]);
 
     return (
         <div className="w-full h-full flex flex-col bg-[#F8FAFC] relative font-satoshi min-h-screen">
@@ -380,7 +452,20 @@ const ResourceLibrary = () => {
                 {/* ═══ Professional Filters & Search ═══ */}
                 <div className="sticky top-0 z-30 bg-[#F8FAFC]/80 backdrop-blur-md py-4 space-y-4">
                     <div className="flex flex-col xl:flex-row gap-4">
-                        <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div className="flex-1 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+                            <div className="relative">
+                                <span className="absolute -top-2 left-3 bg-[#F8FAFC] px-1 text-[10px] font-black text-indigo-500 uppercase z-10">Version</span>
+                                <select 
+                                    value={filterMedium} 
+                                    onChange={e => setFilterMedium(e.target.value)} 
+                                    className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-700 rounded-2xl px-4 py-3 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                >
+                                    <option value="ALL">All Versions</option>
+                                    <option value="Bangla">Bangla Version</option>
+                                    <option value="English">English Version</option>
+                                    <option value="Bilingual">Bilingual / Mixed</option>
+                                </select>
+                            </div>
                             <div className="relative">
                                 <span className="absolute -top-2 left-3 bg-[#F8FAFC] px-1 text-[10px] font-black text-indigo-500 uppercase z-10">Level</span>
                                 <select 
@@ -425,10 +510,10 @@ const ResourceLibrary = () => {
                                     className="w-full bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-2xl px-4 py-3 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none disabled:opacity-50 cursor-pointer"
                                 >
                                     <option value="">All Subjects</option>
-                                    {filteredClassSubjects.map(cs => {
-                                        const subjectName = hierarchy.subjects?.find(s => s.id === cs._subjectId)?.name || 'Unknown';
-                                        return <option key={cs.id} value={cs.id}>{subjectName}</option>;
-                                    })}
+                                     {filteredClassSubjects.map(cs => {
+                                         const subData = subjectLanguageMap[cs.id];
+                                         return <option key={cs.id} value={cs.id}>{subData?.name || 'Unknown'} {subData?.isEnglish ? '[EN]' : '[BN]'}</option>;
+                                     })}
                                 </select>
                             </div>
                             <div className="relative">
@@ -551,6 +636,17 @@ const ResourceLibrary = () => {
                                             >
                                                 <Sparkles size={10} strokeWidth={3} className="text-indigo-100" />
                                                 <span>AI Synced</span>
+                                            </motion.span>
+                                        )}
+                                        {hasLanguageMismatch(book) && (
+                                            <motion.span 
+                                                animate={{ scale: [1, 1.06, 1], opacity: [0.9, 1, 0.9] }}
+                                                transition={{ repeat: Infinity, duration: 2 }}
+                                                className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-rose-600 to-red-500 text-white text-[9px] font-black uppercase tracking-widest rounded-lg shadow-md shadow-rose-500/40 border border-rose-500"
+                                                title="The book medium does not match the curriculum subject medium!"
+                                            >
+                                                <AlertCircle size={10} strokeWidth={3} className="animate-pulse text-rose-100" />
+                                                <span>Mismatch Alert</span>
                                             </motion.span>
                                         )}
                                     </div>
@@ -787,12 +883,40 @@ const ResourceLibrary = () => {
 
                                      {/* Right Content Area */}
                                     <div className="flex-1 space-y-10 pb-10">
+                                        {/* Step 1: Version Selection */}
                                         <section className="space-y-4">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center">
+                                                    <Globe size={18} />
+                                                </div>
+                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Book Version (ধাপ ১)</h3>
+                                            </div>
+                                            <div className="relative group">
+                                                <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Language Version / সংস্করণ</label>
+                                                <select 
+                                                    required 
+                                                    value={formData.language} 
+                                                    onChange={e => {
+                                                        const lang = e.target.value;
+                                                        setFormData({...formData, language: lang, classSubjectId: ''});
+                                                    }} 
+                                                    className="w-full px-6 py-5 bg-white border-2 border-indigo-500 rounded-3xl focus:border-indigo-600 text-base font-black text-slate-800 outline-none transition-all appearance-none cursor-pointer shadow-lg shadow-indigo-100/50"
+                                                >
+                                                    <option value="">Select Version (ভার্সন নির্বাচন করুন)</option>
+                                                    <option value="Bangla">Bangla Version (বাংলা সংস্করণ)</option>
+                                                    <option value="English">English Version (ইংরেজি সংস্করণ)</option>
+                                                    <option value="Bilingual">Bilingual / Mixed Version (দ্বিভাষিক সংস্করণ)</option>
+                                                </select>
+                                            </div>
+                                        </section>
+
+                                        {/* Step 2: Curriculum Mapping */}
+                                        <section className={`space-y-4 transition-all duration-300 ${!formData.language ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
                                             <div className="flex items-center gap-3 mb-6">
                                                 <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center">
                                                     <Map size={18} />
                                                 </div>
-                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Curriculum Mapping</h3>
+                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Curriculum Mapping (ধাপ ২)</h3>
                                             </div>
                                             
                                             <div className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 space-y-5">
@@ -804,84 +928,85 @@ const ResourceLibrary = () => {
                                                 </div>
 
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                                    <select value={modalLevel} onChange={e => {setModalLevel(e.target.value); setModalStream(''); setModalClass(''); setFormData({...formData, classSubjectId: ''});}} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black text-slate-700 outline-none focus:border-indigo-500 shadow-sm transition-all">
+                                                    <select disabled={!formData.language} value={modalLevel} onChange={e => {setModalLevel(e.target.value); setModalStream(''); setModalClass(''); setFormData({...formData, classSubjectId: ''});}} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black text-slate-700 outline-none focus:border-indigo-500 shadow-sm transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed">
                                                         <option value="">Level</option>
                                                         {hierarchy.levels?.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                                                     </select>
-                                                    <select value={modalStream} onChange={e => {setModalStream(e.target.value); setModalClass(''); setFormData({...formData, classSubjectId: ''});}} disabled={!modalLevel} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black text-slate-700 outline-none focus:border-indigo-500 shadow-sm transition-all disabled:opacity-50">
+                                                    <select disabled={!formData.language || !modalLevel} value={modalStream} onChange={e => {setModalStream(e.target.value); setModalClass(''); setFormData({...formData, classSubjectId: ''});}} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black text-slate-700 outline-none focus:border-indigo-500 shadow-sm transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed">
                                                         <option value="">Stream</option>
                                                         {hierarchy.streams?.filter(s => !modalLevel || s._levelId === modalLevel).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                                     </select>
-                                                    <select value={modalClass} onChange={e => {setModalClass(e.target.value); setFormData({...formData, classSubjectId: ''});}} disabled={!modalLevel || (hierarchy.streams?.filter(s => s._levelId === modalLevel).length > 0 && !modalStream)} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black text-slate-700 outline-none focus:border-indigo-500 shadow-sm transition-all disabled:opacity-50">
+                                                    <select disabled={!formData.language || !modalLevel || (hierarchy.streams?.filter(s => s._levelId === modalLevel).length > 0 && !modalStream)} value={modalClass} onChange={e => {setModalClass(e.target.value); setFormData({...formData, classSubjectId: ''});}} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black text-slate-700 outline-none focus:border-indigo-500 shadow-sm transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed">
                                                         <option value="">Class</option>
                                                         {hierarchy.classes?.filter(c => !modalStream || c._streamId === modalStream).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                                     </select>
-                                                    <select value={formData.classSubjectId} onChange={e => setFormData({...formData, classSubjectId: e.target.value})} disabled={!modalClass} className="w-full px-4 py-3 bg-indigo-600 border border-indigo-600 rounded-2xl text-[11px] font-black text-white outline-none shadow-lg shadow-indigo-100 transition-all disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 disabled:shadow-none">
+                                                    <select disabled={!formData.language || !modalClass || filteredClassSubjectsForModal.length === 0} value={formData.classSubjectId} onChange={e => setFormData({...formData, classSubjectId: e.target.value})} className="w-full px-4 py-3 bg-indigo-600 border border-indigo-600 rounded-2xl text-[11px] font-black text-white outline-none shadow-lg shadow-indigo-100 transition-all disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:cursor-not-allowed">
                                                         <option value="">Target Subject</option>
-                                                        {hierarchy.classSubjects?.filter(cs => cs._classId === modalClass).map(cs => (
-                                                            <option key={cs.id} value={cs.id} className="text-slate-800 bg-white">
-                                                                {hierarchy.subjects?.find(s => s.id === cs._subjectId)?.name || 'Unknown'}
-                                                            </option>
-                                                        ))}
+                                                         {filteredClassSubjectsForModal.map(cs => {
+                                                             const subData = subjectLanguageMap[cs.id];
+                                                             return (
+                                                                 <option key={cs.id} value={cs.id} className="text-slate-800 bg-white">
+                                                                     {subData?.name || 'Unknown'} {subData?.isEnglish ? '[EN]' : '[BN]'}
+                                                                 </option>
+                                                             );
+                                                         })}
                                                     </select>
                                                 </div>
+                                                {modalClass && filteredClassSubjectsForModal.length === 0 && (
+                                                    <p className="text-[10px] font-black text-rose-500 mt-2 px-2 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
+                                                        <AlertCircle size={14} strokeWidth={2.5} /> No {formData.language} Version subjects mapped to this class! Map it in settings first.
+                                                    </p>
+                                                )}
                                             </div>
                                         </section>
 
-                                        <section className="space-y-6">
+                                        {/* Step 3: Identity & Publication Details */}
+                                        <section className={`space-y-6 transition-all duration-300 ${!formData.language ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
                                             <div className="flex items-center gap-3 mb-2">
                                                 <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
                                                     <AlertCircle size={18} />
                                                 </div>
-                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Base Identity</h3>
+                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Base Identity (ধাপ ৩)</h3>
                                             </div>
                                             
                                             <div className="grid grid-cols-1 gap-6">
                                                 <div className="relative group">
                                                     <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Official Book Title</label>
-                                                    <input required type="text" placeholder="e.g. পদার্থবিজ্ঞান ১ম পত্র (Class 11)" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-3xl focus:border-indigo-500 text-base font-black text-slate-800 outline-none transition-all shadow-sm group-hover:border-slate-200"/>
+                                                    <input disabled={!formData.language} required type="text" placeholder="e.g. পদার্থবিজ্ঞান ১ম পত্র (Class 11)" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-3xl focus:border-indigo-500 text-base font-black text-slate-800 outline-none transition-all shadow-sm group-hover:border-slate-200 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"/>
                                                 </div>
                                                 
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                                <div className="grid grid-cols-1 gap-6">
                                                     <div className="relative group">
                                                         <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Asset Type</label>
-                                                        <select value={formData.bookType} onChange={e => setFormData({...formData, bookType: e.target.value})} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:bg-white focus:border-indigo-500 text-sm font-black text-slate-700 outline-none transition-all appearance-none cursor-pointer">
+                                                        <select disabled={!formData.language} value={formData.bookType} onChange={e => setFormData({...formData, bookType: e.target.value})} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:bg-white focus:border-indigo-500 text-sm font-black text-slate-700 outline-none transition-all appearance-none cursor-pointer disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed">
                                                             <option value="TEXTBOOK">Standard Textbook</option>
                                                             <option value="GUIDE">Ref Guide / Solution</option>
                                                             <option value="QUESTION_BANK">Question Repository</option>
                                                             <option value="LECTURE_SHEET">Lecture Materials</option>
                                                         </select>
                                                     </div>
-                                                    <div className="relative group">
-                                                        <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Language Branch</label>
-                                                        <select value={formData.language} onChange={e => setFormData({...formData, language: e.target.value})} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:bg-white focus:border-indigo-500 text-sm font-black text-slate-700 outline-none transition-all appearance-none cursor-pointer">
-                                                            <option value="Bangla">Bangla Medium</option>
-                                                            <option value="English">English Medium</option>
-                                                            <option value="Bilingual">Bilingual / Mixed</option>
-                                                        </select>
-                                                    </div>
                                                 </div>
                                             </div>
                                         </section>
 
-                                        <section className="space-y-6">
+                                        <section className={`space-y-6 transition-all duration-300 ${!formData.language ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
                                             <div className="flex items-center gap-3 mb-2">
                                                 <div className="w-8 h-8 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center">
                                                     <Share2 size={18} />
                                                 </div>
-                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Publication Intelligence</h3>
+                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Publication Intelligence (ধাপ ৪)</h3>
                                             </div>
 
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                                 <div className="relative group">
                                                     <User size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" />
                                                     <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Primary Author</label>
-                                                    <input type="text" placeholder="ড. শাহজাহান তপন" value={formData.authorName} onChange={e => setFormData({...formData, authorName: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm"/>
+                                                    <input disabled={!formData.language} type="text" placeholder="ড. শাহজাহান তপন" value={formData.authorName} onChange={e => setFormData({...formData, authorName: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"/>
                                                 </div>
                                                 <div className="relative group">
                                                     <Building size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" />
                                                     <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Publisher</label>
-                                                    <input type="text" placeholder="e.g. NCTB, হাসান বুকস" value={formData.publisher} onChange={e => setFormData({...formData, publisher: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm"/>
+                                                    <input disabled={!formData.language} type="text" placeholder="e.g. NCTB, হাসান বুকস" value={formData.publisher} onChange={e => setFormData({...formData, publisher: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"/>
                                                 </div>
                                             </div>
 
@@ -889,12 +1014,12 @@ const ResourceLibrary = () => {
                                                 <div className="relative group">
                                                     <Calendar size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" />
                                                     <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Initial Year</label>
-                                                    <input type="text" placeholder="2015" value={formData.firstPublished} onChange={e => setFormData({...formData, firstPublished: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm"/>
+                                                    <input disabled={!formData.language} type="text" placeholder="2015" value={formData.firstPublished} onChange={e => setFormData({...formData, firstPublished: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"/>
                                                 </div>
                                                 <div className="relative group">
                                                     <Clock size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" />
                                                     <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Active Edition</label>
-                                                    <input type="text" placeholder="25th Ed, 2024" value={formData.latestEdition} onChange={e => setFormData({...formData, latestEdition: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm"/>
+                                                    <input disabled={!formData.language} type="text" placeholder="25th Ed, 2024" value={formData.latestEdition} onChange={e => setFormData({...formData, latestEdition: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"/>
                                                 </div>
                                             </div>
                                         </section>
@@ -905,7 +1030,7 @@ const ResourceLibrary = () => {
                             {/* Sticky Modal Footer */}
                             <div className="px-10 py-6 bg-slate-50 border-t border-slate-100 flex justify-end items-center gap-4 shrink-0">
                                 <button type="button" onClick={closeModal} className="px-8 py-3.5 text-slate-500 hover:text-rose-500 font-black uppercase tracking-widest text-xs transition-colors">Discard Changes</button>
-                                <button type="submit" onClick={handleCreateOrUpdateBook} disabled={isSaving || isUploadingCover || !formData.title.trim()} className="flex items-center gap-3 px-10 py-4 bg-indigo-600 text-white font-black rounded-[1.5rem] hover:bg-slate-900 active:scale-95 transition-all shadow-xl shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <button type="submit" onClick={handleCreateOrUpdateBook} disabled={isSaving || isUploadingCover || !formData.title.trim() || !formData.language} className="flex items-center gap-3 px-10 py-4 bg-indigo-600 text-white font-black rounded-[1.5rem] hover:bg-slate-900 active:scale-95 transition-all shadow-xl shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">
                                     {isSaving ? <><span className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"></span> Syncing...</> : (isEditMode ? 'Commit Updates' : 'Initialize Book')}
                                 </button>
                             </div>

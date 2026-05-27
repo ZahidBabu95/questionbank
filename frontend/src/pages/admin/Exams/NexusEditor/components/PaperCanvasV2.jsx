@@ -425,7 +425,7 @@ const PaperCanvasV2 = React.memo(({
 
             {/* Editor Mode Indicator */}
             {editorMode === 'STRICT_LINKED' && (
-                <div className="absolute -top-4 -right-4 bg-indigo-100 text-indigo-700 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-sm z-50 print:hidden">
+                <div data-html2canvas-ignore="true" className="absolute -top-4 -right-4 bg-indigo-100 text-indigo-700 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-sm z-50 print:hidden">
                     Database Linked
                 </div>
             )}
@@ -438,16 +438,16 @@ const PaperCanvasV2 = React.memo(({
                 {editorMode === 'STRICT_LINKED' && (
                     <div style={{
                         fontFamily: s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'), 
-                        borderBottom: s.headerStyle === 'ডাবল বর্ডার' ? '3px double ' + canvasBorderColor : 
+                        borderBottom: s.headerStyle === 'ডাবল বর্ডার' ? 'none' : 
                                       s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 
                                       s.headerStyle === 'থিক টপ লাইন' ? '3px solid ' + canvasBorderColor : 
-                                      (s.showDivider ? (s.dividerStyle === 'double' ? '3px double ' + canvasBorderColor : s.dividerStyle === 'dashed' ? '1px dashed ' + canvasBorderColor : '1px solid ' + canvasBorderColor) : 'none'),
+                                      (s.showDivider ? (s.dividerStyle === 'double' ? 'none' : s.dividerStyle === 'dashed' ? '1px dashed ' + canvasBorderColor : '1px solid ' + canvasBorderColor) : 'none'),
                         borderTop: s.headerStyle === 'থিক টপ লাইন' ? '3px solid ' + canvasBorderColor : 
                                    s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
                         borderLeft: s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
                         borderRight: s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
                         padding: s.headerStyle === 'বক্স স্টাইল' ? '10px' : '0 0 4px 0',
-                        marginBottom: 20
+                        marginBottom: (s.headerStyle === 'ডাবল বর্ডার' || (s.showDivider && s.dividerStyle === 'double')) ? 12 : 20
                     }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', minHeight: '28px', marginBottom: 4, width: '100%' }}>
                             {/* Left: Subject Code */}
@@ -525,6 +525,13 @@ const PaperCanvasV2 = React.memo(({
                                         )}
                                     </>
                                 )}
+                            </div>
+                        )}
+                        {/* Double line emulation for html2canvas compatibility */}
+                        {(s.headerStyle === 'ডাবল বর্ডার' || (s.headerStyle !== 'বক্স স্টাইল' && s.headerStyle !== 'থিক টপ লাইন' && s.showDivider && s.dividerStyle === 'double')) && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '100%', marginTop: '4px', marginBottom: '0px' }}>
+                                <div style={{ borderTop: '1px solid ' + canvasBorderColor, width: '100%', height: '0px' }}></div>
+                                <div style={{ borderTop: '1px solid ' + canvasBorderColor, width: '100%', height: '0px' }}></div>
                             </div>
                         )}
                     </div>

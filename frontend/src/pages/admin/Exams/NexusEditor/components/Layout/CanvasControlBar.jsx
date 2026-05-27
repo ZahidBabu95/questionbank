@@ -22,10 +22,10 @@ const CanvasControlBar = () => {
     };
 
     return (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 print:hidden transition-all duration-300">
-            <div className="backdrop-blur-md bg-white/85 border border-slate-200/60 shadow-xl rounded-full py-2 px-5 flex items-center gap-5">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 print:hidden transition-all duration-300 max-w-[92vw]">
+            <div className="backdrop-blur-md bg-white/85 border border-slate-200/60 shadow-xl rounded-full py-1.5 px-4 flex items-center gap-3 sm:gap-5">
                 {/* Page Indicator */}
-                <div className="flex items-center gap-1.5 text-slate-500 font-bold text-xs border-r border-slate-200/80 pr-4">
+                <div className="flex items-center gap-1.5 text-slate-500 font-bold text-xs border-r border-slate-200/80 pr-3 sm:pr-4 shrink-0">
                     <FileText size={14} className="text-slate-400" />
                     <span>
                         {uiLang === 'bn' ? 'মোট পেজ:' : 'Pages:'} <span className="text-indigo-600 font-extrabold">{pageCount}</span>
@@ -58,7 +58,7 @@ const CanvasControlBar = () => {
                 </div>
 
                 {/* Canvas Background Theme Selector */}
-                <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-2">
                     <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
                         <Palette size={12} />
                         {uiLang === 'bn' ? 'থিম:' : 'Theme:'}

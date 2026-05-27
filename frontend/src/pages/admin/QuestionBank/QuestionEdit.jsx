@@ -52,6 +52,8 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
         explanation: '', correctAnswer: '', mcqType: 'SIMPLE', statements: []
     });
 
+    // Reverted frontend auto-filtering logic per user request to allow simple database-driven dropdown mapping
+
     const [options, setOptions] = useState([]);
     const [cqParts, setCqParts] = useState([]);
     const [examSources, setExamSources] = useState([]);

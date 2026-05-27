@@ -25,7 +25,7 @@ const TopicExtractConfigModal = ({ book, indices, pages, onClose, onStartAll, on
         pages.forEach(p => {
             if (p.sourceBookIndexId && stats[p.sourceBookIndexId]) {
                 stats[p.sourceBookIndexId].total += 1;
-                if (p.extractionStatus === 'PROOFREAD') stats[p.sourceBookIndexId].proofread += 1;
+                if (p.extractionStatus === 'PROOFREAD' || p.extractionStatus === 'FAILED') stats[p.sourceBookIndexId].proofread += 1;
                 if (p.extractionStatus === 'GOLDEN_VECTORIZED') stats[p.sourceBookIndexId].synced += 1;
             }
         });
@@ -180,7 +180,7 @@ const DeleteSyncConfigModal = ({ indices, pages, onClose, onStartAll }) => {
         pages.forEach(p => {
             if (p.sourceBookIndexId && stats[p.sourceBookIndexId]) {
                 stats[p.sourceBookIndexId].total += 1;
-                if (p.extractionStatus === 'PROOFREAD') stats[p.sourceBookIndexId].proofread += 1;
+                if (p.extractionStatus === 'PROOFREAD' || p.extractionStatus === 'FAILED') stats[p.sourceBookIndexId].proofread += 1;
                 if (p.extractionStatus === 'GOLDEN_VECTORIZED') stats[p.sourceBookIndexId].synced += 1;
             }
         });
@@ -989,7 +989,7 @@ const SyncCommandCenter = () => {
                                 {aiQueueJob.failedChaptersCount > 0 && <span className="text-red-600 ml-1">({aiQueueJob.failedChaptersCount} failed)</span>}
                             </span>
                             
-                            {aiQueueJob.status === 'COMPLETED' || aiQueueJob.status === 'FAILED' ? (
+                            {aiQueueJob.status === 'COMPLETED' || aiQueueJob.status === 'FAILED' || aiQueueJob.status === 'CANCELLED' ? (
                                 <button onClick={() => { setDismissedJobId(aiQueueJob.id); setAiQueueJob(null); }} className="ml-1 bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm transition-colors" title="Dismiss">
                                     <span className="hidden xl:inline">DISMISS</span><span className="xl:hidden">✖</span>
                                 </button>
@@ -1005,7 +1005,7 @@ const SyncCommandCenter = () => {
                         </div>
                     )}
                     
-                    {(!aiQueueJob || aiQueueJob.status === 'COMPLETED' || aiQueueJob.status === 'FAILED') && !isBulkFinalizing && (
+                    {(!aiQueueJob || aiQueueJob.status === 'COMPLETED' || aiQueueJob.status === 'FAILED' || aiQueueJob.status === 'CANCELLED') && !isBulkFinalizing && (
                         <div className="flex gap-2">
                             <button onClick={() => setIsTopicModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 border border-indigo-700 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-all shadow-sm text-xs ml-1 h-9">
                                 <Bot size={14} className="shrink-0" /> <span className="hidden xl:inline">Auto Chunk (Pre-Vector)</span>

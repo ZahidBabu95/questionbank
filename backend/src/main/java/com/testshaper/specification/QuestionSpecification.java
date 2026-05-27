@@ -1,11 +1,14 @@
 package com.testshaper.specification;
 
 import com.testshaper.entity.Question;
+import com.testshaper.entity.QuestionOption;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -30,7 +33,8 @@ public class QuestionSpecification {
             String globalTenantId,
             String sourceBoards,
             String sourceYears,
-            String sourceSchools) {
+            String sourceSchools,
+            String filterUnanswered) {
 
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -162,6 +166,21 @@ public class QuestionSpecification {
                     String likePattern = "%" + sourceSchools.toLowerCase() + "%";
                     predicates.add(cb.like(cb.lower(sourceJoin.get("organizationName")), likePattern));
                 }
+            }
+
+            // Filter unanswered questions (only for MCQ having no correct options, or non-MCQ having empty/null correctAnswer)
+            if (StringUtils.hasText(filterUnanswered) && "true".equalsIgnoreCase(filterUnanswered)) {
+                Predicate isNotMcq = cb.notEqual(root.get("type"), "MCQ");
+                Predicate isMcq = cb.equal(root.get("type"), "MCQ");
+                Predicate noCorrectAnswerText = cb.or(cb.isNull(root.get("correctAnswer")), cb.equal(cb.trim(root.get("correctAnswer")), ""));
+                
+                Subquery<Long> subquery = query.subquery(Long.class);
+                Root<QuestionOption> optionRoot = subquery.from(QuestionOption.class);
+                subquery.select(cb.count(optionRoot));
+                subquery.where(cb.and(cb.equal(optionRoot.get("question"), root), cb.equal(optionRoot.get("isCorrect"), true)));
+                Predicate noCorrectOption = cb.equal(subquery, 0L);
+                
+                predicates.add(cb.or(cb.and(isNotMcq, noCorrectAnswerText), cb.and(isMcq, noCorrectOption)));
             }
 
             query.distinct(true);

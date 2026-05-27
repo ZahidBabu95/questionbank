@@ -177,11 +177,9 @@ public class DashboardServiceImpl implements DashboardService {
 
                 Page<Question> recentQuestions;
                 if (creatorEmail != null) {
-                        // For a teacher, we could theoretically fetch their own recent questions. 
-                        // But for simplicity, we'll fetch tenant's recent questions.
-                        recentQuestions = questionRepository.searchApproved(tenantId, null, null, null, null, null, null, null, PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt")));
+                        recentQuestions = questionRepository.findByCreatedByAndDeletedFalse(creatorEmail, PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt")));
                 } else if (tenantId != null) {
-                        recentQuestions = questionRepository.searchApproved(tenantId, null, null, null, null, null, null, null, PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt")));
+                        recentQuestions = questionRepository.findByTenantIdAndDeletedFalse(tenantId, PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt")));
                 } else {
                         recentQuestions = questionRepository.findAll(PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt")));
                 }

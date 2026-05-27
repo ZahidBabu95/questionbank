@@ -24,7 +24,7 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { useBranding } from '../context/BrandingContext';
-import apiClient, { LOCAL_DEV_IP } from '../api/apiClient';
+import apiClient, { LOCAL_DEV_IP, getWebAppBaseUrl, BASE_URL } from '../api/apiClient';
 import { WebView } from 'react-native-webview';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -274,12 +274,29 @@ export const DashboardScreen: React.FC = () => {
   };
 
   const handleOpenWebUrl = (path: string, title: string) => {
-    const webUrl = `http://${LOCAL_DEV_IP}:5173${path}`;
-    setWebViewUrl(webUrl);
+    // Append ?embedded=true if not present
+    const separator = path.includes('?') ? '&' : '?';
+    const cleanPath = path.includes('embedded=true') ? path : `${path}${separator}embedded=true`;
+    
+    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+    const userParam = user ? `&user=${encodeURIComponent(JSON.stringify(user))}` : '';
+    const webUrl = `${getWebAppBaseUrl()}${cleanPath}${tokenParam}${userParam}`;
+    
+    setCanGoBack(false);
+    setQuickActionUrl(webUrl);
     setWebViewTitle(title);
-    setWebProgress(0);
-    setWebLoading(true);
-    setShowWebViewModal(true);
+    setQuickActionProgress(0);
+    setQuickActionLoading(true);
+    setIsWebViewActive(true);
+    
+    // Switch to home tab silently if not already there, to hide other tab views cleanly
+    setActiveTab('home');
+  };
+
+  const handleCloseEmbeddedWebView = () => {
+    setIsWebViewActive(false);
+    setQuickActionUrl('');
+    setCanGoBack(false);
   };
 
   // Loaders
@@ -323,6 +340,7 @@ export const DashboardScreen: React.FC = () => {
   const [loadingStats, setLoadingStats] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showSubjectsModal, setShowSubjectsModal] = useState(false);
+  const [showQuestionStatsModal, setShowQuestionStatsModal] = useState(false);
 
   // WebView states
   const [showWebViewModal, setShowWebViewModal] = useState(false);
@@ -331,6 +349,33 @@ export const DashboardScreen: React.FC = () => {
   const [webProgress, setWebProgress] = useState(0);
   const [webLoading, setWebLoading] = useState(false);
   const webViewRef = React.useRef<any>(null);
+
+  // Quick Action WebView states
+  const [isWebViewActive, setIsWebViewActive] = useState(false);
+  const [quickActionUrl, setQuickActionUrl] = useState('');
+  const [quickActionProgress, setQuickActionProgress] = useState(0);
+  const [quickActionLoading, setQuickActionLoading] = useState(false);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const quickActionWebViewRef = React.useRef<any>(null);
+  
+  const lastAutoLoginTime = React.useRef<{[key: string]: number}>({});
+
+  const handleWebViewMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data && data.type === 'download_pdf') {
+        const downloadUrl = `${BASE_URL}/exams/download/pdf/${data.examId}?${data.queryString}`;
+        console.log("WebView requested PDF download, opening direct URL:", downloadUrl);
+        Alert.alert(
+          "PDF Download",
+          "The exam paper PDF will download and open in your default browser.",
+          [{ text: "Download & Open", onPress: () => Linking.openURL(downloadUrl) }]
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to parse WebView message:", e);
+    }
+  };
 
   const fetchDashboardStats = async () => {
     if (!user) return;
@@ -538,6 +583,11 @@ export const DashboardScreen: React.FC = () => {
       update: { type: LayoutAnimation.Types.spring, springDamping: 0.75 },
       delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity }
     });
+    
+    // Switch active tab and turn off quick actions WebView
+    setIsWebViewActive(false);
+    setQuickActionUrl('');
+    
     setActiveTab(tab);
     if (tab === 'notifications') {
       fetchNotifications();
@@ -545,7 +595,9 @@ export const DashboardScreen: React.FC = () => {
     } else if (tab === 'saved-exams') {
       fetchSavedExams();
     } else if (tab === 'ai-workspace') {
-      const webUrl = `http://${LOCAL_DEV_IP}:5173/ai-workspace?embedded=true`;
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
+      const userParam = user ? `&user=${encodeURIComponent(JSON.stringify(user))}` : '';
+      const webUrl = `${getWebAppBaseUrl()}/ai-workspace?embedded=true${tokenParam}${userParam}`;
       setWebViewUrl(webUrl);
       setWebViewTitle('AI Workspace');
     }
@@ -560,7 +612,7 @@ export const DashboardScreen: React.FC = () => {
   const getStatsCards = () => {
     const qCount = liveStats?.approvedQuestionsCount ?? liveStats?.totalQuestions ?? 0;
     const gCount = liveStats?.globalQuestionsCount ?? liveStats?.totalQuestions ?? 0;
-    const eCount = liveStats?.examsConducted ?? 0;
+    const qTotal = liveStats?.totalQuestions ?? 0;
     const uCount = liveStats?.totalUsers ?? 0;
     const iCount = liveStats?.activeInstitutes ?? 0;
     const xp = freshUser?.contributionPoints ?? 0;
@@ -570,19 +622,19 @@ export const DashboardScreen: React.FC = () => {
     if (user?.roles?.includes('SUPER_ADMIN')) {
       cards.push(
         { label: 'Active Approved Questions', value: qCount.toLocaleString(), subValue: gCount.toLocaleString(), icon: 'database', color: theme.colors.primary, bg: 'rgba(37, 99, 235, 0.08)', onPress: () => setShowSubjectsModal(true) },
-        { label: 'Exams Conducted', value: eCount.toLocaleString(), icon: 'file-text', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.08)', onPress: () => changeTab('saved-exams') },
+        { label: 'Questions Created', value: qTotal.toLocaleString(), icon: 'pie-chart', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.08)', onPress: () => setShowQuestionStatsModal(true) },
         { label: 'Active Institutes', value: iCount.toLocaleString(), icon: 'book-open', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.08)' }
       );
     } else if (user?.roles?.includes('INSTITUTE_ADMIN')) {
       cards.push(
         { label: 'Active Approved Questions', value: qCount.toLocaleString(), subValue: gCount.toLocaleString(), icon: 'database', color: theme.colors.primary, bg: 'rgba(37, 99, 235, 0.08)', onPress: () => setShowSubjectsModal(true) },
-        { label: 'Exams Conducted', value: eCount.toLocaleString(), icon: 'file-text', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.08)', onPress: () => changeTab('saved-exams') }
+        { label: 'Questions Created', value: qTotal.toLocaleString(), icon: 'pie-chart', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.08)', onPress: () => setShowQuestionStatsModal(true) }
       );
     } else {
       // Teachers and other users
       cards.push(
         { label: 'Active Approved Questions', value: qCount.toLocaleString(), subValue: gCount.toLocaleString(), icon: 'database', color: theme.colors.primary, bg: 'rgba(37, 99, 235, 0.08)', onPress: () => setShowSubjectsModal(true) },
-        { label: 'My Exams', value: eCount.toLocaleString(), icon: 'file-text', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.08)', onPress: () => changeTab('saved-exams') }
+        { label: 'My Questions', value: qTotal.toLocaleString(), icon: 'pie-chart', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.08)', onPress: () => setShowQuestionStatsModal(true) }
       );
     }
 
@@ -643,13 +695,7 @@ export const DashboardScreen: React.FC = () => {
     });
   };
 
-  const recentActivities = getRecentActivitiesList().length > 0 
-    ? getRecentActivitiesList() 
-    : [
-        { action: 'AI Exam Generator', desc: 'Term 1 Chemistry Exam paper generated', time: '10m ago', icon: 'zap', color: '#F59E0B' },
-        { action: 'Curriculum update', desc: 'Added new topic to Class 9 Mathematics', time: '2h ago', icon: 'edit', color: theme.colors.primary },
-        { action: 'Teacher invited', desc: 'Fatima Zohra added as secondary teacher', time: '1d ago', icon: 'user-plus', color: '#10B981' }
-      ];
+  const recentActivities = getRecentActivitiesList();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -687,9 +733,21 @@ export const DashboardScreen: React.FC = () => {
         </View>
       </View>
 
+      {/* Progress Bars directly under the standard header */}
+      {isWebViewActive && quickActionLoading && (
+        <View style={styles.webProgressBarBg}>
+          <View style={[styles.webProgressBarFill, { width: `${quickActionProgress * 100}%` }]} />
+        </View>
+      )}
+      {activeTab === 'ai-workspace' && webLoading && (
+        <View style={styles.webProgressBarBg}>
+          <View style={[styles.webProgressBarFill, { width: `${webProgress * 100}%` }]} />
+        </View>
+      )}
+
       {/* ─── Main Content Tabs Switcher ─── */}
       <View style={styles.content}>
-        {activeTab === 'home' ? (
+        {activeTab === 'home' && !isWebViewActive ? (
           // ─── Home Dashboard View ───
           <ScrollView 
             showsVerticalScrollIndicator={false} 
@@ -758,7 +816,7 @@ export const DashboardScreen: React.FC = () => {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Quick Actions</Text>
             </View>
-            <View style={styles.actionRow}>
+            <View style={[styles.actionRow, { marginBottom: 12 }]}>
               <TouchableOpacity 
                 style={styles.actionCard} 
                 activeOpacity={0.8}
@@ -778,9 +836,11 @@ export const DashboardScreen: React.FC = () => {
                 <View style={[styles.actionIconWrapper, { backgroundColor: '#FDF2F8' }]}>
                   <Feather name="zap" size={22} color="#EC4899" />
                 </View>
-                <Text style={styles.actionText}>Auto Exam Generator</Text>
+                <Text style={styles.actionText}>Auto Exam</Text>
               </TouchableOpacity>
+            </View>
 
+            <View style={styles.actionRow}>
               <TouchableOpacity 
                 style={styles.actionCard} 
                 activeOpacity={0.8}
@@ -791,6 +851,17 @@ export const DashboardScreen: React.FC = () => {
                 </View>
                 <Text style={styles.actionText}>Question Bank</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.actionCard} 
+                activeOpacity={0.8}
+                onPress={() => handleOpenWebUrl('/exams/generate/saved', 'Saved Exams Drive')}
+              >
+                <View style={[styles.actionIconWrapper, { backgroundColor: '#F5F3FF' }]}>
+                  <Feather name="hard-drive" size={22} color="#8B5CF6" />
+                </View>
+                <Text style={styles.actionText}>Saved Exams</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Recent Activity Log */}
@@ -800,23 +871,29 @@ export const DashboardScreen: React.FC = () => {
                   <Text style={styles.sectionTitle}>Recent Activity</Text>
                 </View>
                 <View style={styles.activitiesContainer}>
-                  {recentActivities.map((act: any, idx: number) => (
-                    <View key={idx} style={styles.activityRow}>
-                      <View style={[styles.activityIconBg, { backgroundColor: 'rgba(0,0,0,0.03)' }]}>
-                        <Feather name={act.icon as any} size={16} color={act.color} />
+                  {recentActivities.length > 0 ? (
+                    recentActivities.map((act: any, idx: number) => (
+                      <View key={idx} style={styles.activityRow}>
+                        <View style={[styles.activityIconBg, { backgroundColor: 'rgba(0,0,0,0.03)' }]}>
+                          <Feather name={act.icon as any} size={16} color={act.color} />
+                        </View>
+                        <View style={styles.activityMeta}>
+                          <Text style={styles.activityAction}>{act.action}</Text>
+                          <Text style={styles.activityDesc} numberOfLines={1}>{act.desc}</Text>
+                        </View>
+                        <Text style={styles.activityTime}>{act.time}</Text>
                       </View>
-                      <View style={styles.activityMeta}>
-                        <Text style={styles.activityAction}>{act.action}</Text>
-                        <Text style={styles.activityDesc} numberOfLines={1}>{act.desc}</Text>
-                      </View>
-                      <Text style={styles.activityTime}>{act.time}</Text>
+                    ))
+                  ) : (
+                    <View style={{ padding: 20, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 12, color: theme.colors.textMuted }}>সাম্প্রতিক কোনো অ্যাক্টিভিটি পাওয়া যায়নি</Text>
                     </View>
-                  ))}
+                  )}
                 </View>
               </>
             )}
           </ScrollView>
-        ) : activeTab === 'notifications' ? (
+        ) : activeTab === 'notifications' && !isWebViewActive ? (
           // ─── Notifications View ───
           <ScrollView 
             showsVerticalScrollIndicator={false} 
@@ -825,13 +902,21 @@ export const DashboardScreen: React.FC = () => {
               <RefreshControl refreshing={loadingNotifications} onRefresh={fetchNotifications} colors={[theme.colors.primary]} />
             }
           >
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Notifications</Text>
-              {unreadCount > 0 && (
-                <TouchableOpacity onPress={handleMarkAllAsRead} activeOpacity={0.7}>
-                  <Text style={styles.markAllReadText}>Mark all as read</Text>
-                </TouchableOpacity>
-              )}
+            {/* Header row with back button */}
+            <View style={styles.savedExamsHeaderRow}>
+              <TouchableOpacity onPress={() => changeTab('home')} style={styles.backBtn} activeOpacity={0.7}>
+                <Feather name="arrow-left" size={20} color={theme.colors.text} />
+              </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitle}>Notifications</Text>
+                {unreadCount > 0 ? (
+                  <TouchableOpacity onPress={handleMarkAllAsRead} activeOpacity={0.7} style={{ marginTop: 3 }}>
+                    <Text style={styles.markAllReadText}>Mark all as read</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.sectionSubtitle}>Your recent system notifications</Text>
+                )}
+              </View>
             </View>
             
             <View style={styles.notificationsList}>
@@ -870,7 +955,7 @@ export const DashboardScreen: React.FC = () => {
               )}
             </View>
           </ScrollView>
-        ) : activeTab === 'saved-exams' ? (
+        ) : activeTab === 'saved-exams' && !isWebViewActive ? (
           // ─── Saved Exams Library View ───
           <ScrollView 
             showsVerticalScrollIndicator={false} 
@@ -958,7 +1043,7 @@ export const DashboardScreen: React.FC = () => {
               )}
             </View>
           </ScrollView>
-        ) : activeTab === 'profile' ? (
+        ) : activeTab === 'profile' && !isWebViewActive ? (
           // ─── Profile Tab View ───
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollPadding}>
             
@@ -1238,7 +1323,7 @@ export const DashboardScreen: React.FC = () => {
         ) : null}
 
         {/* ─── Keep AI Workspace WebView mounted in the background ─── */}
-        <View style={{ flex: 1, display: activeTab === 'ai-workspace' ? 'flex' : 'none' }}>
+        <View style={{ flex: 1, display: (activeTab === 'ai-workspace' && !isWebViewActive) ? 'flex' : 'none' }}>
           {webViewUrl ? (
             <WebView
               ref={webViewRef}
@@ -1247,26 +1332,35 @@ export const DashboardScreen: React.FC = () => {
               domStorageEnabled={true}
               injectedJavaScriptBeforeContentLoaded={`
                 try {
-                  localStorage.setItem('token', '${token}');
-                  localStorage.setItem('user', JSON.stringify(${JSON.stringify(user)}));
+                  localStorage.setItem('token', ${JSON.stringify(token || '')});
+                  localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user || {}))});
                 } catch(e) {}
                 true;
               `}
               injectedJavaScript={`
                 try {
-                  localStorage.setItem('token', '${token}');
-                  localStorage.setItem('user', JSON.stringify(${JSON.stringify(user)}));
+                  localStorage.setItem('token', ${JSON.stringify(token || '')});
+                  localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user || {}))});
                 } catch(e) {}
                 true;
               `}
               onNavigationStateChange={(navState) => {
                 if (navState.url.includes('/login')) {
+                  if (!token) return;
                   const relativePath = getRelativePath(webViewUrl);
+                  const now = Date.now();
+                  const lastAttempt = lastAutoLoginTime.current[relativePath] || 0;
+                  if (now - lastAttempt < 5000) {
+                    console.warn("Auto-login redirect loop detected. Logging out...");
+                    logout();
+                    return;
+                  }
+                  lastAutoLoginTime.current[relativePath] = now;
                   webViewRef.current?.injectJavaScript(`
                     try {
-                      localStorage.setItem('token', '${token}');
-                      localStorage.setItem('user', JSON.stringify(${JSON.stringify(user)}));
-                      window.location.replace('${relativePath}');
+                      localStorage.setItem('token', ${JSON.stringify(token)});
+                      localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user || {}))});
+                      window.location.replace(${JSON.stringify(relativePath)});
                     } catch(e) {}
                     true;
                   `);
@@ -1275,6 +1369,109 @@ export const DashboardScreen: React.FC = () => {
               onLoadProgress={({ nativeEvent }) => setWebProgress(nativeEvent.progress)}
               onLoadStart={() => setWebLoading(true)}
               onLoadEnd={() => setWebLoading(false)}
+              onMessage={handleWebViewMessage}
+              style={{ flex: 1 }}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={styles.webLoaderOverlay}>
+                  <ActivityIndicator size="large" color={theme.colors.primary} />
+                </View>
+              )}
+            />
+          ) : null}
+        </View>
+
+        {/* ─── Keep Quick Actions Embedded WebView mounted ─── */}
+        <View style={{ flex: 1, display: isWebViewActive ? 'flex' : 'none' }}>
+          {isWebViewActive && (
+            <View style={[styles.webHeader, { height: 48, paddingHorizontal: 12 }]}>
+              <TouchableOpacity 
+                onPress={() => {
+                  if (canGoBack) {
+                    quickActionWebViewRef.current?.goBack();
+                  } else {
+                    handleCloseEmbeddedWebView();
+                  }
+                }} 
+                style={[styles.webCloseBtn, { padding: 4 }]}
+                activeOpacity={0.7}
+              >
+                <Feather name={canGoBack ? "arrow-left" : "chevron-left"} size={22} color={theme.colors.text} />
+              </TouchableOpacity>
+              
+              <View style={styles.webTitleContainer}>
+                <Text style={[styles.webTitleText, { fontSize: 14, fontWeight: 'bold' }]} numberOfLines={1}>
+                  {webViewTitle === 'Saved Exams Drive' ? 'সেভড এক্সাম ড্রাইভ (Saved Exams)' : webViewTitle}
+                </Text>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <TouchableOpacity 
+                  onPress={() => quickActionWebViewRef.current?.reload()} 
+                  style={[styles.webRefreshBtn, { padding: 4 }]}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="refresh-cw" size={15} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={handleCloseEmbeddedWebView} 
+                  style={[styles.webCloseBtn, { padding: 4 }]}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="x" size={18} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {quickActionUrl ? (
+            <WebView
+              ref={quickActionWebViewRef}
+              source={{ uri: quickActionUrl }}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              injectedJavaScriptBeforeContentLoaded={`
+                try {
+                  localStorage.setItem('token', ${JSON.stringify(token || '')});
+                  localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user || {}))});
+                } catch(e) {}
+                true;
+              `}
+              injectedJavaScript={`
+                try {
+                  localStorage.setItem('token', ${JSON.stringify(token || '')});
+                  localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user || {}))});
+                } catch(e) {}
+                true;
+              `}
+              onNavigationStateChange={(navState) => {
+                setCanGoBack(navState.canGoBack);
+                if (navState.url.includes('/login')) {
+                  if (!token) return;
+                  const relativePath = getRelativePath(quickActionUrl);
+                  const now = Date.now();
+                  const lastAttempt = lastAutoLoginTime.current[relativePath] || 0;
+                  if (now - lastAttempt < 5000) {
+                    console.warn("Auto-login redirect loop detected. Logging out...");
+                    logout();
+                    return;
+                  }
+                  lastAutoLoginTime.current[relativePath] = now;
+                  quickActionWebViewRef.current?.injectJavaScript(`
+                    try {
+                      localStorage.setItem('token', ${JSON.stringify(token)});
+                      localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user || {}))});
+                      window.location.replace(${JSON.stringify(relativePath)});
+                    } catch(e) {}
+                    true;
+                  `);
+                }
+              }}
+              onLoadProgress={({ nativeEvent }) => setQuickActionProgress(nativeEvent.progress)}
+              onLoadStart={() => setQuickActionLoading(true)}
+              onLoadEnd={() => setQuickActionLoading(false)}
+              onMessage={handleWebViewMessage}
               style={{ flex: 1 }}
               startInLoadingState={true}
               renderLoading={() => (
@@ -1290,23 +1487,23 @@ export const DashboardScreen: React.FC = () => {
       {/* ─── Custom Bottom Navigation Bar ─── */}
       <View style={styles.bottomNav}>
         <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'home' && styles.navItemActive]}
+          style={[styles.navItem, activeTab === 'home' && !isWebViewActive && styles.navItemActive]}
           onPress={() => changeTab('home')}
           activeOpacity={0.9}
         >
-          <Feather name="home" size={20} color={activeTab === 'home' ? theme.colors.primary : theme.colors.textMuted} />
-          <Text style={[styles.navText, activeTab === 'home' && styles.navTextActive]}>
+          <Feather name="home" size={20} color={activeTab === 'home' && !isWebViewActive ? theme.colors.primary : theme.colors.textMuted} />
+          <Text style={[styles.navText, activeTab === 'home' && !isWebViewActive && styles.navTextActive]}>
             Home
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'ai-workspace' && styles.navItemActive]}
+          style={[styles.navItem, activeTab === 'ai-workspace' && !isWebViewActive && styles.navItemActive]}
           onPress={() => changeTab('ai-workspace')}
           activeOpacity={0.9}
         >
-          <Feather name="zap" size={20} color={activeTab === 'ai-workspace' ? theme.colors.primary : theme.colors.textMuted} />
-          <Text style={[styles.navText, activeTab === 'ai-workspace' && styles.navTextActive]}>
+          <Feather name="zap" size={20} color={activeTab === 'ai-workspace' && !isWebViewActive ? theme.colors.primary : theme.colors.textMuted} />
+          <Text style={[styles.navText, activeTab === 'ai-workspace' && !isWebViewActive && styles.navTextActive]}>
             AI Workspace
           </Text>
         </TouchableOpacity>
@@ -1323,12 +1520,12 @@ export const DashboardScreen: React.FC = () => {
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'profile' && styles.navItemActive]}
+          style={[styles.navItem, activeTab === 'profile' && !isWebViewActive && styles.navItemActive]}
           onPress={() => changeTab('profile')}
           activeOpacity={0.9}
         >
-          <Feather name="user" size={20} color={activeTab === 'profile' ? theme.colors.primary : theme.colors.textMuted} />
-          <Text style={[styles.navText, activeTab === 'profile' && styles.navTextActive]}>
+          <Feather name="user" size={20} color={activeTab === 'profile' && !isWebViewActive ? theme.colors.primary : theme.colors.textMuted} />
+          <Text style={[styles.navText, activeTab === 'profile' && !isWebViewActive && styles.navTextActive]}>
             Profile
           </Text>
         </TouchableOpacity>
@@ -1410,92 +1607,127 @@ export const DashboardScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* Premium In-App WebView Modal */}
+      {/* Question breakdown & types Modal */}
       <Modal
-        visible={showWebViewModal}
+        visible={showQuestionStatsModal}
+        transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowWebViewModal(false)}
+        onRequestClose={() => setShowQuestionStatsModal(false)}
       >
-        <SafeAreaView style={styles.webModalContainer}>
-          {/* WebView Header */}
-          <View style={styles.webHeader}>
-            <TouchableOpacity 
-              onPress={() => setShowWebViewModal(false)} 
-              style={styles.webCloseBtn}
-              activeOpacity={0.7}
-            >
-              <Feather name="arrow-left" size={22} color={theme.colors.text} />
-            </TouchableOpacity>
-            
-            <View style={styles.webTitleContainer}>
-              <Text style={styles.webTitleText} numberOfLines={1}>{webViewTitle}</Text>
-              <Text style={styles.webSubtitleText} numberOfLines={1}>QuestionShaper Workspace</Text>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Questions Stats & Types</Text>
+                <Text style={styles.modalSubtitle}>Breakdown and recent creations</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.modalCloseBtn} 
+                onPress={() => setShowQuestionStatsModal(false)}
+              >
+                <Feather name="x" size={20} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
             </View>
 
-            <TouchableOpacity 
-              onPress={() => webViewRef.current?.reload()} 
-              style={styles.webRefreshBtn}
-              activeOpacity={0.7}
+            {/* Modal Body */}
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalScrollContent}
             >
-              <Feather name="rotate-cw" size={18} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Loader / Progress Bar */}
-          {webLoading && (
-            <View style={styles.webProgressBarBg}>
-              <View style={[styles.webProgressBarFill, { width: `${webProgress * 100}%` }]} />
-            </View>
-          )}
-
-          {/* WebView Component */}
-          {webViewUrl ? (
-            <WebView
-              ref={webViewRef}
-              source={{ uri: webViewUrl }}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-              injectedJavaScriptBeforeContentLoaded={`
-                try {
-                  localStorage.setItem('token', '${token}');
-                  localStorage.setItem('user', JSON.stringify(${JSON.stringify(user)}));
-                } catch(e) {}
-                true;
-              `}
-              injectedJavaScript={`
-                try {
-                  localStorage.setItem('token', '${token}');
-                  localStorage.setItem('user', JSON.stringify(${JSON.stringify(user)}));
-                } catch(e) {}
-                true;
-              `}
-              onNavigationStateChange={(navState) => {
-                if (navState.url.includes('/login')) {
-                  const relativePath = getRelativePath(webViewUrl);
-                  webViewRef.current?.injectJavaScript(`
-                    try {
-                      localStorage.setItem('token', '${token}');
-                      localStorage.setItem('user', JSON.stringify(${JSON.stringify(user)}));
-                      window.location.replace('${relativePath}');
-                    } catch(e) {}
-                    true;
-                  `);
-                }
-              }}
-              onLoadProgress={({ nativeEvent }) => setWebProgress(nativeEvent.progress)}
-              onLoadStart={() => setWebLoading(true)}
-              onLoadEnd={() => setWebLoading(false)}
-              style={{ flex: 1 }}
-              startInLoadingState={true}
-              renderLoading={() => (
-                <View style={styles.webLoaderOverlay}>
-                  <ActivityIndicator size="large" color={theme.colors.primary} />
+              {/* Question Types Distribution section */}
+              <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme.colors.text, marginBottom: 12, marginTop: 4 }}>
+                Question Types Distribution
+              </Text>
+              {liveStats?.questionTypes && liveStats.questionTypes.length > 0 ? (
+                <View style={{ backgroundColor: '#F8FAFC', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#F1F5F9', marginBottom: 20 }}>
+                  {liveStats.questionTypes.map((type: any, index: number) => {
+                    return (
+                      <View key={index} style={{ marginBottom: 12 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#475569' }}>
+                            {type.name === 'MCQ' ? 'MCQ (বহুনির্বাচনী)' : type.name === 'CQ' ? 'CQ (সৃজনশীল)' : type.name === 'Short' ? 'Short (সংক্ষিপ্ত)' : type.name}
+                          </Text>
+                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: type.color || theme.colors.primary }}>
+                            {type.value}%
+                          </Text>
+                        </View>
+                        <View style={{ height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden' }}>
+                          <View style={{ height: '100%', width: `${type.value}%`, backgroundColor: type.color || theme.colors.primary }} />
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={{ padding: 20, alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 16, marginBottom: 20 }}>
+                  <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>No question types data available</Text>
                 </View>
               )}
-            />
-          ) : null}
-        </SafeAreaView>
+
+              {/* Recent Questions list section */}
+              <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme.colors.text, marginBottom: 12 }}>
+                Recent Questions Asked/Created
+              </Text>
+              {liveStats?.recentActivities && liveStats.recentActivities.length > 0 ? (
+                <View style={{ gap: 10 }}>
+                  {liveStats.recentActivities.map((act: any, idx: number) => {
+                    let color = theme.colors.primary;
+                    let icon = 'edit';
+                    if (act.desc?.includes('MCQ') || act.action?.includes('MCQ')) {
+                      color = '#F59E0B';
+                      icon = 'plus-circle';
+                    } else if (act.status === 'APPROVED') {
+                      color = '#10B981';
+                      icon = 'check-circle';
+                    } else if (act.status === 'REJECTED') {
+                      color = '#EF4444';
+                      icon = 'x-circle';
+                    }
+
+                    return (
+                      <View key={idx} style={[styles.activityRow, { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 16, padding: 12, marginHorizontal: 0, marginBottom: 0 }]}>
+                        <View style={[styles.activityIconBg, { backgroundColor: color + '10' }]}>
+                          <Feather name={icon as any} size={15} color={color} />
+                        </View>
+                        <View style={styles.activityMeta}>
+                          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#475569' }}>{act.user}</Text>
+                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text, marginTop: 2 }} numberOfLines={2}>{act.action}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                            <View style={{ backgroundColor: act.status === 'APPROVED' ? '#ECFDF5' : '#FEF3C7', paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4 }}>
+                              <Text style={{ fontSize: 9, fontWeight: 'bold', color: act.status === 'APPROVED' ? '#059669' : '#D97706' }}>
+                                {act.status}
+                              </Text>
+                            </View>
+                            <Text style={{ fontSize: 10, color: theme.colors.textMuted }}>{formatTime(act.time)}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={{ padding: 20, alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 16 }}>
+                  <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>No recent activities available</Text>
+                </View>
+              )}
+
+            </ScrollView>
+
+            {/* Modal Footer */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.modalCloseFooterBtn}
+                onPress={() => setShowQuestionStatsModal(false)}
+              >
+                <Text style={styles.modalCloseFooterBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
+
+
     </SafeAreaView>
   );
 };

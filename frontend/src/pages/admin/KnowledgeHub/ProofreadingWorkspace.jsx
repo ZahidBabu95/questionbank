@@ -1578,6 +1578,7 @@ const ProofreadingWorkspace = () => {
     const [isCreatingIndex, setIsCreatingIndex] = useState(false);
     const [isAssigning, setIsAssigning] = useState(false);
     const [activeTreeBChapter, setActiveTreeBChapter] = useState(null);
+    const explicitlyUnassignedPageIds = useRef(new Set());
 
     const fetchIndices = async () => {
         try {
@@ -1678,6 +1679,14 @@ const ProofreadingWorkspace = () => {
                 { sourceBookIndexId: indexId || null }
             );
             const updatedPage = { ...pageObj, sourceBookIndexId: res.data.sourceBookIndexId };
+            
+            // Track explicit unlink vs auto-assign
+            if (!indexId) {
+                explicitlyUnassignedPageIds.current.add(pageObj.id);
+            } else {
+                explicitlyUnassignedPageIds.current.delete(pageObj.id);
+            }
+
             if (selectedPage && pageObj.id === selectedPage.id) {
                 setSelectedPage(updatedPage);
             }
@@ -1693,6 +1702,9 @@ const ProofreadingWorkspace = () => {
 
     useEffect(() => {
         if (selectedPage && !selectedPage.sourceBookIndexId && activeTreeBChapter && activeTreeBChapter !== selectedPage.sourceBookIndexId) {
+             if (explicitlyUnassignedPageIds.current.has(selectedPage.id)) {
+                 return;
+             }
              handleAssignPage(activeTreeBChapter, selectedPage);
         }
     }, [selectedPage, activeTreeBChapter]);
@@ -2310,6 +2322,48 @@ const ProofreadingWorkspace = () => {
                                                     </div>
                                                 </label>
                                             </div>
+
+                                            {/* Chapter Assignment / Unlink section */}
+                                             {selectedPage && (
+                                                 <div className="flex flex-col gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm mt-1">
+                                                     <div className="text-xs font-bold text-slate-500 uppercase tracking-widest px-1">অধ্যায় সংযোগ (Chapter Link)</div>
+                                                     {indices.find(idx => idx.id === selectedPage?.sourceBookIndexId) ? (
+                                                         <div className="flex flex-col gap-2">
+                                                             <div className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-800">
+                                                                 <Tag size={14} className="text-emerald-600 shrink-0" />
+                                                                 <span className="text-xs font-bold truncate">
+                                                                     {indices.find(idx => idx.id === selectedPage?.sourceBookIndexId)?.indexName}
+                                                                 </span>
+                                                             </div>
+                                                             <button
+                                                                 onClick={() => handleAssignPage(null)}
+                                                                 disabled={isAssigning}
+                                                                 className="w-full py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all text-xs shadow-sm hover:text-rose-800 disabled:opacity-50"
+                                                             >
+                                                                 <XCircle size={14} />
+                                                                 <span>অধ্যায় থেকে আনলিংক করুন</span>
+                                                             </button>
+                                                         </div>
+                                                     ) : (
+                                                         <div className="flex flex-col gap-2">
+                                                             <div className="text-[11px] text-slate-400 italic p-2 bg-slate-50 border border-slate-100 rounded-lg text-center">
+                                                                 কোনো অধ্যায়ের সাথে লিংক করা নেই
+                                                             </div>
+                                                             <select
+                                                                 value={selectedPage?.sourceBookIndexId || ''}
+                                                                 onChange={e => handleAssignPage(e.target.value || null)}
+                                                                 disabled={isAssigning}
+                                                                 className="w-full text-xs border border-slate-300 rounded-lg p-2 bg-white text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 cursor-pointer font-semibold shadow-sm"
+                                                             >
+                                                                 <option value="">-- অধ্যায় নির্বাচন করুন --</option>
+                                                                 {indices.map(idx => (
+                                                                     <option key={idx.id} value={idx.id}>{idx.indexName}</option>
+                                                                 ))}
+                                                             </select>
+                                                         </div>
+                                                     )}
+                                                 </div>
+                                             )}
                                        </div>
                                    )}
 

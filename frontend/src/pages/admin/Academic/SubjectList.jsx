@@ -15,7 +15,7 @@ const SubjectList = () => {
     const [showImportModal, setShowImportModal] = useState(false);
 
     // Form Data
-    const [formData, setFormData] = useState({ name: '', code: '', academicClassId: '' });
+    const [formData, setFormData] = useState({ name: '', code: '', academicClassId: '', isEnglishVersion: false });
     const [selectedGlobalSubjectId, setSelectedGlobalSubjectId] = useState('');
 
     useEffect(() => {
@@ -62,6 +62,7 @@ const SubjectList = () => {
                 id: s.id,
                 code: s.code,
                 name: s.name,
+                isEnglishVersion: s.isEnglishVersion || s.englishVersion || false,
                 type: 'GLOBAL_SUBJECT'
             }));
             setSubjects(normalized);
@@ -83,6 +84,7 @@ const SubjectList = () => {
                 subjectId: dto.subjectId, // Real subject ID
                 code: dto.subjectCode,
                 name: dto.subjectName,
+                isEnglishVersion: dto.isEnglishVersion || dto.englishVersion || false,
                 type: 'CLASS_SUBJECT'
             }));
             setSubjects(normalized);
@@ -101,20 +103,24 @@ const SubjectList = () => {
 
             if (formData.academicClassId) {
                 // Create and Assign to Class (requires classId)
-                await academicService.createClassSubject(formData.academicClassId, {
+                await academicService.createClassSubject(formData.academicClassId, null, {
                     name: formData.name,
-                    code: formData.code
+                    code: formData.code,
+                    isEnglishVersion: formData.isEnglishVersion,
+                    englishVersion: formData.isEnglishVersion
                 });
             } else {
                 // Create Global Subject (no classId)
                 await academicService.createGlobalSubject({
                     name: formData.name,
-                    code: formData.code
+                    code: formData.code,
+                    isEnglishVersion: formData.isEnglishVersion,
+                    englishVersion: formData.isEnglishVersion
                 });
             }
 
             setShowCreateModal(false);
-            setFormData({ name: '', code: '', academicClassId: selectedClass || '' });
+            setFormData({ name: '', code: '', academicClassId: selectedClass || '', isEnglishVersion: false });
 
             // Refresh list
             if (selectedClass) fetchSubjectsByClass(selectedClass);
@@ -258,7 +264,18 @@ const SubjectList = () => {
                             subjects.map(sub => (
                                 <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-3 text-sm font-mono text-slate-500">{sub.code}</td>
-                                    <td className="px-6 py-3 text-sm font-medium text-slate-800">{sub.name}</td>
+                                    <td className="px-6 py-3 text-sm font-medium text-slate-800 flex items-center gap-2">
+                                        <span>{sub.name}</span>
+                                        {sub.isEnglishVersion ? (
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-700 border border-indigo-200">
+                                                EN
+                                            </span>
+                                        ) : (
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                                BN
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-3 text-sm">
                                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${sub.type === 'CLASS_SUBJECT' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
                                             {sub.type === 'CLASS_SUBJECT' ? 'Class Syllabus' : 'Global Library'}
@@ -318,6 +335,18 @@ const SubjectList = () => {
                                     placeholder="e.g. PHYS-101"
                                 />
                             </div>
+                            <div className="flex items-center gap-2 py-1">
+                                <input
+                                    type="checkbox"
+                                    id="isEnglishVersion"
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                    checked={formData.isEnglishVersion}
+                                    onChange={e => setFormData({ ...formData, isEnglishVersion: e.target.checked })}
+                                />
+                                <label htmlFor="isEnglishVersion" className="text-sm font-medium text-slate-700 cursor-pointer select-none">
+                                    Is English Version (ইংরেজি সংস্করণ)
+                                </label>
+                            </div>
                             <div className="flex justify-end gap-3 mt-6">
                                 <button
                                     type="button"
@@ -364,7 +393,7 @@ const SubjectList = () => {
                                         .filter(sub => !subjects.some(existing => existing.subjectId === sub.id))
                                         .map(sub => (
                                             <option key={sub.id} value={sub.id}>
-                                                {sub.code} - {sub.name}
+                                                {sub.code} - {sub.name} {sub.isEnglishVersion ? '[EN]' : '[BN]'}
                                             </option>
                                         ))}
                                 </select>

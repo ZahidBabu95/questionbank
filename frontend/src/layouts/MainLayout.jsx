@@ -26,7 +26,16 @@ const MainLayout = () => {
     const isDefaultInstitute = isSuperAdmin || userData?.instituteName === 'DEFAULT' || userData?.instituteName === 'Default Institute';
 
     // Robustly check if running inside an iframe, so embedding state is preserved across navigations within the iframe
-    const isEmbedded = window !== window.parent || new URLSearchParams(location.search).get('embedded') === 'true';
+    const searchParams = new URLSearchParams(location.search);
+    const embeddedParam = searchParams.get('embedded');
+    if (embeddedParam === 'true') {
+        sessionStorage.setItem('embedded', 'true');
+    } else if (embeddedParam === 'false') {
+        sessionStorage.removeItem('embedded');
+    }
+    const isEmbedded = window !== window.parent || 
+                       embeddedParam === 'true' || 
+                       sessionStorage.getItem('embedded') === 'true';
 
     useEffect(() => {
         if (!isEmbedded && !isDefaultInstitute && location.pathname === '/profile') {

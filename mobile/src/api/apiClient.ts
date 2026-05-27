@@ -9,6 +9,14 @@ import i18n from '../utils/i18n';
 export const LOCAL_DEV_IP = '192.168.68.110'; // Active local IP address
 export const BASE_URL = `http://${LOCAL_DEV_IP}:8080/api/v1`;
 
+export const getWebAppBaseUrl = () => {
+  if (BASE_URL.includes('192.168.') || BASE_URL.includes('10.') || BASE_URL.includes('localhost') || BASE_URL.includes('172.')) {
+    return `http://${LOCAL_DEV_IP}:5173`;
+  }
+  const match = BASE_URL.match(/^(https?:\/\/[^\/]+)/);
+  return match ? match[1] : 'https://qb.learningshaper.com';
+};
+
 const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: {

@@ -27,6 +27,8 @@ const ShortQuestionCreate = () => {
         marks: 2, difficulty: 'MEDIUM', language: 'Bangla', explanation: ''
     });
 
+    // Reverted frontend auto-filtering logic per user request to allow simple database-driven dropdown mapping
+
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState(null);
     const [examSources, setExamSources] = useState([]);

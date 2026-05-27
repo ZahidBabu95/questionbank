@@ -60,6 +60,89 @@ public class ExamGenerationServiceImpl {
         ClassSubject classSubject = classSubjectRepository.findById(request.getClassSubjectId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "ClassSubject not found"));
 
+        // Resolve global ClassSubject ID if custom tenant
+        String globalTenantIdFallback = "0c430840-39f2-4645-b2e4-53d62c8e4b49";
+        try {
+            Object result = entityManager.createNativeQuery("SELECT CAST(id AS CHAR) FROM institutes WHERE code = 'DEFAULT-001'")
+                    .setMaxResults(1)
+                    .getSingleResult();
+            if (result != null) {
+                globalTenantIdFallback = result.toString();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve globalTenantId via native query, falling back to default UUID: {}", e.getMessage());
+        }
+
+        UUID globalClassSubjectId = classSubject.getId();
+        if (!"DEFAULT".equals(classSubject.getTenantId()) && !globalTenantIdFallback.equals(classSubject.getTenantId())) {
+            try {
+                List<UUID> candidates = entityManager.createQuery(
+                    "SELECT cs.id FROM ClassSubject cs WHERE (cs.tenantId = 'DEFAULT' OR cs.tenantId = :globalTenantId) " +
+                    "AND cs.academicClass.id = :classId AND cs.subject.id = :subId", UUID.class)
+                    .setParameter("globalTenantId", globalTenantIdFallback)
+                    .setParameter("classId", classSubject.getAcademicClass().getId())
+                    .setParameter("subId", classSubject.getSubject().getId())
+                    .getResultList();
+                if (!candidates.isEmpty()) {
+                    globalClassSubjectId = candidates.get(0);
+                    log.info("Resolved global classSubjectId {} for custom tenant classSubjectId {}", globalClassSubjectId, classSubject.getId());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to resolve global classSubjectId, using requested classSubjectId: {}", e.getMessage());
+            }
+        }
+
+        // Resolve global Chapter and Topic IDs (run for both custom and global tenants to guarantee successful mapping)
+        // Resolve Chapters
+        if (request.getChapterIds() != null && !request.getChapterIds().isEmpty()) {
+            try {
+                List<String> customChapterNames = entityManager.createQuery(
+                    "SELECT c.name FROM Chapter c WHERE c.id IN :cIds", String.class)
+                    .setParameter("cIds", request.getChapterIds())
+                    .getResultList();
+                
+                if (!customChapterNames.isEmpty()) {
+                    List<UUID> resolvedGlobalChapterIds = entityManager.createQuery(
+                        "SELECT c.id FROM Chapter c WHERE c.classSubject.id = :globalCsId AND c.name IN :names", UUID.class)
+                        .setParameter("globalCsId", globalClassSubjectId)
+                        .setParameter("names", customChapterNames)
+                        .getResultList();
+                    
+                    if (!resolvedGlobalChapterIds.isEmpty()) {
+                        log.info("Resolving chapters {} to global chapters {} by names {}", request.getChapterIds(), resolvedGlobalChapterIds, customChapterNames);
+                        request.setChapterIds(resolvedGlobalChapterIds);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to resolve global chapter IDs: {}", e.getMessage());
+            }
+        }
+
+        // Resolve Topics
+        if (request.getTopicIds() != null && !request.getTopicIds().isEmpty()) {
+            try {
+                List<String> customTopicNames = entityManager.createQuery(
+                    "SELECT t.name FROM Topic t WHERE t.id IN :tIds", String.class)
+                    .setParameter("tIds", request.getTopicIds())
+                    .getResultList();
+                
+                if (!customTopicNames.isEmpty()) {
+                    List<UUID> resolvedGlobalTopicIds = entityManager.createQuery(
+                        "SELECT t.id FROM Topic t WHERE t.chapter.classSubject.id = :globalCsId AND t.name IN :names", UUID.class)
+                        .setParameter("globalCsId", globalClassSubjectId)
+                        .setParameter("names", customTopicNames)
+                        .getResultList();
+                    
+                    if (!resolvedGlobalTopicIds.isEmpty()) {
+                        log.info("Resolving topics {} to global topics {} by names {}", request.getTopicIds(), resolvedGlobalTopicIds, customTopicNames);
+                        request.setTopicIds(resolvedGlobalTopicIds);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to resolve global topic IDs: {}", e.getMessage());
+            }
+        }
+
         // 4. Build exam entity
         Exam exam = buildExamEntity(request, classSubject, createdBy);
 
@@ -73,7 +156,7 @@ public class ExamGenerationServiceImpl {
 
         for (ExamGenerationRequest.QuestionTypeRule rule : request.getQuestionTypeRules()) {
             List<ExamQuestion> selected = selectQuestionsForRule(
-                    exam, rule, request, usedQuestionIds, orderCounter);
+                    exam, rule, request, globalClassSubjectId, usedQuestionIds, orderCounter);
             
             // If sectionName is specified, associate the questions with that section
             if (rule.getSectionName() != null && !rule.getSectionName().trim().isEmpty()) {
@@ -194,8 +277,17 @@ public class ExamGenerationServiceImpl {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
                 
         String currentTenant = TenantContext.getTenantId();
-        // DEFAULT tenant can edit anything. Normal tenants can only edit their own.
-        if (!"DEFAULT".equals(currentTenant) && !exam.getTenantId().equals(currentTenant)) {
+        boolean isSuperAdmin = false;
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                isSuperAdmin = auth.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN") || a.getAuthority().equals("SUPER_ADMIN"));
+            }
+        } catch (Exception ignored) {}
+
+        // DEFAULT tenant and SUPER_ADMIN can edit anything. Normal tenants can only edit their own.
+        if (!isSuperAdmin && !"DEFAULT".equals(currentTenant) && !exam.getTenantId().equals(currentTenant)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied. Cannot modify cross-tenant data.");
         }
 
@@ -272,6 +364,7 @@ public class ExamGenerationServiceImpl {
             Exam exam,
             ExamGenerationRequest.QuestionTypeRule rule,
             ExamGenerationRequest request,
+            UUID globalClassSubjectId,
             Set<UUID> usedIds,
             int startOrder) {
 
@@ -286,11 +379,33 @@ public class ExamGenerationServiceImpl {
         String tenantId = TenantContext.getTenantId();
         Set<UUID> chapterIds = null;
         if (rule.getCategoryName() != null && !rule.getCategoryName().trim().isEmpty()) {
-            List<UUID> catChapterIds = entityManager.createQuery(
-                "SELECT c.id FROM Chapter c WHERE c.classSubject.id = :csId AND (c.isActive = true OR c.isActive IS NULL) AND LOWER(c.categoryName) = LOWER(:catName)", UUID.class)
-                .setParameter("csId", request.getClassSubjectId())
-                .setParameter("catName", rule.getCategoryName().trim())
+            String catNameClean = rule.getCategoryName().trim();
+            List<String> matchedNames = entityManager.createQuery(
+                "SELECT DISTINCT c.name FROM Chapter c WHERE c.classSubject.id = :csId AND (c.isActive = true OR c.isActive IS NULL) AND LOWER(c.categoryName) = LOWER(:catName)", String.class)
+                .setParameter("csId", globalClassSubjectId)
+                .setParameter("catName", catNameClean)
                 .getResultList();
+
+            List<String> cleanNames = matchedNames.stream()
+                .filter(n -> n != null && !n.trim().isEmpty())
+                .map(String::trim)
+                .collect(Collectors.toList());
+
+            List<UUID> catChapterIds;
+            if (!cleanNames.isEmpty()) {
+                catChapterIds = entityManager.createQuery(
+                    "SELECT c.id FROM Chapter c WHERE c.classSubject.id = :csId AND (c.isActive = true OR c.isActive IS NULL) AND (LOWER(c.categoryName) = LOWER(:catName) OR LOWER(c.name) IN :cleanNames)", UUID.class)
+                    .setParameter("csId", globalClassSubjectId)
+                    .setParameter("catName", catNameClean)
+                    .setParameter("cleanNames", cleanNames.stream().map(String::toLowerCase).collect(Collectors.toList()))
+                    .getResultList();
+            } else {
+                catChapterIds = entityManager.createQuery(
+                    "SELECT c.id FROM Chapter c WHERE c.classSubject.id = :csId AND (c.isActive = true OR c.isActive IS NULL) AND LOWER(c.categoryName) = LOWER(:catName)", UUID.class)
+                    .setParameter("csId", globalClassSubjectId)
+                    .setParameter("catName", catNameClean)
+                    .getResultList();
+            }
             
             Set<UUID> catSet = new HashSet<>(catChapterIds);
             if (request.getChapterIds() != null && !request.getChapterIds().isEmpty()) {
@@ -323,19 +438,19 @@ public class ExamGenerationServiceImpl {
         Set<UUID> currentExcludedIds = new HashSet<>(usedIds);
         List<Question> pool = new ArrayList<>();
 
-        List<Question> easyPool = fetchPool(tenantId, request.getClassSubjectId(),
+        List<Question> easyPool = fetchPool(tenantId, globalClassSubjectId,
                 rule.getQuestionType(), Question.DifficultyLevel.EASY,
                 request.getLanguage(), chapterIds, topicIds, currentExcludedIds, easyCount);
         pool.addAll(easyPool);
         easyPool.forEach(q -> currentExcludedIds.add(q.getId()));
 
-        List<Question> mediumPool = fetchPool(tenantId, request.getClassSubjectId(),
+        List<Question> mediumPool = fetchPool(tenantId, globalClassSubjectId,
                 rule.getQuestionType(), Question.DifficultyLevel.MEDIUM,
                 request.getLanguage(), chapterIds, topicIds, currentExcludedIds, mediumCount);
         pool.addAll(mediumPool);
         mediumPool.forEach(q -> currentExcludedIds.add(q.getId()));
 
-        List<Question> hardPool = fetchPool(tenantId, request.getClassSubjectId(),
+        List<Question> hardPool = fetchPool(tenantId, globalClassSubjectId,
                 rule.getQuestionType(), Question.DifficultyLevel.HARD,
                 request.getLanguage(), chapterIds, topicIds, currentExcludedIds, hardCount);
         pool.addAll(hardPool);
@@ -357,13 +472,52 @@ public class ExamGenerationServiceImpl {
                 if (deficit <= 0) {
                     break;
                 }
-                List<Question> fallbackPool = fetchPool(tenantId, request.getClassSubjectId(),
+                List<Question> fallbackPool = fetchPool(tenantId, globalClassSubjectId,
                         rule.getQuestionType(), level,
                         request.getLanguage(), chapterIds, topicIds, currentExcludedIds, deficit);
                 if (!fallbackPool.isEmpty()) {
                     pool.addAll(fallbackPool);
                     fallbackPool.forEach(q -> currentExcludedIds.add(q.getId()));
                     deficit -= fallbackPool.size();
+                }
+            }
+        }
+
+        // If we still have a deficit, try fallback question types (e.g. CQ_DESCRIPTIVE <-> CQ)
+        if (pool.size() < total) {
+            int deficit = total - pool.size();
+            List<String> fallbackTypes = new ArrayList<>();
+            if ("CQ_DESCRIPTIVE".equalsIgnoreCase(rule.getQuestionType())) {
+                fallbackTypes.add("CQ");
+            } else if ("CQ".equalsIgnoreCase(rule.getQuestionType())) {
+                fallbackTypes.add("CQ_DESCRIPTIVE");
+            }
+
+            for (String fallbackType : fallbackTypes) {
+                if (deficit <= 0) {
+                    break;
+                }
+                log.info("Still have deficit of {} questions for type {}. Trying compatible fallback type {}.",
+                        deficit, rule.getQuestionType(), fallbackType);
+
+                List<Question.DifficultyLevel> allLevels = List.of(
+                        Question.DifficultyLevel.MEDIUM,
+                        Question.DifficultyLevel.EASY,
+                        Question.DifficultyLevel.HARD
+                );
+
+                for (Question.DifficultyLevel level : allLevels) {
+                    if (deficit <= 0) {
+                        break;
+                    }
+                    List<Question> fallbackPool = fetchPool(tenantId, globalClassSubjectId,
+                            fallbackType, level,
+                            request.getLanguage(), chapterIds, topicIds, currentExcludedIds, deficit);
+                    if (!fallbackPool.isEmpty()) {
+                        pool.addAll(fallbackPool);
+                        fallbackPool.forEach(q -> currentExcludedIds.add(q.getId()));
+                        deficit -= fallbackPool.size();
+                    }
                 }
             }
         }
@@ -393,12 +547,21 @@ public class ExamGenerationServiceImpl {
 
         String globalTenantId = null;
         try {
-            globalTenantId = (String) entityManager.createQuery("SELECT CAST(i.id AS string) FROM Institute i WHERE i.code = 'DEFAULT-001'")
+            Object result = entityManager.createNativeQuery("SELECT CAST(id AS CHAR) FROM institutes WHERE code = 'DEFAULT-001'")
                     .setMaxResults(1)
                     .getSingleResult();
+            if (result != null) {
+                globalTenantId = result.toString();
+            }
         } catch (Exception e) {
-            // ignore if not found
+            log.warn("Failed to resolve globalTenantId via native query, falling back to default UUID: {}", e.getMessage());
         }
+        if (globalTenantId == null) {
+            globalTenantId = "0c430840-39f2-4645-b2e4-53d62c8e4b49"; // Default Institute UUID fallback
+        }
+
+        log.info("DEBUG fetchPool values: tenantId='{}', globalTenantId='{}', classSubjectId='{}', type='{}', difficulty='{}', language='{}', chapterIds='{}', needed={}",
+                tenantId, globalTenantId, classSubjectId, type, difficulty, language, chapterIds, needed);
 
         Set<UUID> safeExclusions = excludedIds.isEmpty()
                 ? Set.of(UUID.randomUUID()) // avoids empty IN clause issues
@@ -551,10 +714,19 @@ public class ExamGenerationServiceImpl {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
                 
         String currentTenant = TenantContext.getTenantId();
-        // If current user is DEFAULT tenant, allow access.
+        boolean isSuperAdmin = false;
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                isSuperAdmin = auth.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN") || a.getAuthority().equals("SUPER_ADMIN"));
+            }
+        } catch (Exception ignored) {}
+
+        // If current user is DEFAULT tenant or SUPER_ADMIN, allow access.
         // If exam belongs to DEFAULT tenant, allow access (so others can view global templates).
         // Otherwise, current user must be in the same tenant as the exam.
-        if (!"DEFAULT".equals(currentTenant) && !"DEFAULT".equals(exam.getTenantId()) && !exam.getTenantId().equals(currentTenant)) {
+        if (!isSuperAdmin && !"DEFAULT".equals(currentTenant) && !"DEFAULT".equals(exam.getTenantId()) && !exam.getTenantId().equals(currentTenant)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         
@@ -595,7 +767,16 @@ public class ExamGenerationServiceImpl {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
                 
         String currentTenant = TenantContext.getTenantId();
-        if (!"DEFAULT".equals(currentTenant) && !exam.getTenantId().equals(currentTenant)) {
+        boolean isSuperAdmin = false;
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                isSuperAdmin = auth.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN") || a.getAuthority().equals("SUPER_ADMIN"));
+            }
+        } catch (Exception ignored) {}
+
+        if (!isSuperAdmin && !"DEFAULT".equals(currentTenant) && !exam.getTenantId().equals(currentTenant)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied. Cannot delete cross-tenant data.");
         }
         

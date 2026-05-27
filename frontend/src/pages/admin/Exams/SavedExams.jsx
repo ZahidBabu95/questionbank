@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Save, Search, Loader2, Eye, Trash2, Filter, FileText, CheckCircle2, Archive, RefreshCw, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Save, Search, Loader2, Eye, Trash2, Filter, FileText, CheckCircle2, Archive, RefreshCw, AlertTriangle, ShieldAlert, Download } from 'lucide-react';
 import examService from '../../../services/examService';
 import axiosInstance from '../../../utils/axios';
+import { downloadExamPdf } from '../../../services/pdfService';
 
 const SavedExams = () => {
     const [exams, setExams] = useState([]);
@@ -16,6 +17,8 @@ const SavedExams = () => {
     // Filters
     const [examType, setExamType] = useState('');
     const [status, setStatus] = useState('');
+    const [selectedClass, setSelectedClass] = useState('');
+    const [selectedSubject, setSelectedSubject] = useState('');
     
     // Tabs
     const [activeTab, setActiveTab] = useState('active'); // 'active' or 'recycle'
@@ -23,8 +26,10 @@ const SavedExams = () => {
     const user = userStr ? JSON.parse(userStr) : null;
     const isSuperAdmin = user && user.roles && user.roles.includes('SUPER_ADMIN');
 
-    // For deleting/restoring
+    // For deleting/restoring/downloading
     const [actionId, setActionId] = useState(null);
+    const [downloadingId, setDownloadingId] = useState(null);
+    const [fabOpen, setFabOpen] = useState(false);
 
     // Debounce search
     useEffect(() => {
@@ -136,27 +141,47 @@ const SavedExams = () => {
         }
     };
 
+    // Extract unique classes and subjects dynamically from loaded exams
+    const uniqueClasses = Array.from(new Set(exams.map(e => e.className).filter(Boolean)));
+    const uniqueSubjects = Array.from(new Set(exams.map(e => e.subjectName).filter(Boolean)));
+
+    // Client-side filtering by Class and Subject
+    const filteredExams = exams.filter(exam => {
+        const matchClass = !selectedClass || exam.className === selectedClass;
+        const matchSubject = !selectedSubject || exam.subjectName === selectedSubject;
+        return matchClass && matchSubject;
+    });
+
+    const handleDirectDownloadPdf = async (exam) => {
+        setDownloadingId(exam.id);
+        try {
+            await downloadExamPdf(exam.id, {
+                includeAnswers: false,
+                includeAnswerSheet: false,
+                includeWatermark: false,
+                shuffleQuestions: false,
+                shuffleOptions: false,
+                paperSize: 'A4',
+                template: 'default',
+                fontSize: 11
+            });
+        } catch (err) {
+            console.error("Direct download error", err);
+            alert("Direct PDF download failed. Please try again.");
+        } finally {
+            setDownloadingId(null);
+        }
+    };
+
+    const totalExams = exams.length;
+    const publishedExams = exams.filter(e => e.status === 'PUBLISHED').length;
+    const draftExams = exams.filter(e => e.status !== 'PUBLISHED' && e.status !== 'ARCHIVED').length;
+
     return (
         <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-8 font-outfit text-slate-800 pb-20">
             <div className="max-w-full xl:max-w-[1600px] mx-auto space-y-6">
-                
-                {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <div>
-                        <h1 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-                            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
-                                <Save size={24} />
-                            </div>
-                            Saved Exams Repository
-                        </h1>
-                        <p className="text-sm text-slate-500 mt-2 font-medium">
-                            View, manage, and print your previously generated exam papers.
-                        </p>
-                    </div>
-                    <Link to="/exams/generate/auto" className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors shadow-sm">
-                        + Generate New Exam
-                    </Link>
-                </div>
+
+
 
                 {/* Tabs for Super Admin */}
                 {isSuperAdmin && (
@@ -167,7 +192,7 @@ const SavedExams = () => {
                                 activeTab === 'active'
                                     ? 'bg-slate-800 text-white shadow-md'
                                     : 'text-slate-600 hover:bg-slate-100'
-                            }`}
+                             }`}
                         >
                             <FileText size={16} /> Active Exams
                         </button>
@@ -199,7 +224,7 @@ const SavedExams = () => {
                             />
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                             <Filter size={18} className="text-slate-400 ml-2 hidden md:block" />
                             <select 
                                 className="bg-slate-50 border border-slate-200 text-sm font-medium rounded-xl focus:ring-2 focus:ring-emerald-500/20 p-2.5 outline-none text-slate-600 flex-1 md:flex-none cursor-pointer"
@@ -223,6 +248,28 @@ const SavedExams = () => {
                                 <option value="DRAFT">Draft</option>
                                 <option value="PUBLISHED">Published</option>
                                 <option value="ARCHIVED">Archived</option>
+                            </select>
+
+                            <select 
+                                className="bg-slate-50 border border-slate-200 text-sm font-medium rounded-xl focus:ring-2 focus:ring-emerald-500/20 p-2.5 outline-none text-slate-600 flex-1 md:flex-none cursor-pointer"
+                                value={selectedClass}
+                                onChange={(e) => setSelectedClass(e.target.value)}
+                            >
+                                <option value="">All Classes</option>
+                                {uniqueClasses.map(c => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
+
+                            <select 
+                                className="bg-slate-50 border border-slate-200 text-sm font-medium rounded-xl focus:ring-2 focus:ring-emerald-500/20 p-2.5 outline-none text-slate-600 flex-1 md:flex-none cursor-pointer"
+                                value={selectedSubject}
+                                onChange={(e) => setSelectedSubject(e.target.value)}
+                            >
+                                <option value="">All Subjects</option>
+                                {uniqueSubjects.map(s => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
                             </select>
                         </div>
                     </div>
@@ -251,8 +298,8 @@ const SavedExams = () => {
 
                 </div>
 
-                {/* Table */}
-                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                {/* Desktop view Table (Hidden on Mobile) */}
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hidden md:block">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left text-slate-600">
                             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[11px] font-bold">
@@ -286,7 +333,7 @@ const SavedExams = () => {
                                         </td>
                                     </tr>
                                 ) : (
-                                    exams.map((exam) => (
+                                    filteredExams.map((exam) => (
                                         <tr key={exam.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors group">
                                             <td className="px-6 py-4">
                                                 {getStatusBadge(exam.status)}
@@ -324,13 +371,14 @@ const SavedExams = () => {
                                                             >
                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                                                             </Link>
-                                                            <Link
-                                                                to={`/exams/download/pdf`} 
-                                                                className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 flex items-center justify-center transition-all shadow-sm"
-                                                                title="View / Print"
+                                                            <button
+                                                                onClick={() => handleDirectDownloadPdf(exam)}
+                                                                disabled={downloadingId === exam.id}
+                                                                className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center transition-all shadow-sm"
+                                                                title="Direct PDF Download"
                                                             >
-                                                                <Eye size={16} />
-                                                            </Link>
+                                                                {downloadingId === exam.id ? <Loader2 size={15} className="animate-spin text-rose-500" /> : <Download size={15} />}
+                                                            </button>
                                                             <button
                                                                 onClick={() => handleDelete(exam.id)}
                                                                 disabled={actionId === exam.id}
@@ -368,32 +416,220 @@ const SavedExams = () => {
                             </tbody>
                         </table>
                     </div>
+                </div>
 
-                    {/* Pagination */}
-                    {!loading && totalPages > 0 && (
-                        <div className="p-4 bg-slate-50/50 border-t border-slate-200 flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                Page {page + 1} of {totalPages} <span className="lowercase font-medium ml-1 text-slate-400">({exams.length} items on this page)</span>
-                            </span>
-                            <div className="flex gap-2">
-                                <button
-                                    disabled={page === 0}
-                                    onClick={() => setPage(p => p - 1)}
-                                    className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all shadow-sm"
-                                >
-                                    Previous
-                                </button>
-                                <button
-                                    disabled={page >= totalPages - 1}
-                                    onClick={() => setPage(p => p + 1)}
-                                    className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all shadow-sm"
-                                >
-                                    Next
-                                </button>
+                {/* Mobile view Folder-Card Drive Grid (Visible on Mobile) */}
+                <div className="block md:hidden space-y-4">
+                    {loading ? (
+                        <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center shadow-sm">
+                            <Loader2 className="animate-spin mx-auto text-emerald-500 mb-4" size={32} />
+                            <p className="text-slate-500 font-medium">Loading saved drive exams...</p>
+                        </div>
+                    ) : filteredExams.length === 0 ? (
+                        <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500 shadow-sm">
+                            <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                                <Search size={24} />
                             </div>
+                            <p className="font-bold text-slate-700">No drive exams found.</p>
+                            <p className="text-xs mt-1 mb-4">Try adjusting search/filters or generate a new paper.</p>
+                            <button onClick={() => {setSearchTerm(''); setExamType(''); setStatus(''); setSelectedClass(''); setSelectedSubject('');}} className="text-emerald-600 font-bold text-xs hover:underline">
+                                Reset Drive filters
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-4">
+                            {filteredExams.map((exam) => (
+                                <div key={exam.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4 hover:border-emerald-300 transition-all duration-300 relative overflow-hidden group">
+                                    {/* Folder Header */}
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                                exam.status === 'PUBLISHED' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                                exam.status === 'ARCHIVED' ? 'bg-slate-50 text-slate-600 border border-slate-100' :
+                                                'bg-amber-50 text-amber-600 border border-amber-100'
+                                            }`}>
+                                                <FileText size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-slate-800 text-sm line-clamp-1">{exam.title}</h3>
+                                                <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                                    {new Date(exam.createdAt).toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {getStatusBadge(exam.status)}
+                                    </div>
+
+                                    {/* Folder Metadata Grid */}
+                                    <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                        <div>
+                                            <span className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold">Class</span>
+                                            <span className="font-bold text-slate-700 text-xs">{exam.className || 'N/A'}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold">Subject</span>
+                                            <span className="font-bold text-slate-700 text-xs line-clamp-1">{exam.subjectName || 'N/A'}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold">Duration</span>
+                                            <span className="font-bold text-slate-700 text-xs">{exam.durationMinutes} Mins</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold">Total Marks</span>
+                                            <span className="font-bold text-slate-700 text-xs">{exam.totalMarks} Marks</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Row */}
+                                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                                        <span className="bg-slate-100 text-slate-600 font-bold text-[9px] uppercase px-2.5 py-1 rounded tracking-wider">
+                                            {exam.examType?.replace('_', ' ')}
+                                        </span>
+                                        
+                                        <div className="flex items-center gap-2">
+                                            {activeTab === 'active' ? (
+                                                <>
+                                                    <Link
+                                                        to={`/exams/generate/nexus-editor/${exam.id}`}
+                                                        className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-sm"
+                                                        title="Edit in Nexus Editor"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                                                    </Link>
+                                                    <button
+                                                        onClick={() => handleDirectDownloadPdf(exam)}
+                                                        disabled={downloadingId === exam.id}
+                                                        className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center transition-all shadow-sm"
+                                                        title="Direct PDF Download"
+                                                    >
+                                                        {downloadingId === exam.id ? <Loader2 size={16} className="animate-spin text-rose-500" /> : <Download size={16} />}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(exam.id)}
+                                                        disabled={actionId === exam.id}
+                                                        className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center transition-all disabled:opacity-50 shadow-sm"
+                                                        title="Delete Exam"
+                                                    >
+                                                        {actionId === exam.id ? <Loader2 size={16} className="animate-spin text-rose-500" /> : <Trash2 size={16} />}
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleRestore(exam.id)}
+                                                        disabled={actionId === exam.id}
+                                                        className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 flex items-center justify-center transition-all disabled:opacity-50 shadow-sm"
+                                                        title="Restore Exam"
+                                                    >
+                                                        {actionId === exam.id ? <Loader2 size={16} className="animate-spin text-emerald-500" /> : <RefreshCw size={16} />}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleHardDelete(exam.id)}
+                                                        disabled={actionId === exam.id}
+                                                        className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center transition-all disabled:opacity-50 shadow-sm"
+                                                        title="Hard Delete Forever"
+                                                    >
+                                                        {actionId === exam.id ? <Loader2 size={16} className="animate-spin text-rose-500" /> : <AlertTriangle size={16} />}
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
+
+                {/* Pagination */}
+                {!loading && totalPages > 0 && (
+                    <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Page {page + 1} of {totalPages} <span className="lowercase font-medium ml-1 text-slate-400">({exams.length} items on this page)</span>
+                        </span>
+                        <div className="flex gap-2">
+                            <button
+                                disabled={page === 0}
+                                onClick={() => setPage(p => p - 1)}
+                                className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all shadow-sm"
+                            >
+                                Previous
+                            </button>
+                            <button
+                                disabled={page >= totalPages - 1}
+                                onClick={() => setPage(p => p + 1)}
+                                className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all shadow-sm"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Click Catcher Backdrop for FAB */}
+            {fabOpen && (
+                <div 
+                    className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[2px] transition-all duration-300"
+                    onClick={() => setFabOpen(false)}
+                />
+            )}
+
+            {/* Premium Floating Action Button (FAB) Speed Dial */}
+            <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 font-outfit">
+                {/* Speed Dial Options Container */}
+                <div className={`flex flex-col gap-3 transition-all duration-300 transform origin-bottom ${
+                    fabOpen ? 'scale-100 opacity-100 translate-y-0' : 'scale-75 opacity-0 translate-y-10 pointer-events-none'
+                }`}>
+                    {/* Auto Exam Option */}
+                    <Link
+                        to="/exams/generate/auto"
+                        onClick={() => setFabOpen(false)}
+                        className="flex items-center gap-3 bg-white border border-pink-100 hover:border-pink-200 text-pink-600 px-4 py-2.5 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 group hover:-translate-y-0.5 active:translate-y-0"
+                    >
+                        <span className="text-xs font-bold text-slate-700 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 shadow-sm">
+                            অটো এক্সাম (Auto Exam)
+                        </span>
+                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center shadow-lg shadow-pink-200/50 group-hover:scale-105 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        </div>
+                    </Link>
+
+                    {/* Manual Exam Option */}
+                    <Link
+                        to="/exams/generate/manual"
+                        onClick={() => setFabOpen(false)}
+                        className="flex items-center gap-3 bg-white border border-indigo-100 hover:border-indigo-200 text-indigo-600 px-4 py-2.5 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 group hover:-translate-y-0.5 active:translate-y-0"
+                    >
+                        <span className="text-xs font-bold text-slate-700 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 shadow-sm">
+                            ম্যানুয়্যাল এক্সাম (Manual Exam)
+                        </span>
+                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 text-white flex items-center justify-center shadow-lg shadow-indigo-200/50 group-hover:scale-105 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                        </div>
+                    </Link>
+                </div>
+
+                {/* Main FAB Trigger Button */}
+                <button
+                    onClick={() => setFabOpen(!fabOpen)}
+                    className={`w-14 h-14 rounded-full text-white flex items-center justify-center shadow-2xl transition-all duration-300 relative group overflow-hidden ${
+                        fabOpen 
+                            ? 'bg-gradient-to-tr from-rose-500 to-red-500 shadow-rose-200 hover:shadow-rose-300' 
+                            : 'bg-gradient-to-tr from-emerald-500 to-teal-500 shadow-emerald-200 hover:shadow-emerald-300 hover:scale-105 active:scale-95'
+                    }`}
+                >
+                    <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div 
+                        className="transform transition-transform duration-300" 
+                        style={{ transform: fabOpen ? 'rotate(135deg)' : 'rotate(0deg)' }}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </div>
+                </button>
             </div>
         </div>
     );

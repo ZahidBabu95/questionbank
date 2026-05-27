@@ -30,7 +30,7 @@ public class ExamGenerationController {
      * Auto-generate an exam from question bank.
      */
     @PostMapping("/auto")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_GEN_AUTO_CREATE', 'EXAM_PAPER_GENERATOR_AUTO_GENERATE_CREATE')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> generateExam(
             @Valid @RequestBody ExamGenerationRequest request,
             Authentication auth) {
@@ -45,7 +45,7 @@ public class ExamGenerationController {
      * GET /api/v1/exams/generate/{examId}
      */
     @GetMapping("/{examId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_GEN_VIEW', 'EXAMS_VIEW', 'EXAM_PAPER_GENERATOR_VIEW', 'EXAM_PAPER_GENERATOR_AUTO_GENERATE_VIEW', 'EXAM_PAPER_GENERATOR_LEGACY_EDITOR_VIEW', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_VIEW', 'EXAM_PAPER_GENERATOR_NEXUS_PAPER_ENGINE_V2_VIEW', 'EXAM_PAPER_GENERATOR_PAPER_EDITOR_VIEW', 'EXAM_PAPER_GENERATOR_SAVED_EXAMS_VIEW')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> getExam(@PathVariable UUID examId) {
         ExamDTO exam = examGenerationService.getExam(examId);
         return ResponseEntity.ok(Map.of("success", true, "data", exam));
@@ -56,7 +56,7 @@ public class ExamGenerationController {
      * Same as getExam — returns full question list for preview.
      */
     @GetMapping("/{examId}/preview")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_GEN_VIEW', 'EXAMS_VIEW', 'EXAM_PAPER_GENERATOR_VIEW', 'EXAM_PAPER_GENERATOR_AUTO_GENERATE_VIEW', 'EXAM_PAPER_GENERATOR_LEGACY_EDITOR_VIEW', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_VIEW', 'EXAM_PAPER_GENERATOR_NEXUS_PAPER_ENGINE_V2_VIEW', 'EXAM_PAPER_GENERATOR_PAPER_EDITOR_VIEW', 'EXAM_PAPER_GENERATOR_SAVED_EXAMS_VIEW')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> previewExam(@PathVariable UUID examId) {
         ExamDTO exam = examGenerationService.getExam(examId);
         return ResponseEntity.ok(Map.of("success", true, "data", exam));
@@ -67,7 +67,7 @@ public class ExamGenerationController {
      * Regenerate using same configuration but new random questions.
      */
     @PostMapping("/{examId}/regenerate")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_GEN_EDIT', 'EXAMS_GEN_AUTO_EDIT', 'EXAM_PAPER_GENERATOR_AUTO_GENERATE_EDIT')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> regenerateExam(
             @PathVariable UUID examId,
             Authentication auth) {
@@ -82,7 +82,7 @@ public class ExamGenerationController {
      * DELETE /api/v1/exams/generate/{examId}
      */
     @DeleteMapping("/{examId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_GEN_DELETE', 'EXAM_PAPER_GENERATOR_DELETE', 'EXAMS_GEN_AUTO_DELETE', 'EXAM_PAPER_GENERATOR_AUTO_GENERATE_DELETE', 'EXAM_PAPER_GENERATOR_LEGACY_EDITOR_DELETE', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_DELETE', 'EXAM_PAPER_GENERATOR_NEXUS_PAPER_ENGINE_V2_DELETE', 'EXAM_PAPER_GENERATOR_PAPER_EDITOR_DELETE', 'EXAM_PAPER_GENERATOR_SAVED_EXAMS_DELETE')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> deleteExam(@PathVariable UUID examId) {
         examGenerationService.deleteExam(examId);
         return ResponseEntity.ok(Map.of("success", true, "message", "Exam deleted"));
@@ -92,7 +92,7 @@ public class ExamGenerationController {
      * PUT /api/v1/exams/generate/{examId}
      */
     @PutMapping("/{examId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_GEN_EDIT', 'EXAMS_GEN_AUTO_EDIT', 'EXAM_PAPER_GENERATOR_AUTO_GENERATE_EDIT', 'EXAM_PAPER_GENERATOR_LEGACY_EDITOR_EDIT', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_EDIT', 'EXAM_PAPER_GENERATOR_NEXUS_PAPER_ENGINE_V2_EDIT', 'EXAM_PAPER_GENERATOR_PAPER_EDITOR_EDIT', 'EXAM_PAPER_GENERATOR_SAVED_EXAMS_EDIT')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> updateExam(
             @PathVariable UUID examId,
             @RequestBody ExamDTO dto) {
@@ -112,7 +112,7 @@ public class ExamGenerationController {
      * GET /api/v1/exams/generate (list)
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or hasAnyAuthority('EXAMS_GEN_VIEW', 'EXAMS_VIEW', 'EXAM_PAPER_GENERATOR_VIEW', 'EXAM_PAPER_GENERATOR_AUTO_GENERATE_VIEW', 'EXAM_PAPER_GENERATOR_LEGACY_EDITOR_VIEW', 'EXAM_PAPER_GENERATOR_MANUAL_SELECT_VIEW', 'EXAM_PAPER_GENERATOR_NEXUS_PAPER_ENGINE_V2_VIEW', 'EXAM_PAPER_GENERATOR_PAPER_EDITOR_VIEW', 'EXAM_PAPER_GENERATOR_SAVED_EXAMS_VIEW')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> listExams(
             @RequestParam(required = false) String title,
             @RequestParam(required = false) com.testshaper.entity.Exam.ExamType examType,

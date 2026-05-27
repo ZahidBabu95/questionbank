@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal } from 'lucide-react';
+import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal, Sparkles, AlignLeft, CheckSquare } from 'lucide-react';
 import questionService from '../../../services/questionService';
 import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
@@ -21,7 +21,9 @@ const QuestionList = () => {
         const roleName = typeof r === 'string' ? r : (r.name || '');
         return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
     }) || user?.email === 'admin' || user?.email?.includes('admin@');
-    const hasFullLangAccess = isSuperAdmin || user?.instituteName?.toUpperCase() === 'DEFAULT';
+    const isDefaultInstitute = user?.instituteName?.toUpperCase() === 'DEFAULT' || user?.instituteName === 'Default Institute';
+    const isDefaultOrSuperAdmin = isSuperAdmin || isDefaultInstitute;
+    const hasFullLangAccess = isSuperAdmin || isDefaultInstitute;
 
     const hasPerm = (action) => {
         if (isSuperAdmin) return true;
@@ -68,6 +70,7 @@ const QuestionList = () => {
     const [selectedIds, setSelectedIds] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(50);
+    const [filterUnanswered, setFilterUnanswered] = useState(false);
     const [totalElements, setTotalElements] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [splitScreenMode, setSplitScreenMode] = useState(false);
@@ -190,9 +193,10 @@ const QuestionList = () => {
             classId: selectedClassId,
             subjectId: selectedSubjectId,
             chapterId: selectedChapterId,
-            topicId: selectedTopicId
+            topicId: selectedTopicId,
+            filterUnanswered: filterUnanswered ? 'true' : 'false'
         };
-    }, [filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
+    }, [filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, filterUnanswered]);
 
     const getFullParams = React.useCallback(() => {
         return {
@@ -446,6 +450,29 @@ const QuestionList = () => {
             setSelectedSubjectId('');
         }
     }, [selectedClassId]);
+    
+    // Filter subjects based on language selection
+    const filteredSubjects = useMemo(() => {
+        if (!subjects) return [];
+        return subjects.filter(s => {
+            const isEng = s.isEnglishVersion || s.englishVersion || false;
+            if (filterLanguage === 'English') return isEng === true;
+            if (filterLanguage === 'Bangla') return isEng === false;
+            return true;
+        });
+    }, [subjects, filterLanguage]);
+
+    // Reset selected subject/chapter/topic if no longer in filtered subjects list
+    useEffect(() => {
+        if (selectedSubjectId && filteredSubjects.length > 0) {
+            const exists = filteredSubjects.some(s => s.classSubjectId === selectedSubjectId);
+            if (!exists) {
+                setSelectedSubjectId('');
+                setSelectedChapterId('');
+                setSelectedTopicId('');
+            }
+        }
+    }, [filterLanguage, filteredSubjects, selectedSubjectId]);
 
     // Subject → Chapters
     useEffect(() => {
@@ -519,24 +546,38 @@ const QuestionList = () => {
     };
 
     const prevSearchRef = useRef(searchQuery);
+    const prevBoardsRef = useRef(selectedBoards);
+    const prevYearsRef = useRef(selectedYears);
+    const prevSchoolsRef = useRef(selectedSchools);
 
     // Refetch whenever filters or pagination change
     useEffect(() => {
         const isSearchChange = prevSearchRef.current !== searchQuery;
         prevSearchRef.current = searchQuery;
 
-        if (isSearchChange) {
+        const isBoardsChange = JSON.stringify(prevBoardsRef.current) !== JSON.stringify(selectedBoards);
+        prevBoardsRef.current = selectedBoards;
+
+        const isYearsChange = JSON.stringify(prevYearsRef.current) !== JSON.stringify(selectedYears);
+        prevYearsRef.current = selectedYears;
+
+        const isSchoolsChange = JSON.stringify(prevSchoolsRef.current) !== JSON.stringify(selectedSchools);
+        prevSchoolsRef.current = selectedSchools;
+
+        const needsDebounce = isSearchChange || isBoardsChange || isYearsChange || isSchoolsChange;
+
+        if (needsDebounce) {
             const timer = setTimeout(() => {
                 fetchQuestions();
                 fetchOverviewStats();
-            }, 300); // 300ms debounce only for search query typing
+            }, 400); // 400ms debounce for typing & clicking multiple checkboxes
             return () => clearTimeout(timer);
         } else {
-            // Pagination and other filters trigger instantly
+            // Pagination and academic dropdown filters trigger instantly
             fetchQuestions();
             if (currentPage === 1) fetchOverviewStats();
         }
-    }, [viewMode, currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools]);
+    }, [viewMode, currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools, filterUnanswered]);
 
     // Intersection Observer for Infinite Scrolling
     useEffect(() => {
@@ -760,15 +801,43 @@ const QuestionList = () => {
         setCurrentPage(1); // Reset page to 1 when any filter changes
     }, [filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
 
-    const typeTabs = [
-        { id: 'ALL', label: 'All Types' },
-        { id: 'MCQ', label: 'MCQ' },
-        { id: 'CQ', label: 'Creative (CQ)' },
-        { id: 'SHORT', label: 'Short Q' },
-        ...dynamicTypes
-            .filter(t => !t.isSystemDefault)
-            .map(t => ({ id: t.code, label: t.name }))
-    ];
+    const typeTabs = useMemo(() => {
+        const baseTabs = [
+            { id: 'ALL', label: 'All Types' },
+            { id: 'MCQ', label: 'MCQ' },
+            { id: 'CQ', label: 'Creative (CQ)' },
+            { id: 'SHORT', label: 'Short Q' },
+            ...dynamicTypes
+                .filter(t => !t.isSystemDefault)
+                .map(t => ({ id: t.code, label: t.name }))
+        ];
+
+        if (!overviewStats || !overviewStats.typeCounts) {
+            return baseTabs;
+        }
+
+        return baseTabs.filter(tab => {
+            if (tab.id === 'ALL' || filterType === tab.id) return true;
+            const count = overviewStats.typeCounts[tab.id] || 0;
+            return count > 0;
+        });
+    }, [overviewStats, dynamicTypes, filterType]);
+
+    const getTabIcon = (tabId, isActive) => {
+        const iconClass = `shrink-0 transition-colors duration-300 ${isActive ? 'text-white' : ''}`;
+        switch (tabId) {
+            case 'ALL':
+                return <Layers size={13} className={iconClass} />;
+            case 'MCQ':
+                return <CheckSquare size={13} className={`${iconClass} ${!isActive ? 'text-emerald-500' : ''}`} />;
+            case 'CQ':
+                return <Sparkles size={13} className={`${iconClass} ${!isActive ? 'text-amber-500' : ''}`} />;
+            case 'SHORT':
+                return <AlignLeft size={13} className={`${iconClass} ${!isActive ? 'text-indigo-500' : ''}`} />;
+            default:
+                return <FileText size={13} className={`${iconClass} ${!isActive ? 'text-slate-400' : ''}`} />;
+        }
+    };
 
     const getStatusBadge = (status) => {
         switch (status) {
@@ -800,27 +869,17 @@ const QuestionList = () => {
         setSelectedBoards([]);
         setSelectedYears([]);
         setSelectedSchools([]);
+        setFilterUnanswered(false);
     };
 
     const [isSelectingAll, setIsSelectingAll] = useState(false);
     const [showSourceFilters, setShowSourceFilters] = useState(true);
-    const [activeSidebarTab, setActiveSidebarTab] = useState('source');
+    const [activeSidebarTab, setActiveSidebarTab] = useState('academic');
 
     const handleSelectAllGlobal = async () => {
         setIsSelectingAll(true);
         try {
-            const params = {
-                filterStatus: filterStatus === 'ALL' ? '' : filterStatus,
-                filterType: filterType === 'ALL' ? '' : filterType,
-                language: filterLanguage === 'ALL' ? '' : filterLanguage,
-                search: searchQuery,
-                levelId: selectedLevelId,
-                streamId: selectedStreamId,
-                classId: selectedClassId,
-                subjectId: selectedSubjectId,
-                chapterId: selectedChapterId,
-                topicId: selectedTopicId
-            };
+            const params = getFullParams();
             const ids = await questionService.getAllQuestionIds(params);
             setSelectedIds(ids);
         } catch (error) {
@@ -881,7 +940,7 @@ const QuestionList = () => {
         <div className={`flex flex-col min-h-full bg-slate-50 transition-all duration-300 ${showSourceFilters ? 'md:pr-[320px]' : ''}`}>
 
             {/* OVERVIEW STATS BOARD - COMPACT */}
-            {overviewStats && (
+            {overviewStats && isDefaultOrSuperAdmin && (
                 <div className="px-4 md:px-6 pt-3 pb-2 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-200 bg-white shadow-sm z-20 relative gap-2 md:gap-0">
                     <div className="flex items-center gap-3 w-full md:w-auto overflow-hidden">
                         <h2 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5 shrink-0"><Layers size={14} className="text-primary" /> Question Bank</h2>
@@ -919,12 +978,11 @@ const QuestionList = () => {
                     </div>
                 </div>
             )}
-
             {/* STICKY COMPACT FILTER HEADER */}
             <div className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 md:px-6 pt-3 pb-3 shadow-sm space-y-3">
                 
                 {/* Top Row: Navigation Tabs & Search */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div className="flex flex-col gap-3">
                     <div className="flex bg-slate-100 p-1 rounded-lg self-start shrink-0 overflow-x-auto custom-scrollbar w-full md:w-auto">
                         <button
                             onClick={() => { setViewMode('ALL'); setFilterStatus('ALL'); setCurrentPage(1); }}
@@ -945,55 +1003,64 @@ const QuestionList = () => {
                             <svg className="fill-current w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                             My Saved
                         </button>
-                        <button
-                            onClick={() => { setViewMode('REVISED'); setFilterStatus('REVISED'); setCurrentPage(1); }}
-                            className={`flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-md text-[13px] font-bold transition-all whitespace-nowrap flex-1 md:flex-auto ${viewMode === 'REVISED'
-                                ? 'bg-rose-100 text-rose-700 shadow-sm border border-rose-200'
-                                : 'text-slate-500 hover:text-slate-700 hover:bg-black/5'
-                                }`}
-                        >
-                            <Edit size={13} /> Revised
-                        </button>
+                        {isDefaultOrSuperAdmin && (
+                            <button
+                                onClick={() => { setViewMode('REVISED'); setFilterStatus('REVISED'); setCurrentPage(1); }}
+                                className={`flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-md text-[13px] font-bold transition-all whitespace-nowrap flex-1 md:flex-auto ${viewMode === 'REVISED'
+                                    ? 'bg-rose-100 text-rose-700 shadow-sm border border-rose-200'
+                                    : 'text-slate-500 hover:text-slate-700 hover:bg-black/5'
+                                    }`}
+                            >
+                                <Edit size={13} /> Revised
+                            </button>
+                        )}
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+                    <div className="flex items-center gap-2 w-full md:w-auto">
                         <div className="relative flex-1 md:w-[300px] shrink-0">
-                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                             <input
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search explicitly by question text..."
-                                className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all placeholder:text-slate-400 font-medium"
+                                placeholder="Search question text..."
+                                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all placeholder:text-slate-400 font-medium"
                             />
                         </div>
 
-                        <div className="flex items-center gap-2 self-stretch sm:self-auto">
-                            {hasFullLangAccess && (
-                                <button
-                                    onClick={() => setSplitScreenMode(!splitScreenMode)}
-                                    className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                                    title="Toggle Split-Screen Review Mode"
-                                >
-                                    <GitCompare size={14} /> Review Mode
-                                </button>
-                            )}
-
+                        {hasFullLangAccess && (
                             <button
-                                onClick={() => setShowSourceFilters(!showSourceFilters)}
-                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                                title="Toggle Filters & Tags Sidebar"
+                                onClick={() => setSplitScreenMode(!splitScreenMode)}
+                                className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                title="Toggle Split-Screen Review Mode"
                             >
-                                <Filter size={14} /> Filters & Tags
+                                <GitCompare size={14} /> <span className="hidden md:inline">Review Mode</span>
                             </button>
-                        </div>
+                        )}
+
+                        <button
+                            onClick={() => setShowSourceFilters(!showSourceFilters)}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                            title="Toggle Filters & Tags Sidebar"
+                        >
+                            <Filter size={14} /> <span>Filters</span>
+                        </button>
                     </div>
                 </div>
+            
 
-                {/* Right Side Drawer for Source Metadata Filters */}
+            {/* Backdrop for Mobile Drawer */}
+            {showSourceFilters && (
                 <div 
-                    className={`fixed top-[56px] md:top-[60px] right-0 h-[calc(100vh-56px)] md:h-[calc(100vh-60px)] w-full sm:w-[320px] bg-white border-l border-slate-200 shadow-xl z-30 flex flex-col transition-transform duration-300 ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
-                >
+                    className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-30 transition-opacity duration-300 md:hidden"
+                    onClick={() => setShowSourceFilters(false)}
+                />
+            )}
+
+            {/* Right Side Drawer for Source Metadata Filters */}
+            <div 
+                className={`fixed top-0 md:top-[60px] right-0 h-full md:h-[calc(100vh-60px)] w-[80%] sm:w-[320px] bg-white border-l border-slate-200 shadow-2xl z-40 flex flex-col transition-transform duration-300 ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
+            >
                     <div className="flex flex-col border-b border-slate-200 bg-slate-50 shrink-0">
                         <div className="p-4 pb-2 flex items-center justify-between">
                             <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
@@ -1096,12 +1163,19 @@ const QuestionList = () => {
                                     </div>
                                 )}
 
-                                {subjects.length > 1 && (
+                                {filteredSubjects.length > 0 && (
                                     <div className="flex flex-col gap-1">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Subject</label>
                                         <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
                                             <option value="">সব বিষয়</option>
-                                            {subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
+                                            {filteredSubjects.map(s => {
+                                                const isEng = s.isEnglishVersion || s.englishVersion || false;
+                                                return (
+                                                    <option key={s.classSubjectId} value={s.classSubjectId}>
+                                                        {s.subjectName} {isEng ? '[EN]' : '[BN]'}
+                                                    </option>
+                                                );
+                                            })}
                                         </select>
                                     </div>
                                 )}
@@ -1257,24 +1331,46 @@ const QuestionList = () => {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pt-2 border-t border-slate-100">
                     <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto custom-scrollbar pb-2 md:pb-0">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-2 shrink-0"><ListFilter size={12} className="inline mr-1" />Format:</span>
-                        {typeTabs.map(type => (
-                            <button
-                                key={type.id}
-                                onClick={() => setFilterType(type.id)}
-                                className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all whitespace-nowrap border ${filterType === type.id
-                                    ? 'bg-primary text-white border-primary shadow-sm'
-                                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-700'
+                        {typeTabs.map(type => {
+                            const isActive = filterType === type.id;
+                            return (
+                                <button
+                                    key={type.id}
+                                    onClick={() => setFilterType(type.id)}
+                                    className={`px-3 py-1.5 text-[11px] font-extrabold rounded-full transition-all duration-300 whitespace-nowrap border flex items-center gap-1.5 shadow-sm transform hover:-translate-y-[1px] active:translate-y-0 ${
+                                        isActive
+                                            ? 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-500 text-white border-indigo-400/20 shadow-md shadow-indigo-200/50 font-black'
+                                            : 'bg-white/80 hover:bg-white text-slate-600 hover:text-slate-900 border-slate-200 hover:border-slate-300'
                                     }`}
+                                >
+                                    {getTabIcon(type.id, isActive)}
+                                    {type.label}
+                                </button>
+                            );
+                        })}
+                        {isSuperAdmin && (!overviewStats || overviewStats.unansweredCount > 0 || filterUnanswered) && (
+                            <button
+                                onClick={() => {
+                                    setFilterUnanswered(prev => !prev);
+                                    setCurrentPage(1);
+                                }}
+                                className={`ml-3 px-3 py-1 text-[11px] font-black rounded-full transition-all whitespace-nowrap border flex items-center gap-1 ${
+                                    filterUnanswered
+                                        ? 'bg-rose-500 text-white border-rose-500 shadow-sm hover:bg-rose-600 shadow-rose-100'
+                                        : 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700'
+                                }`}
+                                title="যেসকল প্রশ্নের সঠিক উত্তর বা অপশন সেট করা নেই"
                             >
-                                {type.label}
+                                <XCircle size={12} className={filterUnanswered ? 'animate-pulse' : ''} />
+                                উত্তরবিহীন প্রশ্ন
                             </button>
-                        ))}
+                        )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 w-full md:w-auto overflow-x-auto justify-end shrink-0">
 
 
-                        {totalElements > questions.length && (
+                        {isDefaultOrSuperAdmin && totalElements > questions.length && (
                             <button
                                 onClick={handleSelectAllGlobal}
                                 disabled={isSelectingAll}
@@ -1345,7 +1441,7 @@ const QuestionList = () => {
                                         </div>
                                     </>
                                 )}
-                                {hasPerm('DELETE') && (
+                                {isDefaultOrSuperAdmin && hasPerm('DELETE') && (
                                     <button onClick={handleBulkDelete} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 font-bold rounded-lg border border-slate-200 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all text-[11px] uppercase tracking-wide ml-1">
                                         <Trash2 size={12} />
                                     </button>
@@ -1403,6 +1499,7 @@ const QuestionList = () => {
                                     hasPerm={hasPerm}
                                     splitScreenMode={splitScreenMode}
                                     isViewing={selectedQuestion?.id === q.id}
+                                    isDefaultOrSuperAdmin={isDefaultOrSuperAdmin}
                                 />
                             ))}
                             

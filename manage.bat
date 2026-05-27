@@ -94,7 +94,7 @@ echo [INFO] Starting Frontend on port 5173...
 start "QuestionShaper Frontend" cmd /k "set "PATH=!PATH!" && cd frontend && npm run dev"
 
 echo [INFO] Starting Mobile App (Expo) on port 8081...
-start "QuestionShaper Mobile" cmd /k "set "PATH=!PATH!" && cd mobile && npx expo start"
+start "QuestionShaper Mobile" cmd /k "set "PATH=!PATH!" && cd mobile && npx expo start -c"
 
 echo [SUCCESS] Servers launched.
 pause
@@ -162,7 +162,7 @@ goto menu
 :start_mobile
 echo.
 echo [INFO] Starting Mobile App (Expo) on port 8081...
-start "QuestionShaper Mobile" cmd /k "set "PATH=!PATH!" && cd mobile && npx expo start"
+start "QuestionShaper Mobile" cmd /k "set "PATH=!PATH!" && cd mobile && npx expo start -c"
 echo [SUCCESS] Expo dev server launched.
 pause
 goto menu

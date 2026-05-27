@@ -282,10 +282,19 @@ public class ManualExamServiceImpl {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
                 
         String currentTenant = TenantContext.getTenantId();
-        // If current user is DEFAULT tenant, allow access.
+        boolean isSuperAdmin = false;
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                isSuperAdmin = auth.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN") || a.getAuthority().equals("SUPER_ADMIN"));
+            }
+        } catch (Exception ignored) {}
+
+        // If current user is DEFAULT tenant or SUPER_ADMIN, allow access.
         // If exam belongs to DEFAULT tenant, allow access (so others can view global templates).
         // Otherwise, current user must be in the same tenant as the exam.
-        if (!"DEFAULT".equals(currentTenant) && !"DEFAULT".equals(exam.getTenantId()) && !exam.getTenantId().equals(currentTenant)) {
+        if (!isSuperAdmin && !"DEFAULT".equals(currentTenant) && !"DEFAULT".equals(exam.getTenantId()) && !exam.getTenantId().equals(currentTenant)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         return toDTO(exam);
@@ -328,8 +337,17 @@ public class ManualExamServiceImpl {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
                 
         String currentTenant = TenantContext.getTenantId();
-        // DEFAULT tenant can edit anything. Normal tenants can only edit their own.
-        if (!"DEFAULT".equals(currentTenant) && !exam.getTenantId().equals(currentTenant)) {
+        boolean isSuperAdmin = false;
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                isSuperAdmin = auth.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN") || a.getAuthority().equals("SUPER_ADMIN"));
+            }
+        } catch (Exception ignored) {}
+
+        // DEFAULT tenant and SUPER_ADMIN can edit anything. Normal tenants can only edit their own.
+        if (!isSuperAdmin && !"DEFAULT".equals(currentTenant) && !exam.getTenantId().equals(currentTenant)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied. Cannot modify cross-tenant data.");
         }
         return exam;

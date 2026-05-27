@@ -30,9 +30,49 @@ const AcademicStructure = () => {
     const [editValueName, setEditValueName] = useState('');
     const [editValueOrder, setEditValueOrder] = useState('');
     const [editValueGroup, setEditValueGroup] = useState('');
+    const [editIsEnglishVersion, setEditIsEnglishVersion] = useState(false);
 
     const [showGroupModal, setShowGroupModal] = useState(false);
     const [newGroupName, setNewGroupName] = useState('');
+    const [filterVersion, setFilterVersion] = useState('ALL'); // ALL, Bangla, English
+
+    const academicTranslations = {
+        // Levels
+        "প্রাথমিক": "Primary",
+        "নিম্ন মাধ্যমিক": "Lower Secondary",
+        "মাধ্যমিক": "Secondary",
+        "উচ্চ মাধ্যমিক": "Higher Secondary",
+        "উচ্চশিক্ষা": "Higher Education",
+        
+        // Streams
+        "সাধারণ": "General",
+        "মাদ্রাসা": "Madrasah",
+        "কারিগরি": "Technical",
+        "ভোকেশনাল": "Vocational",
+        
+        // Classes
+        "১ম শ্রেণি": "Class 1",
+        "২য় শ্রেণি": "Class 2",
+        "৩য় শ্রেণি": "Class 3",
+        "৪র্থ শ্রেণি": "Class 4",
+        "৫ম শ্রেণি": "Class 5",
+        "৬ষ্ঠ শ্রেণি": "Class 6",
+        "৭ম শ্রেণি": "Class 7",
+        "৮ম শ্রেণি": "Class 8",
+        "৯ম শ্রেণি": "Class 9",
+        "১০ম শ্রেণি": "Class 10",
+        "৯ম-১০ম শ্রেণি": "Class 9-10",
+        "একাদশ শ্রেণি": "Class 11",
+        "দ্বাদশ শ্রেণি": "Class 12",
+        "একাদশ-দ্বাদশ শ্রেণি": "Class 11-12",
+    };
+
+    const formatAcademicName = (name) => {
+        if (filterVersion === 'English') {
+            return academicTranslations[name] || name;
+        }
+        return name;
+    };
 
     useEffect(() => {
         fetchActiveSession();
@@ -190,8 +230,13 @@ const AcademicStructure = () => {
         setEditItem(item);
         setEditValueName(item.name || item.subjectName);
         setEditValueOrder(item.order || item.chapterNumber || '');
-        if (currentType === 'SUBJECT') setEditValueGroup(item.groupId || '');
-        else setEditValueGroup('');
+        if (currentType === 'SUBJECT') {
+            setEditValueGroup(item.groupId || '');
+            setEditIsEnglishVersion(item.isEnglishVersion || item.englishVersion || false);
+        } else {
+            setEditValueGroup('');
+            setEditIsEnglishVersion(false);
+        }
         setEditMode(true);
     };
 
@@ -213,7 +258,9 @@ const AcademicStructure = () => {
             else if (editType === 'SUBJECT') {
                 const subjectUpdatePayload = {
                     subjectName: editValueName, order: updatedData.order,
-                    groupId: editValueGroup === 'null' || editValueGroup === '' ? null : editValueGroup
+                    groupId: editValueGroup === 'null' || editValueGroup === '' ? null : editValueGroup,
+                    isEnglishVersion: editIsEnglishVersion,
+                    englishVersion: editIsEnglishVersion
                 };
                 await academicService.updateClassSubject(id, subjectUpdatePayload);
             }
@@ -288,28 +335,65 @@ const AcademicStructure = () => {
 
     const { title, icon: Icon, next, placeholder } = getTypeInfo();
 
+    const displayedItems = items.filter(item => {
+        if (currentType === 'SUBJECT') {
+            const isEng = item.isEnglishVersion || item.englishVersion || false;
+            if (filterVersion === 'English') return isEng;
+            if (filterVersion === 'Bangla') return !isEng;
+        }
+        return true;
+    });
+
     return (
         <div className="p-6 bg-slate-50 min-h-screen">
-            <div className="flex justify-between items-start mb-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-800 mb-2">Curriculum Explorer</h1>
+                    <h1 className="text-2xl font-bold text-slate-800 mb-1">Curriculum Explorer</h1>
                     <p className="text-slate-500 text-sm">Design and manage your comprehensive 6-layer architecture.</p>
                 </div>
-                {/* Advanced Quick Actions */}
-                {currentType === 'SUBJECT' && (
-                    <div className="flex bg-white border border-slate-200 p-1.5 rounded-lg shadow-sm gap-2">
-                         <select 
-                            className="text-sm bg-slate-50 border border-slate-200 rounded px-3 py-1.5 outline-none focus:border-blue-500 font-medium text-slate-700"
-                            value={selectedGroupId} onChange={handleGroupFilterChange}
+                
+                <div className="flex flex-wrap items-center gap-3">
+                    {/* Premium Segmented Version Controller */}
+                    <div className="flex bg-white border border-slate-200 p-1.5 rounded-2xl shadow-sm gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setFilterVersion('ALL')}
+                            className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${filterVersion === 'ALL' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50'}`}
                         >
-                            <option value="">-- All Groups (Optional) --</option>
-                            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                        </select>
-                        <button onClick={() => setShowGroupModal(true)} className="flex items-center gap-1 px-3 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded hover:bg-slate-100 hover:text-blue-600 transition-colors text-sm font-medium">
-                            <Settings size={15} /> Groups
+                            All Versions
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setFilterVersion('Bangla')}
+                            className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${filterVersion === 'Bangla' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:text-emerald-600 hover:bg-emerald-50'}`}
+                        >
+                            Bangla Version
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setFilterVersion('English')}
+                            className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${filterVersion === 'English' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                        >
+                            English Version
                         </button>
                     </div>
-                )}
+
+                    {/* Advanced Quick Actions */}
+                    {currentType === 'SUBJECT' && (
+                        <div className="flex bg-white border border-slate-200 p-1.5 rounded-lg shadow-sm gap-2">
+                            <select 
+                                className="text-sm bg-slate-50 border border-slate-200 rounded px-3 py-1.5 outline-none focus:border-blue-500 font-medium text-slate-700"
+                                value={selectedGroupId} onChange={handleGroupFilterChange}
+                            >
+                                <option value="">-- All Groups (Optional) --</option>
+                                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                            </select>
+                            <button onClick={() => setShowGroupModal(true)} className="flex items-center gap-1 px-3 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded hover:bg-slate-100 hover:text-blue-600 transition-colors text-sm font-medium">
+                                <Settings size={15} /> Groups
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Breadcrumb Navigation Bar */}
@@ -327,7 +411,7 @@ const AcademicStructure = () => {
                             onClick={() => handleBreadcrumbClick(index)}
                             className={`px-3 py-1.5 rounded-md transition-colors font-medium text-sm ${index === path.length - 1 ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-100'}`}
                         >
-                            {segment.name}
+                            {formatAcademicName(segment.name)}
                         </button>
                     </React.Fragment>
                 ))}
@@ -346,7 +430,7 @@ const AcademicStructure = () => {
                             <Icon size={20} className="text-blue-500" />
                             {title}
                         </h2>
-                        <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">{items.length} items</span>
+                        <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">{displayedItems.length} items</span>
                     </div>
 
                     <form onSubmit={handleAdd} className="flex gap-2 items-center">
@@ -378,7 +462,7 @@ const AcademicStructure = () => {
                 </div>
 
                 <div className="max-h-[65vh] overflow-y-auto w-full">
-                    {items.length === 0 ? (
+                    {displayedItems.length === 0 ? (
                         <div className="flex flex-col items-center justify-center p-16 text-slate-400">
                             <FolderOpen size={48} className="mb-4 text-slate-200" />
                             <p className="text-slate-500 font-medium">No items found in this directory.</p>
@@ -410,7 +494,7 @@ const AcademicStructure = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {/* Sorting Strategy applied: Selected -> Common -> Standard Order */}
-                                {items.sort((a,b) => {
+                                {displayedItems.sort((a,b) => {
                                     if(currentType === 'SUBJECT') {
                                         const sgName = groups.find(g => g.id === selectedGroupId)?.name;
                                         const aGrp = a.groupName || 'Common (All Groups)';
@@ -427,7 +511,7 @@ const AcademicStructure = () => {
                                     return aOrder - bOrder;
                                 }).map((item) => {
                                     const id = item.id || item.classSubjectId;
-                                    const name = item.name || item.subjectName;
+                                    const name = formatAcademicName(item.name || item.subjectName);
                                     const orderVal = item.order ?? item.chapterNumber ?? '--';
                                     const gName = item.groupName || 'Common';
 
@@ -455,7 +539,18 @@ const AcademicStructure = () => {
                                                     onClick={() => next && handleNavigate(item, next)}
                                                 >
                                                     {currentType === 'TOPIC' ? <Check size={16} className="text-emerald-500"/> : <Folder className="text-blue-500" size={16}/>}
-                                                    {name}
+                                                    <span>{name}</span>
+                                                    {currentType === 'SUBJECT' && (
+                                                        (item.isEnglishVersion || item.englishVersion) ? (
+                                                            <span className="px-1 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-700 border border-indigo-200 ml-1">
+                                                                EN
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-1 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 border border-emerald-200 ml-1">
+                                                                BN
+                                                            </span>
+                                                        )
+                                                    )}
                                                 </div>
                                             </td>
                                             {currentType === 'SUBJECT' && (
@@ -510,12 +605,26 @@ const AcademicStructure = () => {
                                 </div>
                             )}
                             {editType === 'SUBJECT' && (
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Academic Group / Category</label>
-                                    <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" value={editValueGroup} onChange={e => setEditValueGroup(e.target.value)} >
-                                        <option value="null">-- Common Subject (All Groups) --</option>
-                                        {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                                    </select>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Academic Group / Category</label>
+                                        <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" value={editValueGroup} onChange={e => setEditValueGroup(e.target.value)} >
+                                            <option value="null">-- Common Subject (All Groups) --</option>
+                                            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex items-center gap-2 py-1">
+                                        <input
+                                            type="checkbox"
+                                            id="editIsEnglishVersion"
+                                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                            checked={editIsEnglishVersion}
+                                            onChange={e => setEditIsEnglishVersion(e.target.checked)}
+                                        />
+                                        <label htmlFor="editIsEnglishVersion" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                                            Is English Version (ইংরেজি সংস্করণ)
+                                        </label>
+                                    </div>
                                 </div>
                             )}
                             <div className="flex justify-end gap-3 mt-8">
@@ -540,7 +649,9 @@ const AcademicStructure = () => {
                                 <select required className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" value={selectedGlobalSubjectId} onChange={e => setSelectedGlobalSubjectId(e.target.value)}>
                                     <option value="">-- Start Typing or Select --</option>
                                     {globalSubjects.filter(sub => !items.some(existing => existing.subjectId === sub.id)).map(sub => (
-                                        <option key={sub.id} value={sub.id}>{sub.code} - {sub.name} {sub.paper ? `(${sub.paper})` : ''}</option>
+                                        <option key={sub.id} value={sub.id}>
+                                            {sub.code} - {sub.name} {sub.paper ? `(${sub.paper})` : ''} {sub.isEnglishVersion || sub.englishVersion ? '[EN]' : '[BN]'}
+                                        </option>
                                     ))}
                                 </select>
                             </div>

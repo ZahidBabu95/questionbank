@@ -136,6 +136,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                         font-style: ${sec.nameItalic ? 'italic' : 'normal'};
                         text-decoration: ${sec.nameUnderline ? 'underline' : 'none'};
                         ${sec.nameFontSize ? `font-size: ${sec.nameFontSize}px !important;` : ''}
+                        line-height: 1.25 !important;
                         
                         /* Background */
                         ${sec.nameBg === true || (sec.nameBg !== false && s.sectionStyle === 'কালো ব্যাকগ্রাউন্ড') 
@@ -153,8 +154,9 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                             ? 'border-bottom: 1px solid #000000 !important; padding-bottom: 6px; display: block;'
                             : ''}
                         
-                        ${sec.nameTopGap ? `margin-top: ${sec.nameTopGap}px !important; display: block;` : ''}
-                        ${sec.nameGap ? `margin-bottom: ${sec.nameGap}px !important; display: block;` : ''}
+                        margin-top: ${sec.nameTopGap !== undefined && sec.nameTopGap !== '' ? sec.nameTopGap : 24}px !important;
+                        margin-bottom: ${sec.nameGap !== undefined && sec.nameGap !== '' ? sec.nameGap : 12}px !important;
+                        display: block !important;
                         break-after: avoid;
                         page-break-after: avoid;
                         column-break-after: avoid;
@@ -268,6 +270,12 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                     column-span: all !important;
                     -webkit-column-span: all !important;
                     display: block !important;
+                }
+                [data-section-id="${sec.id}"].section-name {
+                    line-height: 1.25 !important;
+                }
+                [data-section-id="${sec.id}"].section-conditions,
+                [data-section-id="${sec.id}"].section-instructions {
                     line-height: ${Math.max(1.0, Number(cLineGap))} !important;
                 }
                 
@@ -303,16 +311,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             }
             
             [data-type="question-block"]::before {
-                position: absolute;
-                left: 0; /* Start at the absolute left of the block */
-                top: 0px; /* Match the paddingTop of QuestionBlockNode for perfect vertical alignment */
-                font-weight: 700;
-                font-size: 1em; /* inherit the dynamic question font size */
-                color: #0f172a;
-                width: 2.2em; /* Safe width for 3 digits + dot */
-                text-align: right;
-                padding-right: 0.4em; /* Space between dot and text */
-                white-space: nowrap;
+                display: none !important;
             }
             
             /* Reset paragraph margins inside editor to avoid prose inheritance */
@@ -362,8 +361,11 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             }
             
             @media print {
+                .paper-canvas-container {
+                    zoom: ${s.printScale ? s.printScale / 100 : 0.96} !important;
+                }
                 .ProseMirror {
-                    zoom: ${s.printScale ? s.printScale / 100 : 1.0} !important;
+                    zoom: 1.0 !important;
                 }
                 .paper-canvas-container,
                 .paper-canvas-container * {

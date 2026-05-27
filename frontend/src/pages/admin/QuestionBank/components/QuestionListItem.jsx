@@ -5,7 +5,7 @@ import MarkdownRenderer from '../../../../components/MarkdownRenderer';
 import CQCombinedRenderer from './CQCombinedRenderer';
 import DynamicQuestionViewer from './DynamicQuestionViewer';
 
-const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, isSaved, onView, onDelete, onRevise, onReview, isSuperAdmin, hasPerm, splitScreenMode, isViewing }) => {
+const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, isSaved, onView, onDelete, onRevise, onReview, isSuperAdmin, hasPerm, splitScreenMode, isViewing, isDefaultOrSuperAdmin }) => {
     const navigate = useNavigate();
     const [showAnswer, setShowAnswer] = useState(false);
     const [showExplanation, setShowExplanation] = useState(false);
@@ -58,8 +58,12 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             onClick={(e) => {
                 const isInteractive = e.target.closest('button') || e.target.closest('input') || e.target.closest('a') || e.target.closest('.group');
                 if (!isInteractive) {
-                    onSelect(q.id);
-                    if (splitScreenMode) {
+                    if (isDefaultOrSuperAdmin) {
+                        onSelect(q.id);
+                        if (splitScreenMode) {
+                            onView(q);
+                        }
+                    } else {
                         onView(q);
                     }
                 }
@@ -92,22 +96,24 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 </div>
 
                 {/* Actions Menu (Three-Dot) */}
-                <div ref={menuRef} className="flex items-center gap-1 shrink-0 relative">
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }}
-                        className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
-                    >
-                        <MoreHorizontal size={16} />
-                    </button>
-                    {isMenuOpen && (
-                        <div className="absolute right-0 top-full w-36 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1 flex flex-col animate-in fade-in slide-in-from-top-1 duration-150">
-                            <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onView(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Eye size={12}/> View Detail</button>
-                            {hasPerm && hasPerm('EDIT') && <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); navigate(`/questions/edit/${q.id}`); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Edit size={12}/> Edit Source</button>}
-                            {q.status === 'REVISED' && isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onReview(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><GitCompare size={12}/> Review Changes</button>}
-                            {isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onDelete(q.id); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><Trash2 size={12}/> Delete</button>}
-                        </div>
-                    )}
-                </div>
+                {isDefaultOrSuperAdmin && (
+                    <div ref={menuRef} className="flex items-center gap-1 shrink-0 relative">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }}
+                            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
+                        >
+                            <MoreHorizontal size={16} />
+                        </button>
+                        {isMenuOpen && (
+                            <div className="absolute right-0 top-full w-36 bg-white border border-slate-200 rounded-xl shadow-xl z-20 py-1 flex flex-col animate-in fade-in slide-in-from-top-1 duration-150">
+                                <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onView(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Eye size={12}/> View Detail</button>
+                                {hasPerm && hasPerm('EDIT') && <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); navigate(`/questions/edit/${q.id}`); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors text-left w-full"><Edit size={12}/> Edit Source</button>}
+                                {q.status === 'REVISED' && isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onReview(q); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><GitCompare size={12}/> Review Changes</button>}
+                                {isSuperAdmin && <button onClick={(e) => { e.stopPropagation(); setIsMenuOpen(false); onDelete(q.id); }} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left w-full"><Trash2 size={12}/> Delete</button>}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* ── Revision Info Banner (visible for REVISED questions) ── */}
@@ -271,13 +277,15 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 {/* Action Buttons (Only Primary Footer Actions) */}
                 {!splitScreenMode && (
                     <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto shrink-0 border-t border-slate-100 sm:border-0 pt-2 sm:pt-0">
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onRevise(q); }}
-                            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:text-primary hover:border-primary/30"
-                            title="Quick Revise"
-                        >
-                            <Edit size={12} /> <span>Revise</span>
-                        </button>
+                        {isDefaultOrSuperAdmin && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onRevise(q); }}
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:text-primary hover:border-primary/30"
+                                title="Quick Revise"
+                            >
+                                <Edit size={12} /> <span>Revise</span>
+                            </button>
+                        )}
                         <button
                             onClick={(e) => { e.stopPropagation(); setIsLiked(!isLiked); }}
                             className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${isLiked ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-rose-400'}`}

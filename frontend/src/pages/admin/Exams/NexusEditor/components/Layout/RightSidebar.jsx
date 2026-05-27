@@ -186,7 +186,7 @@ const getAllImages = (documentQuestions, editor, uiLang) => {
 
 const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
     const {
-        uiLang, t, 
+        uiLang, t, isMobileApp,
         isRightPanelOpen, setIsRightPanelOpen,
         rightPanelWidth, 
         activeTab, 
@@ -405,14 +405,19 @@ const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
     };
 
     return (
-        <div style={{ width: isRightPanelOpen ? 'var(--right-panel-width, 420px)' : '0px' }}
-             className={`${!isDraggingRight ? 'transition-all duration-300 ease-in-out' : ''} border-l border-slate-200 shrink-0 flex flex-col z-10 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] relative print:hidden`}>
+        <div style={{ 
+            width: isMobileApp ? 'min(85vw, 340px)' : (isRightPanelOpen ? 'var(--right-panel-width, 420px)' : '0px'),
+            transform: isMobileApp ? (isRightPanelOpen ? 'translate3d(0, 0, 0)' : 'translate3d(100%, 0, 0)') : 'none',
+            transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+            visibility: (isMobileApp && !isRightPanelOpen) ? 'hidden' : 'visible'
+        }}
+             className={`${!isDraggingRight ? 'transition-all' : ''} border-l border-slate-200 shrink-0 flex flex-col z-30 absolute lg:relative right-0 top-0 h-full shadow-2xl lg:shadow-none rounded-l-2xl lg:rounded-none overflow-hidden print:hidden`}>
             
             {/* Resize Handle */}
             <div onMouseDown={() => setIsDraggingRight(true)}
-                 className={`absolute top-0 left-[-3px] w-[6px] h-full cursor-col-resize z-40 transition-colors hover:bg-indigo-400 ${isDraggingRight ? 'bg-indigo-500' : 'bg-transparent'}`} />
+                 className={`absolute top-0 left-[-3px] w-[6px] h-full cursor-col-resize z-40 hidden lg:block transition-colors hover:bg-indigo-400 ${isDraggingRight ? 'bg-indigo-500' : 'bg-transparent'}`} />
 
-            <div className={`absolute top-0 right-0 h-full flex flex-col bg-white ${!isRightPanelOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${!isDraggingRight ? 'transition-opacity duration-300' : ''}`} style={{ width: 'var(--right-panel-width, 420px)' }}>
+            <div className="h-full flex flex-col bg-white w-full">
                 <div className="p-3 border-b border-slate-100 bg-slate-50 shrink-0 flex items-center justify-between">
                     <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
                         <Settings2 size={16} className="text-indigo-500"/> {t[activeTab]}

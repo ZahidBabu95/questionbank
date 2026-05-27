@@ -267,11 +267,17 @@ public class QuestionServiceImpl implements QuestionService {
         // Identify the global tenant ID (Default Institute)
         String globalTenantId = null;
         try {
-            globalTenantId = (String) entityManager.createQuery("SELECT CAST(i.id AS string) FROM Institute i WHERE i.code = 'DEFAULT-001'")
+            Object result = entityManager.createNativeQuery("SELECT CAST(id AS CHAR) FROM institutes WHERE code = 'DEFAULT-001'")
                     .setMaxResults(1)
                     .getSingleResult();
+            if (result != null) {
+                globalTenantId = result.toString();
+            }
         } catch (Exception e) {
             // ignore if not found
+        }
+        if (globalTenantId == null) {
+            globalTenantId = "0c430840-39f2-4645-b2e4-53d62c8e4b49"; // Default Institute UUID fallback
         }
         
         org.springframework.data.jpa.domain.Specification<Question> spec = 
@@ -293,7 +299,8 @@ public class QuestionServiceImpl implements QuestionService {
                 globalTenantId,
                 filters.get("sourceBoards"),
                 filters.get("sourceYears"),
-                filters.get("sourceSchools")
+                filters.get("sourceSchools"),
+                filters.get("filterUnanswered")
             );
 
         return questionRepository.findAll(spec, pageable);
@@ -315,11 +322,17 @@ public class QuestionServiceImpl implements QuestionService {
 
         String globalTenantId = null;
         try {
-            globalTenantId = (String) entityManager.createQuery("SELECT CAST(i.id AS string) FROM Institute i WHERE i.code = 'DEFAULT-001'")
+            Object result = entityManager.createNativeQuery("SELECT CAST(id AS CHAR) FROM institutes WHERE code = 'DEFAULT-001'")
                     .setMaxResults(1)
                     .getSingleResult();
+            if (result != null) {
+                globalTenantId = result.toString();
+            }
         } catch (Exception e) {
             // ignore if not found
+        }
+        if (globalTenantId == null) {
+            globalTenantId = "0c430840-39f2-4645-b2e4-53d62c8e4b49"; // Default Institute UUID fallback
         }
         
         org.springframework.data.jpa.domain.Specification<Question> spec = 
@@ -341,7 +354,8 @@ public class QuestionServiceImpl implements QuestionService {
                 globalTenantId,
                 filters.get("sourceBoards"),
                 filters.get("sourceYears"),
-                filters.get("sourceSchools")
+                filters.get("sourceSchools"),
+                filters.get("filterUnanswered")
             );
 
         // OPTIMIZED ID PROJECTION: 
@@ -438,11 +452,17 @@ public class QuestionServiceImpl implements QuestionService {
 
         String globalTenantId = null;
         try {
-            globalTenantId = (String) entityManager.createQuery("SELECT CAST(i.id AS string) FROM Institute i WHERE i.code = 'DEFAULT-001'")
+            Object result = entityManager.createNativeQuery("SELECT CAST(id AS CHAR) FROM institutes WHERE code = 'DEFAULT-001'")
                     .setMaxResults(1)
                     .getSingleResult();
+            if (result != null) {
+                globalTenantId = result.toString();
+            }
         } catch (Exception e) {
             // ignore if not found
+        }
+        if (globalTenantId == null) {
+            globalTenantId = "0c430840-39f2-4645-b2e4-53d62c8e4b49"; // Default Institute UUID fallback
         }
         
         long totalQuestions = 0;
@@ -469,7 +489,8 @@ public class QuestionServiceImpl implements QuestionService {
                 globalTenantId,
                 filters != null ? filters.get("sourceBoards") : null,
                 filters != null ? filters.get("sourceYears") : null,
-                filters != null ? filters.get("sourceSchools") : null
+                filters != null ? filters.get("sourceSchools") : null,
+                filters != null ? filters.get("filterUnanswered") : null
             );
 
         // OPTIMIZED STATS PROJECTION: 3 counts in 1 query
@@ -505,12 +526,88 @@ public class QuestionServiceImpl implements QuestionService {
             }
             totalSubjects = entityManager.createQuery(cqSub).getSingleResult();
         }
+        // 1. Get counts grouped by question type (MCQ, CQ, SHORT, etc.)
+        org.springframework.data.jpa.domain.Specification<Question> statsSpec = 
+            com.testshaper.specification.QuestionSpecification.filterQuestions(
+                tenantId,
+                null,
+                null, // null so we get counts for all types
+                filters != null ? filters.get("search") : null,
+                filters != null ? filters.get("language") : null,
+                filters != null ? filters.get("levelId") : null,
+                filters != null ? filters.get("streamId") : null,
+                filters != null ? filters.get("classId") : null,
+                filters != null ? filters.get("subjectId") : null,
+                filters != null ? filters.get("chapterId") : null,
+                filters != null ? filters.get("topicId") : null,
+                filters != null ? filters.get("className") : null,
+                filters != null ? filters.get("subjectName") : null,
+                allowedSubjectIds,
+                globalTenantId,
+                filters != null ? filters.get("sourceBoards") : null,
+                filters != null ? filters.get("sourceYears") : null,
+                filters != null ? filters.get("sourceSchools") : null,
+                null // null so we count both answered and unanswered
+            );
+
+        jakarta.persistence.criteria.CriteriaQuery<Object[]> cqGroup = cb.createQuery(Object[].class);
+        jakarta.persistence.criteria.Root<Question> groupRoot = cqGroup.from(Question.class);
+        cqGroup.multiselect(groupRoot.get("type"), cb.count(groupRoot));
+        cqGroup.groupBy(groupRoot.get("type"));
+        jakarta.persistence.criteria.Predicate groupPredicate = statsSpec.toPredicate(groupRoot, cqGroup, cb);
+        if (groupPredicate != null) {
+            cqGroup.where(groupPredicate);
+        }
+        java.util.List<Object[]> typeCounts = entityManager.createQuery(cqGroup).getResultList();
+        java.util.Map<String, Long> questionTypeCounts = new java.util.HashMap<>();
+        for (Object[] row : typeCounts) {
+            String typeName = (String) row[0];
+            Long typeCount = (Long) row[1];
+            if (typeName != null) {
+                questionTypeCounts.put(typeName, typeCount);
+            }
+        }
+
+        // 2. Get unanswered questions count matching active filters
+        org.springframework.data.jpa.domain.Specification<Question> unansweredSpec = 
+            com.testshaper.specification.QuestionSpecification.filterQuestions(
+                tenantId,
+                null,
+                null, // null to search across all types
+                filters != null ? filters.get("search") : null,
+                filters != null ? filters.get("language") : null,
+                filters != null ? filters.get("levelId") : null,
+                filters != null ? filters.get("streamId") : null,
+                filters != null ? filters.get("classId") : null,
+                filters != null ? filters.get("subjectId") : null,
+                filters != null ? filters.get("chapterId") : null,
+                filters != null ? filters.get("topicId") : null,
+                filters != null ? filters.get("className") : null,
+                filters != null ? filters.get("subjectName") : null,
+                allowedSubjectIds,
+                globalTenantId,
+                filters != null ? filters.get("sourceBoards") : null,
+                filters != null ? filters.get("sourceYears") : null,
+                filters != null ? filters.get("sourceSchools") : null,
+                "true" // filterUnanswered as true
+            );
+
+        jakarta.persistence.criteria.CriteriaQuery<Long> cqUnanswered = cb.createQuery(Long.class);
+        jakarta.persistence.criteria.Root<Question> unansweredRoot = cqUnanswered.from(Question.class);
+        cqUnanswered.select(cb.count(unansweredRoot));
+        jakarta.persistence.criteria.Predicate unansweredPredicate = unansweredSpec.toPredicate(unansweredRoot, cqUnanswered, cb);
+        if (unansweredPredicate != null) {
+            cqUnanswered.where(unansweredPredicate);
+        }
+        Long unansweredCount = entityManager.createQuery(cqUnanswered).getSingleResult();
 
         java.util.Map<String, Object> stats = new java.util.HashMap<>();
         stats.put("totalQuestions", totalQuestions);
         stats.put("totalApproved", totalApproved);
         stats.put("totalPending", totalPending);
         stats.put("totalSubjects", totalSubjects);
+        stats.put("typeCounts", questionTypeCounts);
+        stats.put("unansweredCount", unansweredCount != null ? unansweredCount : 0L);
         return stats;
     }
 

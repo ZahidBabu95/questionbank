@@ -48,6 +48,8 @@ const CQCreate = () => {
         stem: '', difficulty: 'MEDIUM', language: 'Bangla',
     });
 
+    // Reverted frontend auto-filtering logic per user request to allow simple database-driven dropdown mapping
+
     const [subQuestions, setSubQuestions] = useState(
         CQ_STRUCTURES.STANDARD.parts.map(p => ({ label: p.label, text: '', marks: p.marks }))
     );

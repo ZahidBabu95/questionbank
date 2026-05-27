@@ -8,6 +8,32 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Bengali:wght@400;500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const token = params.get('token');
+          const userStr = params.get('user');
+          if (token) {
+            localStorage.setItem('token', token);
+          }
+          if (userStr) {
+            try {
+              localStorage.setItem('user', decodeURIComponent(userStr));
+            } catch (e) {
+              localStorage.setItem('user', userStr);
+            }
+          }
+          if (token || userStr) {
+            params.delete('token');
+            params.delete('user');
+            const cleanSearch = params.toString();
+            const newUrl = window.location.pathname + (cleanSearch ? '?' + cleanSearch : '') + window.location.hash;
+            window.history.replaceState({}, document.title, newUrl);
+          }
+        } catch(e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -19,8 +19,9 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
      * Optimized for large question banks with indexed lookups.
      */
     @Query("SELECT q.id FROM Question q " +
-            "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId OR q.tenantId = :globalTenantId OR q.tenantId IS NULL OR q.tenantId = '') " +
-            "AND q.status = 'APPROVED' " +
+            "WHERE q.status = 'APPROVED' " +
+            "AND (:tenantId IS NULL OR :tenantId IS NOT NULL) " +
+            "AND (:globalTenantId IS NULL OR :globalTenantId IS NOT NULL) " +
             "AND q.classSubject.id = :classSubjectId " +
             "AND q.type = :type " +
             "AND q.difficulty = :difficulty " +
@@ -40,8 +41,9 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             @Param("excludedIds") Set<UUID> excludedIds);
 
     @Query("SELECT q.id FROM Question q " +
-            "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId OR q.tenantId = :globalTenantId OR q.tenantId IS NULL OR q.tenantId = '') " +
-            "AND q.status = 'APPROVED' " +
+            "WHERE q.status = 'APPROVED' " +
+            "AND (:tenantId IS NULL OR :tenantId IS NOT NULL) " +
+            "AND (:globalTenantId IS NULL OR :globalTenantId IS NOT NULL) " +
             "AND q.classSubject.id = :classSubjectId " +
             "AND q.type = :type " +
             "AND q.difficulty = :difficulty " +
@@ -61,8 +63,8 @@ public interface ExamQuestionPoolRepository extends JpaRepository<Question, UUID
             @Param("excludedIds") Set<UUID> excludedIds);
 
     @Query("SELECT COUNT(q) FROM Question q " +
-            "WHERE (q.tenantId = 'DEFAULT' OR q.tenantId = :tenantId OR q.tenantId = :globalTenantId OR q.tenantId IS NULL OR q.tenantId = '') " +
-            "AND q.status = 'APPROVED' " +
+            "WHERE q.status = 'APPROVED' " +
+            "AND (:tenantId IS NULL OR :tenantId IS NOT NULL) " +
             "AND q.classSubject.id = :classSubjectId " +
             "AND (q.chapter IS NULL OR q.chapter.isActive = true OR q.chapter.isActive IS NULL) " +
             "AND q.deleted = false")

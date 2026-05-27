@@ -54,6 +54,8 @@ public interface KnowledgeHubService {
     com.testshaper.entity.AiTopicExtractionJob pauseAiTopicExtractionQueue(java.util.UUID jobId);
     com.testshaper.entity.AiTopicExtractionJob resumeAiTopicExtractionQueue(java.util.UUID jobId);
     com.testshaper.entity.AiTopicExtractionJob cancelAiTopicExtractionQueue(java.util.UUID jobId);
+    java.util.List<java.util.UUID> getIndicesWithProofreadPages(java.util.UUID sourceBookId);
+    void saveTopicExtractionJob(com.testshaper.entity.AiTopicExtractionJob job);
 
     // --- Background Question Generation Queue ---
     com.testshaper.entity.AiQuestionGenerationJob startAiQuestionQueue(UUID sourceBookId, com.testshaper.dto.AiQuestionGenConfigDto config);

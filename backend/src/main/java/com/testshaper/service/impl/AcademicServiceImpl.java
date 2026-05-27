@@ -479,7 +479,9 @@ public class AcademicServiceImpl implements AcademicService {
             java.util.List<ClassSubject> globalCandidates = classSubjectRepository.findByAcademicClassId(cs.getAcademicClass().getId());
             UUID globalCsId = null;
             for (ClassSubject globalCs : globalCandidates) {
-                if ("DEFAULT".equals(globalCs.getTenantId()) && globalCs.getSubject().getName().equalsIgnoreCase(cs.getSubject().getName())) {
+                if ("DEFAULT".equals(globalCs.getTenantId()) 
+                        && globalCs.getSubject().getName().equalsIgnoreCase(cs.getSubject().getName())
+                        && globalCs.getSubject().isEnglishVersion() == cs.getSubject().isEnglishVersion()) {
                     globalCsId = globalCs.getId();
                     break;
                 }

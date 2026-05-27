@@ -613,7 +613,7 @@ public class AIQuestionController {
 
     /** Collect all saved questions for a job (partial or complete) */
     @GetMapping("/chunked/questions/{jobId}")
-    @PreAuthorize("hasAnyAuthority('PERMISSION_AI_MANAGE', 'ROLE_SUPER_ADMIN', 'ROLE_INST_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('PERMISSION_AI_MANAGE', 'ROLE_SUPER_ADMIN', 'ROLE_INST_ADMIN', 'ROLE_TEACHER')")
     public ResponseEntity<?> getJobQuestions(@PathVariable UUID jobId) {
         try {
             AiProcessingJob job = jobRepo.findById(jobId)
