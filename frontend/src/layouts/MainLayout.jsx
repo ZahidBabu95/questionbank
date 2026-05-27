@@ -219,8 +219,8 @@ const MainLayout = () => {
 
     
     
-    // Sidebar is entirely restricted to Admins & Default Institute users
-    const hideSidebar = !isDefaultInstitute;
+    // Sidebar is visible to all users
+    const hideSidebar = false;
 
     const isAiWorkspace = location.pathname.startsWith('/ai-workspace');
     const isFullscreenWorkspace = location.pathname.includes('editor') || 
