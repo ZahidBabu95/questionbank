@@ -31,16 +31,29 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 margin: 0 !important;
                 padding: 0 !important;
                 
-                /* Editor View is forced to 1-column to guarantee accurate vertical page breaks and reading order. */
-                ${Math.max(s.columns || 1, ...(s.sections || []).map(sec => sec.columns || 1)) > 1 ? `
-                /* Column Support */
+                counter-reset: question-counter;
+            }
+
+            /* Column Support */
+            ${s.columns > 1 ? `
+            .paper-content-wrapper.global-columns-active {
+                column-count: ${s.columns};
+                column-gap: ${mmToPx(s.colGap || 10)}px;
+                ${s.columnBorder ? 'column-rule: 1.5px solid #000000;' : ''}
+            }
+            .paper-content-wrapper.global-columns-active .tiptap-content-wrapper,
+            .paper-content-wrapper.global-columns-active .ProseMirror {
+                display: contents !important;
+            }
+            ` : `
+            ${Math.max(s.columns || 1, ...(s.sections || []).map(sec => sec.columns || 1)) > 1 ? `
+            .ProseMirror {
                 column-count: ${Math.max(s.columns || 1, ...(s.sections || []).map(sec => sec.columns || 1))};
                 column-gap: ${mmToPx((s.sections || []).find(sec => sec.columns > 1 && sec.colGap)?.colGap || s.colGap || 10)}px;
                 ${(s.sections || []).some(sec => sec.columns > 1 && sec.columnBorder) || s.columns > 1 ? 'column-rule: 1.5px solid #000000;' : ''}
-                ` : ''}
-                
-                counter-reset: question-counter;
             }
+            ` : ''}
+            `}
             .ProseMirror:focus {
                 outline: none;
             }
@@ -103,6 +116,11 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             }
             .show-answers-compact .nexus-detailed-answer-block .answer-label-text {
                 display: none !important;
+            }
+
+            .nexus-compact-answer-sheet {
+                column-span: all !important;
+                -webkit-column-span: all !important;
             }
 
             /* Dynamic Section Display Toggles & Styles */

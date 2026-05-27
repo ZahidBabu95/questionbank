@@ -430,13 +430,13 @@ const PaperCanvasV2 = React.memo(({
                 </div>
             )}
             
-            <div className="relative z-10 h-full w-full paper-content-wrapper" style={{
+            <div className={`relative z-10 h-full w-full paper-content-wrapper ${s.columns > 1 ? 'global-columns-active' : ''}`} style={{
                 paddingTop, paddingBottom, paddingLeft, paddingRight,
                 color: canvasTextColor
             }}>
                 {/* Native Header for Strict Mode */}
                 {editorMode === 'STRICT_LINKED' && (
-                    <div style={{
+                    <div className="nexus-native-header" style={{
                         fontFamily: s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'), 
                         borderBottom: s.headerStyle === 'ডাবল বর্ডার' ? 'none' : 
                                       s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 
@@ -449,7 +449,7 @@ const PaperCanvasV2 = React.memo(({
                         padding: s.headerStyle === 'বক্স স্টাইল' ? '10px' : '0 0 4px 0',
                         marginBottom: (s.headerStyle === 'ডাবল বর্ডার' || (s.showDivider && s.dividerStyle === 'double')) ? 12 : 20
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', minHeight: '28px', marginBottom: 4, width: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', minHeight: '28px', marginBottom: 4, width: '100%', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
                             {/* Left: Subject Code */}
                             <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start', minWidth: 0 }}>
                                 {(s.showSubjectCode !== false && s.subjectCode) && (
@@ -507,7 +507,7 @@ const PaperCanvasV2 = React.memo(({
                         {(s.showName || s.showRoll || s.showReg) && (
                             <div style={{ marginTop: 12, fontSize: ptToPx(s.bodyFontSize) }}>
                                 {s.candidateLayout === 'inline' ? (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 15 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 15, flexWrap: 'wrap' }}>
                                         {s.showName && <div style={{flex: 1}}><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Name' : 'নাম'}:</span> <span style={{display:'inline-block', width:'calc(100% - 40px)', borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
                                         <div style={{display:'flex', gap: 15, flexShrink: 0}}>
                                             {s.showRoll && <div><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Roll No' : 'রোল নম্বর'}:</span> <span style={{display:'inline-block', width:80, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
@@ -538,7 +538,7 @@ const PaperCanvasV2 = React.memo(({
                 )}
                 
                 {/* Tiptap Content */}
-                <div className={(s.includeAnswerSheet && s.ansLayout !== 'compact') ? `show-answers-${s.ansLayout || 'highlighted'}` : ''}>
+                <div className={`tiptap-content-wrapper ${(s.includeAnswerSheet && s.ansLayout !== 'compact') ? `show-answers-${s.ansLayout || 'highlighted'}` : ''}`}>
                     <EditorContent editor={editor} />
                 </div>
 
@@ -574,7 +574,7 @@ const PaperCanvasV2 = React.memo(({
                     };
 
                     return (
-                        <div className="mt-12 pt-6 border-t-2 border-slate-800 break-inside-avoid print:break-before-page" style={{ fontFamily: s.fontFamily || 'Kalpurush' }}>
+                        <div className="nexus-compact-answer-sheet mt-12 pt-6 border-t-2 border-slate-800 break-inside-avoid print:break-before-page" style={{ fontFamily: s.fontFamily || 'Kalpurush' }}>
                             <h4 className="text-center font-bold mb-4" style={{ fontSize: ptToPx(s.subHeaderFontSize || 14) }}>
                                 {s.language === 'ENGLISH' ? 'Answer Sheet' : 'উত্তরপত্র'}
                             </h4>
