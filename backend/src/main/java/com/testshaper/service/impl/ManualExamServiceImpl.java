@@ -132,7 +132,8 @@ public class ManualExamServiceImpl {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Question not found"));
 
         String currentTenant = TenantContext.getTenantId();
-        if (!question.getTenantId().equals(currentTenant) && 
+        if (question.getStatus() != Question.QuestionStatus.APPROVED &&
+            !question.getTenantId().equals(currentTenant) && 
             !"DEFAULT".equals(currentTenant) && 
             !"DEFAULT".equals(question.getTenantId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cross-tenant access denied");
