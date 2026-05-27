@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
@@ -92,6 +93,7 @@ const PaperCanvasV2 = React.memo(({
     const lastEditorContentRef = useRef(rawContent);
     const editorUpdateTimeoutRef = useRef(null);
     const extractTimeoutRef = useRef(null);
+    const [headerPortalContainer, setHeaderPortalContainer] = useState(null);
 
     const editor = useEditor({
         extensions: [
@@ -328,6 +330,29 @@ const PaperCanvasV2 = React.memo(({
     const ptToPx = (pt) => pt * 1.333333;
     const mmToPx = (mm) => mm * 3.7795275591;
     
+    useEffect(() => {
+        if (!editor || editorMode !== 'STRICT_LINKED') {
+            setHeaderPortalContainer(null);
+            return;
+        }
+        const dom = editor.view.dom;
+        if (!dom) return;
+
+        let container = dom.querySelector('.nexus-native-header-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'nexus-native-header-container';
+            container.setAttribute('contenteditable', 'false');
+            container.setAttribute('data-html2canvas-ignore', 'true');
+            container.style.width = '100%';
+            container.style.display = 'block';
+            container.style.userSelect = 'none';
+            container.style.webkitUserSelect = 'none';
+            dom.insertBefore(container, dom.firstChild);
+        }
+        setHeaderPortalContainer(container);
+    }, [editor, editorMode]);
+
     const paddingTop = mmToPx(s.marginTop || 20);
     const paddingBottom = mmToPx(s.marginBottom || 20);
     const paddingLeft = mmToPx(s.marginLeft || 25);
@@ -430,12 +455,12 @@ const PaperCanvasV2 = React.memo(({
                 </div>
             )}
             
-            <div className={`relative z-10 h-full w-full paper-content-wrapper ${s.columns > 1 ? 'global-columns-active' : ''}`} style={{
+            <div className="relative z-10 h-full w-full paper-content-wrapper" style={{
                 paddingTop, paddingBottom, paddingLeft, paddingRight,
                 color: canvasTextColor
             }}>
-                {/* Native Header for Strict Mode */}
-                {editorMode === 'STRICT_LINKED' && (
+                {/* Render Native Header inside ProseMirror via React Portal */}
+                {headerPortalContainer && createPortal(
                     <div className="nexus-native-header" style={{
                         fontFamily: s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'), 
                         borderBottom: s.headerStyle === 'ডাবল বর্ডার' ? 'none' : 
@@ -534,11 +559,11 @@ const PaperCanvasV2 = React.memo(({
                                 <div style={{ borderTop: '1px solid ' + canvasBorderColor, width: '100%', height: '0px' }}></div>
                             </div>
                         )}
-                    </div>
+                    </div>,
+                    headerPortalContainer
                 )}
-                
                 {/* Tiptap Content */}
-                <div className={`tiptap-content-wrapper ${(s.includeAnswerSheet && s.ansLayout !== 'compact') ? `show-answers-${s.ansLayout || 'highlighted'}` : ''}`}>
+                <div className={(s.includeAnswerSheet && s.ansLayout !== 'compact') ? `show-answers-${s.ansLayout || 'highlighted'}` : ''}>
                     <EditorContent editor={editor} />
                 </div>
 
