@@ -83,6 +83,39 @@ const getDisplayQuestionText = (q) => {
     return text;
 };
 
+const StrictHeaderExtension = Extension.create({
+    name: 'strictHeader',
+    addProseMirrorPlugins() {
+        let dom = null;
+        if (typeof document !== 'undefined') {
+            dom = document.createElement('div');
+            dom.className = 'nexus-native-header-portal-container';
+            dom.setAttribute('contenteditable', 'false');
+            dom.setAttribute('data-html2canvas-ignore', 'true');
+            dom.style.width = '100%';
+            dom.style.display = 'block';
+            dom.style.userSelect = 'none';
+            dom.style.webkitUserSelect = 'none';
+        }
+        return [
+            new Plugin({
+                key: new PluginKey('strictHeader'),
+                props: {
+                    decorations(state) {
+                        if (!dom) return DecorationSet.empty;
+                        const { doc } = state;
+                        const widget = Decoration.widget(0, () => dom, { 
+                            key: 'nexus-header-widget',
+                            side: -1 
+                        });
+                        return DecorationSet.create(doc, [widget]);
+                    }
+                }
+            })
+        ];
+    }
+});
+
 const PaperCanvasV2 = React.memo(({ 
     editorMode, rawContent, setRawContent, 
     docSettings, zoom = 100,
@@ -97,38 +130,6 @@ const PaperCanvasV2 = React.memo(({
     const editorUpdateTimeoutRef = useRef(null);
     const extractTimeoutRef = useRef(null);
     const [headerPortalContainer, setHeaderPortalContainer] = useState(null);
-
-    // Tiptap Extension that prepends a stable widget decoration for the header
-    const StrictHeaderExtension = React.useMemo(() => {
-        return Extension.create({
-            name: 'strictHeader',
-            addProseMirrorPlugins() {
-                return [
-                    new Plugin({
-                        key: new PluginKey('strictHeader'),
-                        props: {
-                            decorations(state) {
-                                if (editorMode !== 'STRICT_LINKED') return DecorationSet.empty;
-                                const { doc } = state;
-                                const widget = Decoration.widget(0, () => {
-                                    const dom = document.createElement('div');
-                                    dom.className = 'nexus-native-header-portal-container';
-                                    dom.setAttribute('contenteditable', 'false');
-                                    dom.setAttribute('data-html2canvas-ignore', 'true');
-                                    dom.style.width = '100%';
-                                    dom.style.display = 'block';
-                                    dom.style.userSelect = 'none';
-                                    dom.style.webkitUserSelect = 'none';
-                                    return dom;
-                                }, { side: -1 });
-                                return DecorationSet.create(doc, [widget]);
-                            }
-                        }
-                    })
-                ];
-            }
-        });
-    }, [editorMode]);
 
     const editor = useEditor({
         extensions: [

@@ -34,8 +34,9 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 /* Column Support */
                 ${Math.max(s.columns || 1, ...(s.sections || []).map(sec => sec.columns || 1)) > 1 ? `
                 column-count: ${Math.max(s.columns || 1, ...(s.sections || []).map(sec => sec.columns || 1))};
-                column-gap: ${mmToPx((s.sections || []).find(sec => sec.columns > 1 && sec.colGap)?.colGap || s.colGap || 10)}px;
+                column-gap: ${mmToPx(s.columns > 1 ? (s.colGap || 10) : ((s.sections || []).find(sec => sec.columns > 1 && sec.colGap)?.colGap || s.colGap || 10))}px;
                 ${(s.sections || []).some(sec => sec.columns > 1 && sec.columnBorder) || (s.columns > 1 && s.columnBorder !== false) ? 'column-rule: 1.5px solid #000000;' : ''}
+                column-fill: balance !important;
                 ` : ''}
                 
                 counter-reset: question-counter;
@@ -50,6 +51,21 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 break-after: avoid !important;
                 page-break-inside: avoid !important;
                 page-break-after: avoid !important;
+                
+                /* Column span and background stacking */
+                ${(s.columns || 1) === 1 ? `
+                column-span: all !important;
+                -webkit-column-span: all !important;
+                ` : ''}
+                position: relative !important;
+                z-index: 10 !important;
+                background-color: #ffffff !important;
+            }
+            .nexus-native-header-portal-container:empty {
+                display: none !important;
+                height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
             }
 
             .nexus-native-header {
@@ -161,6 +177,13 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                         ${sec.nameFontSize ? `font-size: ${sec.nameFontSize}px !important;` : ''}
                         line-height: 1.25 !important;
                         
+                        /* Stacking to prevent column-rule cut-through */
+                        position: relative !important;
+                        z-index: 10 !important;
+                        ${!(sec.nameBg === true || (sec.nameBg !== false && s.sectionStyle === 'কালো ব্যাকগ্রাউন্ড')) 
+                            ? 'background-color: #ffffff !important;' 
+                            : ''}
+                        
                         /* Background */
                         ${sec.nameBg === true || (sec.nameBg !== false && s.sectionStyle === 'কালো ব্যাকগ্রাউন্ড') 
                             ? 'background-color: #000000 !important; color: #ffffff !important; padding: 6px 10px; border-radius: 4px; display: block;' 
@@ -254,6 +277,12 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                         font-style: ${sec.condItalic ? 'italic' : 'normal'};
                         text-decoration: ${sec.condUnderline ? 'underline' : 'none'};
                         ${sec.condFontSize ? `font-size: ${sec.condFontSize}px !important;` : ''}
+                        
+                        /* Stacking to prevent column-rule cut-through */
+                        position: relative !important;
+                        z-index: 10 !important;
+                        ${!sec.condBg ? 'background-color: #ffffff !important;' : ''}
+                        
                         ${sec.condBg ? `background-color: #000000 !important; color: #ffffff !important; padding: 6px 10px; border-radius: 4px; display: block;` : ''}
                         ${sec.condDivider ? `border-bottom: 1px solid #000000; padding-bottom: 6px; display: block;` : ''}
                         ${sec.condTopGap ? `margin-top: ${sec.condTopGap}px !important; display: block;` : ''}
@@ -272,6 +301,12 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                         font-style: ${sec.instItalic ? 'italic' : 'normal'};
                         text-decoration: ${sec.instUnderline ? 'underline' : 'none'};
                         ${sec.instFontSize ? `font-size: ${sec.instFontSize}px !important;` : ''}
+                        
+                        /* Stacking to prevent column-rule cut-through */
+                        position: relative !important;
+                        z-index: 10 !important;
+                        ${!sec.instBg ? 'background-color: #ffffff !important;' : ''}
+                        
                         ${sec.instBg ? `background-color: #000000 !important; color: #ffffff !important; padding: 6px 10px; border-radius: 4px; display: block;` : ''}
                         ${sec.instDivider ? `border-bottom: 1px solid #000000; padding-bottom: 6px; display: block;` : ''}
                         ${sec.instTopGap ? `margin-top: ${sec.instTopGap}px !important; display: block;` : ''}
@@ -286,7 +321,8 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                     }
                 `}
                 
-                /* Ensure Headers, Instructions, and Conditions Span All Columns */
+                /* Ensure Headers, Instructions, and Conditions Span All Columns if section is 1-column */
+                ${((s.columns || 1) === 1 && (sec.columns || 1) === 1) ? `
                 [data-section-id="${sec.id}"].section-name
                 ${sec.showConditions !== false ? `, [data-section-id="${sec.id}"].section-conditions` : ''}
                 ${sec.showInstructions !== false ? `, [data-section-id="${sec.id}"].section-instructions` : ''} {
@@ -294,6 +330,13 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                     -webkit-column-span: all !important;
                     display: block !important;
                 }
+                ` : `
+                [data-section-id="${sec.id}"].section-name
+                ${sec.showConditions !== false ? `, [data-section-id="${sec.id}"].section-conditions` : ''}
+                ${sec.showInstructions !== false ? `, [data-section-id="${sec.id}"].section-instructions` : ''} {
+                    display: block !important;
+                }
+                `}
                 [data-section-id="${sec.id}"].section-name {
                     line-height: 1.25 !important;
                 }
@@ -302,8 +345,34 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                     line-height: ${Math.max(1.0, Number(cLineGap))} !important;
                 }
                 
+                /* Specific Theme backgrounds for spanning elements in this section */
+                ${!(sec.nameBg === true || (sec.nameBg !== false && s.sectionStyle === 'কালো ব্যাকগ্রাউন্ড')) ? `
+                .theme-cream [data-section-id="${sec.id}"].section-name {
+                    background-color: #fbf0d9 !important;
+                }
+                .theme-dark [data-section-id="${sec.id}"].section-name {
+                    background-color: #1e293b !important;
+                }
+                ` : ''}
+                ${!sec.condBg ? `
+                .theme-cream [data-section-id="${sec.id}"].section-conditions {
+                    background-color: #fbf0d9 !important;
+                }
+                .theme-dark [data-section-id="${sec.id}"].section-conditions {
+                    background-color: #1e293b !important;
+                }
+                ` : ''}
+                ${!sec.instBg ? `
+                .theme-cream [data-section-id="${sec.id}"].section-instructions {
+                    background-color: #fbf0d9 !important;
+                }
+                .theme-dark [data-section-id="${sec.id}"].section-instructions {
+                    background-color: #1e293b !important;
+                }
+                ` : ''}
+                
                 /* 1-Column Section Question Blocks Spanning All Columns */
-                ${(!sec.columns || sec.columns === 1) ? `
+                ${((s.columns || 1) === 1 && (sec.columns || 1) === 1) ? `
                 [data-section-id="${sec.id}"][data-type="question-block"] {
                     column-span: all !important;
                     -webkit-column-span: all !important;
@@ -367,8 +436,14 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             .theme-cream .ProseMirror {
                 color: #433422 !important;
             }
+            .theme-cream .nexus-native-header-portal-container {
+                background-color: #fbf0d9 !important;
+            }
             .theme-dark .ProseMirror {
                 color: #f1f5f9 !important;
+            }
+            .theme-dark .nexus-native-header-portal-container {
+                background-color: #1e293b !important;
             }
             .theme-dark [data-type="question-block"]::before {
                 color: #cbd5e1 !important;

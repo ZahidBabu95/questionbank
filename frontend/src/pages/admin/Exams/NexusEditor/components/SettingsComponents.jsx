@@ -63,9 +63,9 @@ export const Num = ({value,onChange,min=0,max=999,step=1,disabled=false,classNam
   );
 };
 
-export const Sel = ({value,onChange,opts}) => (
-  <select value={value} onChange={e=>onChange(e.target.value)}
-    className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400">
+export const Sel = ({value,onChange,opts,disabled=false}) => (
+  <select value={value} onChange={e=>onChange(e.target.value)} disabled={disabled}
+    className="w-full text-[13px] px-2 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 outline-none focus:border-indigo-400 disabled:opacity-40 disabled:bg-slate-50 disabled:cursor-not-allowed">
     {opts.map(o=><option key={o.v || o} value={o.v || o}>{o.l || o}</option>)}
   </select>
 );

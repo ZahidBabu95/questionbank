@@ -397,15 +397,20 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                                                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{uiLang === 'bn' ? 'কলাম এবং ফাকা স্থান (Spacing)' : 'Columns & Spacing'}</div>
                                                     
                                                     <div className="grid grid-cols-3 gap-2">
-                                                        <FL label={uiLang === 'bn' ? 'কলাম' : 'Columns'}>
-                                                            <Sel value={sec.columns || 1} onChange={v => {
-                                                                const ns = [...s.sections]; ns[idx] = { ...ns[idx], columns: Number(v) }; u("sections", ns);
-                                                            }} opts={[
-                                                                {v: 1, l: uiLang === 'bn' ? '১ কলাম' : '1 Column'},
-                                                                {v: 2, l: uiLang === 'bn' ? '২ কলাম' : '2 Columns'},
-                                                                {v: 3, l: uiLang === 'bn' ? '৩ কলাম' : '3 Columns'}
-                                                            ]} />
-                                                        </FL>
+                                                        <FL label={uiLang === 'bn' ? 'কলাম' : 'Columns'} help={s.columns > 1 ? (uiLang === 'bn' ? 'গ্লোবাল কলাম সক্রিয়' : 'Global Active') : ''}>
+    <Sel 
+        value={s.columns > 1 ? s.columns : (sec.columns || 1)} 
+        disabled={s.columns > 1}
+        onChange={v => {
+            const ns = [...s.sections]; ns[idx] = { ...ns[idx], columns: Number(v) }; u("sections", ns);
+        }} 
+        opts={[
+            {v: 1, l: uiLang === 'bn' ? '১ কলাম' : '1 Column'},
+            {v: 2, l: uiLang === 'bn' ? '২ কলাম' : '2 Columns'},
+            {v: 3, l: uiLang === 'bn' ? '৩ কলাম' : '3 Columns'}
+        ]} 
+    />
+</FL>
                                                         <FL label={uiLang === 'bn' ? 'বর্ডার' : 'Border'}>
                                                             <Seg 
                                                                 value={sec.columnBorder === true ? 'yes' : 'no'} 
@@ -607,7 +612,17 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                     
                     <ST>{t.columnLayout || 'Column Layout'}</ST>
                     <FL label={t.colCount || 'Column Count'}>
-                    <Seg value={s.columns} onChange={v=>u("columns",v)} opts={[{v:1,l:t.oneCol || '1'},{v:2,l:t.twoCol || '2'}]}/>
+                    <Seg value={s.columns} onChange={v=>{
+                        const cols = Number(v);
+                        const updatedSections = (s.sections || []).map(sec => ({
+                            ...sec,
+                            columns: cols
+                        }));
+                        uMulti({
+                            columns: cols,
+                            sections: updatedSections
+                        });
+                    }} opts={[{v:1,l:t.oneCol || '1'},{v:2,l:t.twoCol || '2'}]}/>
                     </FL>
                     {s.columns>1 && (
                         <>
