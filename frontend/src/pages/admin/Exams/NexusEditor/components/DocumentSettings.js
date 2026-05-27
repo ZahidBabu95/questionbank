@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS = {
   customH: 297,
   columns: 1,
   colGap: 10,
+  columnBorder: true,
   marginTop: 10,
   marginBottom: 10,
   marginLeft: 10,

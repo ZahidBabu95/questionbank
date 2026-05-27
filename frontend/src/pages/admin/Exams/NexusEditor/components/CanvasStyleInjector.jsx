@@ -35,7 +35,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 ${Math.max(s.columns || 1, ...(s.sections || []).map(sec => sec.columns || 1)) > 1 ? `
                 column-count: ${Math.max(s.columns || 1, ...(s.sections || []).map(sec => sec.columns || 1))};
                 column-gap: ${mmToPx((s.sections || []).find(sec => sec.columns > 1 && sec.colGap)?.colGap || s.colGap || 10)}px;
-                ${(s.sections || []).some(sec => sec.columns > 1 && sec.columnBorder) || s.columns > 1 ? 'column-rule: 1.5px solid #000000;' : ''}
+                ${(s.sections || []).some(sec => sec.columns > 1 && sec.columnBorder) || (s.columns > 1 && s.columnBorder !== false) ? 'column-rule: 1.5px solid #000000;' : ''}
                 ` : ''}
                 
                 counter-reset: question-counter;
@@ -430,6 +430,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
         p.lineHeight === n.lineHeight &&
         p.columns === n.columns &&
         p.colGap === n.colGap &&
+        p.columnBorder === n.columnBorder &&
         p.sectionStyle === n.sectionStyle &&
         p.questionGap === n.questionGap &&
         p.printScale === n.printScale &&

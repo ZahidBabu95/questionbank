@@ -609,7 +609,15 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                     <FL label={t.colCount || 'Column Count'}>
                     <Seg value={s.columns} onChange={v=>u("columns",v)} opts={[{v:1,l:t.oneCol || '1'},{v:2,l:t.twoCol || '2'}]}/>
                     </FL>
-                    {s.columns>1 && <FL label={t.colGap || 'Column Gap'}><Slide value={s.colGap} onChange={v=>u("colGap",v)} min={5} max={30}/></FL>}
+                    {s.columns>1 && (
+                        <>
+                            <FL label={t.colGap || 'Column Gap'}><Slide value={s.colGap} onChange={v=>u("colGap",v)} min={5} max={30}/></FL>
+                            <div className="flex items-center justify-between mt-3 mb-1">
+                                <span className="text-xs text-slate-600 font-bold">{uiLang === 'bn' ? 'কলামের মাঝে বর্ডার' : 'Border Between Columns'}</span>
+                                <Toggle checked={s.columnBorder !== false} onChange={e=>u("columnBorder",e.target.checked)}/>
+                            </div>
+                        </>
+                    )}
                 </div>
                 <div className="w-full h-px bg-slate-200 mb-4"></div>
                 <ST>{t.marginsMm}</ST>
