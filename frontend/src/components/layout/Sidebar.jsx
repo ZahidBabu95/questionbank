@@ -386,6 +386,15 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
     const userPermissions = user?.permissions || [];
 
     const isAuthorized = (item, parentId = '') => {
+        // Check for specific premium pages (AI Sync / Import With AI, AI Cost Manager, Upload History)
+        if (item.path === '/questions/import/ai' || item.path === '/questions/import/api' || item.path === '/ai/upload-history') {
+            const isDefaultInstitute = user?.instituteName?.toUpperCase() === 'DEFAULT' || user?.instituteName === 'Default Institute';
+            const isSuperAdmin = userRoles.includes('SUPER_ADMIN') || user?.email === 'admin' || user?.email?.includes('admin@');
+            if (!isSuperAdmin && !isDefaultInstitute) {
+                return false;
+            }
+        }
+
         // SUPER_ADMIN has god-mode access to everything
         if (userRoles.includes('SUPER_ADMIN')) return true;
 

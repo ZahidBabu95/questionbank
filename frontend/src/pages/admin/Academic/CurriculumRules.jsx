@@ -5,6 +5,15 @@ import academicService from '../../../services/academicService';
 import { Link } from 'react-router-dom';
 
 const CurriculumRules = () => {
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : null;
+    const isSuperAdmin = user?.roles?.some(r => {
+        const roleName = typeof r === 'string' ? r : (r.name || '');
+        return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN';
+    }) || user?.email === 'admin' || user?.email?.includes('admin@');
+    const isDefaultInstitute = user?.instituteName?.toUpperCase() === 'DEFAULT' || user?.instituteName === 'Default Institute';
+    const isDefaultOrSuperAdmin = isSuperAdmin || isDefaultInstitute;
+
     // --- Unified Multi-Select State ---
     const [ruleTarget, setRuleTarget] = useState({
         educationLevel: '', tags: '', className: '', subjectName: ''
@@ -814,9 +823,11 @@ const CurriculumRules = () => {
                                     <p className="text-xs font-bold text-slate-500 mt-1 uppercase tracking-wider truncate" title={ruleTarget.className}>{ruleTarget.className || 'For All Classes'}</p>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <Link to={`/questions/import/ai`} className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-black text-white text-sm font-bold rounded-xl shadow-md transition-all">
-                                        Import Scraper <ArrowRightCircle size={16}/>
-                                    </Link>
+                                    {isDefaultOrSuperAdmin && (
+                                        <Link to={`/questions/import/ai`} className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-black text-white text-sm font-bold rounded-xl shadow-md transition-all">
+                                            Import Scraper <ArrowRightCircle size={16}/>
+                                        </Link>
+                                    )}
                                     <button 
                                         onClick={handleSaveRule} disabled={isSaving}
                                         className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow-indigo-500/30 shadow-lg transition-all disabled:opacity-50"
