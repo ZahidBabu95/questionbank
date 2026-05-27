@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal } from 'lucide-react';
+import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal, ShoppingCart } from 'lucide-react';
 import questionService from '../../../services/questionService';
 import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
@@ -24,6 +25,13 @@ const QuestionList = () => {
     const isDefaultInstitute = user?.instituteName?.toUpperCase() === 'DEFAULT' || user?.instituteName === 'Default Institute';
     const isDefaultOrSuperAdmin = isSuperAdmin || isDefaultInstitute;
     const hasFullLangAccess = isSuperAdmin || isDefaultInstitute;
+    const uniqueInstituteMediums = useMemo(() => {
+        if (!user?.instituteMedium) return [];
+        return [...new Set(user.instituteMedium.split(',').map(m => m.trim()).filter(Boolean))];
+    }, [user?.instituteMedium]);
+
+    const showLanguageFilter = hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.length > 1 || user.instituteMedium.includes('Bilingual');
+
 
     const hasPerm = (action) => {
         if (isSuperAdmin) return true;
@@ -62,8 +70,8 @@ const QuestionList = () => {
     const [viewMode, setViewMode] = useState(() => getInitialViewMode(location.pathname));
     const [filterType, setFilterType] = useState('ALL');
     const [filterLanguage, setFilterLanguage] = useState(() => {
-        if (user?.instituteMedium && user.instituteMedium.includes(',')) return 'ALL';
-        return user?.instituteMedium || 'ALL';
+        if (uniqueInstituteMediums && uniqueInstituteMediums.length > 1) return 'ALL';
+        return uniqueInstituteMediums[0] || 'ALL';
     });
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedQuestion, setSelectedQuestion] = useState(null);
@@ -77,6 +85,57 @@ const QuestionList = () => {
     const [savedIds, setSavedIds] = useState(() => {
         try { return JSON.parse(localStorage.getItem('savedQuestionIds') || '[]'); } catch { return []; }
     });
+
+    const [selectedQuestionMap, setSelectedQuestionMap] = useState({});
+    const [isCartOpen, setIsCartOpen] = useState(false);
+    const cartRef = useRef(null);
+
+    const [portalTarget, setPortalTarget] = useState(null);
+    useEffect(() => {
+        let isMounted = true;
+        const findTarget = () => {
+            const el = document.getElementById('topbar-actions');
+            if (el) {
+                if (isMounted) setPortalTarget(el);
+                return true;
+            }
+            return false;
+        };
+
+        if (!findTarget()) {
+            let count = 0;
+            const interval = setInterval(() => {
+                count++;
+                if (findTarget() || count >= 15) {
+                    clearInterval(interval);
+                }
+            }, 100);
+            return () => {
+                isMounted = false;
+                clearInterval(interval);
+                setPortalTarget(null);
+            };
+        }
+
+        return () => {
+            isMounted = false;
+            setPortalTarget(null);
+        };
+    }, []);
+
+    useEffect(() => {
+        const handleClickOutsideCart = (event) => {
+            if (cartRef.current && !cartRef.current.contains(event.target)) {
+                setIsCartOpen(false);
+            }
+        };
+        if (isCartOpen) {
+            document.addEventListener('mousedown', handleClickOutsideCart);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutsideCart);
+        };
+    }, [isCartOpen]);
 
     const [overviewStats, setOverviewStats] = useState(null);
     const [dynamicTypes, setDynamicTypes] = useState([]);
@@ -474,6 +533,16 @@ const QuestionList = () => {
         }
     }, [filterLanguage, filteredSubjects, selectedSubjectId]);
 
+    // Auto-select subject if only one is available after language filtering
+    useEffect(() => {
+        if (filteredSubjects && filteredSubjects.length === 1) {
+            if (selectedSubjectId !== filteredSubjects[0].classSubjectId) {
+                setSelectedSubjectId(filteredSubjects[0].classSubjectId);
+            }
+        }
+    }, [filteredSubjects, selectedSubjectId]);
+
+
     // Subject → Chapters
     useEffect(() => {
         if (selectedSubjectId) {
@@ -624,12 +693,24 @@ const QuestionList = () => {
     const handleSelectItem = React.useCallback((id) => {
         setSelectedIds(prev => {
             if (prev.includes(id)) {
+                setSelectedQuestionMap(prevMap => {
+                    const newMap = { ...prevMap };
+                    delete newMap[id];
+                    return newMap;
+                });
                 return prev.filter(selectedId => selectedId !== id);
             } else {
+                const qObj = questions.find(q => q.id === id);
+                if (qObj) {
+                    setSelectedQuestionMap(prevMap => ({
+                        ...prevMap,
+                        [id]: qObj
+                    }));
+                }
                 return [...prev, id];
             }
         });
-    }, []);
+    }, [questions]);
 
     const [bulkProgress, setBulkProgress] = useState(null); // { current, total, action }
 
@@ -713,7 +794,7 @@ const QuestionList = () => {
     const handleCreateExamFromSelection = async () => {
         if (!selectedIds.length) return;
         
-        const firstSelectedQ = questions.find(q => q.id === selectedIds[0]);
+        const firstSelectedQ = questions.find(q => q.id === selectedIds[0]) || selectedQuestionMap[selectedIds[0]];
         if (!firstSelectedQ) return;
         
         const sId = firstSelectedQ.classSubject?.id || firstSelectedQ.classSubjectId || selectedSubjectId;
@@ -725,7 +806,7 @@ const QuestionList = () => {
             return;
         }
         
-        const selectedQuestions = questions.filter(q => selectedIds.includes(q.id));
+        const selectedQuestions = selectedIds.map(id => selectedQuestionMap[id] || questions.find(q => q.id === id)).filter(Boolean);
         let totalMarks = 0;
         for (const q of selectedQuestions) {
             totalMarks += q.marks || defaultMarksMap[q.type] || 1;
@@ -770,6 +851,8 @@ const QuestionList = () => {
                     
                     if (publishRes.success) {
                         setBulkProgress({ current: selectedIds.length + 2, total: selectedIds.length + 2, action: 'Opening Editor' });
+                        setSelectedIds([]);
+                        setSelectedQuestionMap({});
                         navigate(`/exams/generate/nexus-editor/${examId}`);
                     }
                 }
@@ -783,7 +866,6 @@ const QuestionList = () => {
     };
 
     useEffect(() => {
-        setSelectedIds([]);
         setCurrentPage(1); // Reset page to 1 when any filter changes
     }, [filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
 
@@ -827,15 +909,49 @@ const QuestionList = () => {
     };
 
     const resetFilters = () => {
-        setSelectedLevelId('');
-        setSelectedStreamId('');
-        setSelectedClassId('');
-        setSelectedSubjectId('');
-        setSelectedChapterId('');
-        setSelectedTopicId('');
+        if (levels.length > 1) {
+            setSelectedLevelId('');
+        } else if (levels.length === 1) {
+            setSelectedLevelId(levels[0].id);
+        }
+
+        if (streams.length > 1) {
+            setSelectedStreamId('');
+        } else if (streams.length === 1) {
+            setSelectedStreamId(streams[0].id);
+        }
+
+        if (classes.length > 1) {
+            setSelectedClassId('');
+        } else if (classes.length === 1) {
+            setSelectedClassId(classes[0].id);
+        }
+
+        if (filteredSubjects.length > 1) {
+            setSelectedSubjectId('');
+        } else if (filteredSubjects.length === 1) {
+            setSelectedSubjectId(filteredSubjects[0].classSubjectId);
+        }
+
+        if (chapters.length > 1) {
+            setSelectedChapterId('');
+        } else if (chapters.length === 1) {
+            setSelectedChapterId(chapters[0].id);
+        }
+
+        if (topics.length > 1) {
+            setSelectedTopicId('');
+        } else if (topics.length === 1) {
+            setSelectedTopicId(topics[0].id);
+        }
+
         setSearchQuery('');
         setFilterType('ALL');
-        setFilterLanguage('ALL');
+        if (showLanguageFilter) {
+            setFilterLanguage('ALL');
+        } else {
+            setFilterLanguage(uniqueInstituteMediums[0] || 'ALL');
+        }
         setSelectedBoards([]);
         setSelectedYears([]);
         setSelectedSchools([]);
@@ -843,8 +959,8 @@ const QuestionList = () => {
     };
 
     const [isSelectingAll, setIsSelectingAll] = useState(false);
-    const [showSourceFilters, setShowSourceFilters] = useState(true);
-    const [activeSidebarTab, setActiveSidebarTab] = useState(isDefaultOrSuperAdmin ? 'source' : 'academic');
+    const [showSourceFilters, setShowSourceFilters] = useState(() => window.innerWidth >= 1024);
+    const [activeSidebarTab, setActiveSidebarTab] = useState('academic');
 
     const handleSelectAllGlobal = async () => {
         setIsSelectingAll(true);
@@ -889,8 +1005,165 @@ const QuestionList = () => {
         return crumbs;
     };
 
+    const renderQuestionCart = () => {
+        return (
+            <div className="relative shrink-0 animate-in fade-in zoom-in duration-200" ref={cartRef}>
+                <button
+                    onClick={() => setIsCartOpen(!isCartOpen)}
+                    className={`relative p-2 rounded-xl transition-colors active:scale-90 ${
+                        isCartOpen
+                            ? 'bg-slate-100 text-slate-800'
+                            : selectedIds.length > 0
+                            ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100/75'
+                            : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                    title="Question Cart"
+                >
+                    <ShoppingCart className="w-5 h-5" />
+                    {selectedIds.length > 0 && (
+                        <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-rose-500 text-white border-[1.5px] border-white rounded-full text-[9px] font-black flex items-center justify-center translate-x-1/4 -translate-y-1/4 animate-bounce">
+                            {selectedIds.length}
+                        </span>
+                    )}
+                </button>
+
+                {isCartOpen && (
+                    <div className="absolute right-0 mt-2 w-[92vw] sm:w-[440px] max-w-[480px] bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                        <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                                <ShoppingCart size={14} className="text-indigo-600" />
+                                <span className="text-[12px] font-black text-slate-700 uppercase tracking-widest">Question Cart</span>
+                            </div>
+                            {selectedIds.length > 0 && (
+                                <button
+                                    onClick={() => {
+                                        setSelectedIds([]);
+                                        setSelectedQuestionMap({});
+                                    }}
+                                    className="text-[10px] font-bold text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-2 py-1 rounded transition-colors"
+                                >
+                                    Clear All
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="max-h-[350px] overflow-y-auto custom-scrollbar p-3 space-y-3">
+                            {selectedIds.length === 0 ? (
+                                <div className="py-8 text-center text-slate-400 flex flex-col items-center justify-center gap-1">
+                                    <ShoppingCart size={24} className="stroke-[1.5] text-slate-300" />
+                                    <span className="text-xs font-bold">Cart is empty</span>
+                                    <span className="text-[10px] opacity-80">Click checkboxes in the list to add questions</span>
+                                </div>
+                            ) : (
+                                Object.entries(
+                                    selectedIds.reduce((groups, id, idx) => {
+                                        const q = selectedQuestionMap[id] || questions.find(x => x.id === id);
+                                        const qType = q?.type || 'OTHER';
+                                        if (!groups[qType]) groups[qType] = [];
+                                        groups[qType].push({ id, q, originalIdx: idx });
+                                        return groups;
+                                    }, {})
+                                ).map(([type, items]) => {
+                                    const getGroupLabel = (t) => {
+                                        switch (t.toUpperCase()) {
+                                            case 'MCQ': return 'Multiple Choice (MCQ)';
+                                            case 'CQ': return 'Creative Questions (CQ)';
+                                            case 'SHORT': return 'Short Questions';
+                                            case 'TF': return 'True / False';
+                                            default: return `${t} Questions`;
+                                        }
+                                    };
+
+                                    return (
+                                        <div key={type} className="space-y-1.5">
+                                            {/* Section Header */}
+                                            <div className="bg-slate-100/80 px-2.5 py-1.5 rounded-lg text-[9px] font-black text-slate-600 uppercase tracking-widest flex items-center justify-between">
+                                                <span>{getGroupLabel(type)}</span>
+                                                <span className="bg-white px-1.5 py-0.5 rounded-md border border-slate-200 text-[9px] text-indigo-600 font-bold shadow-sm">{items.length}</span>
+                                            </div>
+
+                                            {/* Section Items */}
+                                            <div className="space-y-1.5 pl-1">
+                                                {items.map(({ id, q, originalIdx }) => {
+                                                    const cleanText = q?.questionText
+                                                        ? q.questionText.replace(/<[^>]*>/g, '').substring(0, 55) + (q.questionText.replace(/<[^>]*>/g, '').length > 55 ? '...' : '')
+                                                        : `Question #${originalIdx + 1}`;
+                                                    return (
+                                                        <div
+                                                            key={id}
+                                                            className="p-2 bg-slate-50/50 hover:bg-slate-100/50 rounded-xl border border-slate-150 flex items-start gap-2 group transition-all"
+                                                        >
+                                                            <span className="w-5 h-5 rounded bg-indigo-50 text-indigo-600 font-black text-[10px] flex items-center justify-center shrink-0 border border-indigo-100 mt-0.5">
+                                                                {originalIdx + 1}
+                                                            </span>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-[11px] font-bold text-slate-700 leading-snug break-words">
+                                                                    {cleanText}
+                                                                </p>
+                                                                <div className="flex items-center gap-1.5 mt-1">
+                                                                    <span className="text-[9px] text-slate-400 font-bold">
+                                                                        {q?.marks || 1} Marks
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedIds(prev => prev.filter(x => x !== id));
+                                                                    setSelectedQuestionMap(prevMap => {
+                                                                        const newMap = { ...prevMap };
+                                                                        delete newMap[id];
+                                                                        return newMap;
+                                                                    });
+                                                                }}
+                                                                className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-1 rounded-lg transition-all"
+                                                            >
+                                                                <X size={12} />
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {selectedIds.length > 0 && (
+                            <div className="p-3 bg-slate-50 border-t border-slate-100 flex flex-col gap-2 shrink-0">
+                                <div className="flex items-center justify-between text-[11px] font-black text-slate-500 uppercase tracking-widest pl-1">
+                                    <span>Total Questions: {selectedIds.length}</span>
+                                    <span>Total Marks: {(() => {
+                                        const defaultMarksMap = { 'MCQ': 1, 'CQ': 10, 'SHORT': 2 };
+                                        return selectedIds.reduce((sum, id) => {
+                                            const q = selectedQuestionMap[id] || questions.find(x => x.id === id);
+                                            return sum + (q?.marks || defaultMarksMap[q?.type] || 1);
+                                        }, 0);
+                                    })()}</span>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setIsCartOpen(false);
+                                        handleCreateExamFromSelection();
+                                    }}
+                                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-black text-white shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
+                                    style={{ background: 'linear-gradient(135deg, var(--primary-color, #e91e8c) 0%, var(--secondary-color, #a855f7) 100%)' }}
+                                >
+                                    <FileText size={13} /> Create Exam
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
         <>
+        {/* Portal Question Cart next to the Notification Bell */}
+        {portalTarget && createPortal(renderQuestionCart(), portalTarget)}
+
         {/* Bulk Action Progress Overlay */}
         {bulkProgress && (
             <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center">
@@ -910,44 +1183,48 @@ const QuestionList = () => {
         <div className={`flex flex-col min-h-full bg-slate-50 transition-all duration-300 ${showSourceFilters ? 'md:pr-[320px]' : ''}`}>
 
             {/* OVERVIEW STATS BOARD - COMPACT */}
-            {overviewStats && isDefaultOrSuperAdmin && (
-                <div className="px-4 md:px-6 pt-3 pb-2 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-200 bg-white shadow-sm z-20 relative gap-2 md:gap-0">
-                    <div className="flex items-center gap-3 w-full md:w-auto overflow-hidden">
-                        <h2 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5 shrink-0"><Layers size={14} className="text-primary" /> Question Bank</h2>
-                        {getActiveFiltersBreadcrumb().length > 0 && (
-                            <div className="hidden sm:flex items-center gap-2 text-xs font-extrabold text-slate-500 overflow-x-auto text-ellipsis whitespace-nowrap bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 shadow-inner custom-scrollbar">
-                                {getActiveFiltersBreadcrumb().map((crumb, idx, arr) => (
-                                    <React.Fragment key={idx}>
-                                        <span className={idx === arr.length - 1 ? "text-primary tracking-wide" : "tracking-wide"}>{crumb}</span>
-                                        {idx < arr.length - 1 && <span className="text-slate-400 mx-0.5">/</span>}
-                                    </React.Fragment>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-4 shrink-0">
-                        <div className="flex flex-col items-end">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Total</span>
-                            <span className="text-sm font-black text-slate-800 leading-none">{overviewStats.totalQuestions}</span>
+            <div className={`px-4 md:px-6 pt-3 pb-2 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-200 bg-white shadow-sm z-40 relative gap-2 md:gap-0 ${!isDefaultOrSuperAdmin ? 'hidden md:flex' : ''}`}>
+                <div className="flex items-center gap-3 w-full md:w-auto overflow-hidden">
+                    <h2 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5 shrink-0"><Layers size={14} className="text-primary" /> Question Bank</h2>
+                    {getActiveFiltersBreadcrumb().length > 0 && (
+                        <div className="hidden sm:flex items-center gap-2 text-xs font-extrabold text-slate-500 overflow-x-auto text-ellipsis whitespace-nowrap bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 shadow-inner custom-scrollbar">
+                            {getActiveFiltersBreadcrumb().map((crumb, idx, arr) => (
+                                <React.Fragment key={idx}>
+                                    <span className={idx === arr.length - 1 ? "text-primary tracking-wide" : "tracking-wide"}>{crumb}</span>
+                                    {idx < arr.length - 1 && <span className="text-slate-400 mx-0.5">/</span>}
+                                </React.Fragment>
+                            ))}
                         </div>
-                        <div className="w-px h-6 bg-slate-200"></div>
-                        <div className="flex flex-col items-end">
-                            <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest leading-none mb-1">Approved</span>
-                            <span className="text-sm font-black text-emerald-700 leading-none">{overviewStats.totalApproved}</span>
-                        </div>
-                        <div className="w-px h-6 bg-slate-200"></div>
-                        <div className="flex flex-col items-end">
-                            <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest leading-none mb-1">Pending</span>
-                            <span className="text-sm font-black text-amber-700 leading-none">{overviewStats.totalPending}</span>
-                        </div>
-                        <div className="w-px h-6 bg-slate-200 hidden sm:block"></div>
-                        <div className="flex-col items-end hidden sm:flex">
-                            <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest leading-none mb-1">Subjects</span>
-                            <span className="text-sm font-black text-indigo-700 leading-none">{overviewStats.totalSubjects}</span>
-                        </div>
-                    </div>
+                    )}
                 </div>
-            )}
+                
+                <div className="flex items-center gap-4 shrink-0 mt-2 md:mt-0 justify-end w-full md:w-auto">
+                    {overviewStats && isDefaultOrSuperAdmin && (
+                        <>
+                            <div className="flex flex-col items-end">
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Total</span>
+                                <span className="text-sm font-black text-slate-800 leading-none">{overviewStats.totalQuestions}</span>
+                            </div>
+                            <div className="w-px h-6 bg-slate-200"></div>
+                            <div className="flex flex-col items-end">
+                                <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest leading-none mb-1">Approved</span>
+                                <span className="text-sm font-black text-emerald-700 leading-none">{overviewStats.totalApproved}</span>
+                            </div>
+                            <div className="w-px h-6 bg-slate-200"></div>
+                            <div className="flex flex-col items-end">
+                                <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest leading-none mb-1">Pending</span>
+                                <span className="text-sm font-black text-amber-700 leading-none">{overviewStats.totalPending}</span>
+                            </div>
+                            <div className="w-px h-6 bg-slate-200 hidden sm:block"></div>
+                            <div className="flex-col items-end hidden sm:flex">
+                                <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest leading-none mb-1">Subjects</span>
+                                <span className="text-sm font-black text-indigo-700 leading-none">{overviewStats.totalSubjects}</span>
+                            </div>
+                            <div className="w-px h-6 bg-slate-200"></div>
+                        </>
+                    )}
+                </div>
+            </div>
 
             {/* STICKY COMPACT FILTER HEADER */}
             <div className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 md:px-6 pt-3 pb-3 shadow-sm space-y-3">
@@ -987,8 +1264,8 @@ const QuestionList = () => {
                         )}
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-                        <div className="relative flex-1 md:w-[300px] shrink-0">
+                    <div className="flex flex-row items-center gap-2 w-full md:w-auto">
+                        <div className="relative flex-1 md:w-[260px] lg:w-[300px]">
                             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                             <input
                                 type="text"
@@ -999,7 +1276,7 @@ const QuestionList = () => {
                             />
                         </div>
 
-                        <div className="flex items-center gap-2 self-stretch sm:self-auto">
+                        <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
                             {hasFullLangAccess && (
                                 <button
                                     onClick={() => setSplitScreenMode(!splitScreenMode)}
@@ -1012,44 +1289,55 @@ const QuestionList = () => {
 
                             <button
                                 onClick={() => setShowSourceFilters(!showSourceFilters)}
-                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                                 title="Toggle Filters & Tags Sidebar"
                             >
-                                <Filter size={14} /> Filters & Tags
+                                <Filter size={14} />
+                                <span className="hidden sm:inline">Filters & Tags</span>
+                                <span className="sm:hidden">Filters</span>
                             </button>
+
+                            {!portalTarget && renderQuestionCart()}
                         </div>
                     </div>
                 </div>
 
+                {/* Backdrop for Filters & Tags Drawer */}
+                {showSourceFilters && (
+                    <div 
+                        onClick={() => setShowSourceFilters(false)}
+                        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 lg:hidden"
+                    />
+                )}
+
                 {/* Right Side Drawer for Source Metadata Filters */}
                 <div 
-                    className={`fixed top-[56px] md:top-[60px] right-0 h-[calc(100vh-56px)] md:h-[calc(100vh-60px)] w-full sm:w-[320px] bg-white border-l border-slate-200 shadow-xl z-30 flex flex-col transition-transform duration-300 ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
+                    className={`fixed right-0 bg-white border-l border-slate-200 flex flex-col transition-transform duration-300 top-0 h-screen w-[290px] sm:w-[320px] z-50 shadow-2xl lg:top-[56px] lg:md:top-[60px] lg:h-[calc(100vh-56px)] lg:md:h-[calc(100vh-60px)] lg:w-[320px] lg:z-20 lg:shadow-none ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
                 >
-                    <div className="flex flex-col border-b border-slate-200 bg-slate-50 shrink-0">
+                    <div className="flex flex-col border-b border-slate-200 bg-slate-50 shrink-0 pt-3 lg:pt-0">
                         <div className="p-4 pb-2 flex items-center justify-between">
                             <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
                                 <Filter size={14} className="text-primary"/> Filters & Tags
                             </h3>
-                            <button onClick={() => setShowSourceFilters(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 p-1.5 rounded-lg transition-colors">
+                            <button onClick={() => setShowSourceFilters(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 p-1.5 rounded-lg transition-colors lg:hidden">
                                 <X size={16} />
                             </button>
                         </div>
-                        {isDefaultOrSuperAdmin && (
-                            <div className="flex w-full mt-2 px-2">
-                                <button 
-                                    onClick={() => setActiveSidebarTab('academic')}
-                                    className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'academic' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    Academic
-                                </button>
-                                <button 
-                                    onClick={() => setActiveSidebarTab('source')}
-                                    className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'source' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    Source Tags
-                                </button>
-                            </div>
-                        )}
+                        
+                        <div className="flex w-full mt-2 px-2">
+                            <button 
+                                onClick={() => setActiveSidebarTab('academic')}
+                                className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'academic' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                            >
+                                Academic Filters
+                            </button>
+                            <button 
+                                onClick={() => setActiveSidebarTab('source')}
+                                className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'source' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                            >
+                                Board & Year
+                            </button>
+                        </div>
                     </div>
                     
                     <div className="p-5 flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-6">
@@ -1089,15 +1377,17 @@ const QuestionList = () => {
                                     )}
                                 </div>
 
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Language</label>
-                                    <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-50">
-                                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual') || user.instituteMedium.includes(',')) && <option value="ALL">সব ভার্সন</option>}
-                                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
-                                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
-                                        {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
-                                    </select>
-                                </div>
+                                {showLanguageFilter && (
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Language</label>
+                                        <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} disabled={!showLanguageFilter} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-50">
+                                            {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.length > 1 || uniqueInstituteMediums.includes('Bilingual')) && <option value="ALL">সব ভার্সন</option>}
+                                            {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.includes('Bangla') || uniqueInstituteMediums.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
+                                            {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.includes('English') || uniqueInstituteMediums.includes('Bilingual')) && <option value="English">English</option>}
+                                            {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
+                                        </select>
+                                    </div>
+                                )}
 
                                 {levels.length > 1 && (
                                     <div className="flex flex-col gap-1">
@@ -1129,7 +1419,7 @@ const QuestionList = () => {
                                     </div>
                                 )}
 
-                                {filteredSubjects.length > 0 && (
+                                {filteredSubjects.length > 1 && (
                                     <div className="flex flex-col gap-1">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Subject</label>
                                         <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">

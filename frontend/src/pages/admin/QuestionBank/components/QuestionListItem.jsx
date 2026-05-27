@@ -58,12 +58,8 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             onClick={(e) => {
                 const isInteractive = e.target.closest('button') || e.target.closest('input') || e.target.closest('a') || e.target.closest('.group');
                 if (!isInteractive) {
-                    if (isDefaultOrSuperAdmin) {
-                        onSelect(q.id);
-                        if (splitScreenMode) {
-                            onView(q);
-                        }
-                    } else {
+                    onSelect(q.id);
+                    if (splitScreenMode) {
                         onView(q);
                     }
                 }
@@ -71,16 +67,14 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
             className={`border border-slate-200 rounded-xl transition-all duration-300 transform hover:-translate-y-[2px] hover:shadow-lg cursor-pointer relative hover:z-10 ${
             isViewing ? 'bg-indigo-50 border-indigo-400 ring-1 ring-indigo-400' 
             : q.status === 'REVISED' ? 'bg-rose-50/50 border-rose-300'
-            : isSelected && isDefaultOrSuperAdmin ? 'bg-blue-50/40 border-blue-300 ring-1 ring-blue-200' : 'bg-white hover:border-indigo-200'
+            : isSelected ? 'bg-blue-50/40 border-blue-300 ring-1 ring-blue-200' : 'bg-white hover:border-indigo-200'
         }`}>
 
             {/* ── Header Row ── */}
             <div className="flex items-start justify-between px-4 pt-3 pb-2 gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                    {isDefaultOrSuperAdmin && (
-                        <input type="checkbox" checked={isSelected} onChange={() => onSelect(q.id)}
-                            className="w-4 h-4 text-primary border-slate-300 rounded cursor-pointer shrink-0 mt-0.5" />
-                    )}
+                    <input type="checkbox" checked={isSelected} onChange={() => onSelect(q.id)}
+                        className="w-4 h-4 text-primary border-slate-300 rounded cursor-pointer shrink-0 mt-0.5" />
                     <span className="text-[12px] font-black text-slate-600 whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">Q #{index}</span>
                     <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold border border-slate-200 whitespace-nowrap">{typeLabel}</span>
                     
@@ -130,18 +124,38 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
 
             {/* ── Stimulus ── */}
             {(() => {
-                if (!q.stimulus) return null;
-                const cleanStimulus = q.stimulus.replace(/<[^>]*>/g, '').trim().toLowerCase();
-                const isPlaceholder = 
-                    cleanStimulus === '' || 
-                    cleanStimulus === 'generated question' || 
-                    cleanStimulus === 'dynamic question' || 
-                    cleanStimulus === 'ডায়নামিক প্রশ্ন' ||
-                    cleanStimulus === 'ডায়নামিক প্রশ্ন';
-                if (isPlaceholder) return null;
+                let stimulusContent = null;
+                
+                // 1. Check if q.stimulus has actual content
+                if (q.stimulus) {
+                    const cleanStimulus = q.stimulus.replace(/<[^>]*>/g, '').trim().toLowerCase();
+                    const isPlaceholder = 
+                        cleanStimulus === '' || 
+                        cleanStimulus === 'generated question' || 
+                        cleanStimulus === 'dynamic question' || 
+                        cleanStimulus === 'ডায়নামিক প্রশ্ন' ||
+                        cleanStimulus === 'ডায়নামিক প্রশ্ন';
+                    if (!isPlaceholder) {
+                        stimulusContent = q.stimulus;
+                    }
+                }
+                
+                // 2. If no valid stimulus in q.stimulus, check if there is stimulus text before the cq-questions container in q.questionText
+                if (!stimulusContent && q.type === 'CQ' && q.questionText && q.questionText.includes('<div class="cq-questions">')) {
+                    const parts = q.questionText.split('<div class="cq-questions">');
+                    const prospectiveStimulus = parts[0].trim();
+                    const cleanProspective = prospectiveStimulus.replace(/<[^>]*>/g, '').trim();
+                    if (cleanProspective.length > 0) {
+                        stimulusContent = prospectiveStimulus;
+                    }
+                }
+                
+                if (!stimulusContent) return null;
+                
                 return (
-                    <div className="mx-4 mb-2 px-4 py-3 bg-slate-50 border border-slate-200 border-l-4 border-l-indigo-400 rounded-r-lg text-[13px] text-slate-700 font-medium leading-relaxed">
-                        <MarkdownRenderer content={q.stimulus} />
+                    <div className="mx-4 mb-2 px-4 py-3 bg-slate-50 border border-slate-200 border-l-4 border-l-indigo-400 rounded-r-lg text-[13.5px] text-slate-700 font-semibold leading-relaxed shadow-sm">
+                        <span className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">Stimulus / উদ্দীপক:</span>
+                        <MarkdownRenderer content={stimulusContent} />
                     </div>
                 );
             })()}

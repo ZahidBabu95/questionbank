@@ -67,17 +67,23 @@ const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) 
 
     return (
         <div className="flex flex-col gap-3 mt-2">
-            {parts.map((p, idx) => (
-                <div key={idx} className="flex flex-col gap-1.5 w-full relative">
-                    <div className="flex items-start gap-2 w-full text-[14px] leading-relaxed">
-                        <span className={`shrink-0 font-bold ${isDark ? 'text-slate-300' : 'text-slate-800'} mt-0.5`}>{p.label}.</span>
-                        <div className="flex-1 min-w-0 font-medium">
-                            <MarkdownRenderer content={p.text} className={`!max-w-full prose-p:!m-0 prose-p:!p-0 ${isDark ? 'prose-invert' : ''}`} />
+            {parts.map((p, idx) => {
+                // Strip duplicate leading labels (e.g. "a. ", "ক) ", etc.) from subquestion text
+                let cleanText = p.text || '';
+                const labelPattern = new RegExp(`^\\s*(?:${p.label}|[a-eA-E]|[ক-ঙ])\\s*[\\.\\)\\-–—\\s]+`, 'i');
+                cleanText = cleanText.replace(labelPattern, '').trim();
+
+                return (
+                    <div key={idx} className="flex flex-col gap-1.5 w-full relative">
+                        <div className="flex items-start gap-2 w-full text-[14px] leading-relaxed">
+                            <span className={`shrink-0 font-bold ${isDark ? 'text-slate-300' : 'text-slate-800'} mt-0.5`}>{p.label}.</span>
+                            <div className="flex-1 min-w-0 font-medium">
+                                <MarkdownRenderer content={cleanText} className={`!max-w-full prose-p:!m-0 prose-p:!p-0 ${isDark ? 'prose-invert' : ''}`} />
+                            </div>
+                            <span className={`text-[12px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'} shrink-0 ml-2`}>
+                                {isEnglish ? cleanMarks(p.marks) : formatBanglaDigits(cleanMarks(p.marks))}
+                            </span>
                         </div>
-                        <span className={`text-[12px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'} shrink-0 ml-2`}>
-                            {isEnglish ? cleanMarks(p.marks) : formatBanglaDigits(cleanMarks(p.marks))}
-                        </span>
-                    </div>
                     {showAnswer && (
                         p.answer ? (
                             <div className={`ml-[1.25rem] p-3 pb-2 pt-2.5 ${isDark ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-300 border-l-[3px] border-l-emerald-600' : 'bg-emerald-50/70 border-emerald-100 text-emerald-900 border-l-[3px] border-l-emerald-500'} border mt-0.5 shadow-sm rounded-lg text-[12px]`}>
@@ -103,7 +109,7 @@ const CQCombinedRenderer = ({ q, showAnswer, showExplanation, isDark = false }) 
                         )
                     )}
                 </div>
-            ))}
+            )})}
         </div>
     );
 };

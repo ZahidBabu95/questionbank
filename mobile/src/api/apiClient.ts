@@ -6,7 +6,7 @@ import i18n from '../utils/i18n';
 // DEVELOPMENT NOTE:
 // Replace the IP below with your computer's local IP address (e.g. 192.168.1.100)
 // Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) in terminal to find your local IP.
-export const LOCAL_DEV_IP = '192.168.68.110'; // Active local IP address
+export const LOCAL_DEV_IP = '192.168.68.108'; // Active local IP address
 export const BASE_URL = `http://${LOCAL_DEV_IP}:8080/api/v1`;
 
 export const getWebAppBaseUrl = () => {
