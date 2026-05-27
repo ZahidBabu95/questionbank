@@ -41,7 +41,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 counter-reset: question-counter;
             }
 
-            .nexus-native-header-container {
+            .nexus-native-header-portal-container {
                 display: block !important;
                 width: 100% !important;
                 margin: 0 !important;

@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { Extension } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
@@ -95,6 +98,38 @@ const PaperCanvasV2 = React.memo(({
     const extractTimeoutRef = useRef(null);
     const [headerPortalContainer, setHeaderPortalContainer] = useState(null);
 
+    // Tiptap Extension that prepends a stable widget decoration for the header
+    const StrictHeaderExtension = React.useMemo(() => {
+        return Extension.create({
+            name: 'strictHeader',
+            addProseMirrorPlugins() {
+                return [
+                    new Plugin({
+                        key: new PluginKey('strictHeader'),
+                        props: {
+                            decorations(state) {
+                                if (editorMode !== 'STRICT_LINKED') return DecorationSet.empty;
+                                const { doc } = state;
+                                const widget = Decoration.widget(0, () => {
+                                    const dom = document.createElement('div');
+                                    dom.className = 'nexus-native-header-portal-container';
+                                    dom.setAttribute('contenteditable', 'false');
+                                    dom.setAttribute('data-html2canvas-ignore', 'true');
+                                    dom.style.width = '100%';
+                                    dom.style.display = 'block';
+                                    dom.style.userSelect = 'none';
+                                    dom.style.webkitUserSelect = 'none';
+                                    return dom;
+                                }, { side: -1 });
+                                return DecorationSet.create(doc, [widget]);
+                            }
+                        }
+                    })
+                ];
+            }
+        });
+    }, [editorMode]);
+
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
@@ -114,6 +149,7 @@ const PaperCanvasV2 = React.memo(({
             ResizableImage,
             MathNode,
             QuestionBlockNode,
+            StrictHeaderExtension,
         ],
         content: rawContent || '<p></p>',
         editorProps: {
@@ -335,22 +371,25 @@ const PaperCanvasV2 = React.memo(({
             setHeaderPortalContainer(null);
             return;
         }
-        const dom = editor.view.dom;
-        if (!dom) return;
 
-        let container = dom.querySelector('.nexus-native-header-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.className = 'nexus-native-header-container';
-            container.setAttribute('contenteditable', 'false');
-            container.setAttribute('data-html2canvas-ignore', 'true');
-            container.style.width = '100%';
-            container.style.display = 'block';
-            container.style.userSelect = 'none';
-            container.style.webkitUserSelect = 'none';
-            dom.insertBefore(container, dom.firstChild);
-        }
-        setHeaderPortalContainer(container);
+        const updateContainer = () => {
+            const dom = editor.view.dom;
+            if (!dom) return;
+            const container = dom.querySelector('.nexus-native-header-portal-container');
+            setHeaderPortalContainer(container);
+        };
+
+        // Run initially
+        updateContainer();
+
+        // Listen to all transactions and updates to keep container in sync
+        editor.on('transaction', updateContainer);
+        editor.on('update', updateContainer);
+
+        return () => {
+            editor.off('transaction', updateContainer);
+            editor.off('update', updateContainer);
+        };
     }, [editor, editorMode]);
 
     const paddingTop = mmToPx(s.marginTop || 20);
