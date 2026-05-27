@@ -321,8 +321,8 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                     }
                 `}
                 
-                /* Ensure Headers, Instructions, and Conditions Span All Columns if section is 1-column */
-                ${((s.columns || 1) === 1 && (sec.columns || 1) === 1) ? `
+                /* Ensure Headers, Instructions, and Conditions Span All Columns if global columns not active */
+                ${(s.columns || 1) === 1 ? `
                 [data-section-id="${sec.id}"].section-name
                 ${sec.showConditions !== false ? `, [data-section-id="${sec.id}"].section-conditions` : ''}
                 ${sec.showInstructions !== false ? `, [data-section-id="${sec.id}"].section-instructions` : ''} {

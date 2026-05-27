@@ -722,13 +722,42 @@ const getFormattedNumber = (num, numberingStyle, language) => {
                             
                             const maxLen = Math.max(...node.attrs.options.map(o => getVisualLength(o.optionText || o.text)));
                             
+                            // Dynamic column width calculation in pixels
+                            const dimensions = {
+                                'A4': { w: 794, h: 1123 },
+                                'Legal': { w: 816, h: 1344 },
+                                'Letter': { w: 816, h: 1056 },
+                                'A5': { w: 559, h: 794 },
+                                'Custom': { w: (node.attrs.customW || 210) * 3.7795275591, h: (node.attrs.customH || 297) * 3.7795275591 }
+                            };
+                            const pageSizeKey = node.attrs.pageSize || 'A4';
+                            const orient = node.attrs.orientation || 'portrait';
+                            let { w: pageW, h: pageH } = dimensions[pageSizeKey] || dimensions['A4'];
+                            
+                            if (orient === 'landscape') {
+                                const temp = pageW;
+                                pageW = pageH;
+                                pageH = temp;
+                            }
+                            
+                            // Convert mm margins and colGap to pixels (1 mm = 3.7795275591 px)
+                            const mmToPx = (mm) => (mm || 0) * 3.7795275591;
+                            const mL = mmToPx(node.attrs.marginLeft !== undefined ? node.attrs.marginLeft : 10);
+                            const mR = mmToPx(node.attrs.marginRight !== undefined ? node.attrs.marginRight : 10);
+                            const cGap = mmToPx(node.attrs.colGap !== undefined ? node.attrs.colGap : 10);
+                            
+                            const contentWidth = Math.max(200, pageW - mL - mR);
+                            
                             let pageCols = node.attrs.pageCols || 1;
+                            
+                            // Each column width
+                            const colWidth = pageCols > 1 ? Math.max(100, (contentWidth - (pageCols - 1) * cGap) / pageCols) : contentWidth;
                             
                             const scale = (fSize || 14.66) / 14.66;
                             
-                            // Improved thresholds for professional fit
-                            const threshold1Col = Math.floor((pageCols > 1 ? 22 : 45) / scale);
-                            const threshold2Col = Math.floor((pageCols > 1 ? 10 : 20) / scale);
+                            // Professional dynamic thresholds based on the exact available column width
+                            const threshold2Col = Math.max(3, Math.floor((colWidth / 28) / scale));
+                            const threshold1Col = Math.max(6, Math.floor((colWidth / 13) / scale));
                             
                             if (maxLen >= threshold1Col) {
                                 computedLayout = 'col1';
@@ -741,10 +770,11 @@ const getFormattedNumber = (num, numberingStyle, language) => {
                     }
                     
                     return (
-                        <div className={`options-grid grid gap-x-6 ${computedLayout === 'col4' ? 'grid-cols-4' : computedLayout === 'col2' ? 'grid-cols-2' : 'grid-cols-1'}`}
+                        <div className={`options-grid grid ${computedLayout === 'col4' ? 'grid-cols-4 gap-x-3' : computedLayout === 'col2' ? 'grid-cols-2 gap-x-6' : 'grid-cols-1 gap-x-6'}`}
                              style={{ 
                                  rowGap: (node.attrs.optionGap && node.attrs.optionGap < 0) ? '0px' : (node.attrs.optionGap ? `${node.attrs.optionGap}px` : '8px'),
-                                 fontSize: fSize ? `${fSize}px` : 'inherit'
+                                 fontSize: fSize ? `${fSize}px` : 'inherit',
+                                 letterSpacing: computedLayout === 'col4' ? '-0.015em' : 'normal'
                              }}
                         >
                             {node.attrs.options.map((opt, idx) => {
@@ -928,7 +958,14 @@ export const QuestionBlockNode = Node.create({
             firstInSection: { default: false },
             questionNumber: { default: null },
             dynamicData: { default: null },
-            dynamicDataSynced: { default: false }
+            dynamicDataSynced: { default: false },
+            orientation: { default: 'portrait' },
+            pageSize: { default: 'A4' },
+            customW: { default: 210 },
+            customH: { default: 297 },
+            marginLeft: { default: 10 },
+            marginRight: { default: 10 },
+            colGap: { default: 10 }
         };
     },
 
@@ -981,6 +1018,13 @@ export const QuestionBlockNode = Node.create({
                     questionNumber: dom.getAttribute('data-question-number') ? Number(dom.getAttribute('data-question-number')) : null,
                     dynamicData: dom.getAttribute('data-dynamic-data') || null,
                     dynamicDataSynced: dom.getAttribute('data-dynamic-data-synced') === 'true',
+                    orientation: dom.getAttribute('orientation') || 'portrait',
+                    pageSize: dom.getAttribute('pagesize') || 'A4',
+                    customW: dom.getAttribute('customw') ? Number(dom.getAttribute('customw')) : 210,
+                    customH: dom.getAttribute('customh') ? Number(dom.getAttribute('customh')) : 297,
+                    marginLeft: dom.getAttribute('marginleft') ? Number(dom.getAttribute('marginleft')) : 10,
+                    marginRight: dom.getAttribute('marginright') ? Number(dom.getAttribute('marginright')) : 10,
+                    colGap: dom.getAttribute('colgap') ? Number(dom.getAttribute('colgap')) : 10,
                     options
                 };
             }
@@ -1020,7 +1064,14 @@ export const QuestionBlockNode = Node.create({
             'data-question-number': qNum || null,
             'style': finalStyle || null,
             'data-dynamic-data': HTMLAttributes.dynamicData || null,
-            'data-dynamic-data-synced': HTMLAttributes.dynamicDataSynced ? 'true' : 'false'
+            'data-dynamic-data-synced': HTMLAttributes.dynamicDataSynced ? 'true' : 'false',
+            'orientation': HTMLAttributes.orientation || 'portrait',
+            'pagesize': HTMLAttributes.pageSize || 'A4',
+            'customw': HTMLAttributes.customW || 210,
+            'customh': HTMLAttributes.customH || 297,
+            'marginleft': HTMLAttributes.marginLeft !== undefined ? HTMLAttributes.marginLeft : 10,
+            'marginright': HTMLAttributes.marginRight !== undefined ? HTMLAttributes.marginRight : 10,
+            'colgap': HTMLAttributes.colGap !== undefined ? HTMLAttributes.colGap : 10
         })];
     },
 

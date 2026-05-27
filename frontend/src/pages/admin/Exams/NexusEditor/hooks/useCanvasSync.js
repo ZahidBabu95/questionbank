@@ -34,7 +34,14 @@ export const useCanvasSync = (editor, s) => {
         lineHeight: s?.lineHeight,
         questionGap: s?.questionGap,
         language: s?.language,
-        columns: s?.columns
+        columns: s?.columns,
+        orientation: s?.orientation,
+        pageSize: s?.pageSize,
+        customW: s?.customW,
+        customH: s?.customH,
+        marginLeft: s?.marginLeft,
+        marginRight: s?.marginRight,
+        colGap: s?.colGap
     });
 
     // Dynamically apply Question Setup settings to existing question nodes and upgrade legacy headers
@@ -98,7 +105,14 @@ export const useCanvasSync = (editor, s) => {
                 bodyFs: s.bodyFontSize,
                 lineH: s.lineHeight,
                 qGap: s.questionGap,
-                questionOrder
+                questionOrder,
+                orientation: s.orientation,
+                pageSize: s.pageSize,
+                customW: s.customW,
+                customH: s.customH,
+                marginLeft: s.marginLeft,
+                marginRight: s.marginRight,
+                colGap: s.colGap
             });
             
             // If formatting hasn't changed AND no legacy upgrade needed, skip the heavy traversal
@@ -222,6 +236,13 @@ export const useCanvasSync = (editor, s) => {
                         
                         const tAlign = targetSec.textAlign || 'left';
                         const pc = targetSec.columns || s.columns || 1; // Section columns override global columns
+                        const orientation = s.orientation || 'portrait';
+                        const pageSize = s.pageSize || 'A4';
+                        const customW = s.customW || 210;
+                        const customH = s.customH || 297;
+                        const marginLeft = s.marginLeft !== undefined ? s.marginLeft : 10;
+                        const marginRight = s.marginRight !== undefined ? s.marginRight : 10;
+                        const colGap = s.columns > 1 ? (s.colGap || 10) : ((s.sections || []).find(sec => sec.columns > 1 && sec.colGap)?.colGap || s.colGap || 10);
                         
                         if (node.attrs.fontSize != fSize) { changes.fontSize = fSize; needsUpdate = true; }
                         if (node.attrs.lineGap != lGap) { changes.lineGap = lGap; needsUpdate = true; }
@@ -229,6 +250,13 @@ export const useCanvasSync = (editor, s) => {
                         if (node.attrs.questionGap != qGap) { changes.questionGap = qGap; needsUpdate = true; }
                         if (node.attrs.textAlign != tAlign) { changes.textAlign = tAlign; needsUpdate = true; }
                         if (node.attrs.pageCols != pc) { changes.pageCols = pc; needsUpdate = true; }
+                        if (node.attrs.orientation !== orientation) { changes.orientation = orientation; needsUpdate = true; }
+                        if (node.attrs.pageSize !== pageSize) { changes.pageSize = pageSize; needsUpdate = true; }
+                        if (node.attrs.customW != customW) { changes.customW = customW; needsUpdate = true; }
+                        if (node.attrs.customH != customH) { changes.customH = customH; needsUpdate = true; }
+                        if (node.attrs.marginLeft != marginLeft) { changes.marginLeft = marginLeft; needsUpdate = true; }
+                        if (node.attrs.marginRight != marginRight) { changes.marginRight = marginRight; needsUpdate = true; }
+                        if (node.attrs.colGap != colGap) { changes.colGap = colGap; needsUpdate = true; }
                         
                         if (needsUpdate) {
                             updates.push({ pos, type: 'attrs', changes });
