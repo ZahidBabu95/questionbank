@@ -140,6 +140,21 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
         setToast(null);
     }, [q?.id]);
 
+    // Auto-resize textareas based on their text content length
+    useEffect(() => {
+        if (!isOpen) return;
+        const adjustHeight = () => {
+            const textareas = document.querySelectorAll('.auto-resize-textarea');
+            textareas.forEach(ta => {
+                ta.style.height = 'auto';
+                ta.style.height = ta.scrollHeight + 'px';
+            });
+        };
+        // Run after render and brief DOM updates
+        const timer = setTimeout(adjustHeight, 50);
+        return () => clearTimeout(timer);
+    }, [isOpen, form]);
+
     const set = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
     const updateOption = (index, field, value) => {
@@ -385,7 +400,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                 <RichTextEditor
                                     value={form.stimulus}
                                     onChange={val => set('stimulus', val)}
-                                    height="h-28"
+                                    height="h-auto [&_.ql-editor]:min-h-[80px] [&_.ql-editor]:h-auto [&_.ql-editor]:max-h-[300px] [&_.ql-editor]:overflow-y-auto"
                                     placeholder="উদ্দীপক লিখুন — সমীকরণ, তথ্য, পরিস্থিতি..."
                                     className="bg-white text-[12px]"
                                 />
@@ -393,9 +408,8 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                 <textarea
                                     value={form.stimulus}
                                     onChange={e => set('stimulus', e.target.value)}
-                                    rows={3}
                                     placeholder="উদ্দীপক লিখুন (যদি থাকে)..."
-                                    className="w-full px-3 py-2.5 text-[12px] bg-amber-50/50 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400"
+                                    className="auto-resize-textarea w-full px-3 py-2.5 text-[12px] bg-amber-50/50 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400 overflow-hidden min-h-[60px]"
                                 />
                             )}
                         </div>
@@ -407,7 +421,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                 <RichTextEditor
                                     value={form.questionText}
                                     onChange={val => set('questionText', val)}
-                                    height="h-40"
+                                    height="h-auto [&_.ql-editor]:min-h-[120px] [&_.ql-editor]:h-auto [&_.ql-editor]:max-h-[400px] [&_.ql-editor]:overflow-y-auto"
                                     placeholder="সৃজনশীল প্রশ্নের মূল কন্টেন্ট লিখুন..."
                                     className="bg-white text-[12px]"
                                 />
@@ -418,9 +432,8 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                 <textarea
                                     value={form.questionText}
                                     onChange={e => set('questionText', e.target.value)}
-                                    rows={4}
                                     placeholder="প্রশ্নের টেক্সট লিখুন..."
-                                    className="w-full px-3 py-2.5 text-[13px] font-medium bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-800 placeholder:text-slate-400"
+                                    className="auto-resize-textarea w-full px-3 py-2.5 text-[13px] font-medium bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-800 placeholder:text-slate-400 overflow-hidden min-h-[80px]"
                                 />
                             </div>
                         ) : (
@@ -456,7 +469,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                                             set('cqParts', pts);
                                                         }}
                                                         placeholder={`${displayLabel} অংশের প্রশ্ন লিখুন...`}
-                                                        height="h-16"
+                                                        height="h-auto [&_.ql-editor]:min-h-[48px] [&_.ql-editor]:h-auto [&_.ql-editor]:max-h-[180px] [&_.ql-editor]:overflow-y-auto"
                                                         minimal={true}
                                                         className="text-xs bg-white"
                                                     />
@@ -471,7 +484,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                                             set('cqParts', pts);
                                                         }}
                                                         placeholder={`${displayLabel} অংশের উত্তর লিখুন (ঐচ্ছিক)...`}
-                                                        height="h-16"
+                                                        height="h-auto [&_.ql-editor]:min-h-[48px] [&_.ql-editor]:h-auto [&_.ql-editor]:max-h-[180px] [&_.ql-editor]:overflow-y-auto"
                                                         minimal={true}
                                                         className="text-xs bg-white"
                                                     />
@@ -486,7 +499,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                                             set('cqParts', pts);
                                                         }}
                                                         placeholder={`${displayLabel} অংশের ব্যাখ্যা লিখুন (ঐচ্ছিক)...`}
-                                                        height="h-16"
+                                                        height="h-auto [&_.ql-editor]:min-h-[48px] [&_.ql-editor]:h-auto [&_.ql-editor]:max-h-[180px] [&_.ql-editor]:overflow-y-auto"
                                                         minimal={true}
                                                         className="text-xs bg-white"
                                                     />
@@ -506,7 +519,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                     {form.statements.map((stmt, idx) => (
                                         <div key={idx} className="flex items-center gap-2">
                                             <span className="w-6 h-6 rounded bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center font-bold text-xs shrink-0">{['i', 'ii', 'iii'][idx] || idx+1}</span>
-                                            <input type="text"
+                                            <textarea
                                                 value={stmt.replace(/^[iv]+\.\s*/, '')}
                                                 onChange={(e) => {
                                                     const newStmts = [...form.statements];
@@ -514,12 +527,14 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                                     newStmts[idx] = `${label}. ${e.target.value}`;
                                                     set('statements', newStmts);
                                                 }}
-                                                className="flex-1 px-3 py-1.5 text-[12px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all text-slate-700"
+                                                placeholder="বিবৃতি লিখুন..."
+                                                className="auto-resize-textarea flex-1 px-3 py-1.5 text-[12px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all text-slate-700 overflow-hidden resize-none min-h-[36px]"
+                                                rows={1}
                                             />
                                         </div>
                                     ))}
                                 </div>
-                            </div>
+                             </div>
                         )}
 
                         {/* ── EDITABLE: MCQ Options ── */}
@@ -550,12 +565,12 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                             >
                                                 {displayLabel}
                                             </button>
-                                            <input
-                                                type="text"
+                                            <textarea
                                                 value={opt.optionText}
                                                 onChange={e => updateOption(idx, 'optionText', e.target.value)}
-                                                className="flex-1 px-2 py-1 text-[12px] bg-transparent border-0 border-b border-transparent focus:border-primary/30 focus:outline-none text-slate-700 placeholder:text-slate-400"
+                                                className="auto-resize-textarea flex-1 px-2 py-1 text-[12px] bg-transparent border-0 border-b border-transparent focus:border-primary/30 focus:outline-none text-slate-700 placeholder:text-slate-400 overflow-hidden resize-none min-h-[28px]"
                                                 placeholder={`Option ${displayLabel}`}
+                                                rows={1}
                                             />
                                             {opt.correct && <CheckCircle size={14} className="text-emerald-500 shrink-0" />}
                                         </div>
@@ -572,7 +587,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                     <RichTextEditor
                                         value={form.correctAnswer}
                                         onChange={val => set('correctAnswer', val)}
-                                        height="h-32"
+                                        height="h-auto [&_.ql-editor]:min-h-[100px] [&_.ql-editor]:h-auto [&_.ql-editor]:max-h-[300px] [&_.ql-editor]:overflow-y-auto"
                                         placeholder="সৃজনশীল প্রশ্নের উত্তর লিখুন..."
                                         className="bg-white text-[12px]"
                                     />
@@ -580,9 +595,8 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                     <textarea
                                         value={form.correctAnswer}
                                         onChange={e => set('correctAnswer', e.target.value)}
-                                        rows={3}
                                         placeholder="সঠিক উত্তর লিখুন..."
-                                        className="w-full px-3 py-2.5 text-[12px] bg-emerald-50/50 border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400"
+                                        className="auto-resize-textarea w-full px-3 py-2.5 text-[12px] bg-emerald-50/50 border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400 overflow-hidden min-h-[60px]"
                                     />
                                 )}
                             </div>
@@ -596,7 +610,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                     <RichTextEditor
                                         value={form.explanation}
                                         onChange={val => set('explanation', val)}
-                                        height="h-32"
+                                        height="h-auto [&_.ql-editor]:min-h-[100px] [&_.ql-editor]:h-auto [&_.ql-editor]:max-h-[300px] [&_.ql-editor]:overflow-y-auto"
                                         placeholder="প্রশ্নের ব্যাখ্যা লিখুন (ঐচ্ছিক)..."
                                         className="bg-white text-[12px]"
                                     />
@@ -604,15 +618,12 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                                     <textarea
                                         value={form.explanation}
                                         onChange={e => set('explanation', e.target.value)}
-                                        rows={3}
                                         placeholder="প্রশ্নের ব্যাখ্যা লিখুন (ঐচ্ছিক)..."
-                                        className="w-full px-3 py-2.5 text-[12px] bg-blue-50/50 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400"
+                                        className="auto-resize-textarea w-full px-3 py-2.5 text-[12px] bg-blue-50/50 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400 overflow-hidden min-h-[60px]"
                                     />
                                 )}
                             </div>
                         )}
-
-
 
                         {/* ── REQUIRED: Revision Notes ── */}
                         <div className="space-y-1.5">
@@ -620,9 +631,8 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                             <textarea
                                 value={form.revisionNotes}
                                 onChange={e => set('revisionNotes', e.target.value)}
-                                rows={3}
                                 placeholder="কেন এই রিভিশন প্রয়োজন? পর্যালোচকের জন্য নোট লিখুন..."
-                                className={`w-full px-3 py-2.5 text-[12px] bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400 ${!form.revisionNotes.trim() ? 'border-rose-200' : 'border-slate-200 focus:border-primary/50'}`}
+                                className={`auto-resize-textarea w-full px-3 py-2.5 text-[12px] bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all resize-none text-slate-700 placeholder:text-slate-400 overflow-hidden min-h-[60px] ${!form.revisionNotes.trim() ? 'border-rose-200' : 'border-slate-200 focus:border-primary/50'}`}
                             />
                             {!form.revisionNotes.trim() && (
                                 <p className="text-[10px] text-rose-400 font-medium flex items-center gap-1">
