@@ -239,6 +239,7 @@ const QuestionList = () => {
     const [selectedChapterId, setSelectedChapterId] = useState('');
     const [selectedTopicId, setSelectedTopicId] = useState('');
     const [hasSelectedOnce, setHasSelectedOnce] = useState(!!selectedSubjectId || !!showAllOverride || viewMode === 'FAVORITES');
+    const [isScrolled, setIsScrolled] = useState(false);
     
     // Source Tag filters
     const [selectedBoards, setSelectedBoards] = useState([]);
@@ -398,6 +399,18 @@ const QuestionList = () => {
             setHasSelectedOnce(true);
         }
     }, [selectedSubjectId, showAllOverride, viewMode]);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            if (window.scrollY > 30) {
+                setIsScrolled(true);
+            } else {
+                setIsScrolled(false);
+            }
+        };
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
 
     // Run fetchInitialFilters once on mount
     useEffect(() => {
@@ -1555,6 +1568,16 @@ const QuestionList = () => {
                             </span>
                         </div>
                     </div>
+                    {/* Right: Exit / Back Button inside top-right header, hidden when scrolled */}
+                    {!isScrolled && (
+                        <button
+                            onClick={handleExitMobileView}
+                            className="flex items-center justify-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-750 border border-rose-150 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shrink-0 shadow-sm animate-in fade-in zoom-in-95 duration-200"
+                        >
+                            <X size={11} className="stroke-[3]" />
+                            <span>ফিরে যান</span>
+                        </button>
+                    )}
                 </div>
                 
                 <div className="flex items-center gap-2.5 w-full">
@@ -1771,10 +1794,10 @@ const QuestionList = () => {
                         </div>
 
                         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-                            {(isEmbedded || window.innerWidth < 768) && (
+                            {(isEmbedded || window.innerWidth < 768) && isScrolled && (
                                 <button
                                     onClick={handleExitMobileView}
-                                    className="flex sm:hidden items-center justify-center gap-1 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shrink-0 shadow-sm bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
+                                    className="flex sm:hidden items-center justify-center gap-1 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shrink-0 shadow-sm bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 animate-in fade-in zoom-in-95 duration-200"
                                     title="ফিরে যান"
                                 >
                                     <X size={12} className="stroke-[3]" />
