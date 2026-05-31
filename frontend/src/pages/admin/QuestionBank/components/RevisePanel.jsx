@@ -269,7 +269,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                         </div>
                         <div>
                             <h2 className="text-[14px] font-black text-slate-800 leading-tight">Revise Question</h2>
-                            <p className="text-[10px] text-slate-400 font-medium">Core content editable — source/chapter/tags are locked</p>
+                            <p className="text-[10px] text-slate-400 font-medium">প্রশ্নটির উদ্দীপক, মূল টেক্সট বা অপশন সংশোধন করতে এডিট করুন</p>
                         </div>
                     </div>
                     <button onClick={onClose}
@@ -612,20 +612,7 @@ const RevisePanel = ({ question: q, isOpen, onClose, onSuccess }) => {
                             </div>
                         )}
 
-                        <div className="border-t border-dashed border-slate-200" />
 
-                        {/* ── LOCKED: Source / Chapter / Topic / Tags ── */}
-                        <div className="space-y-2">
-                            <SectionHeader icon={Lock} title="Source, Chapter, Topic, Tags (Locked)" locked />
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                <LockedField label="Source" value={q.sourceReference || 'N/A'} />
-                                <LockedField label="Subject" value={q.classSubject?.subject?.name || 'N/A'} />
-                                <LockedField label="Chapter" value={q.chapter?.name || 'N/A'} />
-                                <LockedField label="Topic" value={q.topic?.name || 'N/A'} />
-                            </div>
-                        </div>
-
-                        <div className="border-t border-dashed border-slate-200" />
 
                         {/* ── REQUIRED: Revision Notes ── */}
                         <div className="space-y-1.5">
