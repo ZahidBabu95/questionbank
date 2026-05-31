@@ -1802,13 +1802,13 @@ const QuestionList = () => {
                 {showSourceFilters && (
                     <div 
                         onClick={() => setShowSourceFilters(false)}
-                        className="fixed inset-0 z-40 bg-slate-900/15 backdrop-blur-[6px] animate-in fade-in duration-200 lg:hidden"
+                        className="fixed inset-0 z-[70] bg-slate-900/15 backdrop-blur-[6px] animate-in fade-in duration-200 lg:hidden"
                     />
                 )}
 
                 {/* Right Side Drawer for Source Metadata Filters */}
                 <div 
-                    className={`fixed right-0 bg-white border-l border-slate-200 flex flex-col transition-transform duration-300 top-[56px] md:top-[60px] h-[calc(100vh-56px)] md:h-[calc(100vh-60px)] w-[290px] sm:w-[320px] z-45 shadow-2xl lg:z-20 lg:shadow-none ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
+                    className={`fixed right-0 bg-white border-l border-slate-200 flex flex-col transition-transform duration-300 top-0 h-screen w-[290px] sm:w-[320px] z-[80] shadow-2xl lg:top-[56px] lg:md:top-[60px] lg:h-[calc(100vh-56px)] lg:md:h-[calc(100vh-60px)] lg:z-20 lg:shadow-none ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
                 >
                     <div className="flex flex-col border-b border-slate-200 bg-slate-50 shrink-0">
                         <div className="p-4 flex items-center justify-between">
