@@ -238,6 +238,7 @@ const QuestionList = () => {
     const [selectedSubjectId, setSelectedSubjectId] = useState(''); // classSubjectId
     const [selectedChapterId, setSelectedChapterId] = useState('');
     const [selectedTopicId, setSelectedTopicId] = useState('');
+    const [hasSelectedOnce, setHasSelectedOnce] = useState(!!selectedSubjectId || !!showAllOverride || viewMode === 'FAVORITES');
     
     // Source Tag filters
     const [selectedBoards, setSelectedBoards] = useState([]);
@@ -391,6 +392,12 @@ const QuestionList = () => {
         });
         return total;
     }, [availability]);
+
+    useEffect(() => {
+        if (selectedSubjectId || showAllOverride || viewMode === 'FAVORITES') {
+            setHasSelectedOnce(true);
+        }
+    }, [selectedSubjectId, showAllOverride, viewMode]);
 
     // Run fetchInitialFilters once on mount
     useEffect(() => {
@@ -1334,7 +1341,7 @@ const QuestionList = () => {
         )}
 
         {/* Gorgeous Full-Screen Glassmorphic Subject Selector Modal */}
-        {!(selectedSubjectId || showAllOverride || viewMode === 'FAVORITES') && (
+        {!hasSelectedOnce && !(selectedSubjectId || showAllOverride || viewMode === 'FAVORITES') && (
             <div className="absolute inset-0 z-50 bg-slate-950/60 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-500">
                 {/* Stunning Gradient Ambient Glow Blobs */}
                 <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-gradient-to-tr from-pink-500/20 to-purple-600/20 rounded-full blur-[120px] pointer-events-none animate-pulse" />
