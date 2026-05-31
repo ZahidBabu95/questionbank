@@ -1,5 +1,5 @@
 export const APP_CONFIG = {
-  VERSION_CODE: 4, // Incrementing to code 4 for the new v1.0.3 release
+  VERSION_CODE: 3, // Incrementing to code 3 for the new v1.0.3 release
   VERSION_NAME: '1.0.3',
   CHANGELOG: [
     '• Resolved academic filters modal hijacking issue in Question Bank using selection state guards',
