@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal, ShoppingCart } from 'lucide-react';
+import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal, ShoppingCart, ArrowLeft } from 'lucide-react';
 import questionService from '../../../services/questionService';
 import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
@@ -1794,16 +1794,6 @@ const QuestionList = () => {
                         </div>
 
                         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-                            {(isEmbedded || window.innerWidth < 768) && isScrolled && (
-                                <button
-                                    onClick={handleExitMobileView}
-                                    className="flex sm:hidden items-center justify-center gap-1 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shrink-0 shadow-sm bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 animate-in fade-in zoom-in-95 duration-200"
-                                    title="ফিরে যান"
-                                >
-                                    <X size={12} className="stroke-[3]" />
-                                    <span>ফিরে যান</span>
-                                </button>
-                            )}
                             {hasFullLangAccess && (
                                 <button
                                     onClick={() => setSplitScreenMode(!splitScreenMode)}
@@ -2609,6 +2599,18 @@ const QuestionList = () => {
                 fetchQuestions();
             }}
         />
+
+        {/* Sleek Floating dynamic Back/Exit Button on mobile when scrolled */}
+        {(isEmbedded || window.innerWidth < 768) && isScrolled && (
+            <button
+                onClick={handleExitMobileView}
+                className="fixed bottom-6 right-6 z-[60] w-14 h-14 rounded-full bg-gradient-to-tr from-pink-500 via-purple-600 to-indigo-600 text-white flex flex-col items-center justify-center shadow-[0_8px_30px_rgba(233,30,140,0.4)] border border-white/20 active:scale-95 transition-all hover:scale-105 animate-in fade-in slide-in-from-bottom-6 duration-300 md:hidden cursor-pointer"
+                title="ফিরে যান"
+            >
+                <ArrowLeft size={20} className="stroke-[2.5]" />
+                <span className="text-[8px] font-black tracking-widest mt-0.5 uppercase">Exit</span>
+            </button>
+        )}
         </div>
     );
 };
