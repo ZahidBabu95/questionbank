@@ -1555,15 +1555,6 @@ const QuestionList = () => {
                             </span>
                         </div>
                     </div>
-
-                    {/* Right: Exit / Back Button inside top-right header */}
-                    <button
-                        onClick={handleExitMobileView}
-                        className="flex items-center justify-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-150 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shrink-0 shadow-sm"
-                    >
-                        <X size={11} className="stroke-[3]" />
-                        <span>ফিরে যান</span>
-                    </button>
                 </div>
                 
                 <div className="flex items-center gap-2.5 w-full">
@@ -1780,6 +1771,16 @@ const QuestionList = () => {
                         </div>
 
                         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                            {(isEmbedded || window.innerWidth < 768) && (
+                                <button
+                                    onClick={handleExitMobileView}
+                                    className="flex sm:hidden items-center justify-center gap-1 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shrink-0 shadow-sm bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
+                                    title="ফিরে যান"
+                                >
+                                    <X size={12} className="stroke-[3]" />
+                                    <span>ফিরে যান</span>
+                                </button>
+                            )}
                             {hasFullLangAccess && (
                                 <button
                                     onClick={() => setSplitScreenMode(!splitScreenMode)}
