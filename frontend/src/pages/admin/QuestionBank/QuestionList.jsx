@@ -1577,9 +1577,10 @@ const QuestionList = () => {
                         <button
                             onClick={handleExitMobileView}
                             className="flex items-center justify-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-750 border border-rose-150 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shrink-0 shadow-sm animate-in fade-in zoom-in-95 duration-200"
+                            title="Back"
                         >
-                            <X size={11} className="stroke-[3]" />
-                            <span>ফিরে যান</span>
+                            <ArrowLeft size={11} className="stroke-[3]" />
+                            <span>Back</span>
                         </button>
                     )}
                 </div>
@@ -1591,9 +1592,10 @@ const QuestionList = () => {
                             <button
                                 onClick={handleExitMobileView}
                                 className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 hover:border-rose-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shrink-0 shadow-sm"
+                                title="Back"
                             >
-                                <X size={12} className="stroke-[2.5]" />
-                                <span>ফিরে যান</span>
+                                <ArrowLeft size={12} className="stroke-[2.5]" />
+                                <span>Back</span>
                             </button>
                         )}
                         
@@ -2609,10 +2611,10 @@ const QuestionList = () => {
             <button
                 onClick={handleExitMobileView}
                 className="fixed bottom-6 right-6 z-[60] w-14 h-14 rounded-full bg-gradient-to-tr from-pink-500 via-purple-600 to-indigo-600 text-white flex flex-col items-center justify-center shadow-[0_8px_30px_rgba(233,30,140,0.4)] border border-white/20 active:scale-95 transition-all hover:scale-105 animate-in fade-in slide-in-from-bottom-6 duration-300 md:hidden cursor-pointer"
-                title="ফিরে যান"
+                title="Back"
             >
                 <ArrowLeft size={20} className="stroke-[2.5]" />
-                <span className="text-[8px] font-black tracking-widest mt-0.5 uppercase">Exit</span>
+                <span className="text-[8px] font-black tracking-widest mt-0.5 uppercase">Back</span>
             </button>
         )}
         </div>
