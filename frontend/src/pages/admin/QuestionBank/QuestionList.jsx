@@ -1798,6 +1798,14 @@ const QuestionList = () => {
                     </div>
                 </div>
 
+                {/* Frosted Glass Backdrop for Filters & Tags Drawer */}
+                {showSourceFilters && (
+                    <div 
+                        onClick={() => setShowSourceFilters(false)}
+                        className="fixed inset-0 z-40 bg-slate-900/15 backdrop-blur-[6px] animate-in fade-in duration-200 lg:hidden"
+                    />
+                )}
+
                 {/* Right Side Drawer for Source Metadata Filters */}
                 <div 
                     className={`fixed right-0 bg-white border-l border-slate-200 flex flex-col transition-transform duration-300 top-[56px] md:top-[60px] h-[calc(100vh-56px)] md:h-[calc(100vh-60px)] w-[290px] sm:w-[320px] z-45 shadow-2xl lg:z-20 lg:shadow-none ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
