@@ -80,6 +80,7 @@ public class QuestionSpecification {
                 
                 root.fetch("chapter", JoinType.LEFT);
                 root.fetch("topic", JoinType.LEFT);
+                root.fetch("sources", JoinType.LEFT);
             }
 
             // Status filter

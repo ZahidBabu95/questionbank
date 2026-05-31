@@ -23,8 +23,16 @@ public class AuthController {
     private final com.testshaper.service.UserService userService;
 
     @PostMapping("/login")
-    public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody LoginRequest loginRequest) {
-        String token = authService.login(loginRequest.getEmail(), loginRequest.getPassword());
+    public ResponseEntity<Map<String, Object>> login(
+            @Valid @RequestBody LoginRequest loginRequest,
+            jakarta.servlet.http.HttpServletRequest request) {
+        String ipAddress = request.getHeader("X-Forwarded-For");
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = request.getRemoteAddr();
+        }
+        String userAgent = request.getHeader("User-Agent");
+
+        String token = authService.login(loginRequest.getEmail(), loginRequest.getPassword(), ipAddress, userAgent);
         com.testshaper.dto.UserDTO user = userService.getUserByEmail(loginRequest.getEmail());
 
         return ResponseEntity.ok(Map.of(
@@ -32,6 +40,21 @@ public class AuthController {
                 "message", "Login successful",
                 "data", token,
                 "user", user));
+    }
+
+    @PostMapping("/refresh-token")
+    public ResponseEntity<Map<String, Object>> refreshToken(@RequestBody Map<String, String> payload) {
+        String oldToken = payload.get("token");
+        String newToken = authService.refreshToken(oldToken);
+        if (newToken != null) {
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Token refreshed successfully",
+                    "data", newToken));
+        }
+        return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "message", "Invalid or expired token"));
     }
 
     @PostMapping("/signup")

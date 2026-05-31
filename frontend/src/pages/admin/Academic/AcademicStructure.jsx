@@ -434,7 +434,7 @@ const AcademicStructure = () => {
                     </div>
 
                     <form onSubmit={handleAdd} className="flex gap-2 items-center">
-                        {currentType === 'TOPIC' && selectedItems.length > 0 && (
+                        {(currentType === 'TOPIC' || currentType === 'CHAPTER') && selectedItems.length > 0 && (
                             <button 
                                 type="button"
                                 onClick={handleBulkDelete}
@@ -472,7 +472,7 @@ const AcademicStructure = () => {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-white sticky top-0 z-10">
-                                    {currentType === 'TOPIC' && (
+                                    {(currentType === 'TOPIC' || currentType === 'CHAPTER') && (
                                         <th className="py-3 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider w-12">
                                             <input 
                                                 type="checkbox" 
@@ -517,7 +517,7 @@ const AcademicStructure = () => {
 
                                     return (
                                         <tr key={id} className="hover:bg-slate-50/50 transition-colors group">
-                                            {currentType === 'TOPIC' && (
+                                            {(currentType === 'TOPIC' || currentType === 'CHAPTER') && (
                                                 <td className="py-3 px-6" onClick={(e) => e.stopPropagation()}>
                                                     <input 
                                                         type="checkbox" 

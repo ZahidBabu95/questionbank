@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -11,7 +11,8 @@ import {
   Platform, 
   ScrollView,
   Image,
-  useWindowDimensions
+  useWindowDimensions,
+  Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -19,13 +20,14 @@ import { Feather, AntDesign } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { useBranding } from '../context/BrandingContext';
+import { TERMS_OF_SERVICE, PRIVACY_POLICY } from '../utils/legalContent';
 
 interface RegisterScreenProps {
   navigation: any;
 }
 
 export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { logoUrl } = useBranding();
   const { register, login } = useAuth();
   const { width } = useWindowDimensions();
@@ -40,6 +42,35 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
   const [secureText, setSecureText] = useState(true);
   const [secureConfirmText, setSecureConfirmText] = useState(true);
   const [loading, setLoading] = useState(false);
+  
+  // Validation and error states
+  const [nameError, setNameError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
+  const [termsError, setTermsError] = useState('');
+  const [globalError, setGlobalError] = useState('');
+
+  // Auto-dismiss global error banner after 4 seconds
+  useEffect(() => {
+    if (globalError) {
+      const timer = setTimeout(() => {
+        setGlobalError('');
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [globalError]);
+
+  // Legal Modal states
+  const [legalModalVisible, setLegalModalVisible] = useState(false);
+  const [legalModalType, setLegalModalType] = useState<'terms' | 'privacy'>('terms');
+
+  const openLegalModal = (type: 'terms' | 'privacy') => {
+    setLegalModalType(type);
+    setLegalModalVisible(true);
+    if (termsError) setTermsError('');
+  };
   
   // Track focused fields for premium outline animation
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -60,28 +91,61 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
 
   // Validate form details to match web validation rules
   const validateForm = () => {
-    if (!name.trim() || !email.trim() || !password) {
-      Alert.alert(t('common.error'), 'Please fill in all required fields (Name, Email, Password).');
-      return false;
+    let isValid = true;
+    setNameError('');
+    setEmailError('');
+    setPhoneError('');
+    setPasswordError('');
+    setConfirmPasswordError('');
+    setTermsError('');
+    setGlobalError('');
+
+    if (!name.trim()) {
+      setNameError(i18n.language === 'bn' ? 'অনুগ্রহ করে আপনার পুরো নাম লিখুন।' : 'Please enter your full name.');
+      isValid = false;
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      Alert.alert(t('common.error'), 'Please enter a valid email address.');
-      return false;
+
+    if (!email.trim()) {
+      setEmailError(i18n.language === 'bn' ? 'অনুগ্রহ করে ইমেইল অ্যাড্রেসটি দিন।' : 'Email address is required.');
+      isValid = false;
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        setEmailError(i18n.language === 'bn' ? 'সঠিক ইমেইল অ্যাড্রেস প্রদান করুন।' : 'Please enter a valid email address.');
+        isValid = false;
+      }
     }
-    if (!isPasswordValid) {
-      Alert.alert(t('common.error'), t('auth.passwordRequirementsNotMet') || 'Password does not meet all security requirements.');
-      return false;
+
+    if (phone.trim()) {
+      const phoneRegex = /^(\+8801|8801|01)[3-9]\d{8}$/;
+      if (!phoneRegex.test(phone.trim())) {
+        setPhoneError(i18n.language === 'bn' ? 'সঠিক বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017xxxxxxxx)।' : 'Please enter a valid Bangladeshi phone number.');
+        isValid = false;
+      }
     }
-    if (password !== confirmPassword) {
-      Alert.alert(t('common.error'), t('auth.passwordsDoNotMatch') || 'Passwords do not match.');
-      return false;
+
+    if (!password) {
+      setPasswordError(i18n.language === 'bn' ? 'পাসওয়ার্ড প্রদান করা আবশ্যক।' : 'Password is required.');
+      isValid = false;
+    } else if (!isPasswordValid) {
+      setPasswordError(i18n.language === 'bn' ? 'পাসওয়ার্ডটি নিরাপত্তা শর্তাবলী পূরণ করেনি।' : 'Password does not meet requirements.');
+      isValid = false;
     }
+
+    if (!confirmPassword) {
+      setConfirmPasswordError(i18n.language === 'bn' ? 'পাসওয়ার্ডটি পুনরায় টাইপ করুন।' : 'Please confirm your password.');
+      isValid = false;
+    } else if (password !== confirmPassword) {
+      setConfirmPasswordError(i18n.language === 'bn' ? 'পাসওয়ার্ড দুটি মেলেনি।' : 'Passwords do not match.');
+      isValid = false;
+    }
+
     if (!termsAccepted) {
-      Alert.alert(t('common.error'), t('auth.termsRequired') || 'You must agree to the Terms of Service and Privacy Policy.');
-      return false;
+      setTermsError(i18n.language === 'bn' ? 'আপনাকে ব্যবহারের শর্তাবলী ও গোপনীয়তা নীতিতে সম্মত হতে হবে।' : 'You must agree to the Terms of Service and Privacy Policy.');
+      isValid = false;
     }
-    return true;
+
+    return isValid;
   };
 
   const handleRegister = async () => {
@@ -103,7 +167,18 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
       await login(payload.email, password);
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || err.message || 'Registration failed.';
-      Alert.alert(t('common.error'), errorMsg);
+      // Localized backend errors
+      let localMsg = errorMsg;
+      if (errorMsg.toLowerCase().includes('already exists') || errorMsg.toLowerCase().includes('duplicate email')) {
+        localMsg = i18n.language === 'bn'
+          ? 'এই ইমেইলটি ইতিমধ্যে ব্যবহার করা হয়েছে। দয়া করে অন্য ইমেইল ব্যবহার করুন।'
+          : 'This email is already registered. Please use a different email.';
+      } else if (errorMsg.toLowerCase().includes('network error') || errorMsg.toLowerCase().includes('timeout')) {
+        localMsg = i18n.language === 'bn'
+          ? 'সার্ভারের সাথে সংযোগ ব্যাহত হয়েছে। আপনার ইন্টারনেট কানেকশন চেক করুন।'
+          : 'Network error. Please check your internet connection.';
+      }
+      setGlobalError(localMsg);
     } finally {
       setLoading(false);
     }
@@ -170,17 +245,29 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
             {/* Form Area */}
             <View style={styles.formArea}>
               
+              {/* Global Error Banner */}
+              {!!globalError && (
+                <View style={styles.globalErrorCard}>
+                  <Feather name="alert-circle" size={18} color={theme.colors.danger} />
+                  <Text style={styles.globalErrorText}>{globalError}</Text>
+                  <TouchableOpacity onPress={() => setGlobalError('')} style={styles.globalErrorClose}>
+                    <Feather name="x" size={16} color={theme.colors.danger} />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* Name Input */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Full Name *</Text>
                 <View style={[
                   styles.inputWrapper, 
-                  focusedField === 'name' && styles.inputWrapperFocused
+                  focusedField === 'name' && styles.inputWrapperFocused,
+                  !!nameError && styles.inputWrapperError
                 ]}>
                   <Feather 
                     name="user" 
                     size={18} 
-                    color={focusedField === 'name' ? theme.colors.primary : theme.colors.textMuted} 
+                    color={nameError ? theme.colors.danger : (focusedField === 'name' ? theme.colors.primary : theme.colors.textMuted)} 
                     style={styles.inputIcon} 
                   />
                   <TextInput 
@@ -188,12 +275,19 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                     placeholder="John Doe"
                     placeholderTextColor={theme.colors.textMuted}
                     value={name}
-                    onChangeText={setName}
+                    onChangeText={(val) => {
+                      setName(val);
+                      if (nameError) setNameError('');
+                    }}
                     autoCorrect={false}
                     onFocus={() => setFocusedField('name')}
                     onBlur={() => setFocusedField(null)}
+                    textContentType="name"
+                    autoComplete="name"
                   />
                 </View>
+                {/* Inline Error */}
+                {!!nameError && <Text style={styles.errorText}>{nameError}</Text>}
               </View>
 
               {/* Email Input */}
@@ -201,12 +295,13 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                 <Text style={styles.label}>Email Address *</Text>
                 <View style={[
                   styles.inputWrapper, 
-                  focusedField === 'email' && styles.inputWrapperFocused
+                  focusedField === 'email' && styles.inputWrapperFocused,
+                  !!emailError && styles.inputWrapperError
                 ]}>
                   <Feather 
                     name="mail" 
                     size={18} 
-                    color={focusedField === 'email' ? theme.colors.primary : theme.colors.textMuted} 
+                    color={emailError ? theme.colors.danger : (focusedField === 'email' ? theme.colors.primary : theme.colors.textMuted)} 
                     style={styles.inputIcon} 
                   />
                   <TextInput 
@@ -214,14 +309,26 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                     placeholder="you@example.com"
                     placeholderTextColor={theme.colors.textMuted}
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(val) => {
+                      setEmail(val);
+                      if (emailError) setEmailError('');
+                    }}
                     autoCapitalize="none"
                     keyboardType="email-address"
                     autoCorrect={false}
                     onFocus={() => setFocusedField('email')}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+                        setEmailError(i18n.language === 'bn' ? 'সঠিক ইমেইল অ্যাড্রেস প্রদান করুন।' : 'Please enter a valid email address.');
+                      }
+                    }}
+                    textContentType="emailAddress"
+                    autoComplete="email"
                   />
                 </View>
+                {/* Inline Error */}
+                {!!emailError && <Text style={styles.errorText}>{emailError}</Text>}
               </View>
 
               {/* Phone Input */}
@@ -229,12 +336,13 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                 <Text style={styles.label}>Phone Number</Text>
                 <View style={[
                   styles.inputWrapper, 
-                  focusedField === 'phone' && styles.inputWrapperFocused
+                  focusedField === 'phone' && styles.inputWrapperFocused,
+                  !!phoneError && styles.inputWrapperError
                 ]}>
                   <Feather 
                     name="smartphone" 
                     size={18} 
-                    color={focusedField === 'phone' ? theme.colors.primary : theme.colors.textMuted} 
+                    color={phoneError ? theme.colors.danger : (focusedField === 'phone' ? theme.colors.primary : theme.colors.textMuted)} 
                     style={styles.inputIcon} 
                   />
                   <TextInput 
@@ -242,12 +350,24 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                     placeholder="+880 1XXX XXXXXX"
                     placeholderTextColor={theme.colors.textMuted}
                     value={phone}
-                    onChangeText={setPhone}
+                    onChangeText={(val) => {
+                      setPhone(val);
+                      if (phoneError) setPhoneError('');
+                    }}
                     keyboardType="phone-pad"
                     onFocus={() => setFocusedField('phone')}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      if (phone.trim() && !/^(\+8801|8801|01)[3-9]\d{8}$/.test(phone.trim())) {
+                        setPhoneError(i18n.language === 'bn' ? 'সঠিক বাংলাদেশী মোবাইল নম্বর দিন।' : 'Please enter a valid Bangladeshi phone number.');
+                      }
+                    }}
+                    textContentType="telephoneNumber"
+                    autoComplete="tel"
                   />
                 </View>
+                {/* Inline Error */}
+                {!!phoneError && <Text style={styles.errorText}>{phoneError}</Text>}
               </View>
 
               {/* Password & Confirm Grid for tablet, row for mobile */}
@@ -258,12 +378,13 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                   <Text style={styles.label}>Password *</Text>
                   <View style={[
                     styles.inputWrapper, 
-                    focusedField === 'password' && styles.inputWrapperFocused
+                    focusedField === 'password' && styles.inputWrapperFocused,
+                    !!passwordError && styles.inputWrapperError
                   ]}>
                     <Feather 
                       name="lock" 
                       size={18} 
-                      color={focusedField === 'password' ? theme.colors.primary : theme.colors.textMuted} 
+                      color={passwordError ? theme.colors.danger : (focusedField === 'password' ? theme.colors.primary : theme.colors.textMuted)} 
                       style={styles.inputIcon} 
                     />
                     <TextInput 
@@ -272,16 +393,23 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                       placeholderTextColor={theme.colors.textMuted}
                       secureTextEntry={secureText}
                       value={password}
-                      onChangeText={setPassword}
+                      onChangeText={(val) => {
+                        setPassword(val);
+                        if (passwordError) setPasswordError('');
+                      }}
                       autoCapitalize="none"
                       autoCorrect={false}
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
+                      textContentType="newPassword"
+                      autoComplete="password-new"
                     />
                     <TouchableOpacity onPress={() => setSecureText(!secureText)}>
                       <Feather name={secureText ? 'eye-off' : 'eye'} size={18} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
+                  {/* Inline Error */}
+                  {!!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
                 </View>
 
                 {/* Confirm Password Input */}
@@ -289,12 +417,13 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                   <Text style={styles.label}>Confirm Password *</Text>
                   <View style={[
                     styles.inputWrapper, 
-                    focusedField === 'confirmPassword' && styles.inputWrapperFocused
+                    focusedField === 'confirmPassword' && styles.inputWrapperFocused,
+                    !!confirmPasswordError && styles.inputWrapperError
                   ]}>
                     <Feather 
                       name="lock" 
                       size={18} 
-                      color={focusedField === 'confirmPassword' ? theme.colors.primary : theme.colors.textMuted} 
+                      color={confirmPasswordError ? theme.colors.danger : (focusedField === 'confirmPassword' ? theme.colors.primary : theme.colors.textMuted)} 
                       style={styles.inputIcon} 
                     />
                     <TextInput 
@@ -303,16 +432,28 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                       placeholderTextColor={theme.colors.textMuted}
                       secureTextEntry={secureConfirmText}
                       value={confirmPassword}
-                      onChangeText={setConfirmPassword}
+                      onChangeText={(val) => {
+                        setConfirmPassword(val);
+                        if (confirmPasswordError) setConfirmPasswordError('');
+                      }}
                       autoCapitalize="none"
                       autoCorrect={false}
                       onFocus={() => setFocusedField('confirmPassword')}
-                      onBlur={() => setFocusedField(null)}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        if (confirmPassword && password !== confirmPassword) {
+                          setConfirmPasswordError(i18n.language === 'bn' ? 'পাসওয়ার্ড দুটি মেলেনি।' : 'Passwords do not match.');
+                        }
+                      }}
+                      textContentType="newPassword"
+                      autoComplete="password-new"
                     />
                     <TouchableOpacity onPress={() => setSecureConfirmText(!secureConfirmText)}>
                       <Feather name={secureConfirmText ? 'eye-off' : 'eye'} size={18} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
+                  {/* Inline Error */}
+                  {!!confirmPasswordError && <Text style={styles.errorText}>{confirmPasswordError}</Text>}
                 </View>
 
               </View>
@@ -399,18 +540,41 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
               )}
 
               {/* Terms Checkbox */}
-              <TouchableOpacity 
-                style={styles.checkboxContainer} 
-                onPress={() => setTermsAccepted(!termsAccepted)}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+              <View style={styles.checkboxContainer}>
+                <TouchableOpacity 
+                  style={[
+                    styles.checkbox, 
+                    termsAccepted && styles.checkboxChecked,
+                    !!termsError && styles.checkboxError
+                  ]}
+                  onPress={() => {
+                    setTermsAccepted(!termsAccepted);
+                    if (termsError) setTermsError('');
+                  }}
+                  activeOpacity={0.8}
+                >
                   {termsAccepted && <Feather name="check" size={12} color="#FFF" />}
-                </View>
+                </TouchableOpacity>
                 <Text style={styles.checkboxLabel}>
-                  I agree to the <Text style={styles.linkText}>Terms of Service</Text> and <Text style={styles.linkText}>Privacy Policy</Text>
+                  {i18n.language === 'bn' ? 'আমি ' : 'I agree to the '}
+                  <Text 
+                    style={styles.linkText} 
+                    onPress={() => openLegalModal('terms')}
+                  >
+                    {i18n.language === 'bn' ? 'ব্যবহারের শর্তাবলী' : 'Terms of Service'}
+                  </Text>
+                  {i18n.language === 'bn' ? ' এবং ' : ' and '}
+                  <Text 
+                    style={styles.linkText} 
+                    onPress={() => openLegalModal('privacy')}
+                  >
+                    {i18n.language === 'bn' ? 'গোপনীয়তা নীতি' : 'Privacy Policy'}
+                  </Text>
+                  {i18n.language === 'bn' ? '-তে সম্মত আছি।' : ''}
                 </Text>
-              </TouchableOpacity>
+              </View>
+              {/* Inline Terms Error */}
+              {!!termsError && <Text style={[styles.errorText, { marginTop: -6 }]}>{termsError}</Text>}
 
               {/* Signup Button */}
               <TouchableOpacity 
@@ -442,6 +606,81 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Legal Content Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={legalModalVisible}
+        onRequestClose={() => setLegalModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {legalModalType === 'terms' 
+                  ? (i18n.language === 'bn' ? TERMS_OF_SERVICE.bn.title : TERMS_OF_SERVICE.en.title)
+                  : (i18n.language === 'bn' ? PRIVACY_POLICY.bn.title : PRIVACY_POLICY.en.title)
+                }
+              </Text>
+              <TouchableOpacity 
+                style={styles.modalCloseBtn} 
+                onPress={() => setLegalModalVisible(false)}
+              >
+                <Feather name="x" size={22} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Scrollable Content */}
+            <ScrollView 
+              style={styles.modalScrollView} 
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={true}
+            >
+              <Text style={styles.modalLastUpdated}>
+                {legalModalType === 'terms'
+                  ? (i18n.language === 'bn' ? TERMS_OF_SERVICE.bn.lastUpdated : TERMS_OF_SERVICE.en.lastUpdated)
+                  : (i18n.language === 'bn' ? PRIVACY_POLICY.bn.lastUpdated : PRIVACY_POLICY.en.lastUpdated)
+                }
+              </Text>
+              <Text style={styles.modalIntro}>
+                {legalModalType === 'terms'
+                  ? (i18n.language === 'bn' ? TERMS_OF_SERVICE.bn.intro : TERMS_OF_SERVICE.en.intro)
+                  : (i18n.language === 'bn' ? PRIVACY_POLICY.bn.intro : PRIVACY_POLICY.en.intro)
+                }
+              </Text>
+
+              {/* Sections */}
+              {(legalModalType === 'terms' 
+                ? (i18n.language === 'bn' ? TERMS_OF_SERVICE.bn.sections : TERMS_OF_SERVICE.en.sections)
+                : (i18n.language === 'bn' ? PRIVACY_POLICY.bn.sections : PRIVACY_POLICY.en.sections)
+              ).map((sec, index) => (
+                <View key={index} style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>{sec.title}</Text>
+                  <Text style={styles.modalSectionContent}>{sec.content}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Footer Accept Button */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.modalAcceptBtn} 
+                onPress={() => {
+                  setTermsAccepted(true);
+                  setLegalModalVisible(false);
+                }}
+              >
+                <Text style={styles.modalAcceptBtnText}>
+                  {i18n.language === 'bn' ? 'শর্তাবলীতে সম্মত এবং বন্ধ করুন' : 'Agree & Close'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -734,5 +973,137 @@ const styles = StyleSheet.create({
   boldText: {
     color: theme.colors.primary,
     fontWeight: theme.typography.weights.bold,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    height: '82%',
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    ...theme.shadows.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: theme.typography.weights.bold,
+    color: theme.colors.text,
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalScrollView: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  modalScrollContent: {
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  modalLastUpdated: {
+    fontSize: 12,
+    fontWeight: theme.typography.weights.semibold,
+    color: theme.colors.textMuted,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  modalIntro: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: 24,
+    fontWeight: theme.typography.weights.medium,
+  },
+  modalSection: {
+    marginBottom: 24,
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  modalSectionTitle: {
+    fontSize: 15,
+    fontWeight: theme.typography.weights.bold,
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  modalSectionContent: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: 18,
+  },
+  modalFooter: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    backgroundColor: '#FFF',
+  },
+  modalAcceptBtn: {
+    height: 50,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...theme.shadows.md,
+  },
+  modalAcceptBtnText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: theme.typography.weights.bold,
+  },
+  inputWrapperError: {
+    borderColor: theme.colors.danger,
+    borderWidth: 1.5,
+    backgroundColor: '#FFF8F8',
+  },
+  errorText: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.danger,
+    fontWeight: theme.typography.weights.medium,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  checkboxError: {
+    borderColor: theme.colors.danger,
+    backgroundColor: '#FFF8F8',
+    borderWidth: 1.5,
+  },
+  globalErrorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    position: 'relative',
+    gap: 12,
+    ...theme.shadows.sm,
+  },
+  globalErrorText: {
+    flex: 1,
+    fontSize: theme.typography.sizes.base - 1,
+    color: theme.colors.danger,
+    fontWeight: theme.typography.weights.semibold,
+    lineHeight: 18,
+  },
+  globalErrorClose: {
+    padding: 4,
   },
 });

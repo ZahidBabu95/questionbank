@@ -192,6 +192,13 @@ public class QuestionController {
         return ResponseEntity.ok(questionService.getOverviewStats(filters));
     }
 
+    @GetMapping("/availability")
+    public ResponseEntity<Map<String, Object>> getQuestionAvailability(
+            @RequestParam UUID classSubjectId,
+            @RequestParam(required = false) String language) {
+        return ResponseEntity.ok(questionService.getQuestionAvailability(classSubjectId, language));
+    }
+
     // --- Revision / Contribution System ---
     @PostMapping("/{id}/revision")
     public ResponseEntity<Map<String, Object>> submitRevision(

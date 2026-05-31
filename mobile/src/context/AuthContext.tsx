@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import authService, { User } from '../api/authService';
+import { injectLogoutCallback } from '../api/apiClient';
 
 interface AuthContextType {
   user: User | null;
@@ -47,6 +48,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     loadSession();
+  }, []);
+
+  // Inject global logout callback for Axios Interceptor synchronization
+  useEffect(() => {
+    injectLogoutCallback(() => {
+      setToken(null);
+      setUser(null);
+    });
   }, []);
 
   const login = async (email: string, password: string) => {

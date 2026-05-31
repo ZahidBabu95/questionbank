@@ -1,20 +1,33 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import i18n from '../utils/i18n';
 
 // DEVELOPMENT NOTE:
-// Replace the IP below with your computer's local IP address (e.g. 192.168.1.100)
-// Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) in terminal to find your local IP.
-export const LOCAL_DEV_IP = '192.168.68.108'; // Active local IP address
-export const BASE_URL = `http://${LOCAL_DEV_IP}:8080/api/v1`;
+// We dynamically resolve the computer's local IP address using Expo Constants.
+// If not available, we fall back to the active detected local IP: 192.168.68.107
+const getHostIp = (): string => {
+  const hostUri = Constants.expoConfig?.hostUri; // e.g. "192.168.68.107:8081"
+  if (hostUri) {
+    const ip = hostUri.split(':')[0];
+    if (ip && ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+      return ip;
+    }
+  }
+  return '192.168.68.107'; // Fallback to current local active IP
+};
+
+export const LOCAL_DEV_IP = getHostIp();
+export const BASE_URL = __DEV__
+  ? `http://${LOCAL_DEV_IP}:8080/api/v1`
+  : 'https://qb.learningshaper.com/api/v1';
 
 export const getWebAppBaseUrl = () => {
-  if (BASE_URL.includes('192.168.') || BASE_URL.includes('10.') || BASE_URL.includes('localhost') || BASE_URL.includes('172.')) {
+  if (__DEV__) {
     return `http://${LOCAL_DEV_IP}:5173`;
   }
-  const match = BASE_URL.match(/^(https?:\/\/[^\/]+)/);
-  return match ? match[1] : 'https://qb.learningshaper.com';
+  return 'https://qb.learningshaper.com';
 };
 
 const apiClient = axios.create({
@@ -49,6 +62,13 @@ apiClient.interceptors.request.use(
   }
 );
 
+// Global Logout Callback Registry for React Context Sync
+let logoutCallback: (() => void) | null = null;
+
+export const injectLogoutCallback = (cb: () => void) => {
+  logoutCallback = cb;
+};
+
 // Response Interceptor: Handle Authentication Expiry (401)
 apiClient.interceptors.response.use(
   (response) => response,
@@ -61,7 +81,9 @@ apiClient.interceptors.response.use(
       } catch (e) {
         console.log('Error clearing credentials:', e);
       }
-      // You can add global navigation redirect hooks here (e.g., using navigation ref)
+      if (logoutCallback) {
+        logoutCallback();
+      }
     }
     return Promise.reject(error);
   }

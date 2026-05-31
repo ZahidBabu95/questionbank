@@ -7,7 +7,10 @@ import {
   TouchableOpacity, 
   ActivityIndicator, 
   Dimensions,
-  Image
+  Image,
+  Modal,
+  Alert,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -15,7 +18,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
 import cmsService, { CmsSection, BillingPackage } from '../api/cmsService';
+import apiClient from '../api/apiClient';
 import { useBranding } from '../context/BrandingContext';
+import { TERMS_OF_SERVICE, PRIVACY_POLICY } from '../utils/legalContent';
 
 const { width } = Dimensions.get('window');
 
@@ -39,6 +44,21 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [enabledLanguages, setEnabledLanguages] = useState<string[]>(['en', 'bn']);
   const [defaultLanguage, setDefaultLanguage] = useState<string>('en');
+  const [downloads, setDownloads] = useState<Record<string, any>>({
+    ANDROID: null,
+    IOS: null,
+    WINDOWS: null,
+    LINUX: null
+  });
+
+  // Legal Modal states
+  const [legalModalVisible, setLegalModalVisible] = useState(false);
+  const [legalModalType, setLegalModalType] = useState<'terms' | 'privacy'>('terms');
+
+  const openLegalModal = (type: 'terms' | 'privacy') => {
+    setLegalModalType(type);
+    setLegalModalVisible(true);
+  };
 
   // Toggle Language
   const toggleLanguage = async () => {
@@ -60,6 +80,21 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ navigation }) => {
         ]);
         setCmsData(landingData);
         setPackages(packagesData);
+        
+        // Fetch dynamic app download releases from database (managed at /cms/landing)
+        const plats = ['ANDROID', 'IOS', 'WINDOWS', 'LINUX'];
+        const dlData: Record<string, any> = {};
+        for (const p of plats) {
+          try {
+            const res = await apiClient.get(`/public/apps/latest?platform=${p}`);
+            if (res.data && res.data.active) {
+              dlData[p] = res.data;
+            }
+          } catch (e) {
+            // ignore 404/not active release
+          }
+        }
+        setDownloads(dlData);
         
         const enabled = langsData.enabledLanguages ? langsData.enabledLanguages.split(',') : ['en', 'bn'];
         const def = langsData.defaultLanguage || 'en';
@@ -109,6 +144,102 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ navigation }) => {
   const features = findSection('FEATURES_SECTION');
   const cta = findSection('CTA_SECTION');
   const trusted = findSection('TRUSTED_SECTION');
+  const termsSec = findSection('TERMS_SECTION');
+  const privacySec = findSection('PRIVACY_SECTION');
+
+  const currentSec = legalModalType === 'terms' ? termsSec : privacySec;
+  const dynamicTitle = getContent(
+    currentSec,
+    'TITLE',
+    legalModalType === 'terms'
+      ? (i18n.language === 'bn' ? TERMS_OF_SERVICE.bn.title : TERMS_OF_SERVICE.en.title)
+      : (i18n.language === 'bn' ? PRIVACY_POLICY.bn.title : PRIVACY_POLICY.en.title)
+  );
+  const dynamicBody = getContent(currentSec, 'BODY_CONTENT', '');
+
+  const renderMarkdown = (text: string) => {
+    if (!text) return null;
+    return text.split('\n\n').map((paragraph, idx) => {
+      const trimmed = paragraph.trim();
+      if (!trimmed) return null;
+
+      // H3 Heading
+      if (trimmed.startsWith('###')) {
+        return (
+          <Text key={idx} style={styles.modalH3}>
+            {trimmed.replace(/^###\s*/, '')}
+          </Text>
+        );
+      }
+      // H2 Heading
+      if (trimmed.startsWith('##')) {
+        return (
+          <Text key={idx} style={styles.modalH2}>
+            {trimmed.replace(/^##\s*/, '')}
+          </Text>
+        );
+      }
+      // H1 Heading
+      if (trimmed.startsWith('#')) {
+        return (
+          <Text key={idx} style={styles.modalH1}>
+            {trimmed.replace(/^#\s*/, '')}
+          </Text>
+        );
+      }
+
+      // Bullet List
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.includes('\n- ') || trimmed.includes('\n* ')) {
+        return (
+          <View key={idx} style={styles.modalList}>
+            {trimmed.split('\n').map((li, lIdx) => {
+              const cleanLi = li.trim();
+              if (!cleanLi) return null;
+              const liText = cleanLi.replace(/^[\-\*]\s*/, '').trim();
+              return (
+                <View key={lIdx} style={styles.modalListItem}>
+                  <Text style={styles.modalListDot}>•</Text>
+                  <Text style={styles.modalListText}>{liText}</Text>
+                </View>
+              );
+            })}
+          </View>
+        );
+      }
+
+      // Numbered List
+      if (/^\d+\.\s/.test(trimmed) || trimmed.includes('\n1. ') || trimmed.includes('\n2. ')) {
+        return (
+          <View key={idx} style={styles.modalList}>
+            {trimmed.split('\n').map((li, lIdx) => {
+              const cleanLi = li.trim();
+              if (!cleanLi) return null;
+              const match = cleanLi.match(/^(\d+)\.\s*(.*)/);
+              if (!match) {
+                return <Text key={lIdx} style={styles.modalListText}>{cleanLi}</Text>;
+              }
+              const num = match[1];
+              const liText = match[2].trim();
+              return (
+                <View key={lIdx} style={styles.modalListItem}>
+                  <Text style={styles.modalListNum}>{num}.</Text>
+                  <Text style={styles.modalListText}>{liText}</Text>
+                </View>
+              );
+            })}
+          </View>
+        );
+      }
+
+      // Standard Paragraph
+      return (
+        <Text key={idx} style={styles.modalParagraph}>
+          {trimmed}
+        </Text>
+      );
+    });
+  };
+
 
   // Retrieve partners dynamically from TRUSTED_SECTION
   const partners: { name: string; logo: string }[] = [];
@@ -304,6 +435,113 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ navigation }) => {
           </View>
         </View>
 
+                {/* App Downloads Section (Dynamic releases with fallback) */}
+        {(() => {
+          const hasActiveReleases = Object.values(downloads).some(d => d && d.active);
+          const finalDownloads: Record<string, any> = {};
+
+          if (hasActiveReleases) {
+            Object.entries(downloads).forEach(([platform, data]) => {
+              if (data && data.active) {
+                finalDownloads[platform] = data;
+              }
+            });
+          } else {
+            // Default fallback is Android ONLY when database contains zero active releases
+            finalDownloads.ANDROID = {
+              active: true,
+              versionName: "2.0.0",
+              versionCode: 1,
+              releaseType: "FILE_UPLOAD",
+              downloadUrl: "https://qb.learningshaper.com/api/v1/public/files/QuestionShaper.apk",
+              changelog: i18n.language === 'bn' 
+                ? "• এআই-চালিত সৃজনশীল প্রশ্ন জেনারেটর\n• নেটিভ পারফরম্যান্স এবং স্পিড পিডিএফ ডাউনলোড\n• অফলাইন মেমরি ক্যাশ অপ্টিমাইজেশন"
+                : "• AI-driven Creative Question workspace\n• Native performance & fast PDF downloads\n• Offline memory caching & optimizations"
+            };
+          }
+
+          return (
+            <View style={styles.downloadsSection}>
+              <Text style={styles.sectionTitle}>
+                {i18n.language === 'bn' ? 'কোয়েশ্চেন শ্যাপার অ্যাপ ডাউনলোড করুন' : 'Download the QuestionShaper Apps'}
+              </Text>
+              <Text style={styles.sectionSubtitle}>
+                {i18n.language === 'bn' 
+                  ? 'আমাদের এআই-চালিত অনন্য ওয়ার্কস্পেস আপনার মোবাইল এবং ডেস্কটপে নেটিভলি অ্যাক্সেস করুন।' 
+                  : 'Access our advanced neural workspace natively across all your devices for ultimate performance.'}
+              </Text>
+
+              <View style={styles.downloadsContainer}>
+                {Object.entries(finalDownloads).map(([platform, data]) => {
+                  if (!data || !data.active) return null;
+                  
+                  const isAndroid = platform === 'ANDROID';
+                  const isIos = platform === 'IOS';
+                  const isWindows = platform === 'WINDOWS';
+                  
+                  const iconName = isAndroid ? 'smartphone' : isIos ? 'apple' : isWindows ? 'monitor' : 'cpu';
+                  const title = isAndroid ? 'Android App' : isIos ? 'iOS App' : isWindows ? 'Windows Native' : 'Linux Package';
+                  
+                  const cardBg = isAndroid ? '#064E3B' : isIos ? '#0F172A' : isWindows ? '#172554' : '#7C2D12';
+                  const borderColor = isAndroid ? 'rgba(16,185,129,0.3)' : isIos ? 'rgba(255,255,255,0.15)' : isWindows ? 'rgba(59,130,246,0.3)' : 'rgba(249,115,22,0.3)';
+                  const iconColor = isAndroid ? '#34D399' : isIos ? '#FFF' : isWindows ? '#60A5FA' : '#FB923C';
+                  const iconBg = isAndroid ? 'rgba(16,185,129,0.2)' : isIos ? 'rgba(255,255,255,0.1)' : isWindows ? 'rgba(59,130,246,0.2)' : 'rgba(249,115,22,0.2)';
+                  const btnBg = isAndroid ? '#10B981' : isIos ? '#E2E8F0' : isWindows ? '#3B82F6' : '#F97316';
+                  const btnTextColor = isIos ? '#0F172A' : '#FFF';
+                  
+                  const buttonText = data.releaseType === 'STORE_LINK'
+                    ? (i18n.language === 'bn' ? 'স্টোর থেকে ডাউনলোড' : 'Get on App Store')
+                    : (i18n.language === 'bn' ? 'সরাসরি ফাইল ডাউনলোড' : 'Download Binary File');
+                    
+                  return (
+                    <View key={platform} style={[styles.downloadCard, { backgroundColor: cardBg, borderColor }]}>
+                      <View style={styles.cardHeader}>
+                        <View style={[styles.downloadIconBg, { backgroundColor: iconBg }]}>
+                          <Feather name={iconName as any} size={24} color={iconColor} />
+                        </View>
+                        <View style={styles.versionBadge}>
+                          <Text style={styles.versionText}>v{data.versionName}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.downloadCardTitle}>{title}</Text>
+                      <Text style={styles.downloadCardMeta}>
+                        {data.releaseType === 'STORE_LINK' ? 'Official App Store Link' : 'Secure Binary (Cloudflare R2)'}
+                      </Text>
+                      
+                      {data.changelog ? (
+                        <View style={styles.changelogBox}>
+                          <Text style={styles.changelogHeading}>
+                            {i18n.language === 'bn' ? 'নতুন পরিবর্তনসমূহ' : "What's New"}
+                          </Text>
+                          {data.changelog.split('\n').map((line: string, idx: number) => {
+                            let cleanLine = line.trim();
+                            if (cleanLine.startsWith('•')) cleanLine = cleanLine.substring(1).trim();
+                            if (cleanLine.startsWith('-')) cleanLine = cleanLine.substring(1).trim();
+                            if (cleanLine.startsWith('*')) cleanLine = cleanLine.substring(1).trim();
+                            return (
+                              <Text key={idx} style={styles.changelogLine}>• {cleanLine}</Text>
+                            );
+                          })}
+                        </View>
+                      ) : null}
+
+                      <TouchableOpacity 
+                        style={[styles.downloadBtn, { backgroundColor: btnBg }]}
+                        onPress={() => Linking.openURL(data.downloadUrl)}
+                      >
+                        <Feather name="download" size={16} color={btnTextColor} style={{ marginRight: 6 }} />
+                        <Text style={[styles.downloadBtnText, { color: btnTextColor }]}>
+                          {buttonText}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })()}
+
         {/* Pricing/Packages Section */}
         <View style={styles.pricingSection}>
           <Text style={styles.sectionTitle}>{t('landing.pricingTitle')}</Text>
@@ -458,7 +696,102 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ navigation }) => {
           </View>
         )}
 
+        {/* Footer Section */}
+        <View style={styles.footerSection}>
+          <Text style={styles.footerText}>
+            © {new Date().getFullYear()} {systemName}. {i18n.language === 'bn' ? 'সর্বস্বত্ব সংরক্ষিত।' : 'All rights reserved.'}
+          </Text>
+          <View style={styles.footerLinks}>
+            <TouchableOpacity onPress={() => openLegalModal('terms')}>
+              <Text style={styles.footerLinkText}>
+                {i18n.language === 'bn' ? 'ব্যবহারের শর্তাবলী' : 'Terms of Service'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.footerLinkDivider}>•</Text>
+            <TouchableOpacity onPress={() => openLegalModal('privacy')}>
+              <Text style={styles.footerLinkText}>
+                {i18n.language === 'bn' ? 'গোপনীয়তা নীতি' : 'Privacy Policy'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
       </ScrollView>
+
+      {/* Legal Content Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={legalModalVisible}
+        onRequestClose={() => setLegalModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {dynamicTitle}
+              </Text>
+              <TouchableOpacity 
+                style={styles.modalCloseBtn} 
+                onPress={() => setLegalModalVisible(false)}
+              >
+                <Feather name="x" size={22} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Scrollable Content */}
+            <ScrollView 
+              style={styles.modalScrollView} 
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={true}
+            >
+              {dynamicBody ? (
+                renderMarkdown(dynamicBody)
+              ) : (
+                <>
+                  <Text style={styles.modalLastUpdated}>
+                    {legalModalType === 'terms'
+                      ? (i18n.language === 'bn' ? TERMS_OF_SERVICE.bn.lastUpdated : TERMS_OF_SERVICE.en.lastUpdated)
+                      : (i18n.language === 'bn' ? PRIVACY_POLICY.bn.lastUpdated : PRIVACY_POLICY.en.lastUpdated)
+                    }
+                  </Text>
+                  <Text style={styles.modalIntro}>
+                    {legalModalType === 'terms'
+                      ? (i18n.language === 'bn' ? TERMS_OF_SERVICE.bn.intro : TERMS_OF_SERVICE.en.intro)
+                      : (i18n.language === 'bn' ? PRIVACY_POLICY.bn.intro : PRIVACY_POLICY.en.intro)
+                    }
+                  </Text>
+
+                  {/* Sections */}
+                  {(legalModalType === 'terms' 
+                    ? (i18n.language === 'bn' ? TERMS_OF_SERVICE.bn.sections : TERMS_OF_SERVICE.en.sections)
+                    : (i18n.language === 'bn' ? PRIVACY_POLICY.bn.sections : PRIVACY_POLICY.en.sections)
+                  ).map((sec, index) => (
+                    <View key={index} style={styles.modalSection}>
+                      <Text style={styles.modalSectionTitle}>{sec.title}</Text>
+                      <Text style={styles.modalSectionContent}>{sec.content}</Text>
+                    </View>
+                  ))}
+                </>
+              )}
+            </ScrollView>
+
+            {/* Footer Close Button */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.modalAcceptBtn} 
+                onPress={() => setLegalModalVisible(false)}
+              >
+                <Text style={styles.modalAcceptBtnText}>
+                  {i18n.language === 'bn' ? 'ঠিক আছে' : 'I Understand'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -804,6 +1137,297 @@ const styles = StyleSheet.create({
   ctaBtnText: {
     color: '#FFF',
     fontSize: theme.typography.sizes.base,
+    fontWeight: theme.typography.weights.bold,
+  },
+  footerSection: {
+    marginTop: 48,
+    paddingVertical: 24,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FAFBFD',
+  },
+  footerText: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    fontWeight: theme.typography.weights.medium,
+  },
+  footerLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  footerLinkText: {
+    fontSize: 13,
+    fontWeight: theme.typography.weights.semibold,
+    color: theme.colors.primary,
+  },
+  footerLinkDivider: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    height: '82%',
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    ...theme.shadows.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: theme.typography.weights.bold,
+    color: theme.colors.text,
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalScrollView: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  modalScrollContent: {
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  modalLastUpdated: {
+    fontSize: 12,
+    fontWeight: theme.typography.weights.semibold,
+    color: theme.colors.textMuted,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  modalIntro: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: 24,
+    fontWeight: theme.typography.weights.medium,
+  },
+  modalSection: {
+    marginBottom: 24,
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  modalSectionTitle: {
+    fontSize: 15,
+    fontWeight: theme.typography.weights.bold,
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  modalSectionContent: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: 18,
+  },
+  modalH1: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: theme.colors.text,
+    marginTop: 18,
+    marginBottom: 8,
+    lineHeight: 24,
+  },
+  modalH2: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.text,
+    marginTop: 16,
+    marginBottom: 6,
+    lineHeight: 20,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
+    paddingLeft: 8,
+  },
+  modalH3: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginTop: 12,
+    marginBottom: 4,
+    lineHeight: 16,
+  },
+  modalParagraph: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  modalList: {
+    marginBottom: 10,
+  },
+  modalListItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 5,
+    paddingLeft: 4,
+  },
+  modalListDot: {
+    fontSize: 14,
+    color: theme.colors.primary,
+    marginRight: 6,
+    lineHeight: 16,
+  },
+  modalListNum: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    marginRight: 6,
+    lineHeight: 16,
+  },
+  modalListText: {
+    flex: 1,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    lineHeight: 16,
+  },
+  modalFooter: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    backgroundColor: '#FFF',
+  },
+  modalAcceptBtn: {
+    height: 50,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...theme.shadows.md,
+  },
+  modalAcceptBtnText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: theme.typography.weights.bold,
+  },
+  downloadsSection: {
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: 40,
+    backgroundColor: '#FAFBFD',
+    marginTop: theme.spacing.lg,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  sectionSubtitle: {
+    fontSize: theme.typography.sizes.base,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    marginTop: -20,
+    marginBottom: 32,
+    lineHeight: 22,
+    paddingHorizontal: theme.spacing.md,
+  },
+  downloadsContainer: {
+    gap: 24,
+  },
+  downloadCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  downloadIconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  versionBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  versionText: {
+    fontSize: 10,
+    fontWeight: theme.typography.weights.bold,
+    color: '#FFF',
+  },
+  downloadCardTitle: {
+    fontSize: theme.typography.sizes.xl,
+    fontWeight: theme.typography.weights.bold,
+    color: '#FFF',
+  },
+  downloadCardMeta: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: theme.typography.weights.semibold,
+    marginTop: 2,
+    marginBottom: 16,
+  },
+  changelogBox: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.03)',
+  },
+  changelogHeading: {
+    fontSize: 9,
+    fontWeight: theme.typography.weights.bold,
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  changelogLine: {
+    fontSize: 12,
+    color: '#CBD5E1',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  downloadBtn: {
+    height: 48,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  downloadBtnText: {
+    color: '#FFF',
+    fontSize: 13,
     fontWeight: theme.typography.weights.bold,
   },
 });

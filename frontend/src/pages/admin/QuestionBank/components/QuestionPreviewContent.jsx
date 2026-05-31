@@ -24,6 +24,67 @@ const QuestionPreviewContent = ({ selectedQuestion, isDark = false }) => {
                 {getStatusBadge(selectedQuestion.status)}
             </div>
 
+            {/* Render Rich Source Tags dynamically in the preview panel */}
+            {((selectedQuestion.sources && selectedQuestion.sources.length > 0) || selectedQuestion.sourceReference) ? (
+                <div className="flex flex-wrap gap-2 mb-6">
+                    {selectedQuestion.sources && selectedQuestion.sources.length > 0 ? (
+                        selectedQuestion.sources.map((src, sIdx) => {
+                            const type = src.sourceType || 'OTHER';
+                            const org = src.organizationName || '';
+                            const year = src.examYear ? ` ${src.examYear}` : '';
+                            const exam = src.examName ? ` - ${src.examName}` : '';
+                            const displayName = `${org}${exam}${year}`;
+
+                            if (type === 'BOARD_EXAM') {
+                                return (
+                                    <span key={sIdx} className={`px-2.5 py-1 ${isDark ? 'bg-purple-950/40 text-purple-400 border-purple-800/40' : 'bg-purple-50 text-purple-700 border-purple-150'} rounded-xl text-xs font-black border uppercase whitespace-nowrap flex items-center gap-1 shadow-sm`}>
+                                        🏛️ {displayName}
+                                    </span>
+                                );
+                            }
+                            if (type === 'UNIVERSITY_ADMISSION') {
+                                return (
+                                    <span key={sIdx} className={`px-2.5 py-1 ${isDark ? 'bg-indigo-950/40 text-indigo-400 border-indigo-800/40' : 'bg-indigo-50 text-indigo-700 border-indigo-150'} rounded-xl text-xs font-black border uppercase whitespace-nowrap flex items-center gap-1 shadow-sm`}>
+                                        🎓 {displayName}
+                                    </span>
+                                );
+                            }
+                            if (type === 'INSTITUTION_TEST') {
+                                return (
+                                    <span key={sIdx} className={`px-2.5 py-1 ${isDark ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/40' : 'bg-emerald-50 text-emerald-700 border-emerald-150'} rounded-xl text-xs font-black border uppercase whitespace-nowrap flex items-center gap-1 shadow-sm`}>
+                                        🏫 {displayName}
+                                    </span>
+                                );
+                            }
+                            if (type === 'JOB_EXAM') {
+                                return (
+                                    <span key={sIdx} className={`px-2.5 py-1 ${isDark ? 'bg-amber-950/40 text-amber-400 border-amber-800/40' : 'bg-amber-50 text-amber-700 border-amber-150'} rounded-xl text-xs font-black border uppercase whitespace-nowrap flex items-center gap-1 shadow-sm`}>
+                                        💼 {displayName}
+                                    </span>
+                                );
+                            }
+                            return (
+                                <span key={sIdx} className={`px-2.5 py-1 ${isDark ? 'bg-slate-800 text-slate-300 border-slate-750' : 'bg-slate-50 text-slate-600 border-slate-200'} rounded-xl text-xs font-black border uppercase whitespace-nowrap flex items-center gap-1 shadow-sm`}>
+                                    🏛️ {displayName}
+                                </span>
+                            );
+                        })
+                    ) : (
+                        selectedQuestion.sourceReference && (
+                            selectedQuestion.sourceReference === 'Textbook Content' ? (
+                                <span className={`px-2.5 py-1 ${isDark ? 'bg-slate-800 text-slate-300 border-slate-750' : 'bg-slate-50 text-slate-600 border-slate-200'} rounded-xl text-xs font-black border uppercase whitespace-nowrap flex items-center gap-1 shadow-sm`}>
+                                    📖 Textbook Content
+                                </span>
+                            ) : (
+                                <span className={`px-2.5 py-1 ${isDark ? 'bg-purple-950/40 text-purple-400 border-purple-800/40' : 'bg-purple-50 text-purple-700 border-purple-150'} rounded-xl text-xs font-black border uppercase whitespace-nowrap flex items-center gap-1 shadow-sm`}>
+                                    🏛️ {selectedQuestion.sourceReference}
+                                </span>
+                            )
+                        )
+                    )}
+                </div>
+            ) : null}
+
             <div className="space-y-6">
                 {selectedQuestion.classSubject && (
                     <div>

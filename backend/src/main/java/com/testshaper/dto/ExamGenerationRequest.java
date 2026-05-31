@@ -55,6 +55,23 @@ public class ExamGenerationRequest {
     @Max(100)
     private Integer hardPercent = 20;
 
+    // Bloom's Cognitive Levels distribution (must sum to 100)
+    @Min(0)
+    @Max(100)
+    private Integer knowledgePercent = 40;
+
+    @Min(0)
+    @Max(100)
+    private Integer comprehensionPercent = 30;
+
+    @Min(0)
+    @Max(100)
+    private Integer applicationPercent = 20;
+
+    @Min(0)
+    @Max(100)
+    private Integer higherOrderPercent = 10;
+
     // Question type distribution
     @NotEmpty(message = "At least one question type rule is required")
     @Valid

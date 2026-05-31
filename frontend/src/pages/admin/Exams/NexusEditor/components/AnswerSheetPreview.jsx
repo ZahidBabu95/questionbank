@@ -17,6 +17,29 @@ const isPlaceholderText = (text) => {
 const getDisplayQuestionText = (q) => {
     if (!q) return '';
     let text = q.questionText || '';
+    
+    if (q.stimulus) {
+        const cleanStim = q.stimulus.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+        const isStimPlaceholder = cleanStim === '' || 
+                                  cleanStim.startsWith('generated question') || 
+                                  cleanStim.startsWith('dynamic question') || 
+                                  cleanStim.startsWith('ডায়নামিক প্রশ্ন') || 
+                                  cleanStim.startsWith('ডায়নামিক প্রশ্ন');
+        if (!isStimPlaceholder) {
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const stem = doc.querySelector('.cq-stem');
+                if (stem) {
+                    stem.remove();
+                    text = doc.body.innerHTML;
+                }
+            } catch (e) {
+                console.error("Failed to strip cq-stem in getDisplayQuestionText:", e);
+            }
+        }
+    }
+
     const cleanText = text.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
     const isPlaceholder = cleanText.startsWith('generated question') || 
                           cleanText.startsWith('dynamic question') || 

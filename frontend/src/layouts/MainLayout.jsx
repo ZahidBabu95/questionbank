@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
     Menu, Search, Bell, ChevronDown, Box,
-    LayoutDashboard, FileQuestion, FileText, Settings, X
+    LayoutDashboard, FileQuestion, FileText, Settings, X, ArrowLeft
 } from 'lucide-react';
 import Sidebar from '../components/layout/Sidebar';
 import NotificationDropdown from '../components/layout/NotificationDropdown';
@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useBranding } from '../context/BrandingContext';
 import WorkspaceStatusOverlay from '../components/common/WorkspaceStatusOverlay';
+import IdleSessionTimeout from '../components/common/IdleSessionTimeout';
 
 const MainLayout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -49,8 +50,19 @@ const MainLayout = () => {
     }, [location.pathname, isEmbedded, isDefaultInstitute, navigate]);
 
     if (isEmbedded) {
+        const showFloatingBack = location.pathname !== '/questions/approved' && 
+                                 location.pathname !== '/ai-workspace';
         return (
-            <div className="w-full h-screen overflow-y-auto bg-slate-50 custom-scrollbar">
+            <div className="w-full h-screen overflow-y-auto bg-slate-50 custom-scrollbar relative">
+                {showFloatingBack && (
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="fixed top-4 left-4 z-[9999] flex items-center justify-center w-9 h-9 bg-white/95 backdrop-blur-md border border-slate-200/80 hover:bg-white text-slate-700 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 group"
+                        title="ফিরে যান / Go Back"
+                    >
+                        <ArrowLeft size={16} className="stroke-[2.5] transition-transform group-hover:-translate-x-0.5" />
+                    </button>
+                )}
                 <Outlet />
             </div>
         );
@@ -224,8 +236,8 @@ const MainLayout = () => {
 
     
     
-    // Sidebar is always visible for all users
-    const hideSidebar = false;
+    // Sidebar, Header, and Bottom Bar can be hidden dynamically
+    const hideSidebar = dynamicTitle?.hideLayoutBars === true;
 
     const isAiWorkspace = location.pathname.startsWith('/ai-workspace');
     const isFullscreenWorkspace = location.pathname.includes('editor') || 
@@ -481,6 +493,7 @@ const MainLayout = () => {
                 </nav>
                 )}
             </div>
+            <IdleSessionTimeout />
         </div>
     );
 };

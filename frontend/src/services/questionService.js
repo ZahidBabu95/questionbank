@@ -92,6 +92,13 @@ const getSourceTags = async (params = {}) => {
     return response.data;
 };
 
+const getQuestionAvailability = async (classSubjectId, language = null) => {
+    const params = { classSubjectId };
+    if (language && language !== 'ALL') params.language = language;
+    const response = await axios.get(`${API_URL}/availability`, { params });
+    return response.data;
+};
+
 const deleteQuestion = async (id) => {
     await axios.delete(`${API_URL}/${id}`);
     clearQuestionCache();
@@ -255,4 +262,5 @@ export default {
     hasFavorited,
     getMyFavorites,
     getMyFavoriteIds,
+    getQuestionAvailability,
 };

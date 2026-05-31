@@ -29,7 +29,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserLoginHistoryRepository loginHistoryRepo;
 
     @Override
-    public String login(String email, String password) {
+    public String login(String email, String password, String ipAddress, String userAgent) {
         // 1. Check User Status & Unlock if needed
         User user = userRepository.findByEmail(email).orElse(null);
         if (user != null) {
@@ -70,6 +70,8 @@ public class AuthServiceImpl implements AuthService {
                 h.setUserId(user.getId());
                 h.setEmail(email);
                 h.setSuccess(true);
+                h.setIpAddress(ipAddress);
+                h.setUserAgent(userAgent);
                 loginHistoryRepo.save(h);
             }
             return jwtTokenProvider.generateToken(authentication);
@@ -94,6 +96,8 @@ public class AuthServiceImpl implements AuthService {
                 h.setEmail(email);
                 h.setSuccess(false);
                 h.setFailureReason(newAttempts >= maxAttempts ? "Account locked" : "Wrong password");
+                h.setIpAddress(ipAddress);
+                h.setUserAgent(userAgent);
                 loginHistoryRepo.save(h);
             }
             throw e;
@@ -112,11 +116,22 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public String refreshToken(String oldToken) {
-        // Basic implementation, can be enhanced
         if (jwtTokenProvider.validateToken(oldToken)) {
-            // Extract username and generate new token
-            // For now, simpler implementation or placeholder
-            return oldToken;
+            String email = jwtTokenProvider.getUsername(oldToken);
+            User user = userRepository.findByEmail(email).orElse(null);
+            if (user != null && user.isActive() && !user.isAccountLocked()) {
+                java.util.Set<org.springframework.security.core.authority.SimpleGrantedAuthority> authorities = user.getRoles()
+                        .stream()
+                        .map(role -> new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + role.getName()))
+                        .collect(java.util.stream.Collectors.toSet());
+
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                        user.getEmail(),
+                        null,
+                        authorities);
+
+                return jwtTokenProvider.generateToken(authentication);
+            }
         }
         return null;
     }

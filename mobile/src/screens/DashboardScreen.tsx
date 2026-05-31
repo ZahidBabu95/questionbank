@@ -16,7 +16,8 @@ import {
   Modal,
   Image,
   Animated,
-  Linking
+  Linking,
+  BackHandler
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -25,7 +26,9 @@ import { theme } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { useBranding } from '../context/BrandingContext';
 import apiClient, { LOCAL_DEV_IP, getWebAppBaseUrl, BASE_URL } from '../api/apiClient';
+import { APP_CONFIG } from '../config';
 import { WebView } from 'react-native-webview';
+import * as ImagePicker from 'expo-image-picker';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -123,6 +126,10 @@ export const DashboardScreen: React.FC = () => {
   const { t } = useTranslation();
   const { user, logout, updateUser, token } = useAuth();
   const { logoUrl, systemName } = useBranding();
+
+  // Auto-Update States
+  const [updateInfo, setUpdateInfo] = useState<any>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
 
   // Tab: 'home' | 'notifications' | 'profile' | 'saved-exams' | 'ai-workspace'
   const [activeTab, setActiveTab] = useState<'home' | 'notifications' | 'profile' | 'saved-exams' | 'ai-workspace'>('home');
@@ -297,6 +304,7 @@ export const DashboardScreen: React.FC = () => {
     setIsWebViewActive(false);
     setQuickActionUrl('');
     setCanGoBack(false);
+    setHideMobileLayoutBars(false);
   };
 
   // Loaders
@@ -333,6 +341,7 @@ export const DashboardScreen: React.FC = () => {
   // Fresh user state (from backend)
   const [freshUser, setFreshUser] = useState<any>(user);
   const [assignedSubjects, setAssignedSubjects] = useState<any[]>([]);
+  const [academicHierarchy, setAcademicHierarchy] = useState<any>(null);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
 
   // Live stats state
@@ -357,6 +366,8 @@ export const DashboardScreen: React.FC = () => {
   const [quickActionLoading, setQuickActionLoading] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const quickActionWebViewRef = React.useRef<any>(null);
+  const [hideMobileLayoutBars, setHideMobileLayoutBars] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   
   const lastAutoLoginTime = React.useRef<{[key: string]: number}>({});
 
@@ -371,9 +382,65 @@ export const DashboardScreen: React.FC = () => {
           "The exam paper PDF will download and open in your default browser.",
           [{ text: "Download & Open", onPress: () => Linking.openURL(downloadUrl) }]
         );
+      } else if (data && data.type === 'hide_layout_bars') {
+        setHideMobileLayoutBars(!!data.hide);
+      } else if (data && data.type === 'close_webview') {
+        handleCloseEmbeddedWebView();
       }
     } catch (e) {
       console.warn("Failed to parse WebView message:", e);
+    }
+  };
+
+  const handleUploadAvatar = async () => {
+    // 1. Request permission
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'Please grant gallery access to change profile picture.');
+      return;
+    }
+
+    // 2. Select image
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets || result.assets.length === 0) return;
+    
+    const selectedAsset = result.assets[0];
+    
+    // 3. Upload to API
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      
+      const fileUri = selectedAsset.uri;
+      const fileType = selectedAsset.mimeType || 'image/jpeg';
+      const fileName = fileUri.split('/').pop() || 'profile.jpg';
+
+      formData.append('file', {
+        uri: Platform.OS === 'android' ? fileUri : fileUri.replace('file://', ''),
+        name: fileName,
+        type: fileType,
+      } as any);
+
+      const response = await apiClient.post(`/users/${user.id}/profile-image`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (response.data?.success) {
+        Alert.alert('Success', 'Profile image updated successfully!');
+        // Refresh fresh user details to reload avatar
+        fetchFreshUserDetails();
+      }
+    } catch (error: any) {
+      console.log('Avatar upload failed:', error);
+      Alert.alert('Error', error.response?.data?.message || 'Failed to upload profile image.');
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -416,7 +483,24 @@ export const DashboardScreen: React.FC = () => {
     startGreetingTimer();
   };
 
+  const checkForAppUpdates = async () => {
+    try {
+      const platformParam = Platform.OS === 'ios' ? 'IOS' : 'ANDROID';
+      const response = await apiClient.get(`/public/apps/latest?platform=${platformParam}`);
+      if (response.data && response.data.active) {
+        const serverRelease = response.data;
+        if (serverRelease.versionCode > APP_CONFIG.VERSION_CODE) {
+          setUpdateInfo(serverRelease);
+          setShowUpdateModal(true);
+        }
+      }
+    } catch (error) {
+      console.log('Failed to check for app updates:', error);
+    }
+  };
+
   useEffect(() => {
+    checkForAppUpdates();
     fetchFreshUserDetails();
     fetchDashboardStats();
     fetchNotifications();
@@ -428,6 +512,50 @@ export const DashboardScreen: React.FC = () => {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const backAction = () => {
+      // 1. If Quick Action WebView is active (e.g. manual selection)
+      if (isWebViewActive) {
+        if (canGoBack) {
+          quickActionWebViewRef.current?.goBack();
+          return true; // Prevent default action (app exit/back)
+        } else {
+          // Double-confirmation dialog to protect unsaved user exam progress!
+          Alert.alert(
+            "Exit Manual Exam Builder?",
+            "Are you sure you want to close the manual exam builder? Unsaved changes will be lost.",
+            [
+              { text: "Cancel", onPress: () => null, style: "cancel" },
+              { text: "Exit & Close", onPress: () => handleCloseEmbeddedWebView(), style: "destructive" }
+            ]
+          );
+          return true; // Prevent default action
+        }
+      }
+      
+      // 2. If AI Workspace WebView is active
+      if (activeTab === 'ai-workspace') {
+        setActiveTab('home');
+        return true;
+      }
+
+      // 3. If on other sub-tabs like notifications or profile, redirect to home instead of crashing/exiting
+      if (activeTab !== 'home') {
+        setActiveTab('home');
+        return true;
+      }
+
+      return false; // Let default back action happen (exit app)
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [isWebViewActive, canGoBack, activeTab]);
 
   useEffect(() => {
     // Sync profile form when context user changes
@@ -484,17 +612,22 @@ export const DashboardScreen: React.FC = () => {
 
   const fetchAcademicAccess = async () => {
     if (!user?.instituteId) return;
-    const isAdmin = user.roles?.includes('INSTITUTE_ADMIN') || user.roles?.includes('SUPER_ADMIN');
-    if (!isAdmin) return; // Regular teachers can't read assignment endpoints directly
     
     setLoadingSubjects(true);
     try {
-      const response = await apiClient.get(`/institutes/${user.instituteId}/assigned-subjects`);
-      if (response.data) {
-        setAssignedSubjects(Array.isArray(response.data) ? response.data : []);
+      const [subjectsRes, hierarchyRes] = await Promise.all([
+        apiClient.get(`/institutes/${user.instituteId}/assigned-subjects`),
+        apiClient.get('/academic/hierarchy?bypass=true')
+      ]);
+
+      if (subjectsRes.data) {
+        setAssignedSubjects(Array.isArray(subjectsRes.data) ? subjectsRes.data : []);
+      }
+      if (hierarchyRes.data) {
+        setAcademicHierarchy(hierarchyRes.data);
       }
     } catch (error) {
-      console.log('Failed to fetch academic subjects:', error);
+      console.log('Failed to fetch academic subjects/hierarchy:', error);
     } finally {
       setLoadingSubjects(false);
     }
@@ -700,38 +833,40 @@ export const DashboardScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       {/* ─── Top Header (Logo & Notifications) ─── */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => changeTab('home')} activeOpacity={0.7}>
-          {logoUrl ? (
-            <Image source={{ uri: logoUrl }} style={styles.headerLogoImage} resizeMode="contain" />
-          ) : (
-            <View style={styles.headerLogoPlaceholder}>
-              <View style={styles.headerLogoIcon}>
-                <Feather name="book-open" size={16} color="#FFF" />
+      {!hideMobileLayoutBars && (
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => changeTab('home')} activeOpacity={0.7}>
+            {logoUrl ? (
+              <Image source={{ uri: logoUrl }} style={styles.headerLogoImage} resizeMode="contain" />
+            ) : (
+              <View style={styles.headerLogoPlaceholder}>
+                <View style={styles.headerLogoIcon}>
+                  <Feather name="book-open" size={16} color="#FFF" />
+                </View>
+                <Text style={styles.headerLogoText}>{systemName}</Text>
               </View>
-              <Text style={styles.headerLogoText}>{systemName}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.headerRightActions}>
-          {freshUser?.contributionPoints !== undefined && (
-            <View style={styles.headerXpBadge}>
-              <Feather name="award" size={12} color="#D97706" style={{ marginRight: 4 }} />
-              <Text style={styles.headerXpText}>{freshUser.contributionPoints} XP</Text>
-            </View>
-          )}
-
-          <TouchableOpacity 
-            style={styles.headerNotificationBtn}
-            onPress={() => changeTab('notifications')}
-            activeOpacity={0.7}
-          >
-            <Feather name="bell" size={18} color={theme.colors.text} />
-            {unreadCount > 0 && <View style={styles.headerNotificationBadge} />}
+            )}
           </TouchableOpacity>
+
+          <View style={styles.headerRightActions}>
+            {freshUser?.contributionPoints !== undefined && (
+              <View style={styles.headerXpBadge}>
+                <Feather name="award" size={12} color="#D97706" style={{ marginRight: 4 }} />
+                <Text style={styles.headerXpText}>{freshUser.contributionPoints} XP</Text>
+              </View>
+            )}
+
+            <TouchableOpacity 
+              style={styles.headerNotificationBtn}
+              onPress={() => changeTab('notifications')}
+              activeOpacity={0.7}
+            >
+              <Feather name="bell" size={18} color={theme.colors.text} />
+              {unreadCount > 0 && <View style={styles.headerNotificationBadge} />}
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Progress Bars directly under the standard header */}
       {isWebViewActive && quickActionLoading && (
@@ -1052,11 +1187,32 @@ export const DashboardScreen: React.FC = () => {
               <View style={styles.profileBanner} />
               
               <View style={styles.profileMetaArea}>
-                <View style={styles.profileAvatar}>
-                  <Text style={styles.profileAvatarTxt}>
-                    {user?.name?.charAt(0).toUpperCase() || 'U'}
-                  </Text>
-                </View>
+                <TouchableOpacity 
+                  style={styles.profileAvatarContainer} 
+                  onPress={handleUploadAvatar}
+                  disabled={uploadingAvatar}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.profileAvatar}>
+                    {uploadingAvatar ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (freshUser?.profileImageUrl || user?.profileImageUrl) ? (
+                      <Image 
+                        source={{ uri: freshUser?.profileImageUrl || user?.profileImageUrl }} 
+                        style={styles.profileAvatarImg} 
+                      />
+                    ) : (
+                      <Text style={styles.profileAvatarTxt}>
+                        {(freshUser?.name || user?.name || 'U').charAt(0).toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
+                  
+                  {/* Camera edit floating icon */}
+                  <View style={styles.profileAvatarEditBadge}>
+                    <Feather name="camera" size={10} color="#FFF" />
+                  </View>
+                </TouchableOpacity>
                 <Text style={styles.profileName}>{freshUser?.name || user?.name}</Text>
                 <Text style={styles.profileEmail}>{user?.email}</Text>
                 
@@ -1240,76 +1396,287 @@ export const DashboardScreen: React.FC = () => {
                 </View>
               )}
 
-              {profileSubTab === 'subscription' && (
-                // 3. Subscription details
-                <View style={styles.formContainer}>
-                  <Text style={styles.formSectionTitle}>Active Plan Details</Text>
-                  
-                  <View style={styles.subPlanBox}>
-                    <Feather name="zap" size={24} color={theme.colors.primary} />
-                    <View style={{ marginLeft: 12 }}>
-                      <Text style={styles.subPlanTitle}>
-                        {user?.subscriptionPackage || 'Basic Workspace Plan'}
-                      </Text>
-                      <Text style={styles.subPlanCycle}>Active Subscription</Text>
-                    </View>
-                  </View>
+              {profileSubTab === 'subscription' && (() => {
+                const aiUsed = freshUser?.aiUsedCurrentMonth ?? 0;
+                const aiLimit = freshUser?.aiLimitPerMonth ?? 500000;
+                const aiPercent = Math.min(100, Math.max(0, (aiUsed / aiLimit) * 100));
 
-                  <View style={styles.limitsGrid}>
-                    <View style={styles.limitCard}>
-                      <Text style={styles.limitValue}>Active</Text>
-                      <Text style={styles.limitLabel}>Workspace Status</Text>
-                    </View>
-                    <View style={styles.limitCard}>
-                      <Text style={styles.limitValue}>
-                        {user?.roles?.includes('SUPER_ADMIN') ? 'Unlimited' : 'Enterprise'}
-                      </Text>
-                      <Text style={styles.limitLabel}>Permissions</Text>
-                    </View>
-                  </View>
+                const questionsUsed = freshUser?.questionsUsedCurrentMonth ?? 0;
+                const questionsLimit = freshUser?.maxQuestions ?? 5000;
+                const questionsPercent = Math.min(100, Math.max(0, (questionsUsed / questionsLimit) * 100));
 
-                  <Text style={styles.infoBoxText}>
-                    To upgrade your subscription limits or change payment structures, please contact your workspace administrator or login via our Web Dashboard.
-                  </Text>
-                </View>
-              )}
+                const storageUsed = freshUser?.storageUsedMb ?? 0.0;
+                const storageLimit = freshUser?.storageLimitMb ?? 1024;
+                const storagePercent = Math.min(100, Math.max(0, (storageUsed / storageLimit) * 100));
 
-              {profileSubTab === 'academic' && (
-                // 4. Academic Access Scope
-                <View style={styles.formContainer}>
-                  <Text style={styles.formSectionTitle}>Academic Scope Access</Text>
-                  
-                  {loadingSubjects ? (
-                    <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 20 }} />
-                  ) : (
-                    <>
-                      <Text style={styles.infoBoxText}>
-                        Your account has licensing access to subjects inside this institute. Below is the list of active scope permissions:
+                const formatLimitNumber = (num: number) => {
+                  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                  if (num >= 1000) return (num / 1000).toFixed(0) + '.0K';
+                  return num.toString();
+                };
+
+                const formatDate = (dateStr: any) => {
+                  if (!dateStr) return 'No expiration (আজীবন সচল)';
+                  try {
+                    const d = new Date(dateStr);
+                    if (isNaN(d.getTime())) return dateStr;
+                    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+                  } catch (e) {
+                    return dateStr;
+                  }
+                };
+
+                return (
+                  <View style={styles.formContainer}>
+                    <Text style={styles.formSectionTitle}>Workspace Plan & Limits</Text>
+                    
+                    {/* Active Plan Premium Gradient Card */}
+                    <View style={styles.premiumPlanCard}>
+                      <View style={styles.premiumPlanGradient} />
+                      <View style={styles.premiumPlanHeader}>
+                        <Text style={styles.premiumPlanCode}>
+                          {freshUser?.planType || 'BETA'}
+                        </Text>
+                        <View style={styles.premiumActiveBadge}>
+                          <Text style={styles.premiumActiveBadgeText}>Active Plan</Text>
+                        </View>
+                      </View>
+                      
+                      <Text style={styles.premiumPlanTitle}>
+                        {freshUser?.subscriptionPackage || user?.subscriptionPackage || 'Beta User (Early Access)'}
                       </Text>
                       
-                      <View style={styles.subjectsScopeList}>
-                        {assignedSubjects.length > 0 ? (
-                          assignedSubjects.map((subId, idx) => (
-                            <View key={idx} style={styles.scopeItem}>
-                              <Feather name="check" size={14} color="#10B981" />
-                              <Text style={styles.scopeItemText}>Licensed Subject ID: {subId}</Text>
-                            </View>
-                          ))
-                        ) : (
-                          <View style={styles.scopeItem}>
-                            <Feather name="info" size={14} color={theme.colors.primary} />
-                            <Text style={styles.scopeItemText}>
-                              {user?.roles?.includes('SUPER_ADMIN') 
-                                ? 'Super Admin Mode - Unlimited global curriculum access'
-                                : 'Default curriculum scope activated for your teacher workspace'}
-                            </Text>
-                          </View>
-                        )}
+                      <Text style={styles.premiumPlanDesc}>
+                        Exclusive generous package for early workspace members and academic administrators.
+                      </Text>
+
+                      <View style={styles.premiumPlanPriceArea}>
+                        <Text style={styles.premiumPlanPrice}>
+                          {freshUser?.subscriptionPackage ? '৳0.0' : '$100'}
+                        </Text>
+                        <Text style={styles.premiumPlanPeriod}>/ MONTHLY</Text>
                       </View>
-                    </>
-                  )}
-                </View>
-              )}
+                    </View>
+
+                    {/* রিসোর্স ব্যবহার সীমা Header */}
+                    <Text style={styles.resourceSectionTitle}>রিসোর্স ব্যবহার সীমা (Resource Usage Limits)</Text>
+
+                    {/* AI Token Quota Card */}
+                    <View style={styles.resourceCard}>
+                      <View style={styles.resourceHeader}>
+                        <View style={styles.resourceTitleRow}>
+                          <View style={[styles.resourceIconBg, { backgroundColor: 'rgba(109, 40, 217, 0.08)' }]}>
+                            <Feather name="zap" size={15} color="#6D28D9" />
+                          </View>
+                          <Text style={styles.resourceName}>AI TOKEN QUOTA</Text>
+                        </View>
+                        <Text style={styles.resourcePercent}>{aiPercent.toFixed(0)}% capacity</Text>
+                      </View>
+                      <View style={styles.resourceStatsRow}>
+                        <Text style={styles.resourceValueUsed}>
+                          {formatLimitNumber(aiUsed)}
+                        </Text>
+                        <Text style={styles.resourceValueLimit}>
+                          {' / ' + formatLimitNumber(aiLimit)}
+                        </Text>
+                      </View>
+                      <Text style={styles.resourceValueLabel}>Used This Month</Text>
+                      <View style={styles.resourceProgressBarBg}>
+                        <View style={[styles.resourceProgressBarFill, { width: `${aiPercent}%`, backgroundColor: '#6D28D9' }]} />
+                      </View>
+                    </View>
+
+                    {/* Questions Created Card */}
+                    <View style={styles.resourceCard}>
+                      <View style={styles.resourceHeader}>
+                        <View style={styles.resourceTitleRow}>
+                          <View style={[styles.resourceIconBg, { backgroundColor: 'rgba(37, 99, 235, 0.08)' }]}>
+                            <Feather name="help-circle" size={15} color="#2563EB" />
+                          </View>
+                          <Text style={styles.resourceName}>QUESTIONS CREATED</Text>
+                        </View>
+                        <Text style={styles.resourcePercent}>{questionsPercent.toFixed(0)}% capacity</Text>
+                      </View>
+                      <View style={styles.resourceStatsRow}>
+                        <Text style={styles.resourceValueUsed}>
+                          {formatLimitNumber(questionsUsed)}
+                        </Text>
+                        <Text style={styles.resourceValueLimit}>
+                          {' / ' + formatLimitNumber(questionsLimit)}
+                        </Text>
+                      </View>
+                      <Text style={styles.resourceValueLabel}>Created This Month</Text>
+                      <View style={styles.resourceProgressBarBg}>
+                        <View style={[styles.resourceProgressBarFill, { width: `${questionsPercent}%`, backgroundColor: '#2563EB' }]} />
+                      </View>
+                    </View>
+
+                    {/* Storage Used Card */}
+                    <View style={styles.resourceCard}>
+                      <View style={styles.resourceHeader}>
+                        <View style={styles.resourceTitleRow}>
+                          <View style={[styles.resourceIconBg, { backgroundColor: 'rgba(16, 185, 129, 0.08)' }]}>
+                            <Feather name="database" size={15} color="#10B981" />
+                          </View>
+                          <Text style={styles.resourceName}>STORAGE USED</Text>
+                        </View>
+                        <Text style={styles.resourcePercent}>{storagePercent.toFixed(0)}% capacity</Text>
+                      </View>
+                      <View style={styles.resourceStatsRow}>
+                        <Text style={styles.resourceValueUsed}>
+                          {storageUsed.toFixed(1) + ' MB'}
+                        </Text>
+                        <Text style={styles.resourceValueLimit}>
+                          {' / ' + (storageLimit >= 1024 ? (storageLimit / 1024).toFixed(1) + ' GB' : storageLimit + ' MB')}
+                        </Text>
+                      </View>
+                      <Text style={styles.resourceValueLabel}>R2 Bucket Volume</Text>
+                      <View style={styles.resourceProgressBarBg}>
+                        <View style={[styles.resourceProgressBarFill, { width: `${storagePercent}%`, backgroundColor: '#10B981' }]} />
+                      </View>
+                    </View>
+
+                    {/* Workspace Status dark glass Card */}
+                    <View style={styles.workspaceStatusCard}>
+                      <View style={styles.workspaceHeaderRow}>
+                        <Feather name="shield" size={14} color="#94A3B8" />
+                        <Text style={styles.workspaceHeaderTitle}>Workspace Status</Text>
+                      </View>
+
+                      <View style={styles.workspaceDetailRow}>
+                        <Text style={styles.workspaceDetailLabel}>Account ID</Text>
+                        <TouchableOpacity 
+                          onPress={() => {
+                            if (freshUser?.instituteId) {
+                              const Clipboard = require('react-native').Clipboard;
+                              Clipboard.setString(freshUser.instituteId);
+                              Alert.alert('Copied', 'Account ID copied to clipboard!');
+                            }
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.workspaceDetailValue, { color: '#818CF8', textDecorationLine: 'underline' }]} numberOfLines={1}>
+                            {freshUser?.instituteId || '2648f762-bc87-48e3-82eb-31a0ca0d3fc2'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.workspaceDetailRow}>
+                        <Text style={styles.workspaceDetailLabel}>Account Status</Text>
+                        <View style={styles.workspaceStatusDotRow}>
+                          <View style={styles.workspaceStatusDot} />
+                          <Text style={styles.workspaceStatusText}>
+                            Active ({freshUser?.instituteStatus || user?.instituteStatus || 'সক্রিয়'})
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.workspaceDetailRow}>
+                        <Text style={styles.workspaceDetailLabel}>Member Since</Text>
+                        <Text style={styles.workspaceDetailValue}>
+                          {freshUser?.createdAt ? formatDate(freshUser.createdAt) : '24 May 2026'}
+                        </Text>
+                      </View>
+
+                      <View style={styles.workspaceDetailRow}>
+                        <Text style={styles.workspaceDetailLabel}>Plan Expiry Date</Text>
+                        <Text style={styles.workspaceDetailValue}>
+                          {formatDate(freshUser?.expiryDate || freshUser?.planEndDate)}
+                        </Text>
+                      </View>
+
+                      {/* Workspace Limit small cards */}
+                      <View style={styles.workspaceLimitsGrid}>
+                        <View style={styles.workspaceLimitBox}>
+                          <Text style={styles.workspaceLimitVal}>
+                            {freshUser?.maxTeachers ?? 10}
+                          </Text>
+                          <Text style={styles.workspaceLimitLbl}>Teachers Quota</Text>
+                        </View>
+                        <View style={styles.workspaceLimitBox}>
+                          <Text style={styles.workspaceLimitVal}>
+                            {freshUser?.maxStudents ?? 100}
+                          </Text>
+                          <Text style={styles.workspaceLimitLbl}>Students Quota</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <Text style={styles.infoBoxText}>
+                      To upgrade your subscription limits or change payment structures, please contact your workspace administrator or login via our Web Dashboard.
+                    </Text>
+                  </View>
+                );
+              })()}
+
+              {profileSubTab === 'academic' && (() => {
+                const activeSubjectsList: any[] = [];
+                
+                if (academicHierarchy?.classSubjects) {
+                  academicHierarchy.classSubjects.forEach((cs: any) => {
+                    if (assignedSubjects.includes(cs.id)) {
+                      const cls = academicHierarchy.classes?.find((c: any) => c.id === cs._classId);
+                      activeSubjectsList.push({
+                        classSubject: cs,
+                        cls: cls
+                      });
+                    }
+                  });
+                }
+
+                return (
+                  <View style={styles.formContainer}>
+                    <Text style={styles.formSectionTitle}>Academic Scope Access</Text>
+                    
+                    {loadingSubjects ? (
+                      <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 20 }} />
+                    ) : (
+                      <>
+                        <Text style={styles.infoBoxText}>
+                          Your account has licensing access to subjects inside this institute. Below is the list of active scope permissions:
+                        </Text>
+                        
+                        <View style={styles.subjectsScopeList}>
+                          {activeSubjectsList.length > 0 ? (
+                            activeSubjectsList.map(({ classSubject, cls }, idx) => (
+                              <View key={classSubject.id || idx} style={styles.scopeItem}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
+                                  <View style={[styles.resourceIconBg, { backgroundColor: 'rgba(16, 185, 129, 0.08)' }]}>
+                                    <Feather name="book-open" size={14} color="#10B981" />
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme.colors.text }}>
+                                      {classSubject.name}
+                                    </Text>
+                                    <Text style={{ fontSize: 9, color: theme.colors.textMuted, fontWeight: 'bold', textTransform: 'uppercase', marginTop: 2 }}>
+                                      {cls?.name || 'Class'} • {cls?._streamName || 'General'}
+                                    </Text>
+                                  </View>
+                                </View>
+                                
+                                <View style={styles.premiumActiveBadge}>
+                                  <Text style={styles.premiumActiveBadgeText}>Active</Text>
+                                </View>
+                              </View>
+                            ))
+                          ) : (
+                            <View style={styles.scopeItem}>
+                              <View style={[styles.resourceIconBg, { backgroundColor: 'rgba(59, 130, 246, 0.08)' }]}>
+                                <Feather name="info" size={14} color={theme.colors.primary} />
+                              </View>
+                              <Text style={[styles.scopeItemText, { marginLeft: 10 }]}>
+                                {user?.roles?.includes('SUPER_ADMIN') 
+                                  ? 'Super Admin Mode - Unlimited global curriculum access'
+                                  : 'Default curriculum scope activated for your teacher workspace'}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </>
+                    )}
+                  </View>
+                );
+              })()}
             </View>
 
             {/* Logout Row - Hidden per user request as it is now in the bottom navigation bar */}
@@ -1377,13 +1744,30 @@ export const DashboardScreen: React.FC = () => {
                   <ActivityIndicator size="large" color={theme.colors.primary} />
                 </View>
               )}
+              renderError={() => (
+                <View style={styles.webErrorOverlay}>
+                  <Feather name="wifi-off" size={40} color="#EF4444" style={{ marginBottom: 12 }} />
+                  <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.colors.text, marginBottom: 4 }}>
+                    নেটওয়ার্ক সংযোগ নেই
+                  </Text>
+                  <Text style={{ fontSize: 11, color: theme.colors.textSecondary, textAlign: 'center', paddingHorizontal: 24, marginBottom: 16 }}>
+                    অনুগ্রহ করে আপনার ইন্টারনেট সংযোগটি পরীক্ষা করুন এবং পুনরায় চেষ্টা করুন।
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={() => webViewRef.current?.reload()}
+                    style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 }}
+                  >
+                    <Text style={{ color: '#FFF', fontSize: 12, fontWeight: 'bold' }}>পুনরায় চেষ্টা করুন</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             />
           ) : null}
         </View>
 
         {/* ─── Keep Quick Actions Embedded WebView mounted ─── */}
         <View style={{ flex: 1, display: isWebViewActive ? 'flex' : 'none' }}>
-          {isWebViewActive && (
+          {isWebViewActive && !hideMobileLayoutBars && (
             <View style={[styles.webHeader, { height: 48, paddingHorizontal: 12 }]}>
               <TouchableOpacity 
                 onPress={() => {
@@ -1479,57 +1863,78 @@ export const DashboardScreen: React.FC = () => {
                   <ActivityIndicator size="large" color={theme.colors.primary} />
                 </View>
               )}
+              renderError={() => (
+                <View style={styles.webErrorOverlay}>
+                  <Feather name="wifi-off" size={40} color="#EF4444" style={{ marginBottom: 12 }} />
+                  <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.colors.text, marginBottom: 4 }}>
+                    নেটওয়ার্ক সংযোগ নেই
+                  </Text>
+                  <Text style={{ fontSize: 11, color: theme.colors.textSecondary, textAlign: 'center', paddingHorizontal: 24, marginBottom: 16 }}>
+                    অনুগ্রহ করে আপনার ইন্টারনেট সংযোগটি পরীক্ষা করুন এবং পুনরায় চেষ্টা করুন।
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={() => quickActionWebViewRef.current?.reload()}
+                    style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 }}
+                  >
+                    <Text style={{ color: '#FFF', fontSize: 12, fontWeight: 'bold' }}>পুনরায় চেষ্টা করুন</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             />
           ) : null}
+          
+          
         </View>
       </View>
 
       {/* ─── Custom Bottom Navigation Bar ─── */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'home' && !isWebViewActive && styles.navItemActive]}
-          onPress={() => changeTab('home')}
-          activeOpacity={0.9}
-        >
-          <Feather name="home" size={20} color={activeTab === 'home' && !isWebViewActive ? theme.colors.primary : theme.colors.textMuted} />
-          <Text style={[styles.navText, activeTab === 'home' && !isWebViewActive && styles.navTextActive]}>
-            Home
-          </Text>
-        </TouchableOpacity>
+      {!hideMobileLayoutBars && (
+        <View style={styles.bottomNav}>
+          <TouchableOpacity 
+            style={[styles.navItem, activeTab === 'home' && !isWebViewActive && styles.navItemActive]}
+            onPress={() => changeTab('home')}
+            activeOpacity={0.9}
+          >
+            <Feather name="home" size={20} color={activeTab === 'home' && !isWebViewActive ? theme.colors.primary : theme.colors.textMuted} />
+            <Text style={[styles.navText, activeTab === 'home' && !isWebViewActive && styles.navTextActive]}>
+              Home
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'ai-workspace' && !isWebViewActive && styles.navItemActive]}
-          onPress={() => changeTab('ai-workspace')}
-          activeOpacity={0.9}
-        >
-          <Feather name="zap" size={20} color={activeTab === 'ai-workspace' && !isWebViewActive ? theme.colors.primary : theme.colors.textMuted} />
-          <Text style={[styles.navText, activeTab === 'ai-workspace' && !isWebViewActive && styles.navTextActive]}>
-            AI Workspace
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.navItem, activeTab === 'ai-workspace' && !isWebViewActive && styles.navItemActive]}
+            onPress={() => changeTab('ai-workspace')}
+            activeOpacity={0.9}
+          >
+            <Feather name="zap" size={20} color={activeTab === 'ai-workspace' && !isWebViewActive ? theme.colors.primary : theme.colors.textMuted} />
+            <Text style={[styles.navText, activeTab === 'ai-workspace' && !isWebViewActive && styles.navTextActive]}>
+              AI Workspace
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={handleLogout}
-          activeOpacity={0.9}
-        >
-          <Feather name="log-out" size={20} color={theme.colors.textMuted} />
-          <Text style={styles.navText}>
-            Logout
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.navItem}
+            onPress={handleLogout}
+            activeOpacity={0.9}
+          >
+            <Feather name="log-out" size={20} color={theme.colors.textMuted} />
+            <Text style={styles.navText}>
+              Logout
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.navItem, activeTab === 'profile' && !isWebViewActive && styles.navItemActive]}
-          onPress={() => changeTab('profile')}
-          activeOpacity={0.9}
-        >
-          <Feather name="user" size={20} color={activeTab === 'profile' && !isWebViewActive ? theme.colors.primary : theme.colors.textMuted} />
-          <Text style={[styles.navText, activeTab === 'profile' && !isWebViewActive && styles.navTextActive]}>
-            Profile
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity 
+            style={[styles.navItem, activeTab === 'profile' && !isWebViewActive && styles.navItemActive]}
+            onPress={() => changeTab('profile')}
+            activeOpacity={0.9}
+          >
+            <Feather name="user" size={20} color={activeTab === 'profile' && !isWebViewActive ? theme.colors.primary : theme.colors.textMuted} />
+            <Text style={[styles.navText, activeTab === 'profile' && !isWebViewActive && styles.navTextActive]}>
+              Profile
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Subject breakdown Modal */}
       <Modal
@@ -1559,11 +1964,18 @@ export const DashboardScreen: React.FC = () => {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.modalScrollContent}
             >
-              {liveStats?.subjectQuestions && liveStats.subjectQuestions.length > 0 ? (
-                liveStats.subjectQuestions.map((sub: any, index: number) => {
-                  const total = liveStats.subjectQuestions.reduce((acc: number, curr: any) => acc + curr.count, 0);
+              {(() => {
+                if (!liveStats?.subjectQuestions || liveStats.subjectQuestions.length === 0) {
+                  return (
+                    <View style={styles.modalEmptyContainer}>
+                      <Feather name="info" size={40} color={theme.colors.textMuted} />
+                      <Text style={styles.modalEmptyText}>No subject metrics available</Text>
+                    </View>
+                  );
+                }
+                const total = liveStats.subjectQuestions.reduce((acc: number, curr: any) => acc + curr.count, 0);
+                return liveStats.subjectQuestions.map((sub: any, index: number) => {
                   const percent = total > 0 ? Math.round((sub.count / total) * 100) : 0;
-                  
                   const colors = ['#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#10b981'];
                   const color = colors[index % colors.length];
 
@@ -1585,13 +1997,8 @@ export const DashboardScreen: React.FC = () => {
                       <Text style={styles.modalSubjectPercent}>{percent}% of total approved</Text>
                     </View>
                   );
-                })
-              ) : (
-                <View style={styles.modalEmptyContainer}>
-                  <Feather name="info" size={40} color={theme.colors.textMuted} />
-                  <Text style={styles.modalEmptyText}>No subject metrics available</Text>
-                </View>
-              )}
+                });
+              })()}
             </ScrollView>
 
             {/* Modal Footer */}
@@ -1727,6 +2134,63 @@ export const DashboardScreen: React.FC = () => {
         </View>
       </Modal>
 
+      {/* --- Dynamic Auto-Update Overlay Modal --- */}
+      <Modal
+        visible={showUpdateModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          if (updateInfo && !updateInfo.forceUpdate) {
+            setShowUpdateModal(false);
+          }
+        }}
+      >
+        <View style={styles.updateModalOverlay}>
+          <View style={styles.updateModalContainer}>
+            <View style={styles.updateModalHeader}>
+              <View style={styles.updateIconContainer}>
+                <Ionicons name="cloud-download-outline" size={32} color="#2563EB" />
+              </View>
+              <Text style={styles.updateModalTitle}>New Update Available!</Text>
+              <Text style={styles.updateModalSubtitle}>
+                Version {updateInfo?.versionName} (Build {updateInfo?.versionCode}) is now live.
+              </Text>
+            </View>
+
+            <ScrollView style={styles.updateChangelogScroll} showsVerticalScrollIndicator={false}>
+              <Text style={styles.updateChangelogHeader}>WHAT'S NEW</Text>
+              <Text style={styles.updateChangelogText}>
+                {updateInfo?.changelog || '• Performance enhancements and general bug fixes.'}
+              </Text>
+            </ScrollView>
+
+            <View style={styles.updateModalActions}>
+              <TouchableOpacity
+                style={styles.updateButton}
+                onPress={() => {
+                  if (updateInfo?.downloadUrl) {
+                    Linking.openURL(updateInfo.downloadUrl);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.updateButtonText}>Update Now</Text>
+                <Feather name="arrow-right" size={16} color="#FFF" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+
+              {updateInfo && !updateInfo.forceUpdate && (
+                <TouchableOpacity
+                  style={styles.skipButton}
+                  onPress={() => setShowUpdateModal(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.skipButtonText}>Later</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </SafeAreaView>
   );
@@ -2037,7 +2501,31 @@ const styles = StyleSheet.create({
     borderColor: '#FFF',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     ...theme.shadows.md,
+  },
+  profileAvatarContainer: {
+    position: 'relative',
+    ...theme.shadows.md,
+  },
+  profileAvatarImg: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+  },
+  profileAvatarEditBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: theme.colors.primary,
+    borderWidth: 2,
+    borderColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...theme.shadows.sm,
   },
   profileAvatarTxt: {
     fontSize: 32,
@@ -2200,49 +2688,241 @@ const styles = StyleSheet.create({
     color: '#10B981',
     fontWeight: theme.typography.weights.semibold,
   },
-  subPlanBox: {
+  premiumPlanCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    position: 'relative',
+    overflow: 'hidden',
+    ...theme.shadows.md,
+  },
+  premiumPlanGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(99, 102, 241, 0.12)', // Subtle indigo glow
+  },
+  premiumPlanHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1.5,
-    borderColor: '#BFDBFE',
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    marginBottom: 14,
   },
-  subPlanTitle: {
-    fontSize: 16,
+  premiumActiveBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderRadius: 99,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
+  },
+  premiumActiveBadgeText: {
+    color: '#10B981',
+    fontSize: 9,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  premiumPlanCode: {
+    color: '#818CF8',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  premiumPlanTitle: {
+    color: '#FFF',
+    fontSize: 20,
     fontWeight: theme.typography.weights.bold,
-    color: theme.colors.primary,
   },
-  subPlanCycle: {
+  premiumPlanDesc: {
+    color: '#94A3B8',
     fontSize: 11,
-    color: '#4B5563',
-    fontWeight: theme.typography.weights.medium,
-    marginTop: 2,
-  },
-  limitsGrid: {
-    flexDirection: 'row',
-    gap: 12,
+    lineHeight: 16,
+    marginTop: 6,
     marginBottom: 16,
   },
-  limitCard: {
-    flex: 1,
-    backgroundColor: '#F8F9FC',
-    borderRadius: 12,
-    padding: 14,
+  premiumPlanPriceArea: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  premiumPlanPrice: {
+    color: '#FFF',
+    fontSize: 24,
+    fontWeight: theme.typography.weights.black,
+  },
+  premiumPlanPeriod: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  resourceSectionTitle: {
+    fontSize: 14,
+    fontWeight: theme.typography.weights.bold,
+    color: theme.colors.text,
+    marginBottom: 12,
+    marginTop: 10,
+  },
+  resourceCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    padding: 16,
+    marginBottom: 14,
+    ...theme.shadows.sm,
   },
-  limitValue: {
-    fontSize: 16,
+  resourceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  resourceTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  resourceIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resourceName: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+  },
+  resourcePercent: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: theme.colors.textSecondary,
+  },
+  resourceStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 8,
+  },
+  resourceValueUsed: {
+    fontSize: 18,
     fontWeight: theme.typography.weights.bold,
     color: theme.colors.text,
   },
-  limitLabel: {
-    fontSize: 10,
-    color: theme.colors.textSecondary,
-    fontWeight: theme.typography.weights.medium,
+  resourceValueLimit: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    fontWeight: 'semibold',
+  },
+  resourceValueLabel: {
+    fontSize: 9,
+    color: theme.colors.textMuted,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  resourceProgressBarBg: {
+    height: 6,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  resourceProgressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  workspaceStatusCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: 22,
+    padding: 18,
+    marginTop: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    ...theme.shadows.md,
+  },
+  workspaceHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+    paddingBottom: 8,
+  },
+  workspaceHeaderTitle: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  workspaceDetailRow: {
+    marginBottom: 12,
+  },
+  workspaceDetailLabel: {
+    color: '#64748B',
+    fontSize: 9,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  workspaceDetailValue: {
+    color: '#E2E8F0',
+    fontSize: 12,
+    fontWeight: 'semibold',
+  },
+  workspaceStatusDotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  workspaceStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  workspaceStatusText: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  workspaceLimitsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    paddingTop: 14,
+  },
+  workspaceLimitBox: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  workspaceLimitVal: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'black',
+  },
+  workspaceLimitLbl: {
+    color: '#64748B',
+    fontSize: 9,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
     marginTop: 2,
   },
   infoBoxText: {
@@ -2778,4 +3458,120 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  webErrorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  updateModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  updateModalContainer: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#FFF',
+    borderRadius: 32,
+    padding: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+    elevation: 10,
+    alignItems: 'center',
+  },
+  updateModalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  updateIconContainer: {
+    width: 68,
+    height: 68,
+    borderRadius: 24,
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  updateModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  updateModalSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 8,
+  },
+  updateChangelogScroll: {
+    width: '100%',
+    maxHeight: 150,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    marginBottom: 24,
+  },
+  updateChangelogHeader: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#94A3B8',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  updateChangelogText: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 20,
+  },
+  updateModalActions: {
+    width: '100%',
+    gap: 12,
+  },
+  updateButton: {
+    width: '100%',
+    height: 52,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  updateButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  skipButton: {
+    width: '100%',
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  skipButtonText: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
 });

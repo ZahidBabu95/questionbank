@@ -71,24 +71,81 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
         }`}>
 
             {/* ── Header Row ── */}
-            <div className="flex items-start justify-between px-4 pt-3 pb-2 gap-3">
-                <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-start justify-between px-2 sm:px-4 pt-1.5 sm:pt-2.5 pb-1 sm:pb-1.5 gap-1.5 sm:gap-2">
+                <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
                     <input type="checkbox" checked={isSelected} onChange={() => onSelect(q.id)}
-                        className="w-4 h-4 text-primary border-slate-300 rounded cursor-pointer shrink-0 mt-0.5" />
-                    <span className="text-[12px] font-black text-slate-600 whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">Q #{index}</span>
-                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold border border-slate-200 whitespace-nowrap">{typeLabel}</span>
+                        className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary border-slate-300 rounded cursor-pointer shrink-0 mt-0.5" />
+                    <span className="text-[9px] sm:text-[10.5px] font-black text-slate-600 whitespace-nowrap bg-slate-100 px-1 sm:px-1.5 py-px rounded border border-slate-200">Q #{index}</span>
+                    <span className="px-1 sm:px-1.5 py-px bg-slate-100 text-slate-600 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-slate-200 whitespace-nowrap">{typeLabel}</span>
                     
                     {/* Unified Status Badges */}
-                    {q.status === 'APPROVED' && <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Approved</span>}
-                    {q.status === 'REJECTED' && <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Rejected</span>}
-                    {q.status === 'PENDING' && <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">Pending</span>}
-                    {q.status === 'REVISED' && <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-md text-[10px] font-bold uppercase whitespace-nowrap animate-pulse">Revised</span>}
-                    {q.aiGenerated && isDefaultOrSuperAdmin && <span className="px-2 py-0.5 bg-violet-50 text-violet-700 rounded-md text-[10px] font-bold uppercase whitespace-nowrap">AI Synced</span>}
+                    {q.status === 'APPROVED' && <span className="px-1 sm:px-1.5 py-px bg-emerald-50 text-emerald-700 rounded text-[8.5px] sm:text-[9.5px] font-bold uppercase whitespace-nowrap border border-emerald-100">Approved</span>}
+                    {q.status === 'REJECTED' && <span className="px-1 sm:px-1.5 py-px bg-rose-50 text-rose-700 rounded text-[8.5px] sm:text-[9.5px] font-bold uppercase whitespace-nowrap border border-rose-100">Rejected</span>}
+                    {q.status === 'PENDING' && <span className="px-1 sm:px-1.5 py-px bg-amber-50 text-amber-700 rounded text-[8.5px] sm:text-[9.5px] font-bold uppercase whitespace-nowrap border border-amber-100">Pending</span>}
+                    {q.status === 'REVISED' && <span className="px-1 sm:px-1.5 py-px bg-rose-100 text-rose-800 rounded text-[8.5px] sm:text-[9.5px] font-bold uppercase whitespace-nowrap animate-pulse border border-rose-200">Revised</span>}
+                    {q.aiGenerated && isDefaultOrSuperAdmin && <span className="px-1 sm:px-1.5 py-px bg-violet-50 text-violet-700 rounded text-[8.5px] sm:text-[9.5px] font-bold uppercase whitespace-nowrap border border-violet-100">AI Synced</span>}
                     
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase whitespace-nowrap ${difficultyStyle[q.difficulty] || 'bg-slate-50 text-slate-600'}`}>
+                    <span className={`px-1 sm:px-1.5 py-px rounded text-[8.5px] sm:text-[9.5px] font-bold uppercase whitespace-nowrap border ${difficultyStyle[q.difficulty] ? difficultyStyle[q.difficulty] + ' border-slate-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
                         {q.difficulty}
                     </span>
-                    <span className="px-2 py-0.5 bg-slate-50 text-slate-600 rounded-md text-[10px] font-bold whitespace-nowrap">{q.marks ?? 1} Marks</span>
+                    <span className="px-1 sm:px-1.5 py-px bg-slate-50 text-slate-600 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-slate-200 whitespace-nowrap">{q.marks ?? 1} Marks</span>
+
+                    {/* Render Rich Source Tags dynamically */}
+                    {q.sources && q.sources.length > 0 ? (
+                        q.sources.map((src, sIdx) => {
+                            const type = src.sourceType || 'OTHER';
+                            const org = src.organizationName || '';
+                            const year = src.examYear ? ` ${src.examYear}` : '';
+                            const exam = src.examName ? ` - ${src.examName}` : '';
+                            const displayName = `${org}${exam}${year}`;
+
+                            if (type === 'BOARD_EXAM') {
+                                return (
+                                    <span key={sIdx} className="px-1.5 py-px bg-purple-50 text-purple-700 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-purple-100 uppercase whitespace-nowrap flex items-center gap-1">
+                                        🏛️ {displayName}
+                                    </span>
+                                );
+                            }
+                            if (type === 'UNIVERSITY_ADMISSION') {
+                                return (
+                                    <span key={sIdx} className="px-1.5 py-px bg-indigo-50 text-indigo-700 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-indigo-100 uppercase whitespace-nowrap flex items-center gap-1">
+                                        🎓 {displayName}
+                                    </span>
+                                );
+                            }
+                            if (type === 'INSTITUTION_TEST') {
+                                return (
+                                    <span key={sIdx} className="px-1.5 py-px bg-emerald-50 text-emerald-700 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-emerald-100 uppercase whitespace-nowrap flex items-center gap-1">
+                                        🏫 {displayName}
+                                    </span>
+                                );
+                            }
+                            if (type === 'JOB_EXAM') {
+                                return (
+                                    <span key={sIdx} className="px-1.5 py-px bg-amber-50 text-amber-700 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-amber-100 uppercase whitespace-nowrap flex items-center gap-1">
+                                        💼 {displayName}
+                                    </span>
+                                );
+                            }
+                            return (
+                                <span key={sIdx} className="px-1.5 py-px bg-slate-100 text-slate-600 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-slate-200 uppercase whitespace-nowrap flex items-center gap-1">
+                                    🏛️ {displayName}
+                                </span>
+                            );
+                        })
+                    ) : (
+                        q.sourceReference && !q.sourceReference.toUpperCase().includes('CHUNK_') && (
+                            q.sourceReference === 'Textbook Content' ? (
+                                <span className="px-1 sm:px-1.5 py-px bg-slate-100 text-slate-600 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-slate-200 uppercase whitespace-nowrap flex items-center gap-1">
+                                    📖 Textbook Content
+                                </span>
+                            ) : (
+                                <span className="px-1 sm:px-1.5 py-px bg-purple-50 text-purple-700 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-purple-100 uppercase whitespace-nowrap flex items-center gap-1">
+                                    🏛️ {q.sourceReference}
+                                </span>
+                            )
+                        )
+                    )}
                 </div>
 
                 {/* Actions Menu (Three-Dot) */}
@@ -153,16 +210,16 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 if (!stimulusContent) return null;
                 
                 return (
-                    <div className="mx-4 mb-2 px-4 py-3 bg-slate-50 border border-slate-200 border-l-4 border-l-indigo-400 rounded-r-lg text-[13.5px] text-slate-700 font-semibold leading-relaxed shadow-sm">
-                        <span className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">Stimulus / উদ্দীপক:</span>
+                    <div className="mx-1.5 sm:mx-3 mb-1 sm:mb-1.5 px-2 py-1.5 bg-slate-50 border border-slate-200 border-l-4 border-l-indigo-400 rounded-r-lg text-[11.5px] sm:text-[13px] text-slate-700 font-bold leading-relaxed shadow-sm">
+                        <span className="block text-[8.5px] sm:text-[9.5px] font-black text-indigo-600 uppercase tracking-widest mb-0.5">Stimulus / উদ্দীপক:</span>
                         <MarkdownRenderer content={stimulusContent} />
                     </div>
                 );
             })()}
 
             {/* ── Question Text ── */}
-            <div className="mx-4 mb-2 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
-                <div className="text-[13px] font-semibold text-slate-800 leading-snug">
+            <div className="mx-1.5 sm:mx-3 mb-1 sm:mb-1.5 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="text-[11.5px] sm:text-[12.5px] font-bold text-slate-850 leading-normal">
                     {q.type === 'CQ' ? (
                         <CQCombinedRenderer q={q} showAnswer={showAnswer} showExplanation={showExplanation} />
                     ) : q.dynamicData ? (
@@ -173,9 +230,9 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 </div>
                 
                 {q.mcqType === 'MULTIPLE_COMPLETION' && q.statements && q.statements.length > 0 && (
-                    <div className="mt-2 pl-4 border-l-2 border-primary/20 space-y-1">
+                    <div className="mt-1 pl-2.5 border-l-2 border-primary/25 space-y-0.5">
                         {q.statements.map((stmt, sIdx) => (
-                            <div key={sIdx} className="text-[12px] text-slate-600 font-medium leading-snug">
+                            <div key={sIdx} className="text-[10.5px] sm:text-[11.5px] text-slate-600 font-bold leading-normal">
                                 <MarkdownRenderer content={stmt} />
                             </div>
                         ))}
@@ -183,27 +240,27 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                 )}
             </div>
 
-            {/* ── MCQ Options 2x2 on desktop, stacked on mobile — highlights correct only after Show Answer click ── */}
+            {/* ── MCQ Options ── */}
             {q.type === 'MCQ' && q.options && q.options.length > 0 && (
-                <div className="mx-4 mb-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                <div className="mx-1.5 sm:mx-3 mb-1 sm:mb-1.5 grid grid-cols-1 sm:grid-cols-2 gap-0.5 sm:gap-1">
                     {q.options.map((opt, idx) => {
                         const isEnglish = q.language && q.language.toLowerCase() === 'english';
                         const displayLabel = isEnglish ? String.fromCharCode(65 + idx) : (['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(65 + idx));
                         return (
-                        <div key={opt.id} className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-all duration-300 ${
+                        <div key={opt.id} className={`flex items-center gap-1.5 px-2 py-0.5 rounded border text-[10.5px] sm:text-[11.5px] font-bold transition-all duration-300 ${
                             showAnswer && opt.isCorrect
                                 ? 'bg-emerald-50 border-emerald-400 text-emerald-800 shadow-sm'
                                 : showAnswer && !opt.isCorrect
-                                ? 'bg-white border-slate-200 text-slate-400 opacity-60'
+                                ? 'bg-white border-slate-200 text-slate-450 opacity-60'
                                 : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                         }`}>
-                            <span className={`shrink-0 flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-black transition-all duration-300 ${
+                            <span className={`shrink-0 flex items-center justify-center w-4 h-4 rounded-full text-[8.5px] sm:text-[9.5px] font-black transition-all duration-300 ${
                                 showAnswer && opt.isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'
                             }`}>
                                 {displayLabel}
                             </span>
                             <span className="flex-1"><MarkdownRenderer content={opt.optionText} /></span>
-                            {showAnswer && opt.isCorrect && <CheckCircle size={13} className="text-emerald-500 ml-auto shrink-0" />}
+                            {showAnswer && opt.isCorrect && <CheckCircle size={10} className="text-emerald-500 ml-auto shrink-0" />}
                         </div>
                     )})}
                 </div>
@@ -211,50 +268,50 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
 
             {/* Non-MCQ: show correct answer block after Show Answer click */}
             {showAnswer && q.type !== 'MCQ' && !q.dynamicData && (q.type !== 'CQ' || !isStructuredCQAnswer) && q.correctAnswer && hasCQAnswer && (
-                <div className="mx-4 mb-2 px-3 py-2.5 bg-emerald-50 border border-emerald-300 rounded-lg text-[12px] text-emerald-900 font-semibold leading-snug flex items-start gap-2">
-                    <CheckCircle size={14} className="text-emerald-500 mt-0.5 shrink-0" />
+                <div className="mx-1.5 sm:mx-3 mb-1 sm:mb-1.5 px-2 py-1 bg-emerald-50 border border-emerald-300 rounded text-[10.5px] sm:text-[11.5px] text-emerald-900 font-bold leading-snug flex items-start gap-1.5">
+                    <CheckCircle size={11} className="text-emerald-500 mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
-                        {q.type === 'CQ' && <span className="block text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1">সৃজনশীল উত্তর (পুরাতন/আনস্ট্রাকচার্ড ফরম্যাট):</span>}
+                        {q.type === 'CQ' && <span className="block text-[8.5px] sm:text-[9.5px] font-bold text-emerald-600 uppercase tracking-wide mb-0.5">সৃজনশীল উত্তর (পুরাতন/আনস্ট্রাকচার্ড ফরম্যাট):</span>}
                         <span><MarkdownRenderer content={q.correctAnswer} /></span>
                     </div>
                 </div>
             )}
             {showAnswer && q.type === 'CQ' && !q.dynamicData && (!q.correctAnswer || !hasCQAnswer) && (
-                <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No answer available.</div>
+                <div className="mx-1.5 sm:mx-3 mb-1 sm:mb-1.5 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[9.5px] sm:text-[10.5px] text-slate-400 italic">No answer available.</div>
             )}
 
-            <div className="mx-4 mb-2 grid grid-cols-2 gap-3">
+            <div className="mx-1.5 sm:mx-3 mb-1 sm:mb-1.5 grid grid-cols-2 gap-1.5 sm:gap-2">
                 {/* Show Answer — always gradient, green when active */}
                 <button
                     onClick={() => setShowAnswer(!showAnswer)}
-                    className="flex items-center justify-center gap-2 py-2 px-4 text-[12px] font-extrabold text-white rounded-xl transition-all duration-300 active:scale-[0.97] border border-white/10"
+                    className="flex items-center justify-center gap-1 py-1 sm:py-1.5 px-2 sm:px-3 text-[10px] sm:text-[11px] font-extrabold text-white rounded-lg transition-all duration-300 active:scale-[0.97] border border-white/10"
                     style={{ 
                         background: showAnswer
                             ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
                             : 'linear-gradient(135deg, #e91e8c 0%, #a855f7 100%)',
                         boxShadow: showAnswer
-                            ? '0 4px 14px rgba(16, 185, 129, 0.35)'
-                            : '0 4px 14px rgba(168, 85, 247, 0.35)'
+                            ? '0 2px 6px rgba(16, 185, 129, 0.2)'
+                            : '0 2px 6px rgba(168, 85, 247, 0.2)'
                     }}
                 >
-                    <Eye size={14} /> {showAnswer ? 'Hide Answer' : 'Show Answer'}
+                    <Eye size={12} /> {showAnswer ? 'Hide Answer' : 'Show Answer'}
                 </button>
 
                 {/* Explanation — plain when inactive, reverse gradient when active */}
                 <button
                     onClick={() => setShowExplanation(!showExplanation)}
-                    className="flex items-center justify-center gap-2 py-2 px-4 text-[12px] font-extrabold rounded-xl transition-all duration-300 active:scale-[0.97] border"
+                    className="flex items-center justify-center gap-1 py-1 sm:py-1.5 px-2 sm:px-3 text-[10px] sm:text-[11px] font-extrabold rounded-lg transition-all duration-300 active:scale-[0.97] border"
                     style={{ 
                         background: showExplanation
                             ? 'linear-gradient(135deg, #a855f7 0%, #e91e8c 100%)'
                             : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
                         borderColor: showExplanation ? 'rgba(255,255,255,0.1)' : '#e2e8f0',
                         boxShadow: showExplanation
-                            ? '0 4px 14px rgba(168, 85, 247, 0.35)'
-                            : '0 2px 6px rgba(0,0,0,0.02)',
+                            ? '0 2px 6px rgba(168, 85, 247, 0.2)'
+                            : '0 1px 2px rgba(0,0,0,0.01)',
                     }}
                 >
-                    <FileText size={14} className={showExplanation ? 'text-white' : 'text-slate-600'} />
+                    <FileText size={12} className={showExplanation ? 'text-white' : 'text-slate-600'} />
                     <span className={showExplanation ? 'text-white font-extrabold' : 'text-slate-600'}>Explanation</span>
                 </button>
             </div>
@@ -262,68 +319,66 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
 
             {/* ── Explanation Block ── */}
             {showExplanation && !q.dynamicData && (q.type !== 'CQ' || !isStructuredCQExplanation) && finalExplanation && hasCQExplanation && (
-                <div className="mx-4 mb-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-[12px] text-blue-900 leading-snug">
+                <div className="mx-1.5 sm:mx-3 mb-1 sm:mb-1.5 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-[10.5px] sm:text-[11.5px] text-blue-900 leading-snug">
                     <div className="flex-1 min-w-0">
-                        {q.type === 'CQ' && <span className="block text-[10px] font-bold text-blue-600 uppercase tracking-wide mb-1">সৃজনশীল ব্যাখ্যা (পুরাতন/আনস্ট্রাকচার্ড ফরম্যাট):</span>}
+                        {q.type === 'CQ' && <span className="block text-[8.5px] sm:text-[9.5px] font-bold text-blue-600 uppercase tracking-wide mb-0.5">সৃজনশীল ব্যাখ্যা (পুরাতন/আনস্ট্রাকচার্ড ফরম্যাট):</span>}
                         <MarkdownRenderer content={finalExplanation} />
                     </div>
                 </div>
             )}
             {showExplanation && q.type === 'CQ' && !q.dynamicData && (!finalExplanation || !hasCQExplanation) && (
-                <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No explanation available.</div>
+                <div className="mx-1.5 sm:mx-3 mb-1 sm:mb-1.5 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[9.5px] sm:text-[10.5px] text-slate-400 italic">No explanation available.</div>
             )}
             {showExplanation && q.type !== 'CQ' && !q.dynamicData && !finalExplanation && (
-                <div className="mx-4 mb-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-400 italic">No explanation available.</div>
+                <div className="mx-1.5 sm:mx-3 mb-1 sm:mb-1.5 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[9.5px] sm:text-[10.5px] text-slate-400 italic">No explanation available.</div>
             )}
 
             {/* ── Source / Action Footer ── */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 pb-3 pt-1.5 border-t border-slate-100 gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-2.5 sm:px-3 pb-1.5 sm:pb-2.5 pt-0.5 sm:pt-1 border-t border-slate-100 gap-1.5 sm:gap-2.5">
                 {/* Source — no truncation, allow wrapping */}
-                <div className="flex items-center gap-1.5 text-[10.5px] flex-1 min-w-0 flex-wrap">
+                <div className="flex items-center gap-1 sm:gap-1.5 text-[9px] sm:text-[10px] flex-1 min-w-0 flex-wrap">
                     {q.classSubject ? (
-                        <div className="flex flex-wrap items-center gap-1.5 px-2 py-1 bg-indigo-50/80 border border-indigo-100 rounded-md text-indigo-700 font-semibold">
-                            <FileText size={11} className="text-indigo-400 shrink-0" />
-                            <span className="bg-white text-indigo-800 px-1.5 py-px rounded border border-indigo-100 text-[10px] font-bold shrink-0 shadow-sm">{q.classSubject?.subject?.name}</span>
+                        <div className="flex flex-wrap items-center gap-1 px-1.5 py-0.5 bg-indigo-50/80 border border-indigo-100 rounded text-indigo-700 font-semibold">
+                            <FileText size={9} className="text-indigo-400 shrink-0" />
+                            <span className="bg-white text-indigo-800 px-1 py-px rounded border border-indigo-100 text-[8px] font-bold shrink-0 shadow-sm">{q.classSubject?.subject?.name}</span>
                             <span className="text-indigo-300 shrink-0">›</span>
                             <span className="shrink-0">{q.classSubject?.academicClass?.name}</span>
                             {q.chapter && <><span className="text-indigo-300 shrink-0">›</span><span className="shrink-0">{q.chapter?.name}</span></>}
                             {q.topic && <><span className="text-indigo-300 shrink-0">›</span><span className="shrink-0">{q.topic?.name}</span></>}
                         </div>
-                    ) : q.sourceReference ? (
-                        <div className="flex flex-wrap items-center gap-1.5 px-2 py-1 bg-violet-50/80 border border-violet-100 rounded-md text-violet-700 font-semibold">
-                            <FileText size={11} className="text-violet-400 shrink-0" />
+                    ) : q.sourceReference && !q.sourceReference.toUpperCase().includes('CHUNK_') ? (
+                        <div className="flex flex-wrap items-center gap-1 px-1.5 py-0.5 bg-violet-50/80 border border-violet-100 rounded text-violet-700 font-semibold">
+                            <FileText size={9} className="text-violet-400 shrink-0" />
                             <span className="font-bold">{q.sourceReference}</span>
-                            {q.aiGenerated && isDefaultOrSuperAdmin && <span className="text-[9px] bg-violet-100 text-violet-800 border border-violet-200 px-1.5 py-px rounded font-black uppercase shrink-0">AI Synced</span>}
+                            {q.aiGenerated && isDefaultOrSuperAdmin && <span className="text-[8px] bg-violet-100 text-violet-800 border border-violet-200 px-1 py-px rounded font-black uppercase shrink-0">AI Synced</span>}
                         </div>
                     ) : null}
                 </div>
 
                 {/* Action Buttons (Only Primary Footer Actions) */}
                 {!splitScreenMode && (
-                    <div className="flex items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto shrink-0 border-t border-slate-100 sm:border-0 pt-2 sm:pt-0">
-                        {isDefaultOrSuperAdmin && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onRevise(q); }}
-                                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-extrabold transition-all duration-300 border bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:text-primary hover:border-primary/40 hover:-translate-y-px active:scale-[0.97]"
-                                title="Quick Revise"
-                            >
-                                <Edit size={12} /> <span>Revise</span>
-                            </button>
-                        )}
+                    <div className="flex items-center justify-between sm:justify-end gap-1 sm:gap-2 w-full sm:w-auto shrink-0 border-t border-slate-100 sm:border-0 pt-1 sm:pt-0">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onRevise(q); }}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[9px] sm:text-[10.5px] font-extrabold transition-all duration-300 border bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:text-primary hover:border-primary/40 hover:-translate-y-px active:scale-[0.97]"
+                            title="Quick Revise"
+                        >
+                            <Edit size={10} /> <span>Revise</span>
+                        </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); setIsLiked(!isLiked); }}
-                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-extrabold transition-all duration-300 border ${isLiked ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white border-transparent shadow-[0_3px_10px_rgba(244,63,94,0.3)] hover:shadow-[0_4px_14px_rgba(244,63,94,0.4)] hover:-translate-y-px active:scale-[0.97]' : 'bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-rose-500 hover:border-rose-200 hover:-translate-y-px active:scale-[0.97]'}`}
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[9px] sm:text-[10.5px] font-extrabold transition-all duration-300 border ${isLiked ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white border-transparent shadow-[0_1.5px_4px_rgba(244,63,94,0.15)] hover:shadow-[0_3px_8px_rgba(244,63,94,0.25)] hover:-translate-y-px active:scale-[0.97]' : 'bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-rose-500 hover:border-rose-200 hover:-translate-y-px active:scale-[0.97]'}`}
                             title="Like"
                         >
-                            <ThumbsUp size={12} className={isLiked ? 'fill-current' : ''} />
+                            <ThumbsUp size={10} className={isLiked ? 'fill-current' : ''} />
                             <span>Like</span>
                         </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); onSave(q.id); }}
-                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-extrabold transition-all duration-300 border ${isSaved ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent shadow-[0_3px_10px_rgba(245,158,11,0.3)] hover:shadow-[0_4px_14px_rgba(245,158,11,0.4)] hover:-translate-y-px active:scale-[0.97]' : 'bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-amber-500 hover:border-amber-200 hover:-translate-y-px active:scale-[0.97]'}`}
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[9px] sm:text-[10.5px] font-extrabold transition-all duration-300 border ${isSaved ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent shadow-[0_1.5px_4px_rgba(245,158,11,0.15)] hover:shadow-[0_3px_8px_rgba(245,158,11,0.25)] hover:-translate-y-px active:scale-[0.97]' : 'bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-amber-500 hover:border-amber-200 hover:-translate-y-px active:scale-[0.97]'}`}
                             title={isSaved ? 'Remove from Saved' : 'Save'}
                         >
-                            {isSaved ? <BookmarkCheck size={12} className="fill-current" /> : <Bookmark size={12} />}
+                            {isSaved ? <BookmarkCheck size={10} className="fill-current" /> : <Bookmark size={10} />}
                             <span>Save</span>
                         </button>
                     </div>

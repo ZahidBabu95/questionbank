@@ -491,6 +491,37 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 animation: highlightFlash 1.5s ease-out;
                 border-radius: 8px;
             }
+            /* PDF Export Mode overrides */
+            .pdf-export-mode .paper-page-background {
+                border: none !important;
+                border-bottom: none !important;
+                box-shadow: none !important;
+            }
+
+            /* Active PDF Export Styles (Page-by-Page Capture overrides) */
+            .pdf-export-active.paper-canvas-container {
+                background-color: #ffffff !important;
+                box-shadow: none !important;
+            }
+            .pdf-export-active .paper-page-background {
+                background-color: #ffffff !important;
+                border: none !important;
+                border-bottom: none !important;
+                box-shadow: none !important;
+            }
+            .pdf-export-active .ProseMirror {
+                color: #000000 !important;
+                background-color: transparent !important;
+                column-rule: none !important; /* Fixes html2canvas horizontal black bands in multi-columns */
+            }
+            .pdf-export-active .ProseMirror * {
+                color: #000000 !important;
+            }
+            .show-answers-highlighted.pdf-export-active .nexus-correct-option,
+            .show-answers-highlighted.pdf-export-active .nexus-correct-option * {
+                background-color: #f0fdf4 !important;
+                color: #16a34a !important;
+            }
         `}} />
     );
 }, (prevProps, nextProps) => {

@@ -4,10 +4,7 @@ import com.testshaper.dto.cms.CmsSectionDTO;
 import com.testshaper.service.CmsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import com.testshaper.service.DynamicStorageService;
@@ -32,6 +29,11 @@ public class PublicLandingController {
     @GetMapping("/landing")
     public ResponseEntity<List<CmsSectionDTO>> getLandingData() {
         return ResponseEntity.ok(cmsService.getPublicLandingData());
+    }
+
+    @GetMapping("/sections/{key}")
+    public ResponseEntity<CmsSectionDTO> getSectionByKey(@PathVariable("key") String key) {
+        return ResponseEntity.ok(cmsService.getSectionByKey(key));
     }
 
     @GetMapping("/packages")

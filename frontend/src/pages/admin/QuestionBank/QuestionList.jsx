@@ -32,6 +32,19 @@ const QuestionList = () => {
 
     const showLanguageFilter = hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.length > 1 || user.instituteMedium.includes('Bilingual');
 
+    const isEmbedded = useMemo(() => {
+        return window.location.search.includes('embedded=true') || sessionStorage.getItem('embedded') === 'true';
+    }, []);
+
+    const handleExitMobileView = () => {
+        if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'close_webview'
+            }));
+        } else {
+            navigate(-1);
+        }
+    };
 
     const hasPerm = (action) => {
         if (isSuperAdmin) return true;
@@ -82,6 +95,7 @@ const QuestionList = () => {
     const [totalElements, setTotalElements] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [splitScreenMode, setSplitScreenMode] = useState(false);
+    const [showAllOverride, setShowAllOverride] = useState(false);
     const [savedIds, setSavedIds] = useState(() => {
         try { return JSON.parse(localStorage.getItem('savedQuestionIds') || '[]'); } catch { return []; }
     });
@@ -211,34 +225,80 @@ const QuestionList = () => {
     const [subjects, setSubjects] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [topics, setTopics] = useState([]);
+    
     const [fullHierarchy, setFullHierarchy] = useState([]);
     const [metadataSearchTerm, setMetadataSearchTerm] = useState('');
     const [metadataSuggestions, setMetadataSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
 
     // Hierarchy filter selections
-    const [selectedLevelId, setSelectedLevelId] = useState(() => localStorage.getItem('qb_filter_level') || '');
-    const [selectedStreamId, setSelectedStreamId] = useState(() => localStorage.getItem('qb_filter_stream') || '');
-    const [selectedClassId, setSelectedClassId] = useState(() => localStorage.getItem('qb_filter_class') || '');
-    const [selectedSubjectId, setSelectedSubjectId] = useState(() => localStorage.getItem('qb_filter_subject') || ''); // classSubjectId
-    const [selectedChapterId, setSelectedChapterId] = useState(() => localStorage.getItem('qb_filter_chapter') || '');
-    const [selectedTopicId, setSelectedTopicId] = useState(() => localStorage.getItem('qb_filter_topic') || '');
-    
-    // Save filter selections to localStorage
-    useEffect(() => {
-        localStorage.setItem('qb_filter_level', selectedLevelId || '');
-        localStorage.setItem('qb_filter_stream', selectedStreamId || '');
-        localStorage.setItem('qb_filter_class', selectedClassId || '');
-        localStorage.setItem('qb_filter_subject', selectedSubjectId || '');
-        localStorage.setItem('qb_filter_chapter', selectedChapterId || '');
-        localStorage.setItem('qb_filter_topic', selectedTopicId || '');
-    }, [selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId]);
+    const [selectedLevelId, setSelectedLevelId] = useState('');
+    const [selectedStreamId, setSelectedStreamId] = useState('');
+    const [selectedClassId, setSelectedClassId] = useState('');
+    const [selectedSubjectId, setSelectedSubjectId] = useState(''); // classSubjectId
+    const [selectedChapterId, setSelectedChapterId] = useState('');
+    const [selectedTopicId, setSelectedTopicId] = useState('');
     
     // Source Tag filters
     const [selectedBoards, setSelectedBoards] = useState([]);
     const [selectedYears, setSelectedYears] = useState([]);
     const [selectedSchools, setSelectedSchools] = useState([]);
     const [sourceTags, setSourceTags] = useState({ boards: [], years: [], schools: [] });
+
+    // Fetch chapter and topic counts dynamically for the active subject
+    const [availability, setAvailability] = useState({ chapters: {}, topics: {} });
+
+    const activeSubjectName = useMemo(() => {
+        if (selectedSubjectId) {
+            const sub = subjects?.find(x => x && (String(x.classSubjectId) === String(selectedSubjectId) || String(x.id) === String(selectedSubjectId)));
+            if (sub) return sub.subjectName || sub.name;
+            if (fullHierarchy?.classSubjects) {
+                const cs = fullHierarchy.classSubjects.find(x => String(x.id) === String(selectedSubjectId));
+                if (cs) return cs.name || cs.subjectName;
+            }
+        }
+        if (showAllOverride) return 'সব বিষয় (অফলাইন)';
+        return '';
+    }, [selectedSubjectId, subjects, fullHierarchy, showAllOverride]);
+
+    const activeClassName = useMemo(() => {
+        if (selectedClassId) {
+            const cls = classes?.find(c => c && String(c.id) === String(selectedClassId));
+            if (cls) return cls.name;
+        }
+        if (selectedSubjectId && fullHierarchy?.classSubjects) {
+            const cs = fullHierarchy.classSubjects.find(x => String(x.id) === String(selectedSubjectId));
+            if (cs) {
+                const cls = fullHierarchy.classes?.find(c => String(c.id) === String(cs._classId || cs.classId));
+                if (cls) return cls.name;
+            }
+        }
+        return '';
+    }, [selectedClassId, classes, selectedSubjectId, fullHierarchy]);
+
+    // Update dynamic header title/subtitle to the default clean state
+    useEffect(() => {
+        if (isDefaultOrSuperAdmin) {
+            const titleText = activeSubjectName 
+                ? `${activeSubjectName}${activeClassName ? ` (${activeClassName})` : ''}` 
+                : 'Question Bank';
+            const subtitleText = activeSubjectName
+                ? `Exploring questions for ${activeSubjectName}`
+                : 'Manage and explore questions in the repository';
+            
+            window.dispatchEvent(new CustomEvent('setDynamicPageTitle', {
+                detail: {
+                    title: titleText,
+                    subtitle: subtitleText
+                }
+            }));
+        } else {
+            window.dispatchEvent(new CustomEvent('setDynamicPageTitle', { detail: null }));
+        }
+        return () => {
+            window.dispatchEvent(new CustomEvent('setDynamicPageTitle', { detail: null }));
+        };
+    }, [isDefaultOrSuperAdmin, activeSubjectName, activeClassName]);
 
     // Parameter builders
     const getHierarchyParams = React.useCallback(() => {
@@ -293,10 +353,67 @@ const QuestionList = () => {
         fetchSourceTags();
     }, [getHierarchyParams]);
 
+    useEffect(() => {
+        if (selectedSubjectId) {
+            questionService.getQuestionAvailability(selectedSubjectId, filterLanguage)
+                .then(data => {
+                    setAvailability(data || { chapters: {}, topics: {} });
+                })
+                .catch(err => {
+                    console.error("Failed to load availability", err);
+                    setAvailability({ chapters: {}, topics: {} });
+                });
+        } else {
+            setAvailability({ chapters: {}, topics: {} });
+        }
+    }, [selectedSubjectId, filterLanguage]);
+
+    const getChapterQuestionCount = React.useCallback((chapId) => {
+        if (!availability?.chapters || !availability.chapters[chapId]) return 0;
+        let total = 0;
+        const types = availability.chapters[chapId];
+        Object.values(types).forEach(diffs => {
+            Object.values(diffs).forEach(count => {
+                total += count;
+            });
+        });
+        return total;
+    }, [availability]);
+
+    const getTopicQuestionCount = React.useCallback((topId) => {
+        if (!availability?.topics || !availability.topics[topId]) return 0;
+        let total = 0;
+        const types = availability.topics[topId];
+        Object.values(types).forEach(diffs => {
+            Object.values(diffs).forEach(count => {
+                total += count;
+            });
+        });
+        return total;
+    }, [availability]);
+
     // Run fetchInitialFilters once on mount
     useEffect(() => {
         fetchInitialFilters();
     }, []);
+
+    // Automatically trigger full-screen mode in embedded mobile WebView
+    useEffect(() => {
+        if (isEmbedded && window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'hide_layout_bars',
+                hide: true
+            }));
+        }
+        return () => {
+            if (isEmbedded && window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'hide_layout_bars',
+                    hide: false
+                }));
+            }
+        };
+    }, [isEmbedded]);
 
     useEffect(() => {
         const viewId = searchParams.get('view');
@@ -463,13 +580,17 @@ const QuestionList = () => {
     useEffect(() => {
         if (selectedLevelId) {
             academicService.getStreamsByLevel(selectedLevelId).then(data => {
-                setStreams(data);
-                if (data.length === 1) {
-                    setSelectedStreamId(data[0].id);
-                } else if (selectedStreamId && !data.find(s => s.id === selectedStreamId)) {
+                const safeData = Array.isArray(data) ? data : [];
+                setStreams(safeData);
+                if (safeData.length === 1) {
+                    setSelectedStreamId(safeData[0].id);
+                } else if (selectedStreamId && !safeData.find(s => s.id === selectedStreamId)) {
                     setSelectedStreamId('');
                 }
-            }).catch(console.error);
+            }).catch(error => {
+                console.error(error);
+                setStreams([]);
+            });
         } else {
             setStreams([]);
             setSelectedStreamId('');
@@ -480,13 +601,17 @@ const QuestionList = () => {
     useEffect(() => {
         if (selectedStreamId) {
             academicService.getClassesByStream(selectedStreamId).then(data => {
-                setClasses(data);
-                if (data.length === 1) {
-                    setSelectedClassId(data[0].id);
-                } else if (selectedClassId && !data.find(c => c.id === selectedClassId)) {
+                const safeData = Array.isArray(data) ? data : [];
+                setClasses(safeData);
+                if (safeData.length === 1) {
+                    setSelectedClassId(safeData[0].id);
+                } else if (selectedClassId && !safeData.find(c => c.id === selectedClassId)) {
                     setSelectedClassId('');
                 }
-            }).catch(console.error);
+            }).catch(error => {
+                console.error(error);
+                setClasses([]);
+            });
         } else {
             setClasses([]);
             setSelectedClassId('');
@@ -497,13 +622,15 @@ const QuestionList = () => {
     useEffect(() => {
         if (selectedClassId) {
             academicService.getSubjectsByClass(selectedClassId).then(data => {
-                setSubjects(data);
-                if (data.length === 1) {
-                    setSelectedSubjectId(data[0].classSubjectId);
-                } else if (selectedSubjectId && !data.find(s => s.classSubjectId === selectedSubjectId)) {
+                const safeData = Array.isArray(data) ? data : [];
+                setSubjects(safeData);
+                if (selectedSubjectId && !safeData.find(s => s.classSubjectId === selectedSubjectId)) {
                     setSelectedSubjectId('');
                 }
-            }).catch(console.error);
+            }).catch(error => {
+                console.error(error);
+                setSubjects([]);
+            });
         } else {
             setSubjects([]);
             setSelectedSubjectId('');
@@ -512,8 +639,8 @@ const QuestionList = () => {
     
     // Filter subjects based on language selection
     const filteredSubjects = useMemo(() => {
-        if (!subjects) return [];
-        return subjects.filter(s => {
+        const safeSubjects = Array.isArray(subjects) ? subjects : [];
+        return safeSubjects.filter(s => {
             const isEng = s.isEnglishVersion || s.englishVersion || false;
             if (filterLanguage === 'English') return isEng === true;
             if (filterLanguage === 'Bangla') return isEng === false;
@@ -523,8 +650,9 @@ const QuestionList = () => {
 
     // Reset selected subject/chapter/topic if no longer in filtered subjects list
     useEffect(() => {
-        if (selectedSubjectId && filteredSubjects.length > 0) {
-            const exists = filteredSubjects.some(s => s.classSubjectId === selectedSubjectId);
+        const safeFiltered = Array.isArray(filteredSubjects) ? filteredSubjects : [];
+        if (selectedSubjectId && safeFiltered.length > 0) {
+            const exists = safeFiltered.some(s => s.classSubjectId === selectedSubjectId);
             if (!exists) {
                 setSelectedSubjectId('');
                 setSelectedChapterId('');
@@ -533,27 +661,24 @@ const QuestionList = () => {
         }
     }, [filterLanguage, filteredSubjects, selectedSubjectId]);
 
-    // Auto-select subject if only one is available after language filtering
-    useEffect(() => {
-        if (filteredSubjects && filteredSubjects.length === 1) {
-            if (selectedSubjectId !== filteredSubjects[0].classSubjectId) {
-                setSelectedSubjectId(filteredSubjects[0].classSubjectId);
-            }
-        }
-    }, [filteredSubjects, selectedSubjectId]);
+
 
 
     // Subject → Chapters
     useEffect(() => {
         if (selectedSubjectId) {
             academicService.getChaptersByClassSubject(selectedSubjectId).then(data => {
-                setChapters(data);
-                if (data.length === 1) {
-                    setSelectedChapterId(data[0].id);
-                } else if (selectedChapterId && !data.find(ch => ch.id === selectedChapterId)) {
+                const safeData = Array.isArray(data) ? data : [];
+                setChapters(safeData);
+                if (safeData.length === 1) {
+                    setSelectedChapterId(safeData[0].id);
+                } else if (selectedChapterId && !safeData.find(ch => ch.id === selectedChapterId)) {
                     setSelectedChapterId('');
                 }
-            }).catch(console.error);
+            }).catch(error => {
+                console.error(error);
+                setChapters([]);
+            });
         } else {
             setChapters([]);
             setSelectedChapterId('');
@@ -564,13 +689,17 @@ const QuestionList = () => {
     useEffect(() => {
         if (selectedChapterId) {
             academicService.getTopicsByChapter(selectedChapterId).then(data => {
-                setTopics(data);
-                if (data.length === 1) {
-                    setSelectedTopicId(data[0].id);
-                } else if (selectedTopicId && !data.find(t => t.id === selectedTopicId)) {
+                const safeData = Array.isArray(data) ? data : [];
+                setTopics(safeData);
+                if (safeData.length === 1) {
+                    setSelectedTopicId(safeData[0].id);
+                } else if (selectedTopicId && !safeData.find(t => t.id === selectedTopicId)) {
                     setSelectedTopicId('');
                 }
-            }).catch(console.error);
+            }).catch(error => {
+                console.error(error);
+                setTopics([]);
+            });
         } else {
             setTopics([]);
             setSelectedTopicId('');
@@ -578,6 +707,18 @@ const QuestionList = () => {
     }, [selectedChapterId]);
 
     const fetchQuestions = async () => {
+        const isAcademicSelected = !!selectedSubjectId;
+        const canFetch = isAcademicSelected || showAllOverride || viewMode === 'FAVORITES';
+
+        if (!canFetch) {
+            setQuestions([]);
+            setTotalPages(0);
+            setTotalElements(0);
+            setLoading(false);
+            setLoadingMore(false);
+            return;
+        }
+
         if (currentPage === 1) setLoading(true);
         else setLoadingMore(true);
         try {
@@ -632,7 +773,7 @@ const QuestionList = () => {
             fetchQuestions();
             if (currentPage === 1) fetchOverviewStats();
         }
-    }, [viewMode, currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools, filterUnanswered]);
+    }, [viewMode, currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools, filterUnanswered, showAllOverride]);
 
     // Intersection Observer for Infinite Scrolling
     useEffect(() => {
@@ -959,8 +1100,7 @@ const QuestionList = () => {
     };
 
     const [isSelectingAll, setIsSelectingAll] = useState(false);
-    const [showSourceFilters, setShowSourceFilters] = useState(() => window.innerWidth >= 1024);
-    const [activeSidebarTab, setActiveSidebarTab] = useState('academic');
+    const [showSourceFilters, setShowSourceFilters] = useState(false);
 
     const handleSelectAllGlobal = async () => {
         setIsSelectingAll(true);
@@ -1160,9 +1300,195 @@ const QuestionList = () => {
     };
 
     return (
-        <>
+        <div className="relative min-h-screen w-full bg-slate-50 flex flex-col">
         {/* Portal Question Cart next to the Notification Bell */}
-        {portalTarget && createPortal(renderQuestionCart(), portalTarget)}
+        {portalTarget && createPortal(
+            <div className="flex items-center gap-2">
+                {overviewStats && isDefaultOrSuperAdmin && (
+                    <div className="hidden md:flex items-center gap-2 mr-2 animate-in fade-in slide-in-from-right-3 duration-300">
+                        {/* Total Questions Badge */}
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-700 rounded-lg shadow-sm">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Total:</span>
+                            <span className="text-xs font-black text-slate-800">{overviewStats.totalQuestions}</span>
+                        </div>
+                        {/* Approved Badge */}
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg shadow-sm">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-emerald-500">Approved:</span>
+                            <span className="text-xs font-black text-slate-800">{overviewStats.totalApproved}</span>
+                        </div>
+                        {/* Pending Badge */}
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg shadow-sm">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-amber-500">Pending:</span>
+                            <span className="text-xs font-black text-slate-800">{overviewStats.totalPending}</span>
+                        </div>
+                        {/* Subjects Badge */}
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg shadow-sm">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-indigo-500">Subjects:</span>
+                            <span className="text-xs font-black text-slate-800">{overviewStats.totalSubjects}</span>
+                        </div>
+                    </div>
+                )}
+                {renderQuestionCart()}
+            </div>,
+            portalTarget
+        )}
+
+        {/* Gorgeous Full-Screen Glassmorphic Subject Selector Modal */}
+        {!(selectedSubjectId || showAllOverride || viewMode === 'FAVORITES') && (
+            <div className="absolute inset-0 z-50 bg-slate-950/60 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-500">
+                {/* Stunning Gradient Ambient Glow Blobs */}
+                <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-gradient-to-tr from-pink-500/20 to-purple-600/20 rounded-full blur-[120px] pointer-events-none animate-pulse" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-gradient-to-tr from-indigo-600/20 to-blue-500/20 rounded-full blur-[120px] pointer-events-none animate-pulse" />
+
+                <div className="bg-white/95 border border-white/60 rounded-[36px] shadow-[0_32px_80px_-16px_rgba(0,0,0,0.3)] p-7 sm:p-9 max-w-[490px] w-full flex flex-col items-center text-center gap-6 animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 relative overflow-hidden">
+                    
+                    {/* Glowing Top Border Gradient Decorator */}
+                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600"></div>
+
+                    {/* Elegant floating Close/Back Button */}
+                    <button 
+                        onClick={handleExitMobileView}
+                        className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-full transition-all duration-300 hover:rotate-90 shadow-sm"
+                        title="ফিরে যান"
+                    >
+                        <X size={16} className="stroke-[2.5]" />
+                    </button>
+
+                    {/* Luxurious Glowing Icon Block */}
+                    <div className="relative group mt-2">
+                        <div className="absolute inset-0 bg-gradient-to-tr from-pink-500 via-purple-600 to-indigo-600 rounded-3xl blur-md opacity-45 group-hover:opacity-75 transition-opacity duration-300 animate-pulse" />
+                        <div className="relative w-16 h-16 bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-600 rounded-3xl flex items-center justify-center text-white shadow-lg border border-white/20 transform hover:scale-105 transition-transform duration-300">
+                            <Layers size={30} className="stroke-[1.8]" />
+                        </div>
+                    </div>
+
+                    {/* Title and description with dynamic colors */}
+                    <div className="space-y-1 text-center">
+                        <h3 className="text-2xl font-black text-slate-800 tracking-tight sm:text-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 bg-clip-text text-transparent">বিষয় নির্বাচন করুন</h3>
+                    </div>
+
+                    {/* Grid of beautifully styled inputs */}
+                    <div className="w-full bg-slate-50/70 border border-slate-150 p-5 rounded-3xl flex flex-col gap-4 shadow-sm backdrop-blur-md">
+                        {/* Level Dropdown */}
+                        {levels.length > 1 && (
+                            <div className="flex flex-col gap-1.5 text-left">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest pl-1.5 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> Level / স্তর
+                                </label>
+                                <div className="relative group">
+                                    <select 
+                                        value={selectedLevelId} 
+                                        onChange={(e) => setSelectedLevelId(e.target.value)} 
+                                        className="appearance-none w-full h-11 px-4 pr-10 bg-white hover:bg-slate-50/80 border border-slate-200/80 hover:border-indigo-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl text-[12px] font-bold text-slate-700 transition-all cursor-pointer shadow-sm focus:outline-none"
+                                    >
+                                        <option value="">সব স্তর</option>
+                                        {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                    </select>
+                                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                        <ChevronDown size={14} className="stroke-[2.5]" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Stream Dropdown */}
+                        {streams.length > 1 && (
+                            <div className="flex flex-col gap-1.5 text-left">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest pl-1.5 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> Stream / বিভাগ
+                                </label>
+                                <div className="relative group">
+                                    <select 
+                                        value={selectedStreamId} 
+                                        onChange={(e) => setSelectedStreamId(e.target.value)} 
+                                        className="appearance-none w-full h-11 px-4 pr-10 bg-white hover:bg-slate-50/80 border border-slate-200/80 hover:border-indigo-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl text-[12px] font-bold text-slate-700 transition-all cursor-pointer shadow-sm focus:outline-none"
+                                    >
+                                        <option value="">সব বিভাগ</option>
+                                        {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                        <ChevronDown size={14} className="stroke-[2.5]" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Class Dropdown */}
+                        {classes.length > 1 && (
+                            <div className="flex flex-col gap-1.5 text-left">
+                                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest pl-1.5 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> Class / শ্রেণি
+                                </label>
+                                <div className="relative group">
+                                    <select 
+                                        value={selectedClassId} 
+                                        onChange={(e) => setSelectedClassId(e.target.value)} 
+                                        className={`appearance-none w-full h-11 px-4 pr-10 bg-white hover:bg-slate-50/80 border rounded-2xl text-[12px] font-bold text-slate-700 transition-all cursor-pointer shadow-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 ${!selectedClassId ? 'border-indigo-300 animate-pulse hover:border-indigo-400 focus:border-indigo-500' : 'border-slate-200/80 hover:border-indigo-400 focus:border-indigo-500'}`}
+                                    >
+                                        <option value="">সব শ্রেণি</option>
+                                        {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                        <ChevronDown size={14} className="stroke-[2.5]" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Subject Dropdown */}
+                        <div className="flex flex-col gap-1.5 text-left">
+                            <label className="text-[10px] font-extrabold text-primary uppercase tracking-widest pl-1.5 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" /> Subject / বিষয়
+                            </label>
+                            <div className="relative group">
+                                <select 
+                                    value={selectedSubjectId} 
+                                    onChange={(e) => setSelectedSubjectId(e.target.value)} 
+                                    className={`appearance-none w-full h-11 px-4 pr-10 bg-white border-2 rounded-2xl text-[12px] font-black text-indigo-955 focus:outline-none transition-all cursor-pointer shadow-sm focus:ring-4 focus:ring-primary/10 ${selectedClassId && !selectedSubjectId ? 'border-primary shadow-[0_0_12px_rgba(233,30,140,0.25)] focus:border-primary' : 'border-slate-250 hover:border-primary/50 focus:border-primary'} disabled:opacity-60 disabled:cursor-not-allowed`}
+                                    disabled={filteredSubjects.length === 0}
+                                >
+                                    {filteredSubjects.length === 0 ? (
+                                        <option value="">শ্রেণি নির্বাচন করুন</option>
+                                    ) : (
+                                        <>
+                                            <option value="">বিষয় সিলেক্ট করুন</option>
+                                            {filteredSubjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
+                                        </>
+                                    )}
+                                </select>
+                                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-primary transition-colors">
+                                    <ChevronDown size={14} className="stroke-[2.5]" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Exit/Back Button at bottom of Selector Modal */}
+                    <button
+                        onClick={handleExitMobileView}
+                        className="text-[11px] font-extrabold text-slate-500 hover:text-rose-600 bg-slate-100 hover:bg-rose-50/80 px-4 py-2 rounded-2xl transition-all duration-300 flex items-center gap-1.5 shadow-sm active:scale-95"
+                    >
+                        <X size={13} className="stroke-[2.5]" />
+                        <span>ফিরে যান / বন্ধ করুন</span>
+                    </button>
+
+                    {/* Super Admin Control Box */}
+                    {isSuperAdmin && (
+                        <div className="w-full border-t border-slate-100/80 pt-4 mt-1 flex flex-col gap-2.5">
+                            <div className="flex items-center justify-center gap-1 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                                <Settings2 size={12} className="animate-spin duration-3000" /> সুপার অ্যাডমিন কন্ট্রোল প্যানেল
+                            </div>
+                            <button 
+                                onClick={() => setShowAllOverride(true)}
+                                className="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-[11px] uppercase tracking-wider shadow-[0_8px_20px_-6px_rgba(99,102,241,0.5)] hover:shadow-[0_12px_28px_-4px_rgba(99,102,241,0.7)] transition-all active:scale-[0.97] hover:scale-[1.01] flex items-center justify-center gap-2 border border-white/10"
+                            >
+                                <Layers size={13} className="animate-pulse" /> সব প্রশ্ন লোড করুন (অফলাইন মোড)
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
 
         {/* Bulk Action Progress Overlay */}
         {bulkProgress && (
@@ -1183,116 +1509,286 @@ const QuestionList = () => {
         <div className={`flex flex-col min-h-full bg-slate-50 transition-all duration-300 ${showSourceFilters ? 'md:pr-[320px]' : ''}`}>
 
             {/* OVERVIEW STATS BOARD - COMPACT */}
-            <div className={`px-4 md:px-6 pt-3 pb-2 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-200 bg-white shadow-sm z-40 relative gap-2 md:gap-0 ${!isDefaultOrSuperAdmin ? 'hidden md:flex' : ''}`}>
-                <div className="flex items-center gap-3 w-full md:w-auto overflow-hidden">
-                    <h2 className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5 shrink-0"><Layers size={14} className="text-primary" /> Question Bank</h2>
-                    {getActiveFiltersBreadcrumb().length > 0 && (
-                        <div className="hidden sm:flex items-center gap-2 text-xs font-extrabold text-slate-500 overflow-x-auto text-ellipsis whitespace-nowrap bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 shadow-inner custom-scrollbar">
-                            {getActiveFiltersBreadcrumb().map((crumb, idx, arr) => (
-                                <React.Fragment key={idx}>
-                                    <span className={idx === arr.length - 1 ? "text-primary tracking-wide" : "tracking-wide"}>{crumb}</span>
-                                    {idx < arr.length - 1 && <span className="text-slate-400 mx-0.5">/</span>}
-                                </React.Fragment>
-                            ))}
+            <div className={`px-3 md:px-6 pt-3 pb-2 flex flex-col items-start border-b border-slate-200 bg-white shadow-sm z-40 relative ${!isDefaultOrSuperAdmin && !isEmbedded ? 'hidden md:flex' : 'flex'}`}>
+                {/* Desktop Version Viewport (> 768px) - Normal Badges */}
+                {!portalTarget && overviewStats && isDefaultOrSuperAdmin && (
+                    <div className="hidden sm:flex items-center gap-2 overflow-x-auto flex-nowrap pb-2 border-b border-slate-100 mb-2.5 w-full no-scrollbar select-none">
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-700 rounded-lg shadow-sm shrink-0">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Total:</span>
+                            <span className="text-xs font-black text-slate-800">{overviewStats.totalQuestions}</span>
                         </div>
-                    )}
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg shadow-sm shrink-0">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-emerald-500">Approved:</span>
+                            <span className="text-xs font-black text-slate-800">{overviewStats.totalApproved}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg shadow-sm shrink-0">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-amber-500">Pending:</span>
+                            <span className="text-xs font-black text-slate-800">{overviewStats.totalPending}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg shadow-sm shrink-0">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-indigo-500">Subjects:</span>
+                            <span className="text-xs font-black text-slate-800">{overviewStats.totalSubjects}</span>
+                        </div>
+                    </div>
+                )}
+
+                {/* Mobile / WebView Viewport (< 768px) - Highly Compact minimalist header requested by user */}
+                <div className="flex sm:hidden items-center justify-between w-full select-none py-1">
+                    {/* Left: Selected Subject Name & total question stats */}
+                    <div className="flex items-center gap-2 overflow-hidden mr-3">
+                        <div className="flex items-center justify-center bg-indigo-50 border border-indigo-100 p-1.5 rounded-lg text-indigo-700 shrink-0">
+                            <Layers size={13} className="stroke-[2]" />
+                        </div>
+                        <div className="flex flex-col text-left overflow-hidden">
+                            <span className="text-xs font-black text-slate-800 truncate animate-fade-in" style={{ maxWidth: '210px' }}>
+                                {activeSubjectName || 'সব বিষয়'} {activeClassName ? <span className="text-[10px] text-slate-500 font-bold ml-0.5">({activeClassName})</span> : ''}
+                            </span>
+                            <span className="text-[9px] font-bold text-slate-400 tracking-wider">
+                                সর্বমোট প্রশ্ন: {overviewStats?.totalQuestions ?? totalElements}টি
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Right: Exit / Back Button inside top-right header */}
+                    <button
+                        onClick={handleExitMobileView}
+                        className="flex items-center justify-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-150 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shrink-0 shadow-sm"
+                    >
+                        <X size={11} className="stroke-[3]" />
+                        <span>ফিরে যান</span>
+                    </button>
                 </div>
                 
-                <div className="flex items-center gap-4 shrink-0 mt-2 md:mt-0 justify-end w-full md:w-auto">
-                    {overviewStats && isDefaultOrSuperAdmin && (
-                        <>
-                            <div className="flex flex-col items-end">
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Total</span>
-                                <span className="text-sm font-black text-slate-800 leading-none">{overviewStats.totalQuestions}</span>
+                <div className="flex items-center gap-2.5 w-full">
+                    {/* Desktop "ফিরে যান" / filter icon */}
+                    <div className="hidden sm:flex items-center gap-2">
+                        {(isEmbedded || window.innerWidth < 768) && (
+                            <button
+                                onClick={handleExitMobileView}
+                                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 hover:border-rose-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shrink-0 shadow-sm"
+                            >
+                                <X size={12} className="stroke-[2.5]" />
+                                <span>ফিরে যান</span>
+                            </button>
+                        )}
+                        
+                        <div className="flex items-center justify-center bg-indigo-50 border border-indigo-100/80 p-1.5 rounded-xl text-indigo-700 shrink-0 shadow-sm" title="একাডেমিক ফিল্টার">
+                            <Filter size={13} className="text-indigo-650 animate-pulse" />
+                        </div>
+                    </div>
+                    
+                    {/* Compact Inline Academic Filters in premium scrollable row (Desktop ONLY!) */}
+                    <div className="hidden sm:flex items-center gap-2 flex-nowrap pl-1 pr-4 shrink-0 overflow-x-auto no-scrollbar">
+                        {/* Language Dropdown */}
+                        {showLanguageFilter && (
+                            <div className="relative group shrink-0">
+                                <select 
+                                    value={filterLanguage} 
+                                    onChange={(e) => setFilterLanguage(e.target.value)} 
+                                    className={`appearance-none h-9 pl-3 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 ${filterLanguage !== 'ALL' ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                >
+                                    {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.length > 1 || uniqueInstituteMediums.includes('Bilingual')) && <option value="ALL">সব ভার্সন</option>}
+                                    {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.includes('Bangla') || uniqueInstituteMediums.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
+                                    {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.includes('English') || uniqueInstituteMediums.includes('Bilingual')) && <option value="English">English</option>}
+                                    {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
+                                </select>
+                                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                    <ChevronDown size={12} className="stroke-[2.5]" />
+                                </div>
                             </div>
-                            <div className="w-px h-6 bg-slate-200"></div>
-                            <div className="flex flex-col items-end">
-                                <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest leading-none mb-1">Approved</span>
-                                <span className="text-sm font-black text-emerald-700 leading-none">{overviewStats.totalApproved}</span>
+                        )}
+
+                        {/* Level Dropdown */}
+                        {levels.length > 1 && (
+                            <div className="relative group shrink-0">
+                                <select 
+                                    value={selectedLevelId} 
+                                    onChange={(e) => setSelectedLevelId(e.target.value)} 
+                                    className={`appearance-none h-9 pl-3 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 ${selectedLevelId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                >
+                                    <option value="">সব স্তর</option>
+                                    {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                </select>
+                                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                    <ChevronDown size={12} className="stroke-[2.5]" />
+                                </div>
                             </div>
-                            <div className="w-px h-6 bg-slate-200"></div>
-                            <div className="flex flex-col items-end">
-                                <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest leading-none mb-1">Pending</span>
-                                <span className="text-sm font-black text-amber-700 leading-none">{overviewStats.totalPending}</span>
+                        )}
+
+                        {/* Stream Dropdown */}
+                        {streams.length > 1 && (
+                            <div className="relative group shrink-0">
+                                <select 
+                                    value={selectedStreamId} 
+                                    onChange={(e) => setSelectedStreamId(e.target.value)} 
+                                    className={`appearance-none h-9 pl-3 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 ${selectedStreamId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                >
+                                    <option value="">সব বিভাগ</option>
+                                    {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                    <ChevronDown size={12} className="stroke-[2.5]" />
+                                </div>
                             </div>
-                            <div className="w-px h-6 bg-slate-200 hidden sm:block"></div>
-                            <div className="flex-col items-end hidden sm:flex">
-                                <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest leading-none mb-1">Subjects</span>
-                                <span className="text-sm font-black text-indigo-700 leading-none">{overviewStats.totalSubjects}</span>
+                        )}
+
+                        {/* Class Dropdown */}
+                        {classes.length > 1 && (
+                            <div className="relative group shrink-0">
+                                <select 
+                                    value={selectedClassId} 
+                                    onChange={(e) => setSelectedClassId(e.target.value)} 
+                                    className={`appearance-none h-9 pl-3 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 ${selectedClassId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                >
+                                    <option value="">সব শ্রেণি</option>
+                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                    <ChevronDown size={12} className="stroke-[2.5]" />
+                                </div>
                             </div>
-                            <div className="w-px h-6 bg-slate-200"></div>
-                        </>
-                    )}
+                        )}
+
+                        {/* Subject Dropdown */}
+                        <div className="relative group shrink-0">
+                            <select 
+                                value={selectedSubjectId} 
+                                onChange={(e) => setSelectedSubjectId(e.target.value)} 
+                                className={`appearance-none h-9 pl-3 pr-9 rounded-xl text-[11px] font-black transition-all duration-300 cursor-pointer shadow-md outline-none border-2 focus:ring-4 ${selectedSubjectId ? 'bg-gradient-to-r from-indigo-50 to-pink-50/30 border-primary text-primary focus:ring-primary/10 shadow-primary/5' : 'bg-white border-primary/30 text-indigo-955 focus:ring-primary/10 animate-pulse-slow'}`}
+                                disabled={filteredSubjects.length === 0}
+                            >
+                                {filteredSubjects.length === 0 ? (
+                                    <option value="">শ্রেণি নির্বাচন করুন</option>
+                                ) : (
+                                    <>
+                                        <option value="">বিষয় সিলেক্ট করুন</option>
+                                        {filteredSubjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
+                                    </>
+                                )}
+                            </select>
+                            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-primary transition-colors">
+                                <ChevronDown size={12} className="stroke-[2.5]" />
+                            </div>
+                        </div>
+
+                        {/* Chapter Dropdown */}
+                        {chapters.length > 1 && (
+                            <div className="relative group shrink-0">
+                                <select 
+                                    value={selectedChapterId} 
+                                    onChange={(e) => setSelectedChapterId(e.target.value)} 
+                                    className={`appearance-none h-9 pl-3 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 max-w-[130px] sm:max-w-[160px] truncate ${selectedChapterId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                >
+                                    <option value="">সব অধ্যায়</option>
+                                    {chapters.map(ch => {
+                                        const count = getChapterQuestionCount(ch.id);
+                                        return (
+                                            <option key={ch.id} value={ch.id}>
+                                                {ch.name} ({count})
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                    <ChevronDown size={12} className="stroke-[2.5]" />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Topic Dropdown */}
+                        {topics.length > 1 && (
+                            <div className="relative group shrink-0">
+                                <select 
+                                    value={selectedTopicId} 
+                                    onChange={(e) => setSelectedTopicId(e.target.value)} 
+                                    className={`appearance-none h-9 pl-3 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 max-w-[130px] sm:max-w-[160px] truncate ${selectedTopicId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                >
+                                    <option value="">সব টপিক</option>
+                                    {topics.map(t => {
+                                        const count = getTopicQuestionCount(t.id);
+                                        return (
+                                            <option key={t.id} value={t.id}>
+                                                {t.name} ({count})
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                    <ChevronDown size={12} className="stroke-[2.5]" />
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
             {/* STICKY COMPACT FILTER HEADER */}
-            <div className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 md:px-6 pt-3 pb-3 shadow-sm space-y-3">
+            <div className="sticky top-0 z-30 bg-white border-b border-slate-200 px-1.5 sm:px-4 pt-1 pb-1 sm:pt-2 sm:pb-2 shadow-sm space-y-1 sm:space-y-2">
                 
                 {/* Top Row: Navigation Tabs & Search */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                    <div className="flex bg-slate-100 p-1 rounded-lg self-start shrink-0 overflow-x-auto custom-scrollbar w-full md:w-auto">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1.5 sm:gap-2.5">
+                    <div className="flex bg-slate-100 p-0.5 rounded-lg self-start shrink-0 overflow-x-auto custom-scrollbar w-full md:w-auto">
                         <button
                             onClick={() => { setViewMode('ALL'); setFilterStatus('ALL'); setCurrentPage(1); }}
-                            className={`flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-md text-[13px] font-bold transition-all whitespace-nowrap flex-1 md:flex-auto ${viewMode === 'ALL'
+                            className={`flex items-center justify-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 rounded text-[11px] sm:text-[12px] font-bold transition-all whitespace-nowrap flex-1 md:flex-auto ${viewMode === 'ALL'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-500 hover:text-slate-700 hover:bg-black/5'
                                 }`}
                         >
-                            <Layers size={14} /> All Questions
+                            <Layers size={12} /> All Questions
                         </button>
                         <button
                             onClick={() => { setViewMode('FAVORITES'); setCurrentPage(1); }}
-                            className={`flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-md text-[13px] font-bold transition-all whitespace-nowrap flex-1 md:flex-auto ${viewMode === 'FAVORITES'
+                            className={`flex items-center justify-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 rounded text-[11px] sm:text-[12px] font-bold transition-all whitespace-nowrap flex-1 md:flex-auto ${viewMode === 'FAVORITES'
                                 ? 'bg-amber-100 text-amber-700 shadow-sm border border-amber-200'
                                 : 'text-slate-500 hover:text-slate-700 hover:bg-black/5'
                                 }`}
                         >
-                            <svg className="fill-current w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                            <svg className="fill-current w-2.5 h-2.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                             My Saved
                         </button>
                         {isDefaultOrSuperAdmin && (
                             <button
                                 onClick={() => { setViewMode('REVISED'); setFilterStatus('REVISED'); setCurrentPage(1); }}
-                                className={`flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-md text-[13px] font-bold transition-all whitespace-nowrap flex-1 md:flex-auto ${viewMode === 'REVISED'
+                                className={`flex items-center justify-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 rounded text-[11px] sm:text-[12px] font-bold transition-all whitespace-nowrap flex-1 md:flex-auto ${viewMode === 'REVISED'
                                     ? 'bg-rose-100 text-rose-700 shadow-sm border border-rose-200'
                                     : 'text-slate-500 hover:text-slate-700 hover:bg-black/5'
                                     }`}
                             >
-                                <Edit size={13} /> Revised
+                                <Edit size={11} /> Revised
                             </button>
                         )}
                     </div>
 
-                    <div className="flex flex-row items-center gap-2 w-full md:w-auto">
-                        <div className="relative flex-1 md:w-[260px] lg:w-[300px]">
-                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <div className="flex flex-row items-center gap-1.5 w-full md:w-auto">
+                        <div className="relative flex-1 md:w-[220px] lg:w-[260px]">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
                             <input
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search explicitly by question text..."
-                                className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all placeholder:text-slate-400 font-medium"
+                                placeholder="Search questions..."
+                                className="w-full pl-7 sm:pl-8 pr-2.5 py-1 text-[11px] sm:text-xs bg-slate-50 border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all placeholder:text-slate-400 font-medium"
                             />
                         </div>
 
-                        <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+                        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                             {hasFullLangAccess && (
                                 <button
                                     onClick={() => setSplitScreenMode(!splitScreenMode)}
-                                    className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                    className={`hidden sm:flex items-center gap-1 px-2 py-1 rounded text-[10px] sm:text-[11px] font-bold transition-all border shrink-0 ${splitScreenMode ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                                     title="Toggle Split-Screen Review Mode"
                                 >
-                                    <GitCompare size={14} /> Review Mode
+                                    <GitCompare size={12} /> Review Mode
                                 </button>
                             )}
 
                             <button
                                 onClick={() => setShowSourceFilters(!showSourceFilters)}
-                                className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                className={`flex items-center justify-center gap-1 px-2 py-1 rounded text-[10px] sm:text-[11px] font-bold transition-all border shrink-0 ${showSourceFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                                 title="Toggle Filters & Tags Sidebar"
                             >
-                                <Filter size={14} />
+                                <Filter size={12} />
                                 <span className="hidden sm:inline">Filters & Tags</span>
                                 <span className="sm:hidden">Filters</span>
                             </button>
@@ -1302,296 +1798,343 @@ const QuestionList = () => {
                     </div>
                 </div>
 
-                {/* Backdrop for Filters & Tags Drawer */}
-                {showSourceFilters && (
-                    <div 
-                        onClick={() => setShowSourceFilters(false)}
-                        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 lg:hidden"
-                    />
-                )}
-
                 {/* Right Side Drawer for Source Metadata Filters */}
                 <div 
-                    className={`fixed right-0 bg-white border-l border-slate-200 flex flex-col transition-transform duration-300 top-0 h-screen w-[290px] sm:w-[320px] z-50 shadow-2xl lg:top-[56px] lg:md:top-[60px] lg:h-[calc(100vh-56px)] lg:md:h-[calc(100vh-60px)] lg:w-[320px] lg:z-20 lg:shadow-none ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
+                    className={`fixed right-0 bg-white border-l border-slate-200 flex flex-col transition-transform duration-300 top-[56px] md:top-[60px] h-[calc(100vh-56px)] md:h-[calc(100vh-60px)] w-[290px] sm:w-[320px] z-45 shadow-2xl lg:z-20 lg:shadow-none ${showSourceFilters ? 'translate-x-0' : 'translate-x-full'}`}
                 >
-                    <div className="flex flex-col border-b border-slate-200 bg-slate-50 shrink-0 pt-3 lg:pt-0">
-                        <div className="p-4 pb-2 flex items-center justify-between">
+                    <div className="flex flex-col border-b border-slate-200 bg-slate-50 shrink-0">
+                        <div className="p-4 flex items-center justify-between">
                             <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
-                                <Filter size={14} className="text-primary"/> Filters & Tags
+                                <Filter size={14} className="text-primary"/> Filters & Tags / ফিল্টারসমূহ
                             </h3>
-                            <button onClick={() => setShowSourceFilters(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 p-1.5 rounded-lg transition-colors lg:hidden">
-                                <X size={16} />
-                            </button>
-                        </div>
-                        
-                        <div className="flex w-full mt-2 px-2">
                             <button 
-                                onClick={() => setActiveSidebarTab('academic')}
-                                className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'academic' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                onClick={() => setShowSourceFilters(false)} 
+                                className="flex items-center justify-center bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200/40 p-2 rounded-xl transition-all shadow-sm lg:hidden active:scale-95 shrink-0 cursor-pointer"
+                                title="Close Filters"
                             >
-                                Academic Filters
-                            </button>
-                            <button 
-                                onClick={() => setActiveSidebarTab('source')}
-                                className={`flex-1 pb-2 text-xs font-bold uppercase tracking-wide border-b-2 transition-all ${activeSidebarTab === 'source' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                            >
-                                Board & Year
+                                <X size={18} className="stroke-[2.5]" />
                             </button>
                         </div>
                     </div>
                     
                     <div className="p-5 flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-6">
-                        
-                        {activeSidebarTab === 'academic' && (
-                            <div className="flex flex-col gap-4">
-                                <div className="relative w-full">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/50" size={14} />
-                                    <input
-                                        type="text"
-                                        value={metadataSearchTerm}
-                                        onChange={(e) => {
-                                            setMetadataSearchTerm(e.target.value);
-                                            setShowSuggestions(true);
-                                        }}
-                                        onFocus={() => { 
-                                            if (!metadataSearchTerm) setMetadataSearchTerm(' ');
-                                            setShowSuggestions(true);
-                                        }}
-                                        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                                        placeholder="Auto-select Subject/Topic..."
-                                        className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold text-slate-700 placeholder:text-slate-400 shadow-sm"
-                                    />
-                                    {showSuggestions && metadataSuggestions.length > 0 && (
-                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-[300px] overflow-y-auto custom-scrollbar z-50">
-                                            {metadataSuggestions.map((s, idx) => (
-                                                <div
-                                                    key={idx}
-                                                    onClick={() => handleSelectSuggestion(s)}
-                                                    className="px-3 py-2 border-b border-slate-50 last:border-0 hover:bg-indigo-50 cursor-pointer flex flex-col gap-0.5 transition-colors"
-                                                >
-                                                    <span className="text-xs font-bold text-slate-700">{s.name}</span>
-                                                    <span className="text-[9px] font-black text-primary/70 uppercase tracking-wider">{s.type}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {showLanguageFilter && (
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Language</label>
-                                        <select value={filterLanguage} onChange={(e) => setFilterLanguage(e.target.value)} disabled={!showLanguageFilter} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:opacity-50">
+                        {/* Unified Academic Filters inside the compact sidebar drawer */}
+                        <div className="flex flex-col gap-4 border-b border-slate-150 pb-5">
+                            <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-1.5 mb-1">
+                                <Layers size={12} className="text-indigo-650" /> Academic Filters / শিক্ষাগত ফিল্টার
+                            </span>
+                            
+                            {/* Language Filter */}
+                            {showLanguageFilter && (
+                                <div className="flex flex-col gap-1.5 text-left">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Language Version
+                                    </label>
+                                    <div className="relative group shrink-0">
+                                        <select 
+                                            value={filterLanguage} 
+                                            onChange={(e) => setFilterLanguage(e.target.value)} 
+                                            className={`appearance-none h-10 w-full pl-3.5 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 ${filterLanguage !== 'ALL' ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                        >
                                             {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.length > 1 || uniqueInstituteMediums.includes('Bilingual')) && <option value="ALL">সব ভার্সন</option>}
                                             {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.includes('Bangla') || uniqueInstituteMediums.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
                                             {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.includes('English') || uniqueInstituteMediums.includes('Bilingual')) && <option value="English">English</option>}
                                             {(hasFullLangAccess || !user?.instituteMedium || uniqueInstituteMediums.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
                                         </select>
+                                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                            <ChevronDown size={12} className="stroke-[2.5]" />
+                                        </div>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
-                                {levels.length > 1 && (
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Level</label>
-                                        <select value={selectedLevelId} onChange={(e) => setSelectedLevelId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                            {/* Level Filter */}
+                            {levels.length > 1 && (
+                                <div className="flex flex-col gap-1.5 text-left">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Academic Level
+                                    </label>
+                                    <div className="relative group shrink-0">
+                                        <select 
+                                            value={selectedLevelId} 
+                                            onChange={(e) => setSelectedLevelId(e.target.value)} 
+                                            className={`appearance-none h-10 w-full pl-3.5 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 ${selectedLevelId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                        >
                                             <option value="">সব স্তর</option>
                                             {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                                         </select>
+                                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                            <ChevronDown size={12} className="stroke-[2.5]" />
+                                        </div>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
-                                {streams.length > 1 && (
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Stream</label>
-                                        <select value={selectedStreamId} onChange={(e) => setSelectedStreamId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                            {/* Stream Filter */}
+                            {streams.length > 1 && (
+                                <div className="flex flex-col gap-1.5 text-left">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Stream / বিভাগ
+                                    </label>
+                                    <div className="relative group shrink-0">
+                                        <select 
+                                            value={selectedStreamId} 
+                                            onChange={(e) => setSelectedStreamId(e.target.value)} 
+                                            className={`appearance-none h-10 w-full pl-3.5 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 ${selectedStreamId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                        >
                                             <option value="">সব বিভাগ</option>
                                             {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                         </select>
+                                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                            <ChevronDown size={12} className="stroke-[2.5]" />
+                                        </div>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
-                                {classes.length > 1 && (
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Class</label>
-                                        <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                            {/* Class Filter */}
+                            {classes.length > 1 && (
+                                <div className="flex flex-col gap-1.5 text-left">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Class / শ্রেণি
+                                    </label>
+                                    <div className="relative group shrink-0">
+                                        <select 
+                                            value={selectedClassId} 
+                                            onChange={(e) => setSelectedClassId(e.target.value)} 
+                                            className={`appearance-none h-10 w-full pl-3.5 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 ${selectedClassId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                        >
                                             <option value="">সব শ্রেণি</option>
                                             {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                         </select>
+                                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                            <ChevronDown size={12} className="stroke-[2.5]" />
+                                        </div>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
-                                {filteredSubjects.length > 1 && (
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Subject</label>
-                                        <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
-                                            <option value="">সব বিষয়</option>
-                                            {filteredSubjects.map(s => {
-                                                const isEng = s.isEnglishVersion || s.englishVersion || false;
+                            {/* Subject Filter */}
+                            <div className="flex flex-col gap-1.5 text-left">
+                                <label className="text-[10px] font-extrabold text-primary uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" /> Subject / বিষয়
+                                </label>
+                                <div className="relative group shrink-0">
+                                    <select 
+                                        value={selectedSubjectId} 
+                                        onChange={(e) => setSelectedSubjectId(e.target.value)} 
+                                        className={`appearance-none h-10 w-full pl-3.5 pr-9 rounded-xl text-[11px] font-black transition-all duration-300 cursor-pointer shadow-md outline-none border-2 focus:ring-4 ${selectedSubjectId ? 'bg-gradient-to-r from-indigo-50 to-pink-50/30 border-primary text-primary focus:ring-primary/10 shadow-primary/5' : 'bg-white border-primary/30 text-indigo-955 focus:ring-primary/10 animate-pulse-slow'}`}
+                                        disabled={filteredSubjects.length === 0}
+                                    >
+                                        {filteredSubjects.length === 0 ? (
+                                            <option value="">শ্রেণি নির্বাচন করুন</option>
+                                        ) : (
+                                            <>
+                                                <option value="">বিষয় সিলেক্ট করুন</option>
+                                                {filteredSubjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
+                                            </>
+                                        )}
+                                    </select>
+                                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-primary transition-colors">
+                                        <ChevronDown size={12} className="stroke-[2.5]" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Chapter Filter */}
+                            {chapters.length > 1 && (
+                                <div className="flex flex-col gap-1.5 text-left">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Chapter / অধ্যায়
+                                    </label>
+                                    <div className="relative group shrink-0">
+                                        <select 
+                                            value={selectedChapterId} 
+                                            onChange={(e) => setSelectedChapterId(e.target.value)} 
+                                            className={`appearance-none h-10 w-full pl-3.5 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 truncate ${selectedChapterId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                        >
+                                            <option value="">সব অধ্যায়</option>
+                                            {chapters.map(ch => {
+                                                const count = getChapterQuestionCount(ch.id);
                                                 return (
-                                                    <option key={s.classSubjectId} value={s.classSubjectId}>
-                                                        {s.subjectName} {isEng ? '[EN]' : '[BN]'}
+                                                    <option key={ch.id} value={ch.id}>
+                                                        {ch.name} ({count})
                                                     </option>
                                                 );
                                             })}
                                         </select>
+                                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                            <ChevronDown size={12} className="stroke-[2.5]" />
+                                        </div>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
-                                {chapters.length > 1 && (
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Chapter</label>
-                                        <select value={selectedChapterId} onChange={(e) => setSelectedChapterId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
-                                            <option value="">সব অধ্যায়</option>
-                                            {chapters.map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
-                                        </select>
-                                    </div>
-                                )}
-
-                                {topics.length > 1 && (
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider pl-1">Topic</label>
-                                        <select value={selectedTopicId} onChange={(e) => setSelectedTopicId(e.target.value)} className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer">
+                            {/* Topic Filter */}
+                            {topics.length > 1 && (
+                                <div className="flex flex-col gap-1.5 text-left">
+                                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Topic / টপিক
+                                    </label>
+                                    <div className="relative group shrink-0">
+                                        <select 
+                                            value={selectedTopicId} 
+                                            onChange={(e) => setSelectedTopicId(e.target.value)} 
+                                            className={`appearance-none h-10 w-full pl-3.5 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 truncate ${selectedTopicId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
+                                        >
                                             <option value="">সব টপিক</option>
-                                            {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                            {topics.map(t => {
+                                                const count = getTopicQuestionCount(t.id);
+                                                return (
+                                                    <option key={t.id} value={t.id}>
+                                                        {t.name} ({count})
+                                                    </option>
+                                                );
+                                            })}
                                         </select>
+                                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-indigo-500 transition-colors">
+                                            <ChevronDown size={12} className="stroke-[2.5]" />
+                                        </div>
                                     </div>
-                                )}
-                            </div>
-                        )}
+                                </div>
+                            )}
+                        </div>
 
-                        {activeSidebarTab === 'source' && (
-                            <div className="flex flex-col gap-6">
-                                {/* Selected Tags Bucket */}
-                                {(selectedBoards.length > 0 || selectedYears.length > 0 || selectedSchools.length > 0) && (
-                                    <div className="flex flex-col gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl">
-                                        <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-1.5">
-                                            <Filter size={12} /> Active Filters Bucket
+                        {/* Selected Tags Bucket */}
+                        {(selectedBoards.length > 0 || selectedYears.length > 0 || selectedSchools.length > 0) && (
+                            <div className="flex flex-col gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl">
+                                <span className="text-[10px] font-black text-indigo-800 uppercase tracking-widest flex items-center gap-1.5">
+                                    <Filter size={12} /> Active Filters Bucket
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {selectedBoards.map(b => (
+                                        <span key={b} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
+                                            {b} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedBoards(prev => prev.filter(x => x !== b))} />
                                         </span>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {selectedBoards.map(b => (
-                                                <span key={b} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
-                                                    {b} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedBoards(prev => prev.filter(x => x !== b))} />
-                                                </span>
-                                            ))}
-                                            {selectedYears.map(y => (
-                                                <span key={y} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
-                                                    {y} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedYears(prev => prev.filter(x => x !== y))} />
-                                                </span>
-                                            ))}
-                                            {selectedSchools.map(s => (
-                                                <span key={s} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
-                                                    {s} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedSchools(prev => prev.filter(x => x !== s))} />
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Board / University List */}
-                                {sourceTags.boards && sourceTags.boards.length > 0 && (
-                                    <div className="flex flex-col gap-2">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">Board / University</label>
-                                        <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                                            {sourceTags.boards.map(tag => (
-                                                <label key={tag.name} className="flex items-center justify-between group cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg transition-colors">
-                                                    <div className="flex items-center gap-2">
-                                                        <input 
-                                                            type="checkbox" 
-                                                            checked={selectedBoards.includes(tag.name)}
-                                                            onChange={(e) => {
-                                                                if (e.target.checked) setSelectedBoards(prev => [...prev, tag.name]);
-                                                                else setSelectedBoards(prev => prev.filter(b => b !== tag.name));
-                                                            }}
-                                                            className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20" 
-                                                        />
-                                                        <span className="text-[11px] font-bold text-slate-700">{tag.name}</span>
-                                                    </div>
-                                                    <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">({tag.count})</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Year List */}
-                                {sourceTags.years && sourceTags.years.length > 0 && (
-                                    <div className="flex flex-col gap-2">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">Year</label>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {sourceTags.years.map(tag => (
-                                                <label key={tag.name} className={`flex flex-col items-center justify-center p-2 rounded-lg border cursor-pointer transition-all ${selectedYears.includes(tag.name) ? 'bg-primary/5 border-primary text-primary' : 'bg-white border-slate-200 text-slate-600 hover:border-primary/50'}`}>
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={selectedYears.includes(tag.name)}
-                                                        onChange={(e) => {
-                                                            if (e.target.checked) setSelectedYears(prev => [...prev, tag.name]);
-                                                            else setSelectedYears(prev => prev.filter(y => y !== tag.name));
-                                                        }}
-                                                        className="hidden" 
-                                                    />
-                                                    <span className="text-xs font-black">{tag.name}</span>
-                                                    <span className="text-[9px] font-bold opacity-70">({tag.count})</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* School / College List */}
-                                {sourceTags.schools && sourceTags.schools.length > 0 && (
-                                    <div className="flex flex-col gap-2">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">School / College</label>
-                                        <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                                            {sourceTags.schools.map(tag => (
-                                                <label key={tag.name} className="flex items-center justify-between group cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg transition-colors">
-                                                    <div className="flex items-center gap-2">
-                                                        <input 
-                                                            type="checkbox" 
-                                                            checked={selectedSchools.includes(tag.name)}
-                                                            onChange={(e) => {
-                                                                if (e.target.checked) setSelectedSchools(prev => [...prev, tag.name]);
-                                                                else setSelectedSchools(prev => prev.filter(s => s !== tag.name));
-                                                            }}
-                                                            className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20" 
-                                                        />
-                                                        <span className="text-[11px] font-bold text-slate-700 truncate max-w-[180px]" title={tag.name}>{tag.name}</span>
-                                                    </div>
-                                                    <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0">({tag.count})</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {(!sourceTags.boards?.length && !sourceTags.years?.length && !sourceTags.schools?.length) && (
-                                    <div className="flex flex-col items-center justify-center py-10 opacity-50 text-center gap-2">
-                                        <Search size={24} className="text-slate-400" />
-                                        <p className="text-xs font-bold text-slate-500">No source tags found for the current subject.</p>
-                                    </div>
-                                )}
+                                    ))}
+                                    {selectedYears.map(y => (
+                                        <span key={y} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
+                                            {y} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedYears(prev => prev.filter(x => x !== y))} />
+                                        </span>
+                                    ))}
+                                    {selectedSchools.map(s => (
+                                        <span key={s} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 rounded-md shadow-sm">
+                                            {s} <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => setSelectedSchools(prev => prev.filter(x => x !== s))} />
+                                        </span>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
+                        {/* Board / University List */}
+                        {sourceTags.boards && sourceTags.boards.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">Board / University</label>
+                                <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                    {sourceTags.boards.map(tag => (
+                                        <label key={tag.name} className="flex items-center justify-between group cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg transition-colors">
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedBoards.includes(tag.name)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) setSelectedBoards(prev => [...prev, tag.name]);
+                                                        else setSelectedBoards(prev => prev.filter(b => b !== tag.name));
+                                                    }}
+                                                    className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20" 
+                                                />
+                                                <span className="text-[11px] font-bold text-slate-700">{tag.name}</span>
+                                            </div>
+                                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">({tag.count})</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Year List */}
+                        {sourceTags.years && sourceTags.years.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">Year</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {sourceTags.years.map(tag => (
+                                        <label key={tag.name} className={`flex flex-col items-center justify-center p-2 rounded-lg border cursor-pointer transition-all ${selectedYears.includes(tag.name) ? 'bg-primary/5 border-primary text-primary' : 'bg-white border-slate-200 text-slate-600 hover:border-primary/50'}`}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={selectedYears.includes(tag.name)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setSelectedYears(prev => [...prev, tag.name]);
+                                                    else setSelectedYears(prev => prev.filter(y => y !== tag.name));
+                                                }}
+                                                className="hidden" 
+                                            />
+                                            <span className="text-xs font-black">{tag.name}</span>
+                                            <span className="text-[9px] font-bold opacity-70">({tag.count})</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* School / College List */}
+                        {sourceTags.schools && sourceTags.schools.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1 border-b border-slate-100 pb-1">School / College</label>
+                                <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                    {sourceTags.schools.map(tag => (
+                                        <label key={tag.name} className="flex items-center justify-between group cursor-pointer p-1.5 hover:bg-slate-50 rounded-lg transition-colors">
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedSchools.includes(tag.name)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) setSelectedSchools(prev => [...prev, tag.name]);
+                                                        else setSelectedSchools(prev => prev.filter(s => s !== tag.name));
+                                                    }}
+                                                    className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20" 
+                                                />
+                                                <span className="text-[11px] font-bold text-slate-700 truncate max-w-[180px]" title={tag.name}>{tag.name}</span>
+                                            </div>
+                                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md shrink-0">({tag.count})</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {(!sourceTags.boards?.length && !sourceTags.years?.length && !sourceTags.schools?.length) && (
+                            <div className="flex flex-col items-center justify-center py-10 opacity-50 text-center gap-2">
+                                <Search size={24} className="text-slate-400" />
+                                <p className="text-xs font-bold text-slate-500">No source tags found for the current subject.</p>
+                            </div>
+                        )}
                     </div>
                     
                     <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
-                        <button onClick={resetFilters} className="px-4 py-2 bg-white text-slate-600 hover:text-rose-600 font-bold rounded-lg border border-slate-200 hover:border-rose-200 transition-colors flex items-center justify-center gap-1.5 text-xs uppercase tracking-wide">
+                        <button onClick={resetFilters} className="px-4 py-2 bg-white text-slate-600 hover:text-rose-600 font-bold rounded-lg border border-slate-200 hover:border-rose-200 transition-colors flex items-center justify-center gap-1.5 text-xs uppercase tracking-wide cursor-pointer">
                             <X size={14} /> Clear
                         </button>
-                        <button onClick={() => fetchQuestions()} className="px-6 py-2 bg-primary text-white font-bold rounded-lg border border-transparent hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5 text-xs uppercase tracking-wide shadow-sm">
+                        <button 
+                            onClick={() => {
+                                fetchQuestions();
+                                if (window.innerWidth < 1024) setShowSourceFilters(false);
+                            }} 
+                            className="px-6 py-2 bg-primary text-white font-bold rounded-lg border border-transparent hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5 text-xs uppercase tracking-wide shadow-sm cursor-pointer active:scale-[0.98]"
+                        >
                             <CheckCircle size={14} /> Apply Filters
                         </button>
                     </div>
                 </div>
 
                 {/* Third Row: Formats, Check All & Bulk Actions */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-2.5 overflow-x-auto w-full md:w-auto custom-scrollbar pb-2 md:pb-0">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-1.5 pt-1 border-t border-slate-100">
+                    <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto w-full md:w-auto custom-scrollbar pb-1 md:pb-0">
                         {typeTabs.map(type => (
                             <button
                                 key={type.id}
                                 onClick={() => setFilterType(type.id)}
-                                className={`px-4 py-1.5 text-[11.5px] font-black rounded-xl transition-all duration-300 whitespace-nowrap border active:scale-[0.97] ${filterType === type.id
-                                    ? 'bg-gradient-to-r from-primary to-secondary text-white border-transparent shadow-[0_4px_12px_rgba(233,30,140,0.25)] hover:shadow-[0_6px_16px_rgba(233,30,140,0.35)] scale-105'
+                                className={`px-2 sm:px-3 py-0.5 text-[9.5px] sm:text-[10.5px] font-black rounded transition-all duration-300 whitespace-nowrap border active:scale-[0.97] ${filterType === type.id
+                                    ? 'bg-gradient-to-r from-primary to-secondary text-white border-transparent shadow-[0_2px_6px_rgba(233,30,140,0.15)] hover:shadow-[0_4px_10px_rgba(233,30,140,0.25)] scale-102'
                                     : 'bg-gradient-to-b from-white to-slate-50 text-slate-600 border-slate-200/80 hover:bg-slate-100 hover:text-slate-800 hover:shadow-sm'
                                     }`}
                             >
@@ -1604,14 +2147,14 @@ const QuestionList = () => {
                                     setFilterUnanswered(prev => !prev);
                                     setCurrentPage(1);
                                 }}
-                                className={`ml-3 px-3 py-1 text-[11px] font-black rounded-full transition-all whitespace-nowrap border flex items-center gap-1 ${
+                                className={`ml-2 px-2 py-0.5 text-[9.5px] sm:text-[10.5px] font-black rounded-full transition-all whitespace-nowrap border flex items-center gap-0.5 ${
                                     filterUnanswered
                                         ? 'bg-rose-500 text-white border-rose-500 shadow-sm hover:bg-rose-600 shadow-rose-100'
                                         : 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700'
                                 }`}
                                 title="যেসকল প্রশ্নের সঠিক উত্তর বা অপশন সেট করা নেই"
                             >
-                                <XCircle size={12} className={filterUnanswered ? 'animate-pulse' : ''} />
+                                <XCircle size={10} className={filterUnanswered ? 'animate-pulse' : ''} />
                                 উত্তরবিহীন প্রশ্ন
                             </button>
                         )}
@@ -1704,14 +2247,24 @@ const QuestionList = () => {
                 </div>
             </div>
 
-            <div className={`flex gap-4 px-4 md:px-6 py-4 ${splitScreenMode ? 'flex-col md:flex-row h-[65vh] overflow-hidden' : 'flex-col'}`}>
+            <div className={`flex gap-2 sm:gap-3 px-1 sm:px-3 md:px-6 py-1.5 sm:py-3 ${splitScreenMode ? 'flex-col md:flex-row h-[65vh] overflow-hidden' : 'flex-col'}`}>
                 {/* List Side */}
-                <div id="question-list-scroll-container" className={`${splitScreenMode ? 'w-full md:w-1/2 overflow-y-auto pr-1 md:pr-2 custom-scrollbar flex flex-col gap-4' : 'w-full flex flex-col gap-4'}`}>
+                <div id="question-list-scroll-container" className={`${splitScreenMode ? 'w-full md:w-1/2 overflow-y-auto pr-1 md:pr-2 custom-scrollbar flex flex-col gap-2' : 'w-full flex flex-col gap-2'}`}>
                     {loading && currentPage === 1 ? (
                         <div className="py-16 text-center bg-white rounded-3xl border border-slate-100 shadow-sm mt-4">
                             <div className="flex flex-col items-center justify-center gap-4">
                                 <div className="w-8 h-8 border-4 border-indigo-100 border-t-primary rounded-full animate-spin"></div>
                                 <span className="text-slate-500 text-sm font-bold tracking-wide">Loading Questions...</span>
+                            </div>
+                        </div>
+                    ) : !(selectedSubjectId || showAllOverride || viewMode === 'FAVORITES') ? (
+                        <div className="py-20 flex flex-col items-center justify-center gap-4 bg-white rounded-[32px] border border-slate-200/60 shadow-sm mt-4 text-center">
+                            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
+                                <Layers size={32} className="stroke-[1.5]" />
+                            </div>
+                            <div className="max-w-sm">
+                                <h3 className="text-sm font-black text-slate-700 tracking-tight">কোনো বিষয় সিলেক্ট করা নেই</h3>
+                                <p className="text-slate-400 text-xs mt-1 font-bold">দয়া করে ওপরের নির্বাচক থেকে আপনার শ্রেণি ও বিষয় সিলেক্ট করুন।</p>
                             </div>
                         </div>
                     ) : questions.length === 0 ? (
@@ -1725,7 +2278,7 @@ const QuestionList = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-3 pb-2 relative" style={{ overflowAnchor: 'none' }}>
+                        <div className="flex flex-col gap-1 sm:gap-1.5 pb-1 relative" style={{ overflowAnchor: 'none' }}>
                             {/* Foolproof Observer Target: 2500px tall invisible div at the bottom.
                                 2500px height ensures it triggers 2-3 screens early to beat network latency!
                                 overflowAnchor: 'none' on parent ensures the browser NEVER jumps scroll position. */}
@@ -1904,7 +2457,7 @@ const QuestionList = () => {
                                     </div>
                                 )}
 
-                                {!selectedQuestion.classSubject && selectedQuestion.sourceReference && (
+                                {!selectedQuestion.classSubject && selectedQuestion.sourceReference && !selectedQuestion.sourceReference.toUpperCase().includes('CHUNK_') && (
                                     <div>
                                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Source / Context</h3>
                                         <div className="p-4 bg-violet-50/80 rounded-xl border border-violet-100 flex items-center gap-3">
@@ -2017,7 +2570,7 @@ const QuestionList = () => {
                 fetchQuestions();
             }}
         />
-        </>
+        </div>
     );
 };
 

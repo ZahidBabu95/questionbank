@@ -71,6 +71,8 @@ import SyncCommandCenter from './pages/admin/KnowledgeHub/SyncCommandCenter';
 import CategoryManagement from './pages/admin/CMS/Blog/CategoryManagement';
 import BlogListing from './pages/Public/Blog/BlogListing';
 import BlogPostDetail from './pages/Public/Blog/BlogPostDetail';
+import TermsOfService from './pages/Public/TermsOfService';
+import PrivacyPolicy from './pages/Public/PrivacyPolicy';
 import SupportDashboard from './pages/admin/Support/SupportDashboard';
 import KnowledgeBaseManager from './pages/admin/Support/KnowledgeBaseManager';
 import AllNotificationsPage from './pages/admin/Notifications/AllNotificationsPage';
@@ -115,6 +117,8 @@ function App() {
                     <Route path="/" element={<LandingPage />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
+                    <Route path="/terms" element={<TermsOfService />} />
+                    <Route path="/privacy" element={<PrivacyPolicy />} />
 
                     {/* Public Blog Routes */}
                     <Route path="/blog" element={<BlogListing />} />

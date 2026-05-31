@@ -716,7 +716,6 @@ export const useExamManager = () => {
               await examService.updateExam(id, payload);
               invalidateExamCache(id);
 
-              // 2. Capture and generate PDF using html2canvas & jsPDF in the frontend
               setDownloadProgress(20);
               setDownloadStatus(uiLang === 'bn' ? "ক্যানভাস এলিমেন্ট সনাক্ত করা হচ্ছে..." : "Identifying canvas element...");
 
@@ -728,114 +727,270 @@ export const useExamManager = () => {
               const pageSize = docSettings.pageSize === 'A4' ? 'a4' : docSettings.pageSize === 'Legal' ? 'legal' : 'letter';
               const orientation = docSettings.orientation === 'landscape' || docSettings.orientation === 'Landscape' ? 'l' : 'p';
 
-              setDownloadProgress(30);
-              setDownloadStatus(uiLang === 'bn' ? "পৃষ্ঠাগুলো স্ক্যান করা হচ্ছে..." : "Scanning pages...");
-
-              progressInterval = setInterval(() => {
-                  setDownloadProgress(prev => {
-                      if (prev < 70) return prev + 3;
-                      return prev;
-                  });
-              }, 350);
-
-              // Calculate dynamic dimensions to reset width exactly to desktop sizing
+              // Calculate exact dimensions
               const sDetails = docSettings || {};
               const dimensions = {
-                  'A4': { w: 794, h: 1123, gap: 0 },
-                  'Legal': { w: 816, h: 1344, gap: 0 },
-                  'Letter': { w: 816, h: 1056, gap: 0 },
-                  'A5': { w: 559, h: 794, gap: 0 },
-                  'Custom': { w: (sDetails.customW || 210) * 3.7795275591, h: (sDetails.customH || 297) * 3.7795275591, gap: 0 }
+                  'A4': { w: 794, h: 1123 },
+                  'Legal': { w: 816, h: 1344 },
+                  'Letter': { w: 816, h: 1056 },
+                  'A5': { w: 559, h: 794 },
+                  'Custom': { w: (sDetails.customW || 210) * 3.7795275591, h: (sDetails.customH || 297) * 3.7795275591 }
               };
-              let { w, h, gap } = dimensions[sDetails.pageSize || 'A4'] || dimensions['A4'];
+              let { w, h } = dimensions[sDetails.pageSize || 'A4'] || dimensions['A4'];
               if (sDetails.orientation === 'landscape' || sDetails.orientation === 'Landscape') {
                   const temp = w;
                   w = h;
                   h = temp;
               }
-              const totalH = h + gap;
 
-              const parent = element.parentElement;
-              const originalTransform = element.style.transform;
-              const originalTransition = element.style.transition;
-              const originalParentWidth = parent.style.width;
-              const originalParentMinHeight = parent.style.minHeight;
-              const originalBodyCssText = document.body.style.cssText;
+              const borderOffset = docSettings.outerBorder ? (Number(docSettings.outerBorderWidth) || 1) * 3 + 12 : 0;
+              const mmToPx = (mm) => mm * 3.7795275591;
+              const paddingTop = mmToPx(docSettings.marginTop || 20) + borderOffset;
+              const paddingBottom = mmToPx(docSettings.marginBottom || 20) + borderOffset;
+              const paddingLeft = mmToPx(docSettings.marginLeft || 25) + borderOffset;
+              const paddingRight = mmToPx(docSettings.marginRight || 20) + borderOffset;
 
-              // Enforce 100% desktop scale and prevent mobile viewport squeezing
-              element.style.transform = 'scale(1)';
-              element.style.transition = 'none';
-              if (parent) {
-                  parent.style.width = `${w}px`;
-                  parent.style.minHeight = `${(pageCount || 1) * totalH}px`;
+              const proseMirror = element.querySelector('.ProseMirror');
+              if (!proseMirror) {
+                  throw new Error("ProseMirror editor container not found");
               }
-              document.body.style.width = `${w + 100}px`;
-              document.body.style.minWidth = `${w + 100}px`;
-              document.body.style.overflow = 'visible';
 
-              // Delay to let browser reflow and load Noto Serif Bengali correctly at scale(1)
+              setDownloadProgress(35);
+              setDownloadStatus(uiLang === 'bn' ? "পৃষ্ঠা বিভাজন ও ডিস্ট্রিবিউশন করা হচ্ছে..." : "Distributing content across physical pages...");
+
+              // 1. Create temporary offscreen container
+              const printContainer = document.createElement('div');
+              printContainer.id = 'temp-pdf-print-container';
+              printContainer.style.position = 'fixed';
+              printContainer.style.left = '-9999px';
+              printContainer.style.top = '-9999px';
+              printContainer.style.width = `${w}px`;
+              printContainer.style.zIndex = '-99999';
+              document.body.appendChild(printContainer);
+
+              const proseStyle = window.getComputedStyle(proseMirror);
+
+              const createNewPageElement = (pageNum) => {
+                  const page = document.createElement('div');
+                  page.className = 'print-physical-page';
+                  page.style.width = `${w}px`;
+                  page.style.height = `${h}px`;
+                  page.style.backgroundColor = '#ffffff';
+                  page.style.position = 'relative';
+                  page.style.boxSizing = 'border-box';
+                  page.style.paddingTop = `${paddingTop}px`;
+                  page.style.paddingBottom = `${paddingBottom}px`;
+                  page.style.paddingLeft = `${paddingLeft}px`;
+                  page.style.paddingRight = `${paddingRight}px`;
+                  page.style.overflow = 'hidden';
+                  page.style.display = 'block';
+
+                  // Apply exact double border in CSS
+                  if (docSettings.outerBorder) {
+                      const borderWidth = Number(docSettings.outerBorderWidth) || 1;
+                      const borderDiv = document.createElement('div');
+                      borderDiv.style.position = 'absolute';
+                      borderDiv.style.top = '12px';
+                      borderDiv.style.bottom = '12px';
+                      borderDiv.style.left = '12px';
+                      borderDiv.style.right = '12px';
+                      borderDiv.style.border = `${borderWidth}px solid #000000`;
+                      borderDiv.style.boxSizing = 'border-box';
+                      borderDiv.style.pointerEvents = 'none';
+
+                      const innerBorder = document.createElement('div');
+                      const gapDist = borderWidth + 2.5;
+                      innerBorder.style.position = 'absolute';
+                      innerBorder.style.top = `${gapDist}px`;
+                      innerBorder.style.bottom = `${gapDist}px`;
+                      innerBorder.style.left = `${gapDist}px`;
+                      innerBorder.style.right = `${gapDist}px`;
+                      innerBorder.style.border = '0.8px solid #000000';
+                      innerBorder.style.boxSizing = 'border-box';
+                      innerBorder.style.pointerEvents = 'none';
+
+                      borderDiv.appendChild(innerBorder);
+                      page.appendChild(borderDiv);
+                  }
+
+                  // Watermark
+                  if (docSettings.watermark && docSettings.watermark !== "কোনোটি নয়") {
+                      const watermarkDiv = document.createElement('div');
+                      watermarkDiv.className = 'absolute inset-0 flex items-center justify-center pointer-events-none z-0';
+                      watermarkDiv.style.opacity = docSettings.watermarkOpacity / 100;
+                      
+                      const watermarkInner = document.createElement('div');
+                      watermarkInner.style.transform = 'rotate(-45deg)';
+                      watermarkInner.style.fontSize = '96px';
+                      watermarkInner.style.fontWeight = '900';
+                      watermarkInner.style.color = '#1e293b';
+                      watermarkInner.style.opacity = '0.15';
+                      watermarkInner.style.fontFamily = docSettings.enFont || 'Times New Roman';
+                      watermarkInner.textContent = docSettings.watermark === "কাস্টম" ? docSettings.watermarkCustom : docSettings.watermark === "Confidential" ? "CONFIDENTIAL" : docSettings.institute;
+                      
+                      watermarkDiv.appendChild(watermarkInner);
+                      page.appendChild(watermarkDiv);
+                  }
+
+                  const pageHeader = document.createElement('div');
+                  pageHeader.className = 'print-page-header';
+                  pageHeader.style.width = '100%';
+                  pageHeader.style.display = 'block';
+                  pageHeader.style.zIndex = '10';
+                  page.appendChild(pageHeader);
+
+                  const pageContent = document.createElement('div');
+                  pageContent.className = 'print-page-content ProseMirror focus:outline-none';
+                  pageContent.style.display = 'block';
+                  pageContent.style.height = 'auto';
+                  pageContent.style.minHeight = '0px';
+                  pageContent.style.width = '100%';
+                  pageContent.style.boxSizing = 'border-box';
+                  pageContent.style.color = '#000000';
+                  pageContent.style.backgroundColor = 'transparent';
+                  pageContent.style.zIndex = '10';
+                  pageContent.style.fontFamily = proseStyle.fontFamily;
+                  pageContent.style.fontSize = proseStyle.fontSize;
+                  pageContent.style.lineHeight = proseStyle.lineHeight;
+
+                  // Columns styling
+                  const colCount = Math.max(docSettings.columns || 1, ...(docSettings.sections || []).map(sec => sec.columns || 1));
+                  if (colCount > 1) {
+                      pageContent.style.columnCount = colCount;
+                      pageContent.style.columnGap = `${mmToPx(docSettings.columns > 1 ? (docSettings.colGap || 10) : ((docSettings.sections || []).find(sec => sec.columns > 1 && sec.colGap)?.colGap || docSettings.colGap || 10))}px`;
+                      pageContent.style.columnRule = 'none'; // Avoid black vertical rules
+                      pageContent.style.columnFill = 'balance';
+                  }
+
+                  page.appendChild(pageContent);
+                  return page;
+              };
+
+              const maxPrintableHeight = h - paddingTop - paddingBottom;
+
+              const pages = [];
+              let currentPage = createNewPageElement(1);
+              printContainer.appendChild(currentPage);
+              pages.push(currentPage);
+
+              let currentPageContent = currentPage.querySelector('.print-page-content');
+              let currentPageHeader = currentPage.querySelector('.print-page-header');
+
+              // 2. Clone and place native header inside the print-page-header of Page 1
+              const header = element.querySelector('.nexus-native-header');
+              let headerHeight = 0;
+              if (header) {
+                  const clonedHeader = header.cloneNode(true);
+                  clonedHeader.style.color = '#000000';
+                  currentPageHeader.appendChild(clonedHeader);
+                  
+                  // Measure the rendered header height in offscreen print DOM
+                  headerHeight = currentPageHeader.offsetHeight || header.offsetHeight || 180;
+              }
+
+              // 3. Distribute all other child elements dynamically
+              const children = Array.from(proseMirror.children);
+              for (let i = 0; i < children.length; i++) {
+                  const child = children[i];
+                  // Skip header portal container (we handled header separately)
+                  if (child.classList.contains('nexus-native-header-portal-container')) {
+                      continue;
+                  }
+
+                  const clonedChild = child.cloneNode(true);
+                  clonedChild.style.color = '#000000';
+                  currentPageContent.appendChild(clonedChild);
+
+                  // Measure scroll height vs max height allowed (subtracting header height on first page)
+                  const limit = pages.length === 1 ? (maxPrintableHeight - headerHeight) : maxPrintableHeight;
+                  if (currentPageContent.scrollHeight > limit) {
+                      if (currentPageContent.children.length > 1) {
+                          clonedChild.remove(); // Remove from current page
+
+                          // Create new page
+                          currentPage = createNewPageElement(pages.length + 1);
+                          printContainer.appendChild(currentPage);
+                          pages.push(currentPage);
+
+                          currentPageContent = currentPage.querySelector('.print-page-content');
+                          currentPageContent.appendChild(clonedChild);
+                      }
+                  }
+              }
+
+              // 4. Handle inline compact answer sheet if appended inside element
+              const compactSheet = element.querySelector('.nexus-compact-answer-sheet');
+              if (compactSheet) {
+                  const clonedSheet = compactSheet.cloneNode(true);
+                  clonedSheet.style.color = '#000000';
+                  currentPageContent.appendChild(clonedSheet);
+
+                  const limit = pages.length === 1 ? (maxPrintableHeight - headerHeight) : maxPrintableHeight;
+                  if (currentPageContent.scrollHeight > limit) {
+                      if (currentPageContent.children.length > 1) {
+                          clonedSheet.remove();
+
+                          // Create final page just for answers
+                          currentPage = createNewPageElement(pages.length + 1);
+                          printContainer.appendChild(currentPage);
+                          pages.push(currentPage);
+
+                          currentPageContent = currentPage.querySelector('.print-page-content');
+                          currentPageContent.appendChild(clonedSheet);
+                      }
+                  }
+              }
+
+              const actualPageCount = pages.length;
+
+              // Allow browser layout engine to fully paint offscreen elements
               await new Promise(resolve => setTimeout(resolve, 300));
 
-              const canvas = await html2canvas(element, {
-                  scale: 2, // 2x resolution guarantees ultra-crisp text and formatting!
-                  useCORS: true,
-                  allowTaint: false,
-                  backgroundColor: '#ffffff',
-                  logging: false
-              });
-
-              // Restore styles immediately
-              element.style.transform = originalTransform;
-              element.style.transition = originalTransition;
-              if (parent) {
-                  parent.style.width = originalParentWidth;
-                  parent.style.minHeight = originalParentMinHeight;
-              }
-              document.body.style.cssText = originalBodyCssText;
-
-              if (progressInterval) {
-                  clearInterval(progressInterval);
-                  progressInterval = null;
-              }
-
-              setDownloadProgress(75);
-              setDownloadStatus(uiLang === 'bn' ? "চিত্র উপাত্ত প্রস্তুত করা হচ্ছে..." : "Preparing image data...");
-
-              const imgData = canvas.toDataURL('image/jpeg', 1.0);
-
-              setDownloadProgress(80);
-              setDownloadStatus(uiLang === 'bn' ? "পিডিএফ পৃষ্ঠা তৈরি করা হচ্ছে..." : "Generating PDF pages...");
-
+              // 6. Initialize jsPDF
               const pdf = new jsPDF({
                   orientation: orientation,
                   unit: 'px',
-                  format: pageSize
+                  format: [w, h]
               });
 
-              const pdfWidth = pdf.internal.pageSize.getWidth();
-              const pdfHeight = pdf.internal.pageSize.getHeight();
-              const totalPages = pageCount || 1;
+              // 7. Screenshot each physical A4 page individually
+              for (let i = 0; i < actualPageCount; i++) {
+                  setDownloadProgress(30 + Math.round((i / actualPageCount) * 55));
+                  setDownloadStatus(uiLang === 'bn' ? `পৃষ্ঠা ${i + 1} প্রস্তুত করা হচ্ছে...` : `Preparing page ${i + 1}...`);
 
-              for (let i = 0; i < totalPages; i++) {
+                  const canvas = await html2canvas(pages[i], {
+                      scale: 2, // 2x high resolution
+                      useCORS: true,
+                      allowTaint: false,
+                      backgroundColor: '#ffffff',
+                      logging: false,
+                      width: w,
+                      height: h,
+                      windowWidth: w,
+                      windowHeight: h,
+                      scrollX: 0,
+                      scrollY: 0
+                  });
+
+                  const imgData = canvas.toDataURL('image/jpeg', 1.0);
+
                   if (i > 0) {
-                      pdf.addPage(pageSize, orientation);
+                      pdf.addPage([w, h], orientation);
                   }
-                  // Render each page portion by offsetting the Y position
-                  pdf.addImage(imgData, 'JPEG', 0, -i * pdfHeight, pdfWidth, pdfHeight * totalPages, undefined, 'FAST');
 
-                  const pageProgress = 80 + Math.round(((i + 1) / totalPages) * 15);
-                  setDownloadProgress(pageProgress);
-                  setDownloadStatus(uiLang === 'bn' ? `পৃষ্ঠা ${i + 1} যুক্ত করা হচ্ছে...` : `Adding page ${i + 1}...`);
-
-                  // Small delay to make it smooth and animated
-                  await new Promise(resolve => setTimeout(resolve, 80));
+                  pdf.addImage(imgData, 'JPEG', 0, 0, w, h, undefined, 'FAST');
               }
 
-              setDownloadProgress(98);
+              // Cleanup offscreen print container
+              document.body.removeChild(printContainer);
+
+              setDownloadProgress(90);
               setDownloadStatus(uiLang === 'bn' ? "পিডিএফ ফাইল ডাউনলোড করা হচ্ছে..." : "Downloading PDF file...");
 
+              const hasAnswers = docSettings.includeAnswerSheet === true;
+
               if (window.ReactNativeWebView) {
-                  setDownloadProgress(90);
+                  setDownloadProgress(95);
                   setDownloadStatus(uiLang === 'bn' ? "পিডিএফ সার্ভারে সিঙ্ক করা হচ্ছে..." : "Syncing PDF with server...");
 
                   const pdfBlob = pdf.output('blob');
@@ -844,7 +999,7 @@ export const useExamManager = () => {
                   formData.append('file', pdfBlob, saveName);
 
                   try {
-                      await axios.post(`/v1/exams/download/upload-temp/${id}`, formData, {
+                      await axios.post(`/v1/exams/download/upload-temp/${id}?includeAnswers=${hasAnswers}`, formData, {
                           headers: {
                               'Content-Type': 'multipart/form-data'
                           }
@@ -856,7 +1011,8 @@ export const useExamManager = () => {
                   const token = localStorage.getItem('token') || '';
                   const combinedParams = {
                       pageSize: docSettings.pageSize === 'A4' ? 'A4' : docSettings.pageSize === 'Legal' ? 'Legal' : 'Letter',
-                      orientation: docSettings.orientation === 'landscape' || docSettings.orientation === 'Landscape' ? 'landscape' : 'portrait'
+                      orientation: docSettings.orientation === 'landscape' || docSettings.orientation === 'Landscape' ? 'landscape' : 'portrait',
+                      includeAnswers: hasAnswers
                   };
                   if (token) combinedParams.token = token;
                   if (customFilename) combinedParams.filename = customFilename;
@@ -890,6 +1046,7 @@ export const useExamManager = () => {
               }, 800);
           }
       };
+
 
 
      const handleSaveAs = async () => {

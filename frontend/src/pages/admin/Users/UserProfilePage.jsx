@@ -48,6 +48,26 @@ const InfoRow = ({ icon, label, value }) => (
     </div>
 );
 
+// ─── Parse User Agent Helper ──────────────────────────────────────────────────
+const parseUserAgent = (userAgent) => {
+    if (!userAgent) return "Unknown Device";
+    let browser = "Unknown Browser";
+    let os = "Unknown OS";
+
+    if (userAgent.includes("Chrome")) browser = "Google Chrome";
+    else if (userAgent.includes("Safari") && !userAgent.includes("Chrome")) browser = "Safari";
+    else if (userAgent.includes("Firefox")) browser = "Mozilla Firefox";
+    else if (userAgent.includes("Edge")) browser = "Microsoft Edge";
+
+    if (userAgent.includes("Windows")) os = "Windows";
+    else if (userAgent.includes("Macintosh")) os = "macOS";
+    else if (userAgent.includes("Android")) os = "Android";
+    else if (userAgent.includes("iPhone") || userAgent.includes("iPad")) os = "iOS";
+    else if (userAgent.includes("Linux")) os = "Linux";
+
+    return `${browser} on ${os}`;
+};
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const UserProfilePage = () => {
     const { id } = useParams();
@@ -352,9 +372,10 @@ const UserProfilePage = () => {
                                                     {h.createdAt ? new Date(h.createdAt).toLocaleString('en-GB') : ''}
                                                 </span>
                                             </div>
-                                            <div className="flex gap-3 mt-0.5">
+                                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-0.5">
                                                 {h.ipAddress && <span className="text-[10px] text-slate-400">IP: {h.ipAddress}</span>}
-                                                {h.failureReason && <span className="text-[10px] text-rose-400">{h.failureReason}</span>}
+                                                {h.userAgent && <span className="text-[10px] text-slate-400">Device: {parseUserAgent(h.userAgent)}</span>}
+                                                {h.failureReason && <span className="text-[10px] text-rose-400 font-medium">Reason: {h.failureReason}</span>}
                                             </div>
                                         </div>
                                     </div>

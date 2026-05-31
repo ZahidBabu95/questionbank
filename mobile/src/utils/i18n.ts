@@ -21,31 +21,54 @@ const getLocale = async () => {
     console.log('Error reading language from AsyncStorage:', error);
   }
 
-  // Fallback to system locale
-  const locales = Localization.getLocales();
-  if (locales && locales.length > 0) {
-    const languageCode = locales[0].languageCode;
-    if (languageCode === 'bn') {
-      return 'bn';
+  // Safe fallback to system locale
+  try {
+    if (Localization && typeof Localization.getLocales === 'function') {
+      const locales = Localization.getLocales();
+      if (locales && locales.length > 0) {
+        const languageCode = locales[0]?.languageCode;
+        if (languageCode === 'bn') {
+          return 'bn';
+        }
+      }
     }
+  } catch (e) {
+    console.log('Error getting system locale:', e);
   }
   return 'en'; // default fallback
 };
 
 const initI18n = async () => {
-  const locale = await getLocale();
-
-  await i18n
-    .use(initReactI18next)
-    .init({
-      resources,
-      lng: locale,
-      fallbackLng: 'en',
-      compatibilityJSON: 'v4', // Required for React Native compatibility
-      interpolation: {
-        escapeValue: false, // React already safes from XSS
-      },
-    });
+  try {
+    const locale = await getLocale();
+    await i18n
+      .use(initReactI18next)
+      .init({
+        resources,
+        lng: locale,
+        fallbackLng: 'en',
+        compatibilityJSON: 'v4', // Required for React Native compatibility
+        interpolation: {
+          escapeValue: false, // React already safes from XSS
+        },
+      });
+  } catch (error) {
+    console.error('Failed to initialize i18n:', error);
+    // Safe fallback to prevent startup crash
+    try {
+      await i18n
+        .use(initReactI18next)
+        .init({
+          resources,
+          lng: 'en',
+          fallbackLng: 'en',
+          compatibilityJSON: 'v4',
+          interpolation: {
+            escapeValue: false,
+          },
+        });
+    } catch (e) {}
+  }
 };
 
 initI18n();

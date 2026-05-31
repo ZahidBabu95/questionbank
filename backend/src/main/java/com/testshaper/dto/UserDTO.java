@@ -20,6 +20,23 @@ public class UserDTO {
     private String instituteName;
     private String instituteMedium;
     private String instituteStatus;
+    private String subscriptionPackage;
+    
+    // Institute subscription and usage limits
+    private Integer maxTeachers;
+    private Integer maxStudents;
+    private Integer maxQuestions;
+    private Integer questionsUsedCurrentMonth;
+    private Integer aiLimitPerMonth;
+    private Integer aiUsedCurrentMonth;
+    private Integer storageLimitMb;
+    private Double storageUsedMb;
+    private String planType;
+    private String billingCycle;
+    private java.time.LocalDate planStartDate;
+    private java.time.LocalDate planEndDate;
+    private java.time.LocalDate expiryDate;
+
     private Set<String> roles;
     private Set<String> permissions;
     private LocalDateTime createdAt;

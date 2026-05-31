@@ -30,6 +30,34 @@ const useAcademicHierarchy = (options = {}) => {
         academicService.getAllLevels().then(setLevels).catch(console.error);
     }, []);
 
+    // Auto-select Level if there's only one option
+    useEffect(() => {
+        if (levels.length === 1 && levelId !== levels[0].id) {
+            setLevelId(levels[0].id);
+        }
+    }, [levels, levelId]);
+
+    // Auto-select Stream if there's only one option
+    useEffect(() => {
+        if (levelId && streams.length === 1 && streamId !== streams[0].id) {
+            setStreamId(streams[0].id);
+        }
+    }, [streams, levelId, streamId]);
+
+    // Auto-select Class if there's only one option
+    useEffect(() => {
+        if (streamId && classes.length === 1 && classId !== classes[0].id) {
+            setClassId(classes[0].id);
+        }
+    }, [classes, streamId, classId]);
+
+    // Auto-select Subject if there's only one option
+    useEffect(() => {
+        if (classId && subjects.length === 1 && subjectId !== subjects[0].classSubjectId) {
+            setSubjectId(subjects[0].classSubjectId);
+        }
+    }, [subjects, classId, subjectId]);
+
     // Level → Streams
     useEffect(() => {
         if (isRestoring.current) return;

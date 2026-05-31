@@ -32,6 +32,8 @@ public interface QuestionService {
 
     java.util.Map<String, Object> getOverviewStats(java.util.Map<String, String> filters);
 
+    java.util.Map<String, Object> getQuestionAvailability(UUID classSubjectId, String language);
+
     void deleteQuestion(UUID id);
 
     void deleteQuestionsBulk(List<UUID> ids);

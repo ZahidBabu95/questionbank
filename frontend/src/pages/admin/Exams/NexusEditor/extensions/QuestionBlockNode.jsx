@@ -187,6 +187,23 @@ const getFormattedNumber = (num, numberingStyle, language) => {
     return `${n}.`;
 };
 
+const cleanHtml = (html) => {
+    if (!html) return '';
+    let cleaned = html;
+    let prev;
+    do {
+        prev = cleaned;
+        cleaned = cleaned
+            .replace(/<p[^>]*>\s*<\/p>/gi, '')
+            .replace(/<p[^>]*>\s*<br[^>]*>\s*<\/p>/gi, '')
+            .replace(/<p[^>]*>(?:\s|&nbsp;)*<\/p>/gi, '')
+            .replace(/<br[^>]*>\s*$/gi, '')
+            .replace(/^\s*<br[^>]*>/gi, '')
+            .trim();
+    } while (cleaned !== prev);
+    return cleaned;
+};
+
 
     const QuestionComponent = ({ node, editor, deleteNode, updateAttributes, getPos, selected }) => {
         // Strict mode lock removed as per user request to make it fully usable
@@ -395,7 +412,12 @@ const getFormattedNumber = (num, numberingStyle, language) => {
             }
         };
 
-        const getRenderedQuestionText = () => {
+        const renderedStimulus = React.useMemo(() => {
+            if (!node.attrs.stimulus || isPlaceholderText(node.attrs.stimulus)) return '';
+            return cleanHtml(parseMarkdownImages(node.attrs.stimulus, 'stimulus'));
+        }, [node.attrs.stimulus]);
+
+        const renderedQuestionText = React.useMemo(() => {
             let html = node.attrs.questionText || '';
             if (!html) return '';
 
@@ -405,6 +427,14 @@ const getFormattedNumber = (num, numberingStyle, language) => {
 
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(cleanedHtml, 'text/html');
+
+                // Remove duplicated stimulus if node.attrs.stimulus is present and rendered standalone
+                if (node.attrs.stimulus && !isPlaceholderText(node.attrs.stimulus)) {
+                    const stem = doc.querySelector('.cq-stem');
+                    if (stem) {
+                        stem.remove();
+                    }
+                }
 
                 // Format cq-marks
                 const cqMarks = doc.querySelectorAll('.cq-marks');
@@ -419,29 +449,93 @@ const getFormattedNumber = (num, numberingStyle, language) => {
                     }
                 });
 
-                return doc.body.innerHTML;
+                return cleanHtml(parseMarkdownImages(doc.body.innerHTML, 'questionText'));
             } catch (e) {
                 console.error("Failed to parse and clean questionText HTML", e);
-                return cleanPlaceholderText(html);
+                return cleanHtml(parseMarkdownImages(cleanPlaceholderText(html), 'questionText'));
             }
-        };
+        }, [node.attrs.questionText, node.attrs.stimulus, node.attrs.language, node.attrs.numberingStyle]);
 
-        const cleanHtml = (html) => {
-            if (!html) return '';
-            let cleaned = html;
-            let prev;
-            do {
-                prev = cleaned;
-                cleaned = cleaned
-                    .replace(/<p[^>]*>\s*<\/p>/gi, '')
-                    .replace(/<p[^>]*>\s*<br[^>]*>\s*<\/p>/gi, '')
-                    .replace(/<p[^>]*>(?:\s|&nbsp;)*<\/p>/gi, '')
-                    .replace(/<br[^>]*>\s*$/gi, '')
-                    .replace(/^\s*<br[^>]*>/gi, '')
-                    .trim();
-            } while (cleaned !== prev);
-            return cleaned;
-        };
+        const computedLayout = React.useMemo(() => {
+            let layout = node.attrs.optionLayout || 'col1';
+            if (node.attrs.smartFit === false) {
+                return layout;
+            }
+            if (!node.attrs.options || !Array.isArray(node.attrs.options)) {
+                return layout;
+            }
+
+            const hasImage = node.attrs.options.some(o => (o.optionText || o.text || '').toLowerCase().includes('<img'));
+            if (hasImage) {
+                return 'col1';
+            }
+
+            const getVisualLength = (html) => {
+                const text = (html || '').replace(/<[^>]*>?/gm, '');
+                let len = 0;
+                for(let i=0; i<text.length; i++) {
+                    const code = text.charCodeAt(i);
+                    if (code >= 0x0980 && code <= 0x09FF) len += 1.3; // Bengali
+                    else if (code >= 0x41 && code <= 0x5A) len += 1.2; // Uppercase EN
+                    else if (text[i] === '\\' || text[i] === '$' || text[i] === '^' || text[i] === '_') len += 1.5; // Math
+                    else len += 1.0;
+                }
+                return len;
+            };
+            
+            const maxLen = Math.max(...node.attrs.options.map(o => getVisualLength(o.optionText || o.text)));
+            
+            // Dynamic column width calculation in pixels
+            const dimensions = {
+                'A4': { w: 794, h: 1123 },
+                'Legal': { w: 816, h: 1344 },
+                'Letter': { w: 816, h: 1056 },
+                'A5': { w: 559, h: 794 },
+                'Custom': { w: (node.attrs.customW || 210) * 3.7795275591, h: (node.attrs.customH || 297) * 3.7795275591 }
+            };
+            const pageSizeKey = node.attrs.pageSize || 'A4';
+            const orient = node.attrs.orientation || 'portrait';
+            let { w: pageW } = dimensions[pageSizeKey] || dimensions['A4'];
+            
+            if (orient === 'landscape') {
+                const { h: pageH } = dimensions[pageSizeKey] || dimensions['A4'];
+                pageW = pageH;
+            }
+            
+            const mmToPx = (mm) => (mm || 0) * 3.7795275591;
+            const mL = mmToPx(node.attrs.marginLeft !== undefined ? node.attrs.marginLeft : 10);
+            const mR = mmToPx(node.attrs.marginRight !== undefined ? node.attrs.marginRight : 10);
+            const cGap = mmToPx(node.attrs.colGap !== undefined ? node.attrs.colGap : 10);
+            
+            const contentWidth = Math.max(200, pageW - mL - mR);
+            let pageCols = node.attrs.pageCols || 1;
+            const colWidth = pageCols > 1 ? Math.max(100, (contentWidth - (pageCols - 1) * cGap) / pageCols) : contentWidth;
+            
+            const scale = (fSize || 14.66) / 14.66;
+            const threshold2Col = Math.max(3, Math.floor((colWidth / 28) / scale));
+            const threshold1Col = Math.max(6, Math.floor((colWidth / 13) / scale));
+            
+            if (maxLen >= threshold1Col) {
+                return 'col1';
+            } else if (maxLen >= threshold2Col) {
+                return 'col2';
+            } else {
+                return 'col4';
+            }
+        }, [
+            node.attrs.optionLayout,
+            node.attrs.smartFit,
+            node.attrs.options,
+            node.attrs.pageSize,
+            node.attrs.orientation,
+            node.attrs.customW,
+            node.attrs.customH,
+            node.attrs.marginLeft,
+            node.attrs.marginRight,
+            node.attrs.colGap,
+            node.attrs.pageCols,
+            fSize
+        ]);
 
         let dynamicDataParsed = null;
         let hideSubParts = false;
@@ -608,18 +702,18 @@ const getFormattedNumber = (num, numberingStyle, language) => {
                 </div>
 
                 <div className="flex flex-col items-start gap-1 w-full cq-question-layout">
-                    {node.attrs.stimulus && !isPlaceholderText(node.attrs.stimulus) && (
+                    {renderedStimulus && (
                         <div className="w-full mb-1 text-slate-800 cq-stimulus-block" 
                              style={{ textAlign: node.attrs.textAlign || 'left', lineHeight: safeLineGap }}
-                             dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(node.attrs.stimulus, 'stimulus')) }} 
+                             dangerouslySetInnerHTML={{ __html: renderedStimulus }} 
                         />
                     )}
                     
-                    {getRenderedQuestionText() ? (
+                    {renderedQuestionText ? (
                         <div className="flex items-start justify-between gap-4 w-full">
                             <div className="text-slate-900 font-medium flex-1 w-full" 
                                  style={{ textAlign: node.attrs.textAlign || 'left' }}
-                                 dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(getRenderedQuestionText(), 'questionText')) }} 
+                                 dangerouslySetInnerHTML={{ __html: renderedQuestionText }} 
                             />
                             {node.attrs.marksConfig !== 'hide' && node.attrs.marks && (
                                 <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 mt-0.5 select-none"
@@ -699,85 +793,15 @@ const getFormattedNumber = (num, numberingStyle, language) => {
                 </div>
                 
                 {/* MCQ Options Rendering */}
-                {node.attrs.options && Array.isArray(node.attrs.options) && node.attrs.options.length > 0 && (() => {
-                    let computedLayout = node.attrs.optionLayout || 'col1';
-
-                    if (node.attrs.smartFit !== false) {
-                        const hasImage = node.attrs.options.some(o => (o.optionText || o.text || '').toLowerCase().includes('<img'));
-                        if (hasImage) {
-                            computedLayout = 'col1';
-                        } else {
-                            const getVisualLength = (html) => {
-                                const text = (html || '').replace(/<[^>]*>?/gm, '');
-                                let len = 0;
-                                for(let i=0; i<text.length; i++) {
-                                    const code = text.charCodeAt(i);
-                                    if (code >= 0x0980 && code <= 0x09FF) len += 1.3; // Bengali
-                                    else if (code >= 0x41 && code <= 0x5A) len += 1.2; // Uppercase EN
-                                    else if (text[i] === '\\' || text[i] === '$' || text[i] === '^' || text[i] === '_') len += 1.5; // Math
-                                    else len += 1.0;
-                                }
-                                return len;
-                            };
-                            
-                            const maxLen = Math.max(...node.attrs.options.map(o => getVisualLength(o.optionText || o.text)));
-                            
-                            // Dynamic column width calculation in pixels
-                            const dimensions = {
-                                'A4': { w: 794, h: 1123 },
-                                'Legal': { w: 816, h: 1344 },
-                                'Letter': { w: 816, h: 1056 },
-                                'A5': { w: 559, h: 794 },
-                                'Custom': { w: (node.attrs.customW || 210) * 3.7795275591, h: (node.attrs.customH || 297) * 3.7795275591 }
-                            };
-                            const pageSizeKey = node.attrs.pageSize || 'A4';
-                            const orient = node.attrs.orientation || 'portrait';
-                            let { w: pageW, h: pageH } = dimensions[pageSizeKey] || dimensions['A4'];
-                            
-                            if (orient === 'landscape') {
-                                const temp = pageW;
-                                pageW = pageH;
-                                pageH = temp;
-                            }
-                            
-                            // Convert mm margins and colGap to pixels (1 mm = 3.7795275591 px)
-                            const mmToPx = (mm) => (mm || 0) * 3.7795275591;
-                            const mL = mmToPx(node.attrs.marginLeft !== undefined ? node.attrs.marginLeft : 10);
-                            const mR = mmToPx(node.attrs.marginRight !== undefined ? node.attrs.marginRight : 10);
-                            const cGap = mmToPx(node.attrs.colGap !== undefined ? node.attrs.colGap : 10);
-                            
-                            const contentWidth = Math.max(200, pageW - mL - mR);
-                            
-                            let pageCols = node.attrs.pageCols || 1;
-                            
-                            // Each column width
-                            const colWidth = pageCols > 1 ? Math.max(100, (contentWidth - (pageCols - 1) * cGap) / pageCols) : contentWidth;
-                            
-                            const scale = (fSize || 14.66) / 14.66;
-                            
-                            // Professional dynamic thresholds based on the exact available column width
-                            const threshold2Col = Math.max(3, Math.floor((colWidth / 28) / scale));
-                            const threshold1Col = Math.max(6, Math.floor((colWidth / 13) / scale));
-                            
-                            if (maxLen >= threshold1Col) {
-                                computedLayout = 'col1';
-                            } else if (maxLen >= threshold2Col) {
-                                computedLayout = 'col2';
-                            } else {
-                                computedLayout = 'col4';
-                            }
-                        }
-                    }
-                    
-                    return (
-                        <div className={`options-grid grid ${computedLayout === 'col4' ? 'grid-cols-4 gap-x-3' : computedLayout === 'col2' ? 'grid-cols-2 gap-x-6' : 'grid-cols-1 gap-x-6'}`}
-                             style={{ 
-                                 rowGap: (node.attrs.optionGap && node.attrs.optionGap < 0) ? '0px' : (node.attrs.optionGap ? `${node.attrs.optionGap}px` : '8px'),
-                                 fontSize: fSize ? `${fSize}px` : 'inherit',
-                                 letterSpacing: computedLayout === 'col4' ? '-0.015em' : 'normal'
-                             }}
-                        >
-                            {node.attrs.options.map((opt, idx) => {
+                {node.attrs.options && Array.isArray(node.attrs.options) && node.attrs.options.length > 0 && (
+                    <div className={`options-grid grid ${computedLayout === 'col4' ? 'grid-cols-4 gap-x-3' : computedLayout === 'col2' ? 'grid-cols-2 gap-x-6' : 'grid-cols-1 gap-x-6'}`}
+                         style={{ 
+                             rowGap: (node.attrs.optionGap && node.attrs.optionGap < 0) ? '0px' : (node.attrs.optionGap ? `${node.attrs.optionGap}px` : '8px'),
+                             fontSize: fSize ? `${fSize}px` : 'inherit',
+                             letterSpacing: computedLayout === 'col4' ? '-0.015em' : 'normal'
+                         }}
+                    >
+                        {node.attrs.options.map((opt, idx) => {
                             const optStyle = node.attrs.optionStyle || 'bn';
                             const optLabel = optStyle === 'en' 
                                 ? String.fromCharCode(97 + idx) 
@@ -814,7 +838,7 @@ const getFormattedNumber = (num, numberingStyle, language) => {
                             );
                         })}
                     </div>
-                ); })()}
+                )}
 
                 {/* Inline Detailed Answer Block */}
                 <div className="nexus-detailed-answer-block mt-2 break-inside-avoid w-full hidden"

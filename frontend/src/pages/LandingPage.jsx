@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
     BookOpen, CheckCircle, Layout, Users,
-    ArrowRight, Zap, Globe, Shield, Star, Menu, X, FileText
+    ArrowRight, Zap, Globe, Shield, Star, Menu, X, FileText,
+    Smartphone, Apple, Monitor, Cpu, Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import cmsService from '../services/cmsService';
@@ -16,6 +17,7 @@ const translations = {
         navLogin: "Log In",
         navSignup: "Get Started",
         navDashboard: "Go to Dashboard",
+        navDownloads: "Downloads",
         
         // Hero Fallbacks
         heroBadge: "New Version 2.0 Released",
@@ -74,6 +76,7 @@ const translations = {
         navLogin: "লগইন",
         navSignup: "শুরু করুন",
         navDashboard: "ড্যাশবোর্ডে যান",
+        navDownloads: "ডাউনলোড",
         
         // Hero Fallbacks
         heroBadge: "নতুন সংস্করণ ২.০ রিলিজ হয়েছে",
@@ -144,6 +147,12 @@ const LandingPage = () => {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [enabledLanguages, setEnabledLanguages] = useState(['en', 'bn']);
     const [currentLang, setCurrentLang] = useState('en');
+    const [downloads, setDownloads] = useState({
+        ANDROID: null,
+        IOS: null,
+        WINDOWS: null,
+        LINUX: null
+    });
 
     useEffect(() => {
         setIsLoggedIn(!!localStorage.getItem('token'));
@@ -168,6 +177,22 @@ const LandingPage = () => {
                     setCurrentLang(def);
                     localStorage.setItem('user-language', def);
                 }
+
+                // Fetch dynamic app download releases
+                const plats = ['ANDROID', 'IOS', 'WINDOWS', 'LINUX'];
+                const dlData = {};
+                for (const p of plats) {
+                    try {
+                        const release = await cmsService.getLatestPublicRelease(p);
+                        if (release && release.active) {
+                            dlData[p] = release;
+                        }
+                    } catch (e) {
+                        // ignore 404/no active release
+                    }
+                }
+                setDownloads(dlData);
+
             } catch (err) {
                 console.error('Failed to load CMS content:', err);
             } finally {
@@ -292,6 +317,9 @@ const LandingPage = () => {
                             <a href="#pricing" className="text-sm font-medium text-slate-600 hover:text-primary transition-colors">
                                 {translations[currentLang].navPricing}
                             </a>
+                            <a href="#downloads" className="text-sm font-medium text-slate-600 hover:text-primary transition-colors">
+                                {translations[currentLang].navDownloads}
+                            </a>
                         </div>
 
                         <div className="hidden md:flex items-center gap-4">
@@ -359,6 +387,9 @@ const LandingPage = () => {
                                 </a>
                                 <a href="#pricing" onClick={toggleMenu} className="block w-full text-center text-base font-bold text-slate-700 hover:text-primary p-3 rounded-xl hover:bg-slate-50 transition-colors">
                                     {translations[currentLang].navPricing}
+                                </a>
+                                <a href="#downloads" onClick={toggleMenu} className="block w-full text-center text-base font-bold text-slate-700 hover:text-primary p-3 rounded-xl hover:bg-slate-50 transition-colors">
+                                    {translations[currentLang].navDownloads}
                                 </a>
                                 
                                 <div className="w-full h-px bg-slate-100 my-2"></div>
@@ -496,6 +527,182 @@ const LandingPage = () => {
                     </motion.div>
                 </div>
             </section>
+
+            {/* App Downloads Section */}
+            {(() => {
+                const hasActiveReleases = Object.values(downloads).some(d => d && d.active);
+                if (!hasActiveReleases) return null;
+
+                const finalDownloads = {};
+                Object.entries(downloads).forEach(([platform, data]) => {
+                    if (data && data.active) {
+                        finalDownloads[platform] = data;
+                    }
+                });
+
+                return (
+                    <section id="downloads" className="py-20 bg-gradient-to-b from-white to-slate-50 relative border-t border-slate-100">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <motion.div
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true }}
+                                variants={fadeInUp}
+                                className="text-center mb-16"
+                            >
+                                <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight mb-4">
+                                    {currentLang === 'bn' ? 'কোয়েশ্চেন শ্যাপার অ্যাপ ডাউনলোড করুন' : 'Download the QuestionShaper Apps'}
+                                </h2>
+                                <p className="text-slate-500 max-w-2xl mx-auto text-base">
+                                    {currentLang === 'bn' 
+                                        ? 'আমাদের এআই-চালিত অনন্য ওয়ার্কস্পেস আপনার মোবাইল এবং ডেস্কটপে নেটিভলি অ্যাক্সেস করুন।' 
+                                        : 'Access our advanced neural workspace natively across all your devices for ultimate performance.'}
+                                </p>
+                            </motion.div>
+
+                            <div className="flex flex-wrap justify-center gap-8 max-w-6xl mx-auto">
+                                {Object.entries(finalDownloads).map(([platform, data]) => {
+                                    if (!data) return null;
+                                const isAndroid = platform === 'ANDROID';
+                                const isIos = platform === 'IOS';
+                                const isWindows = platform === 'WINDOWS';
+                                
+                                const IconComp = isAndroid ? Smartphone : isIos ? Apple : isWindows ? Monitor : Cpu;
+                                const title = isAndroid ? 'Android App' : isIos ? 'iOS App' : isWindows ? 'Windows Native' : 'Linux Package';
+                                const buttonText = data.releaseType === 'STORE_LINK' 
+                                    ? (currentLang === 'bn' ? 'স্টোর থেকে ডাউনলোড করুন' : 'Get it on App Store') 
+                                    : (currentLang === 'bn' ? 'সরাসরি ফাইল ডাউনলোড' : 'Download Binary File');
+                                
+                                // Color configurations for the platform glassmorphic look
+                                const theme = isAndroid 
+                                    ? {
+                                        bg: 'bg-emerald-950/90 border-emerald-500/30 text-emerald-400',
+                                        badge: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+                                        iconBg: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.3)]',
+                                        button: 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]',
+                                        glow: 'shadow-[0_0_40px_rgba(16,185,129,0.08)]'
+                                    } 
+                                    : isIos 
+                                    ? {
+                                        bg: 'bg-slate-900/90 border-slate-700/40 text-slate-200',
+                                        badge: 'bg-slate-500/15 text-slate-300 border border-slate-500/20',
+                                        iconBg: 'bg-slate-500/20 text-white border border-slate-500/30 shadow-[0_0_15px_rgba(255,255,255,0.1)]',
+                                        button: 'bg-white text-slate-950 hover:bg-slate-100 hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]',
+                                        glow: 'shadow-[0_0_40px_rgba(255,255,255,0.03)]'
+                                    } 
+                                    : isWindows 
+                                    ? {
+                                        bg: 'bg-blue-950/90 border-blue-500/30 text-blue-400',
+                                        badge: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+                                        iconBg: 'bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.3)]',
+                                        button: 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:shadow-[0_0_25px_rgba(59,130,246,0.4)]',
+                                        glow: 'shadow-[0_0_40px_rgba(59,130,246,0.08)]'
+                                    } 
+                                    : {
+                                        bg: 'bg-orange-950/90 border-orange-500/30 text-orange-400',
+                                        badge: 'bg-orange-500/10 text-orange-400 border border-orange-500/20',
+                                        iconBg: 'bg-orange-500/20 text-orange-400 border border-orange-500/30 shadow-[0_0_15px_rgba(249,115,22,0.3)]',
+                                        button: 'bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:shadow-[0_0_25px_rgba(249,115,22,0.4)]',
+                                        glow: 'shadow-[0_0_40px_rgba(249,115,22,0.08)]'
+                                    };
+
+                                return (
+                                    <motion.div
+                                        key={platform}
+                                        initial={{ opacity: 0, y: 30 }}
+                                        whileInView={{ opacity: 1, y: 0 }}
+                                        viewport={{ once: true }}
+                                        whileHover="hover"
+                                        className={`w-full sm:w-[300px] p-8 rounded-[2rem] border ${theme.bg} ${theme.glow} flex flex-col justify-between transition-all duration-300 relative overflow-hidden backdrop-blur-xl group`}
+                                    >
+                                        {/* Dynamic Gloss Sheen Sweep Effect */}
+                                        <motion.div 
+                                            className="absolute top-0 left-0 w-[60%] h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 -translate-x-[150%] pointer-events-none"
+                                            variants={{
+                                                hover: {
+                                                    x: '250%',
+                                                    transition: {
+                                                        duration: 1.5,
+                                                        ease: 'easeInOut',
+                                                        repeat: Infinity,
+                                                        repeatDelay: 0.3
+                                                    }
+                                                }
+                                            }}
+                                        />
+
+                                        <div className="space-y-6 relative z-10">
+                                            {/* Header Section: Glowing Icon & Platform */}
+                                            <div className="flex justify-between items-start">
+                                                <motion.div 
+                                                    className={`w-14 h-14 rounded-2xl flex items-center justify-center ${theme.iconBg}`}
+                                                    variants={{
+                                                        hover: {
+                                                            scale: 1.1,
+                                                            rotate: [0, -5, 5, 0],
+                                                            transition: { duration: 0.5 }
+                                                        }
+                                                    }}
+                                                >
+                                                    <IconComp size={28} />
+                                                </motion.div>
+                                                <span className={`text-[10px] font-black tracking-widest uppercase px-3 py-1 rounded-full ${theme.badge}`}>
+                                                    v{data.versionName}
+                                                </span>
+                                            </div>
+
+                                            {/* Name & Subtitle */}
+                                            <div>
+                                                <h3 className="font-black text-white text-xl tracking-tight">{title}</h3>
+                                                <p className="text-slate-400 text-xs font-semibold mt-1">
+                                                    {data.releaseType === 'STORE_LINK' ? 'Official App Store Link' : 'Secure Binary (Cloudflare R2)'}
+                                                </p>
+                                            </div>
+
+                                            {/* Changelog section inside glossy box */}
+                                            {data.changelog && (
+                                                <div className="bg-white/5 border border-white/5 p-4 rounded-2xl text-[11px] leading-relaxed text-slate-300">
+                                                    <span className="font-black text-slate-400 uppercase tracking-widest block text-[9px] mb-2">
+                                                        {currentLang === 'bn' ? 'নতুন পরিবর্তনসমূহ' : "What's New"}
+                                                    </span>
+                                                    <div className="space-y-1.5 max-h-[90px] overflow-y-auto pr-1">
+                                                        {data.changelog.split('\n').map((line, idx) => {
+                                                            let cleanLine = line.trim();
+                                                            if (cleanLine.startsWith('•')) cleanLine = cleanLine.substring(1).trim();
+                                                            if (cleanLine.startsWith('-')) cleanLine = cleanLine.substring(1).trim();
+                                                            if (cleanLine.startsWith('*')) cleanLine = cleanLine.substring(1).trim();
+                                                            return (
+                                                                <div key={idx} className="flex items-start gap-2">
+                                                                    <span className="text-indigo-400 mt-0.5">•</span>
+                                                                    <span>{cleanLine}</span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Download CTA Button */}
+                                        <div className="mt-8 relative z-10">
+                                            <a
+                                                href={data.downloadUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className={`w-full py-4 px-6 rounded-2xl font-bold text-xs text-center flex items-center justify-center gap-2 transition-all duration-300 ${theme.button}`}
+                                            >
+                                                <Download size={15} strokeWidth={2.5} className="animate-bounce" />
+                                                {buttonText}
+                                            </a>
+                                        </div>
+                                    </motion.div>
+                                );
+                            })}
+                            </div>
+                        </div>
+                    </section>
+                );
+            })()}
 
             {/* Responsive Pricing Section */}
             <section id="pricing" className="py-24 bg-slate-50 relative">
@@ -691,7 +898,29 @@ const LandingPage = () => {
             {/* Footer */}
             <footer className="bg-white border-t border-slate-100 pt-16 pb-8">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-6 border-b border-slate-100 pb-8 mb-8">
+                        <div className="flex items-center gap-3">
+                            {branding?.logo_url ? (
+                                <img src={branding.logo_url} alt="Logo" className="h-8 w-auto object-contain select-none" />
+                            ) : (
+                                <>
+                                    <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center text-white">
+                                        <Layout strokeWidth={2.5} size={18} />
+                                    </div>
+                                    <span className="font-bold text-slate-800 text-sm">QuestionShaper</span>
+                                </>
+                            )}
+                        </div>
+                        <div className="flex gap-6 text-sm font-semibold text-slate-500">
+                            <Link to="/terms" className="hover:text-primary transition-colors">
+                                {currentLang === 'bn' ? 'ব্যবহারের শর্তাবলী' : 'Terms of Service'}
+                            </Link>
+                            <Link to="/privacy" className="hover:text-primary transition-colors">
+                                {currentLang === 'bn' ? 'গোপনীয়তা নীতিমালা' : 'Privacy Policy'}
+                            </Link>
+                        </div>
+                    </div>
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                         <p className="text-slate-400 text-sm">
                             {branding?.footer_text || `© ${new Date().getFullYear()} QuestionShaper Inc. All rights reserved.`}
                         </p>

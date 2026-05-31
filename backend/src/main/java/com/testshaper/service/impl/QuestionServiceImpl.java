@@ -1001,4 +1001,62 @@ public class QuestionServiceImpl implements QuestionService {
         }
         return questionRepository.findPendingRevisionsByParentIdsAndCreator(originalQuestionIds, userEmail);
     }
+
+    @Override
+    public java.util.Map<String, Object> getQuestionAvailability(UUID classSubjectId, String language) {
+        String jpql = "SELECT q.chapter.id, q.topic.id, q.type, q.difficulty, COUNT(q.id) " +
+                      "FROM Question q " +
+                      "WHERE q.classSubject.id = :csId AND q.deleted = false AND q.status = :status ";
+        
+        if (org.springframework.util.StringUtils.hasText(language) && !"ALL".equalsIgnoreCase(language)) {
+            jpql += "AND q.language = :lang ";
+        }
+        
+        jpql += "GROUP BY q.chapter.id, q.topic.id, q.type, q.difficulty";
+        
+        var query = entityManager.createQuery(jpql, Object[].class)
+                .setParameter("csId", classSubjectId)
+                .setParameter("status", Question.QuestionStatus.APPROVED);
+                
+        if (org.springframework.util.StringUtils.hasText(language) && !"ALL".equalsIgnoreCase(language)) {
+            query.setParameter("lang", language);
+        }
+        
+        java.util.List<Object[]> rows = query.getResultList();
+        
+        java.util.Map<String, java.util.Map<String, java.util.Map<String, Integer>>> chapterCounts = new java.util.HashMap<>();
+        java.util.Map<String, java.util.Map<String, java.util.Map<String, Integer>>> topicCounts = new java.util.HashMap<>();
+        
+        for (Object[] row : rows) {
+            UUID chapUuid = (UUID) row[0];
+            UUID topUuid = (UUID) row[1];
+            String type = (String) row[2];
+            Question.DifficultyLevel diff = (Question.DifficultyLevel) row[3];
+            Long countVal = (Long) row[4];
+            int count = countVal != null ? countVal.intValue() : 0;
+            
+            String chapId = chapUuid != null ? chapUuid.toString() : null;
+            String topId = topUuid != null ? topUuid.toString() : null;
+            String diffStr = diff != null ? diff.name() : "MEDIUM";
+            
+            // Map Chapter counts
+            if (chapId != null) {
+                chapterCounts.computeIfAbsent(chapId, k -> new java.util.HashMap<>())
+                             .computeIfAbsent(type, k -> new java.util.HashMap<>())
+                             .merge(diffStr, count, Integer::sum);
+            }
+            
+            // Map Topic counts
+            if (topId != null) {
+                topicCounts.computeIfAbsent(topId, k -> new java.util.HashMap<>())
+                           .computeIfAbsent(type, k -> new java.util.HashMap<>())
+                           .merge(diffStr, count, Integer::sum);
+            }
+        }
+        
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("chapters", chapterCounts);
+        result.put("topics", topicCounts);
+        return result;
+    }
 }

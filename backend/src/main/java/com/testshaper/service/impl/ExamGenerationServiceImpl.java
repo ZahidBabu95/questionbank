@@ -53,6 +53,9 @@ public class ExamGenerationServiceImpl {
         // 1. Validate difficulty distribution
         validateDifficultyDistribution(request);
 
+        // 1b. Validate Bloom's Taxonomy distribution
+        validateBloomDistribution(request);
+
         // 2. Validate question type rules (sum must match totalQuestions & totalMarks)
         validateQuestionTypeRules(request);
 
@@ -357,6 +360,35 @@ public class ExamGenerationServiceImpl {
         return toDTO(saved);
     }
 
+    private String normalizeBloomLevel(String bloom) {
+        if (bloom == null) return "";
+        String b = bloom.toUpperCase().trim();
+        if (b.equals("REMEMBERING") || b.equals("KNOWLEDGE") || b.equals("জ্ঞানমূলক")) {
+            return "KNOWLEDGE";
+        }
+        if (b.equals("UNDERSTANDING") || b.equals("COMPREHENSION") || b.equals("অনুধাবনমূলক")) {
+            return "COMPREHENSION";
+        }
+        if (b.equals("APPLYING") || b.equals("APPLICATION") || b.equals("প্রয়োগমূলক")) {
+            return "APPLICATION";
+        }
+        if (b.equals("ANALYZING") || b.equals("EVALUATING") || b.equals("CREATING") || b.equals("HIGHER_ORDER") || b.equals("উচ্চতর দক্ষতা")) {
+            return "HIGHER_ORDER";
+        }
+        return b;
+    }
+
+    private List<String> getPreferredBloomLevels(Map<String, Integer> bloomDeficits) {
+        List<String> prefs = new ArrayList<>();
+        if (bloomDeficits == null) return prefs;
+        for (Map.Entry<String, Integer> entry : bloomDeficits.entrySet()) {
+            if (entry.getValue() > 0) {
+                prefs.add(entry.getKey());
+            }
+        }
+        return prefs;
+    }
+
     // =========================================================
     // WEIGHTED RANDOM SELECTION ALGORITHM
     // =========================================================
@@ -373,8 +405,21 @@ public class ExamGenerationServiceImpl {
         int mediumCount = (int) Math.round(total * request.getMediumPercent() / 100.0);
         int hardCount = total - easyCount - mediumCount; // remainder goes to hard
 
-        log.debug("Selecting {} {} questions: easy={} medium={} hard={}",
-                total, rule.getQuestionType(), easyCount, mediumCount, hardCount);
+        // Calculate target Bloom Counts for this rule
+        int knowledgeCount = (int) Math.round(total * request.getKnowledgePercent() / 100.0);
+        int comprehensionCount = (int) Math.round(total * request.getComprehensionPercent() / 100.0);
+        int applicationCount = (int) Math.round(total * request.getApplicationPercent() / 100.0);
+        int higherOrderCount = total - knowledgeCount - comprehensionCount - applicationCount;
+
+        Map<String, Integer> bloomDeficits = new HashMap<>();
+        bloomDeficits.put("KNOWLEDGE", knowledgeCount);
+        bloomDeficits.put("COMPREHENSION", comprehensionCount);
+        bloomDeficits.put("APPLICATION", applicationCount);
+        bloomDeficits.put("HIGHER_ORDER", higherOrderCount);
+
+        log.debug("Selecting {} {} questions: easy={} medium={} hard={}, bloom: K={} C={} A={} H={}",
+                total, rule.getQuestionType(), easyCount, mediumCount, hardCount,
+                knowledgeCount, comprehensionCount, applicationCount, higherOrderCount);
 
         String tenantId = TenantContext.getTenantId();
         Set<UUID> chapterIds = null;
@@ -438,23 +483,47 @@ public class ExamGenerationServiceImpl {
         Set<UUID> currentExcludedIds = new HashSet<>(usedIds);
         List<Question> pool = new ArrayList<>();
 
+        // Fetch EASY batch
+        List<String> preferredEasyBloom = getPreferredBloomLevels(bloomDeficits);
         List<Question> easyPool = fetchPool(tenantId, globalClassSubjectId,
-                rule.getQuestionType(), Question.DifficultyLevel.EASY,
+                rule.getQuestionType(), Question.DifficultyLevel.EASY, preferredEasyBloom,
                 request.getLanguage(), chapterIds, topicIds, currentExcludedIds, easyCount);
         pool.addAll(easyPool);
-        easyPool.forEach(q -> currentExcludedIds.add(q.getId()));
+        easyPool.forEach(q -> {
+            currentExcludedIds.add(q.getId());
+            String norm = normalizeBloomLevel(q.getBloomLevel());
+            if (bloomDeficits.containsKey(norm)) {
+                bloomDeficits.put(norm, Math.max(0, bloomDeficits.get(norm) - 1));
+            }
+        });
 
+        // Fetch MEDIUM batch
+        List<String> preferredMediumBloom = getPreferredBloomLevels(bloomDeficits);
         List<Question> mediumPool = fetchPool(tenantId, globalClassSubjectId,
-                rule.getQuestionType(), Question.DifficultyLevel.MEDIUM,
+                rule.getQuestionType(), Question.DifficultyLevel.MEDIUM, preferredMediumBloom,
                 request.getLanguage(), chapterIds, topicIds, currentExcludedIds, mediumCount);
         pool.addAll(mediumPool);
-        mediumPool.forEach(q -> currentExcludedIds.add(q.getId()));
+        mediumPool.forEach(q -> {
+            currentExcludedIds.add(q.getId());
+            String norm = normalizeBloomLevel(q.getBloomLevel());
+            if (bloomDeficits.containsKey(norm)) {
+                bloomDeficits.put(norm, Math.max(0, bloomDeficits.get(norm) - 1));
+            }
+        });
 
+        // Fetch HARD batch
+        List<String> preferredHardBloom = getPreferredBloomLevels(bloomDeficits);
         List<Question> hardPool = fetchPool(tenantId, globalClassSubjectId,
-                rule.getQuestionType(), Question.DifficultyLevel.HARD,
+                rule.getQuestionType(), Question.DifficultyLevel.HARD, preferredHardBloom,
                 request.getLanguage(), chapterIds, topicIds, currentExcludedIds, hardCount);
         pool.addAll(hardPool);
-        hardPool.forEach(q -> currentExcludedIds.add(q.getId()));
+        hardPool.forEach(q -> {
+            currentExcludedIds.add(q.getId());
+            String norm = normalizeBloomLevel(q.getBloomLevel());
+            if (bloomDeficits.containsKey(norm)) {
+                bloomDeficits.put(norm, Math.max(0, bloomDeficits.get(norm) - 1));
+            }
+        });
 
         // If the selection has deficit, check other difficulty levels of the same question type to fulfill the request.
         if (pool.size() < total) {
@@ -472,12 +541,19 @@ public class ExamGenerationServiceImpl {
                 if (deficit <= 0) {
                     break;
                 }
+                List<String> preferredFallbackBloom = getPreferredBloomLevels(bloomDeficits);
                 List<Question> fallbackPool = fetchPool(tenantId, globalClassSubjectId,
-                        rule.getQuestionType(), level,
+                        rule.getQuestionType(), level, preferredFallbackBloom,
                         request.getLanguage(), chapterIds, topicIds, currentExcludedIds, deficit);
                 if (!fallbackPool.isEmpty()) {
                     pool.addAll(fallbackPool);
-                    fallbackPool.forEach(q -> currentExcludedIds.add(q.getId()));
+                    fallbackPool.forEach(q -> {
+                        currentExcludedIds.add(q.getId());
+                        String norm = normalizeBloomLevel(q.getBloomLevel());
+                        if (bloomDeficits.containsKey(norm)) {
+                            bloomDeficits.put(norm, Math.max(0, bloomDeficits.get(norm) - 1));
+                        }
+                    });
                     deficit -= fallbackPool.size();
                 }
             }
@@ -510,12 +586,19 @@ public class ExamGenerationServiceImpl {
                     if (deficit <= 0) {
                         break;
                     }
+                    List<String> preferredFallbackBloom = getPreferredBloomLevels(bloomDeficits);
                     List<Question> fallbackPool = fetchPool(tenantId, globalClassSubjectId,
-                            fallbackType, level,
+                            fallbackType, level, preferredFallbackBloom,
                             request.getLanguage(), chapterIds, topicIds, currentExcludedIds, deficit);
                     if (!fallbackPool.isEmpty()) {
                         pool.addAll(fallbackPool);
-                        fallbackPool.forEach(q -> currentExcludedIds.add(q.getId()));
+                        fallbackPool.forEach(q -> {
+                            currentExcludedIds.add(q.getId());
+                            String norm = normalizeBloomLevel(q.getBloomLevel());
+                            if (bloomDeficits.containsKey(norm)) {
+                                bloomDeficits.put(norm, Math.max(0, bloomDeficits.get(norm) - 1));
+                            }
+                        });
                         deficit -= fallbackPool.size();
                     }
                 }
@@ -537,6 +620,7 @@ public class ExamGenerationServiceImpl {
     private List<Question> fetchPool(String tenantId, UUID classSubjectId,
             String type,
             Question.DifficultyLevel difficulty,
+            List<String> preferredBloomLevels,
             String language,
             Set<UUID> chapterIds,
             Set<UUID> topicIds,
@@ -598,13 +682,36 @@ public class ExamGenerationServiceImpl {
         // Shuffle the IDs directly
         Collections.shuffle(eligibleIds, new Random());
         
-        // Limit IDs to exactly what is needed
-        List<UUID> selectedIds = eligibleIds.stream().limit(needed).collect(Collectors.toList());
+        // Limit IDs to exactly what is needed (or a larger pool to select matching Bloom levels in memory)
+        List<UUID> selectedIds = eligibleIds.stream().limit(Math.max(needed * 5, 50)).collect(Collectors.toList());
         
-        // Now ONLY fetch the required amount!
-        List<Question> selectedQuestions = questionRepository.findAllById(selectedIds);
+        // Now ONLY fetch the required candidates
+        List<Question> candidates = questionRepository.findAllById(selectedIds);
+        Collections.shuffle(candidates, new Random());
+
+        List<Question> selectedQuestions = new ArrayList<>();
         
-        // Ensure they are randomized
+        // 1. First pass: select candidates matching preferred Bloom levels
+        if (preferredBloomLevels != null && !preferredBloomLevels.isEmpty()) {
+            for (Question q : candidates) {
+                if (selectedQuestions.size() >= needed) break;
+                String qBloom = q.getBloomLevel();
+                String normBloom = normalizeBloomLevel(qBloom);
+                if (preferredBloomLevels.contains(normBloom)) {
+                    selectedQuestions.add(q);
+                }
+            }
+        }
+        
+        // 2. Second pass: fill remaining deficit from any remaining candidates
+        for (Question q : candidates) {
+            if (selectedQuestions.size() >= needed) break;
+            if (!selectedQuestions.contains(q)) {
+                selectedQuestions.add(q);
+            }
+        }
+        
+        // Ensure final selection is randomized
         Collections.shuffle(selectedQuestions, new Random());
         
         return selectedQuestions;
@@ -663,6 +770,14 @@ public class ExamGenerationServiceImpl {
         if (sum != 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Difficulty percentages must sum to 100, got: " + sum);
+        }
+    }
+
+    private void validateBloomDistribution(ExamGenerationRequest req) {
+        int sum = req.getKnowledgePercent() + req.getComprehensionPercent() + req.getApplicationPercent() + req.getHigherOrderPercent();
+        if (sum != 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Bloom's Taxonomy percentages must sum to 100, got: " + sum);
         }
     }
 

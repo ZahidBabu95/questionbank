@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -25,8 +25,8 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
-  const { t } = useTranslation();
-  const { logoUrl } = useBranding();
+  const { t, i18n } = useTranslation();
+  const { logoUrl, systemName } = useBranding();
   const { login } = useAuth();
   const { width } = useWindowDimensions();
   const isTablet = width > 600;
@@ -36,25 +36,51 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [secureText, setSecureText] = useState(true);
   const [loading, setLoading] = useState(false);
   
+  // Validation and error states
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [globalError, setGlobalError] = useState('');
+
+  // Auto-dismiss global error banner after 4 seconds
+  useEffect(() => {
+    if (globalError) {
+      const timer = setTimeout(() => {
+        setGlobalError('');
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [globalError]);
+
   // Track focused fields for premium outline animation
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Simple validation checks
   const validateForm = () => {
-    if (!email.trim() || !password) {
-      Alert.alert(t('common.error'), 'Please fill in all fields.');
-      return false;
+    let isValid = true;
+    setEmailError('');
+    setPasswordError('');
+    setGlobalError('');
+
+    if (!email.trim()) {
+      setEmailError(i18n.language === 'bn' ? 'অনুগ্রহ করে ইমেইল অ্যাড্রেসটি দিন।' : 'Email address is required.');
+      isValid = false;
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        setEmailError(i18n.language === 'bn' ? 'সঠিক ইমেইল অ্যাড্রেস প্রদান করুন।' : 'Please enter a valid email address.');
+        isValid = false;
+      }
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      Alert.alert(t('common.error'), 'Please enter a valid email address.');
-      return false;
+
+    if (!password) {
+      setPasswordError(i18n.language === 'bn' ? 'পাসওয়ার্ড প্রদান করা আবশ্যক।' : 'Password is required.');
+      isValid = false;
+    } else if (password.length < 6) {
+      setPasswordError(i18n.language === 'bn' ? 'পাসওয়ার্ডটি অন্তত ৬ অক্ষরের হতে হবে।' : 'Password must be at least 6 characters.');
+      isValid = false;
     }
-    if (password.length < 6) {
-      Alert.alert(t('common.error'), 'Password must be at least 6 characters.');
-      return false;
-    }
-    return true;
+
+    return isValid;
   };
 
   const handleLogin = async () => {
@@ -66,7 +92,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       // AuthContext state update automatically changes App.tsx route to AuthenticatedStack!
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || err.message || 'Login failed.';
-      Alert.alert(t('common.error'), errorMsg);
+      // Localized error message mapping
+      let localMsg = errorMsg;
+      if (errorMsg.toLowerCase().includes('bad credentials') || errorMsg.toLowerCase().includes('invalid email or password')) {
+        localMsg = i18n.language === 'bn' 
+          ? 'ভুল ইমেইল বা পাসওয়ার্ড! অনুগ্রহ করে সঠিক তথ্য দিন।' 
+          : 'Invalid email or password. Please try again.';
+      } else if (errorMsg.toLowerCase().includes('network error') || errorMsg.toLowerCase().includes('timeout')) {
+        localMsg = i18n.language === 'bn'
+          ? 'সার্ভারের সাথে সংযোগ ব্যাহত হয়েছে। আপনার ইন্টারনেট কানেকশন চেক করুন।'
+          : 'Network error. Please check your internet connection.';
+      }
+      setGlobalError(localMsg);
     } finally {
       setLoading(false);
     }
@@ -133,17 +170,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             {/* Form Area */}
             <View style={styles.formArea}>
               
+              {/* Global Error Banner */}
+              {!!globalError && (
+                <View style={styles.globalErrorCard}>
+                  <Feather name="alert-circle" size={18} color={theme.colors.danger} />
+                  <Text style={styles.globalErrorText}>{globalError}</Text>
+                  <TouchableOpacity onPress={() => setGlobalError('')} style={styles.globalErrorClose}>
+                    <Feather name="x" size={16} color={theme.colors.danger} />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* Email Input */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Email Address</Text>
                 <View style={[
                   styles.inputWrapper, 
-                  focusedField === 'email' && styles.inputWrapperFocused
+                  focusedField === 'email' && styles.inputWrapperFocused,
+                  !!emailError && styles.inputWrapperError
                 ]}>
                   <Feather 
                     name="mail" 
                     size={18} 
-                    color={focusedField === 'email' ? theme.colors.primary : theme.colors.textMuted} 
+                    color={emailError ? theme.colors.danger : (focusedField === 'email' ? theme.colors.primary : theme.colors.textMuted)} 
                     style={styles.inputIcon} 
                   />
                   <TextInput 
@@ -151,14 +200,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                     placeholder="you@example.com"
                     placeholderTextColor={theme.colors.textMuted}
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(val) => {
+                      setEmail(val);
+                      if (emailError) setEmailError('');
+                    }}
                     autoCapitalize="none"
                     keyboardType="email-address"
                     autoCorrect={false}
                     onFocus={() => setFocusedField('email')}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+                        setEmailError(i18n.language === 'bn' ? 'সঠিক ইমেইল অ্যাড্রেস প্রদান করুন।' : 'Please enter a valid email address.');
+                      }
+                    }}
+                    textContentType="emailAddress"
+                    autoComplete="email"
                   />
                 </View>
+                {/* Inline Error */}
+                {!!emailError && <Text style={styles.errorText}>{emailError}</Text>}
               </View>
 
               {/* Password Input */}
@@ -171,12 +232,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                 </View>
                 <View style={[
                   styles.inputWrapper, 
-                  focusedField === 'password' && styles.inputWrapperFocused
+                  focusedField === 'password' && styles.inputWrapperFocused,
+                  !!passwordError && styles.inputWrapperError
                 ]}>
                   <Feather 
                     name="lock" 
                     size={18} 
-                    color={focusedField === 'password' ? theme.colors.primary : theme.colors.textMuted} 
+                    color={passwordError ? theme.colors.danger : (focusedField === 'password' ? theme.colors.primary : theme.colors.textMuted)} 
                     style={styles.inputIcon} 
                   />
                   <TextInput 
@@ -185,16 +247,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                     placeholderTextColor={theme.colors.textMuted}
                     secureTextEntry={secureText}
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={(val) => {
+                      setPassword(val);
+                      if (passwordError) setPasswordError('');
+                    }}
                     autoCapitalize="none"
                     autoCorrect={false}
                     onFocus={() => setFocusedField('password')}
                     onBlur={() => setFocusedField(null)}
+                    textContentType="password"
+                    autoComplete="password"
                   />
                   <TouchableOpacity onPress={() => setSecureText(!secureText)}>
                     <Feather name={secureText ? 'eye-off' : 'eye'} size={18} color={theme.colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
+                {/* Inline Error */}
+                {!!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
               </View>
 
               {/* Login Button */}
@@ -460,5 +529,41 @@ const styles = StyleSheet.create({
   boldText: {
     color: theme.colors.primary,
     fontWeight: theme.typography.weights.bold,
+  },
+  inputWrapperError: {
+    borderColor: theme.colors.danger,
+    borderWidth: 1.5,
+    backgroundColor: '#FFF8F8',
+  },
+  errorText: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.danger,
+    fontWeight: theme.typography.weights.medium,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  globalErrorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    position: 'relative',
+    gap: 12,
+    ...theme.shadows.sm,
+  },
+  globalErrorText: {
+    flex: 1,
+    fontSize: theme.typography.sizes.base - 1,
+    color: theme.colors.danger,
+    fontWeight: theme.typography.weights.semibold,
+    lineHeight: 18,
+  },
+  globalErrorClose: {
+    padding: 4,
   },
 });

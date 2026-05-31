@@ -35,6 +35,94 @@ const AutoExamGenerator = () => {
         examType: 'MODEL_TEST'
     });
 
+    const [availableCounts, setAvailableCounts] = useState({ chapters: {}, topics: {} });
+    const [loadingAvailability, setLoadingAvailability] = useState(false);
+
+    const [bloomDistribution, setBloomDistribution] = useState({
+        knowledge: 40,
+        comprehension: 30,
+        application: 20,
+        higherOrder: 10
+    });
+
+    const [templates, setTemplates] = useState([]);
+    const [selectedTemplateId, setSelectedTemplateId] = useState('');
+    const [newTemplateName, setNewTemplateName] = useState('');
+    const [savingTemplate, setSavingTemplate] = useState(false);
+    const [loadingTemplates, setLoadingTemplates] = useState(false);
+
+    const availableLanguages = React.useMemo(() => {
+        const langs = [];
+        if (hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) {
+            langs.push('Bangla');
+        }
+        if (hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) {
+            langs.push('English');
+        }
+        if (hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) {
+            langs.push('Bilingual');
+        }
+        return langs;
+    }, [hasFullLangAccess, user?.instituteMedium]);
+
+    const getAvailableCount = (id, type, isChapter = true) => {
+        const pool = isChapter ? availableCounts.chapters : availableCounts.topics;
+        const typePool = pool[id]?.[type] || {};
+        return Object.values(typePool).reduce((a, b) => a + b, 0);
+    };
+
+
+
+    // Auto-select Language if there's only one option
+    useEffect(() => {
+        if (availableLanguages.length === 1 && examInfo.language !== availableLanguages[0]) {
+            setExamInfo(prev => ({ ...prev, language: availableLanguages[0] }));
+        }
+    }, [availableLanguages, examInfo.language]);
+
+    // Fetch availability counters when subject or language changes
+    useEffect(() => {
+        if (subjectId) {
+            const fetchAvailability = async () => {
+                setLoadingAvailability(true);
+                try {
+                    const { data } = await axios.get(`/v1/questions/availability?classSubjectId=${subjectId}&language=${examInfo.language}`);
+                    if (data) {
+                        setAvailableCounts({
+                            chapters: data.chapters || {},
+                            topics: data.topics || {}
+                        });
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch question availability", e);
+                } finally {
+                    setLoadingAvailability(false);
+                }
+            };
+            fetchAvailability();
+        } else {
+            setAvailableCounts({ chapters: {}, topics: {} });
+        }
+    }, [subjectId, examInfo.language]);
+
+    // Fetch blueprint templates on mount
+    useEffect(() => {
+        const fetchTemplates = async () => {
+            setLoadingTemplates(true);
+            try {
+                const res = await examService.getTemplates();
+                if (res) {
+                    setTemplates(Array.isArray(res) ? res : (res.data || []));
+                }
+            } catch (e) {
+                console.error("Failed to fetch templates", e);
+            } finally {
+                setLoadingTemplates(false);
+            }
+        };
+        fetchTemplates();
+    }, []);
+
     // Reverted frontend auto-filtering logic per user request to allow simple database-driven dropdown mapping
 
     useEffect(() => {
@@ -398,12 +486,81 @@ const AutoExamGenerator = () => {
         }));
     };
 
+    const handleSaveTemplate = async () => {
+        if (!newTemplateName.trim()) {
+            return alert("Please enter a template name.");
+        }
+        setSavingTemplate(true);
+        try {
+            const structure = {
+                difficulty,
+                bloomDistribution,
+                userStructure
+            };
+            const payload = {
+                templateName: newTemplateName.trim(),
+                isGlobal: isSuperAdmin,
+                structureJson: JSON.stringify(structure),
+                docSettingsJson: "{}"
+            };
+            const res = await examService.createTemplate(payload);
+            if (res) {
+                alert("Template saved successfully!");
+                setNewTemplateName('');
+                const freshRes = await examService.getTemplates();
+                setTemplates(Array.isArray(freshRes) ? freshRes : (freshRes.data || []));
+            }
+        } catch (e) {
+            console.error("Failed to save template", e);
+            alert("Failed to save template: " + (e.response?.data?.message || e.message));
+        } finally {
+            setSavingTemplate(false);
+        }
+    };
+
+    const handleTemplateChange = (templateId) => {
+        setSelectedTemplateId(templateId);
+        if (!templateId) return;
+
+        const selected = templates.find(t => t.id === templateId);
+        if (selected && selected.structureJson) {
+            try {
+                const parsed = JSON.parse(selected.structureJson);
+                if (parsed.difficulty) {
+                    setDifficulty(parsed.difficulty);
+                }
+                if (parsed.bloomDistribution) {
+                    setBloomDistribution(parsed.bloomDistribution);
+                }
+                if (parsed.userStructure) {
+                    setUserStructure(prev => {
+                        const merged = { ...prev };
+                        Object.keys(parsed.userStructure).forEach(k => {
+                            if (merged[k]) {
+                                merged[k] = { ...merged[k], ...parsed.userStructure[k] };
+                            }
+                        });
+                        return merged;
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to parse template structure", e);
+                alert("Failed to parse template structure.");
+            }
+        }
+    };
+
     const handleGenerate = async () => {
         if (targetTotals.qs === 0) return alert("Total questions must be greater than 0.");
         
         // Ensure difficulty is 100
         if (difficulty.easy + difficulty.medium + difficulty.hard !== 100) {
             return alert("Difficulty percentages must equal exactly 100%.");
+        }
+
+        // Ensure Bloom's distribution is 100
+        if (bloomDistribution.knowledge + bloomDistribution.comprehension + bloomDistribution.application + bloomDistribution.higherOrder !== 100) {
+            return alert("Bloom's Taxonomy percentages must equal exactly 100%.");
         }
 
         // Collect selected chapters/topics from allocations
@@ -419,6 +576,25 @@ const AutoExamGenerator = () => {
 
         if (selectedChapterIds.length === 0 && selectedTopicIds.length === 0) {
             return alert("Please allocate at least one question from the syllabus chapters/topics.");
+        }
+
+        // Pre-flight availability check
+        let validationError = false;
+        Object.entries(allocations).forEach(([id, counts]) => {
+            Object.entries(counts).forEach(([type, count]) => {
+                const num = parseInt(count) || 0;
+                if (num > 0) {
+                    const isChapter = chapters.some(c => c.id === id);
+                    const avail = getAvailableCount(id, type, isChapter);
+                    if (num > avail) {
+                        validationError = true;
+                    }
+                }
+            });
+        });
+
+        if (validationError) {
+            return alert("One or more allocations exceed the available questions in the bank. Please adjust allocations before generating.");
         }
 
         setLoading(true);
@@ -453,6 +629,10 @@ const AutoExamGenerator = () => {
                 easyPercent: difficulty.easy,
                 mediumPercent: difficulty.medium,
                 hardPercent: difficulty.hard,
+                knowledgePercent: bloomDistribution.knowledge,
+                comprehensionPercent: bloomDistribution.comprehension,
+                applicationPercent: bloomDistribution.application,
+                higherOrderPercent: bloomDistribution.higherOrder,
                 questionTypeRules: qTypes
             });
 
@@ -512,29 +692,36 @@ const AutoExamGenerator = () => {
                                             <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Exam Title</label>
                                             <input type="text" value={examInfo.title} onChange={e => setExamInfo({...examInfo, title: e.target.value})} className={inputCls} placeholder="e.g. Final Term Examination - 2026" />
                                         </div>
-                                        
+
+
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Level</label>
-                                                <select value={levelId} onChange={e => setLevelId(e.target.value)} className={selectCls}>
-                                                    <option value="">Select Level</option>
-                                                    {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Stream</label>
-                                                <select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!levelId} className={selectCls}>
-                                                    <option value="">Select Stream</option>
-                                                    {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Class</label>
-                                                <select value={classId} onChange={e => setClassId(e.target.value)} disabled={!streamId} className={selectCls}>
-                                                    <option value="">Select Class</option>
-                                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                                </select>
-                                            </div>
+                                            {levels.length > 1 && (
+                                                <div>
+                                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Level</label>
+                                                    <select value={levelId} onChange={e => setLevelId(e.target.value)} className={selectCls}>
+                                                        <option value="">Select Level</option>
+                                                        {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
+                                            {!(levelId && streams.length === 1) && (
+                                                <div>
+                                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Stream</label>
+                                                    <select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!levelId} className={selectCls}>
+                                                        <option value="">Select Stream</option>
+                                                        {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
+                                            {!(streamId && classes.length === 1) && (
+                                                <div>
+                                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Class</label>
+                                                    <select value={classId} onChange={e => setClassId(e.target.value)} disabled={!streamId} className={selectCls}>
+                                                        <option value="">Select Class</option>
+                                                        {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
                                             <div>
                                                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Subject</label>
                                                 <select value={subjectId} onChange={e => setSubjectId(e.target.value)} disabled={!classId} className={selectCls}>
@@ -542,14 +729,14 @@ const AutoExamGenerator = () => {
                                                     {subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
                                                 </select>
                                             </div>
-                                            <div>
-                                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Language</label>
-                                                <select value={examInfo.language} onChange={e => setExamInfo({...examInfo, language: e.target.value})} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className={selectCls + (!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual') ? ' opacity-50' : '')}>
-                                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
-                                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
-                                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
-                                                </select>
-                                            </div>
+                                            {availableLanguages.length > 1 && (
+                                                <div>
+                                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Language</label>
+                                                    <select value={examInfo.language} onChange={e => setExamInfo({...examInfo, language: e.target.value})} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className={selectCls + (!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual') ? ' opacity-50' : '')}>
+                                                        {availableLanguages.map(lang => <option key={lang} value={lang}>{lang}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
                                             <div>
                                                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Duration (Min)</label>
                                                 <input type="number" value={examInfo.duration} onChange={e => setExamInfo({...examInfo, duration: e.target.value})} className={inputCls} />
@@ -568,6 +755,12 @@ const AutoExamGenerator = () => {
                                         <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2 mb-2">
                                             <Target className="text-violet-500" /> Blueprint Target
                                         </h2>
+                                        {subjectId && (
+                                            <div className="text-xs font-black text-violet-600 bg-violet-50 border border-violet-100 rounded-xl px-3 py-1.5 mb-4 inline-flex items-center gap-1.5 shadow-sm">
+                                                <BookOpen size={12} className="text-violet-500" />
+                                                Subject: {subjects.find(s => s.classSubjectId == subjectId)?.subjectName}
+                                            </div>
+                                        )}
                                         <p className="text-sm text-slate-500 mb-6 font-medium">Define structure to see allocation targets.</p>
 
                                         {loadingBlueprint ? (
@@ -674,19 +867,38 @@ const AutoExamGenerator = () => {
                                                                         
                                                                         {/* Chapter Level Allocation */}
                                                                         <div className="flex gap-3 justify-start sm:justify-start w-full sm:w-auto pl-11 sm:pl-0" onClick={e => e.stopPropagation()}>
-                                                                            {activeSections.map(sec => (
-                                                                                <div key={sec.type} className="flex flex-col items-center w-16">
-                                                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{sec.type}</span>
-                                                                                    <input 
-                                                                                        type="number" 
-                                                                                        min="0"
-                                                                                        value={allocations[ch.id]?.[sec.type] || ''} 
-                                                                                        onChange={(e) => handleAllocationChange(ch.id, sec.type, e.target.value)}
-                                                                                        placeholder="0"
-                                                                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-center text-sm font-black text-slate-800 outline-none focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-500/10 transition-all" 
-                                                                                    />
-                                                                                </div>
-                                                                            ))}
+                                                                            {activeSections.map(sec => {
+                                                                                const avail = getAvailableCount(ch.id, sec.type, true);
+                                                                                const allocated = parseInt(allocations[ch.id]?.[sec.type]) || 0;
+                                                                                const isExceeded = allocated > avail;
+                                                                                
+                                                                                return (
+                                                                                    <div key={sec.type} className="flex flex-col items-center w-16">
+                                                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{sec.type}</span>
+                                                                                        <input 
+                                                                                            type="number" 
+                                                                                            min="0"
+                                                                                            value={allocations[ch.id]?.[sec.type] || ''} 
+                                                                                            onChange={(e) => handleAllocationChange(ch.id, sec.type, e.target.value)}
+                                                                                            placeholder="0"
+                                                                                            className={`w-full text-center text-sm font-black rounded-xl p-2 outline-none transition-all ${
+                                                                                                isExceeded 
+                                                                                                    ? 'bg-rose-50 border-2 border-rose-500 text-rose-800 focus:ring-4 focus:ring-rose-500/10' 
+                                                                                                    : 'bg-slate-50 border border-slate-200 text-slate-800 focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-500/10'
+                                                                                            }`}
+                                                                                        />
+                                                                                        <div className={`text-[9px] px-1.5 py-0.5 rounded-md mt-1.5 font-bold tracking-tight text-center shrink-0 ${
+                                                                                            isExceeded 
+                                                                                                ? 'bg-rose-100 text-rose-700 animate-pulse font-black' 
+                                                                                                : avail > 0 
+                                                                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100/50' 
+                                                                                                    : 'bg-slate-100 text-slate-400'
+                                                                                        }`}>
+                                                                                            {isExceeded ? `সীমা: ${avail}` : `মজুদ: ${avail}`}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                );
+                                                                            })}
                                                                         </div>
                                                                     </div>
 
@@ -700,19 +912,40 @@ const AutoExamGenerator = () => {
                                                                                     <div key={top.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-white border border-slate-150 rounded-xl shadow-sm gap-2.5">
                                                                                         <span className="text-sm font-bold text-slate-600 break-words flex-1">{top.name}</span>
                                                                                         <div className="flex flex-wrap gap-3 justify-start sm:justify-end w-full sm:w-auto">
-                                                                                            {activeSections.map(sec => (
-                                                                                                <div key={sec.type} className="flex items-center gap-2 w-20">
-                                                                                                    <span className="text-[9px] font-black text-slate-400 uppercase w-6 text-right shrink-0">{sec.type}</span>
-                                                                                                    <input 
-                                                                                                        type="number" 
-                                                                                                        min="0"
-                                                                                                        value={allocations[top.id]?.[sec.type] || ''} 
-                                                                                                        onChange={(e) => handleAllocationChange(top.id, sec.type, e.target.value)}
-                                                                                                        placeholder="0"
-                                                                                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-center text-sm font-black text-slate-800 outline-none focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-500/10 transition-all" 
-                                                                                                    />
-                                                                                                </div>
-                                                                                            ))}
+                                                                                            {activeSections.map(sec => {
+                                                                                                const avail = getAvailableCount(top.id, sec.type, false);
+                                                                                                const allocated = parseInt(allocations[top.id]?.[sec.type]) || 0;
+                                                                                                const isExceeded = allocated > avail;
+                                                                                                
+                                                                                                return (
+                                                                                                    <div key={sec.type} className="flex items-center gap-1.5 w-28">
+                                                                                                        <div className="flex flex-col items-end shrink-0">
+                                                                                                            <span className="text-[9px] font-black text-slate-400 uppercase w-6 text-right shrink-0">{sec.type}</span>
+                                                                                                            <span className={`text-[8px] px-1 py-0.5 rounded mt-0.5 font-bold shrink-0 ${
+                                                                                                                isExceeded 
+                                                                                                                    ? 'bg-rose-100 text-rose-700 animate-pulse font-black' 
+                                                                                                                    : avail > 0 
+                                                                                                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100/30' 
+                                                                                                                        : 'bg-slate-100 text-slate-400'
+                                                                                                            }`}>
+                                                                                                                {isExceeded ? `সীমা:${avail}` : `মজুদ:${avail}`}
+                                                                                                            </span>
+                                                                                                        </div>
+                                                                                                        <input 
+                                                                                                            type="number" 
+                                                                                                            min="0"
+                                                                                                            value={allocations[top.id]?.[sec.type] || ''} 
+                                                                                                            onChange={(e) => handleAllocationChange(top.id, sec.type, e.target.value)}
+                                                                                                            placeholder="0"
+                                                                                                            className={`w-full text-center text-sm font-black rounded-lg p-1.5 outline-none transition-all ${
+                                                                                                                isExceeded 
+                                                                                                                    ? 'bg-rose-50 border-2 border-rose-500 text-rose-800 focus:ring-4 focus:ring-rose-500/10' 
+                                                                                                                    : 'bg-slate-50 border border-slate-200 text-slate-800 focus:border-violet-500 focus:bg-white focus:ring-4 focus:ring-violet-500/10'
+                                                                                                            }`}
+                                                                                                        />
+                                                                                                    </div>
+                                                                                                );
+                                                                                            })}
                                                                                         </div>
                                                                                     </div>
                                                                                 ))
@@ -732,32 +965,149 @@ const AutoExamGenerator = () => {
                                 )}
                             </div>
 
-                            {/* RIGHT: Difficulty & Status */}
+                            {/* RIGHT: Difficulty & Bloom's Taxonomy & Status */}
                             <div className="lg:col-span-4 space-y-6 order-1 lg:order-2">
+                                
+                                {/* Blueprint Templates Card */}
+                                <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 bg-gradient-to-br from-white to-violet-50/10">
+                                    <h3 className="font-black text-slate-800 flex items-center gap-2 mb-4">
+                                        <LayoutGrid className="text-violet-500" /> Blueprint Templates
+                                    </h3>
+                                    
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">Load Blueprint</label>
+                                            {loadingTemplates ? (
+                                                <div className="text-xs font-bold text-slate-400 py-2 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin text-violet-500" /> Loading...</div>
+                                            ) : (
+                                                <select 
+                                                    value={selectedTemplateId} 
+                                                    onChange={e => handleTemplateChange(e.target.value)} 
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition-all cursor-pointer"
+                                                >
+                                                    <option value="">Custom Configuration</option>
+                                                    {templates.map(t => (
+                                                        <option key={t.id} value={t.id}>{t.templateName} {t.isGlobal ? '(Global)' : ''}</option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                        </div>
+
+                                        <div className="border-t border-slate-100 pt-3.5">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">Save Configuration</label>
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Template Name" 
+                                                    value={newTemplateName} 
+                                                    onChange={e => setNewTemplateName(e.target.value)}
+                                                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-violet-500 focus:bg-white transition-all"
+                                                />
+                                                <button 
+                                                    onClick={handleSaveTemplate}
+                                                    disabled={savingTemplate}
+                                                    className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl px-4 py-2 text-xs font-bold transition-all hover:shadow-md hover:shadow-violet-500/20 active:scale-95 disabled:opacity-50 shrink-0 flex items-center gap-1"
+                                                >
+                                                    {savingTemplate ? <Loader2 size={12} className="animate-spin" /> : null}
+                                                    Save
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Difficulty Card */}
                                 <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
                                     <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6">
-                                        <BrainCircuit className="text-rose-500" /> Difficulty AI Prompt
+                                        <BrainCircuit className="text-violet-500" /> Difficulty AI Prompt
                                     </h3>
                                     
                                     <div className="space-y-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                                        {/* Presets */}
+                                        <div className="flex flex-wrap gap-2 pb-2 border-b border-slate-200/60 justify-between items-center">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Presets:</span>
+                                            <div className="flex gap-1.5">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setDifficulty({ easy: 50, medium: 40, hard: 10 })}
+                                                    className="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-black text-slate-600 transition-all hover:shadow-sm active:scale-95"
+                                                >
+                                                    সহজ
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setDifficulty({ easy: 30, medium: 50, hard: 20 })}
+                                                    className="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-black text-slate-600 transition-all hover:shadow-sm active:scale-95"
+                                                >
+                                                    সুষম
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setDifficulty({ easy: 20, medium: 30, hard: 50 })}
+                                                    className="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-black text-slate-600 transition-all hover:shadow-sm active:scale-95"
+                                                >
+                                                    কঠিন
+                                                </button>
+                                            </div>
+                                        </div>
+
                                         <div>
-                                            <div className="flex justify-between mb-2">
+                                            <div className="flex justify-between mb-2 items-center">
                                                 <span className="text-xs font-black text-emerald-500 uppercase tracking-wider">Easy</span>
-                                                <span className="text-xs font-black text-slate-700">{difficulty.easy}%</span>
+                                                <div className="flex items-center gap-1">
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        value={difficulty.easy} 
+                                                        onChange={(e) => {
+                                                            const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                                                            setDifficulty({...difficulty, easy: val});
+                                                        }}
+                                                        className="w-12 bg-white border border-slate-200 rounded text-center py-0.5 text-xs font-black text-slate-700 outline-none focus:border-emerald-500"
+                                                    />
+                                                    <span className="text-[10px] font-black text-slate-400">%</span>
+                                                </div>
                                             </div>
                                             <input type="range" min="0" max="100" value={difficulty.easy} onChange={(e) => setDifficulty({...difficulty, easy: parseInt(e.target.value)})} className="w-full accent-emerald-500" />
                                         </div>
                                         <div>
-                                            <div className="flex justify-between mb-2">
+                                            <div className="flex justify-between mb-2 items-center">
                                                 <span className="text-xs font-black text-amber-500 uppercase tracking-wider">Medium</span>
-                                                <span className="text-xs font-black text-slate-700">{difficulty.medium}%</span>
+                                                <div className="flex items-center gap-1">
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        value={difficulty.medium} 
+                                                        onChange={(e) => {
+                                                            const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                                                            setDifficulty({...difficulty, medium: val});
+                                                        }}
+                                                        className="w-12 bg-white border border-slate-200 rounded text-center py-0.5 text-xs font-black text-slate-700 outline-none focus:border-amber-500"
+                                                    />
+                                                    <span className="text-[10px] font-black text-slate-400">%</span>
+                                                </div>
                                             </div>
                                             <input type="range" min="0" max="100" value={difficulty.medium} onChange={(e) => setDifficulty({...difficulty, medium: parseInt(e.target.value)})} className="w-full accent-amber-500" />
                                         </div>
                                         <div>
-                                            <div className="flex justify-between mb-2">
+                                            <div className="flex justify-between mb-2 items-center">
                                                 <span className="text-xs font-black text-rose-500 uppercase tracking-wider">Hard</span>
-                                                <span className="text-xs font-black text-slate-700">{difficulty.hard}%</span>
+                                                <div className="flex items-center gap-1">
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        value={difficulty.hard} 
+                                                        onChange={(e) => {
+                                                            const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                                                            setDifficulty({...difficulty, hard: val});
+                                                        }}
+                                                        className="w-12 bg-white border border-slate-200 rounded text-center py-0.5 text-xs font-black text-slate-700 outline-none focus:border-rose-500"
+                                                    />
+                                                    <span className="text-[10px] font-black text-slate-400">%</span>
+                                                </div>
                                             </div>
                                             <input type="range" min="0" max="100" value={difficulty.hard} onChange={(e) => setDifficulty({...difficulty, hard: parseInt(e.target.value)})} className="w-full accent-rose-500" />
                                         </div>
@@ -769,6 +1119,131 @@ const AutoExamGenerator = () => {
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Bloom's Taxonomy Cognitive levels Card */}
+                                <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
+                                    <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6">
+                                        <Sparkles className="text-violet-500" /> Cognitive Levels (Bloom's)
+                                    </h3>
+                                    
+                                    <div className="space-y-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                                        {/* Presets */}
+                                        <div className="flex flex-wrap gap-2 pb-2 border-b border-slate-200/60 justify-between items-center">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Presets:</span>
+                                            <div className="flex gap-1.5">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setBloomDistribution({ knowledge: 40, comprehension: 30, application: 20, higherOrder: 10 })}
+                                                    className="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-black text-slate-600 transition-all hover:shadow-sm active:scale-95"
+                                                >
+                                                    সুষম
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setBloomDistribution({ knowledge: 50, comprehension: 30, application: 15, higherOrder: 5 })}
+                                                    className="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-black text-slate-600 transition-all hover:shadow-sm active:scale-95"
+                                                >
+                                                    স্মরণ ও অনুধাবন
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setBloomDistribution({ knowledge: 25, comprehension: 35, application: 25, higherOrder: 15 })}
+                                                    className="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-[10px] font-black text-slate-600 transition-all hover:shadow-sm active:scale-95"
+                                                >
+                                                    প্রয়োগ ও উচ্চতর
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between mb-2 items-center">
+                                                <span className="text-xs font-black text-indigo-500 uppercase tracking-wider">Knowledge (জ্ঞানমূলক)</span>
+                                                <div className="flex items-center gap-1">
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        value={bloomDistribution.knowledge} 
+                                                        onChange={(e) => {
+                                                            const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                                                            setBloomDistribution({...bloomDistribution, knowledge: val});
+                                                        }}
+                                                        className="w-12 bg-white border border-slate-200 rounded text-center py-0.5 text-xs font-black text-slate-700 outline-none focus:border-indigo-500"
+                                                    />
+                                                    <span className="text-[10px] font-black text-slate-400">%</span>
+                                                </div>
+                                            </div>
+                                            <input type="range" min="0" max="100" value={bloomDistribution.knowledge} onChange={(e) => setBloomDistribution({...bloomDistribution, knowledge: parseInt(e.target.value)})} className="w-full accent-indigo-500" />
+                                        </div>
+                                        <div>
+                                            <div className="flex justify-between mb-2 items-center">
+                                                <span className="text-xs font-black text-sky-500 uppercase tracking-wider">Comprehension (অনুধাবনমূলক)</span>
+                                                <div className="flex items-center gap-1">
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        value={bloomDistribution.comprehension} 
+                                                        onChange={(e) => {
+                                                            const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                                                            setBloomDistribution({...bloomDistribution, comprehension: val});
+                                                        }}
+                                                        className="w-12 bg-white border border-slate-200 rounded text-center py-0.5 text-xs font-black text-slate-700 outline-none focus:border-sky-500"
+                                                    />
+                                                    <span className="text-[10px] font-black text-slate-400">%</span>
+                                                </div>
+                                            </div>
+                                            <input type="range" min="0" max="100" value={bloomDistribution.comprehension} onChange={(e) => setBloomDistribution({...bloomDistribution, comprehension: parseInt(e.target.value)})} className="w-full accent-sky-500" />
+                                        </div>
+                                        <div>
+                                            <div className="flex justify-between mb-2 items-center">
+                                                <span className="text-xs font-black text-teal-500 uppercase tracking-wider">Application (প্রয়োগমূলক)</span>
+                                                <div className="flex items-center gap-1">
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        value={bloomDistribution.application} 
+                                                        onChange={(e) => {
+                                                            const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                                                            setBloomDistribution({...bloomDistribution, application: val});
+                                                        }}
+                                                        className="w-12 bg-white border border-slate-200 rounded text-center py-0.5 text-xs font-black text-slate-700 outline-none focus:border-teal-500"
+                                                    />
+                                                    <span className="text-[10px] font-black text-slate-400">%</span>
+                                                </div>
+                                            </div>
+                                            <input type="range" min="0" max="100" value={bloomDistribution.application} onChange={(e) => setBloomDistribution({...bloomDistribution, application: parseInt(e.target.value)})} className="w-full accent-teal-500" />
+                                        </div>
+                                        <div>
+                                            <div className="flex justify-between mb-2 items-center">
+                                                <span className="text-xs font-black text-fuchsia-500 uppercase tracking-wider">Higher Order (উচ্চতর দক্ষতা)</span>
+                                                <div className="flex items-center gap-1">
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        value={bloomDistribution.higherOrder} 
+                                                        onChange={(e) => {
+                                                            const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                                                            setBloomDistribution({...bloomDistribution, higherOrder: val});
+                                                        }}
+                                                        className="w-12 bg-white border border-slate-200 rounded text-center py-0.5 text-xs font-black text-slate-700 outline-none focus:border-fuchsia-500"
+                                                    />
+                                                    <span className="text-[10px] font-black text-slate-400">%</span>
+                                                </div>
+                                            </div>
+                                            <input type="range" min="0" max="100" value={bloomDistribution.higherOrder} onChange={(e) => setBloomDistribution({...bloomDistribution, higherOrder: parseInt(e.target.value)})} className="w-full accent-fuchsia-500" />
+                                        </div>
+                                        
+                                        {(bloomDistribution.knowledge + bloomDistribution.comprehension + bloomDistribution.application + bloomDistribution.higherOrder) !== 100 && (
+                                            <div className="p-3 bg-rose-100 text-rose-700 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-2 border border-rose-200">
+                                                <AlertCircle size={14} /> Total must equal 100% 
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
                             </div>
                             
                         </div>

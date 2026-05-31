@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Save, BookOpen, Layers, Search, Plus, Trash2, Loader2, Target, Check, LayoutGrid, ChevronRight, ChevronLeft, Copy, Eye, EyeOff, Bookmark, CheckCircle, BookmarkCheck } from 'lucide-react';
+import { Sparkles, Save, BookOpen, Layers, Search, Plus, Trash2, Loader2, Target, Check, LayoutGrid, ChevronRight, ChevronLeft, Copy, Eye, EyeOff, Bookmark, CheckCircle, BookmarkCheck, FileText } from 'lucide-react';
 import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
 import questionService from '../../../services/questionService';
@@ -39,18 +39,380 @@ const parseMarkdownImages = (text) => {
     });
 };
 
+const defaultMarksMap = { 'MCQ': 1, 'CQ': 10, 'SHORT': 2 };
+
+const QuestionCard = React.memo(({
+    q,
+    idx,
+    inCart,
+    onAdd,
+    addLoading,
+    cartLength,
+    targetQs,
+    isSaved,
+    onToggleSave,
+    examInfo
+}) => {
+    const [showAnswer, setShowAnswer] = useState(false);
+    const [showExplanation, setShowExplanation] = useState(false);
+
+    // Extract fallback explanations for dynamic questions
+    let finalExplanation = q.explanation;
+    if (!finalExplanation && q.dynamicData) {
+        let dData = q.dynamicData;
+        if (typeof dData === 'string') {
+            try { dData = JSON.parse(dData); } catch (e) {}
+        }
+        if (dData && typeof dData === 'object') {
+            const expKey = Object.keys(dData).find(k => k.toLowerCase().includes('explanation'));
+            if (expKey) finalExplanation = dData[expKey];
+        }
+    }
+
+    const isStructuredCQAnswer = q.type === 'CQ' && q.correctAnswer && q.correctAnswer.includes('cq-ans-part');
+    const isStructuredCQExplanation = q.type === 'CQ' && finalExplanation && finalExplanation.includes('cq-exp-part');
+    const hasAnswer = q.correctAnswer && q.correctAnswer.replace(/<[^>]*>/g, '').trim().length > 0;
+    const hasExplanation = finalExplanation && finalExplanation.replace(/<[^>]*>/g, '').trim().length > 0;
+
+    const typeLabel = q.type === 'MCQ' ? 'MCQ' : q.type === 'CQ' ? 'Creative' : q.type === 'SHORT' ? 'Short Answer' : q.type;
+
+    const difficultyStyle = {
+        EASY: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+        MEDIUM: 'bg-amber-50 text-amber-700 border-amber-100',
+        HARD: 'bg-rose-50 text-rose-700 border-rose-100',
+    };
+
+    return (
+        <div 
+            id={`question-item-${q.id}`}
+            className={`rounded-xl border transition-all duration-300 shadow-sm p-2.5 sm:p-3 ${
+                inCart 
+                    ? 'bg-emerald-50/15 border-emerald-250 ring-1 ring-emerald-100/20 shadow-md' 
+                    : 'bg-white border-slate-100 hover:border-indigo-150 hover:shadow-md'
+            }`}
+        >
+            {/* ── Header Row (Ultra-Compact labels) ── */}
+            <div className="flex flex-wrap items-center gap-1 mb-1">
+                <span className="text-[9px] font-black text-slate-700 bg-slate-100 px-1 py-px rounded border border-slate-200">Q #{idx + 1}</span>
+                <span className="text-[8px] font-extrabold bg-slate-100 text-slate-600 px-1 py-px rounded border border-slate-200">{typeLabel}</span>
+                
+                {q.status === 'APPROVED' && <span className="px-1 py-px bg-emerald-50 text-emerald-700 rounded text-[7.5px] font-bold uppercase border border-emerald-100">Approved</span>}
+                {q.status === 'PENDING' && <span className="px-1 py-px bg-amber-50 text-amber-700 rounded text-[7.5px] font-bold uppercase border border-amber-100">Pending</span>}
+                {q.status === 'REVISED' && <span className="px-1 py-px bg-rose-100 text-rose-850 rounded text-[7.5px] font-bold uppercase border border-rose-200 animate-pulse">Revised</span>}
+                {q.aiGenerated && <span className="px-1 py-px bg-violet-50 text-violet-700 rounded text-[7.5px] font-bold uppercase border border-violet-100">AI Synced</span>}
+                
+                <span className={`px-1 py-px rounded text-[7.5px] font-bold uppercase border ${difficultyStyle[q.difficulty] || 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                    {q.difficulty}
+                </span>
+                {q.bloomLevel && (
+                    <span className="px-1 py-px bg-indigo-50 text-indigo-700 rounded text-[7.5px] font-bold border border-indigo-100 uppercase">
+                        {q.bloomLevel}
+                    </span>
+                )}
+                {/* Render Rich Source Tags dynamically */}
+                {q.sources && q.sources.length > 0 ? (
+                    q.sources.map((src, sIdx) => {
+                        const type = src.sourceType || 'OTHER';
+                        const org = src.organizationName || '';
+                        const year = src.examYear ? ` ${src.examYear}` : '';
+                        const exam = src.examName ? ` - ${src.examName}` : '';
+                        const displayName = `${org}${exam}${year}`;
+
+                        if (type === 'BOARD_EXAM') {
+                            return (
+                                <span key={sIdx} className="px-1 py-px bg-purple-50 text-purple-700 rounded text-[7.5px] font-bold border border-purple-100 uppercase">
+                                    🏛️ {displayName}
+                                </span>
+                            );
+                        }
+                        if (type === 'UNIVERSITY_ADMISSION') {
+                            return (
+                                <span key={sIdx} className="px-1 py-px bg-indigo-50 text-indigo-700 rounded text-[7.5px] font-bold border border-indigo-100 uppercase">
+                                    🎓 {displayName}
+                                </span>
+                            );
+                        }
+                        if (type === 'INSTITUTION_TEST') {
+                            return (
+                                <span key={sIdx} className="px-1 py-px bg-emerald-50 text-emerald-700 rounded text-[7.5px] font-bold border border-emerald-100 uppercase">
+                                    🏫 {displayName}
+                                </span>
+                            );
+                        }
+                        if (type === 'JOB_EXAM') {
+                            return (
+                                <span key={sIdx} className="px-1 py-px bg-amber-50 text-amber-700 rounded text-[7.5px] font-bold border border-amber-100 uppercase">
+                                    💼 {displayName}
+                                </span>
+                            );
+                        }
+                        return (
+                            <span key={sIdx} className="px-1 py-px bg-slate-100 text-slate-600 rounded text-[7.5px] font-bold border border-slate-200 uppercase">
+                                🏛️ {displayName}
+                            </span>
+                        );
+                    })
+                ) : (
+                    q.sourceReference && (
+                        q.sourceReference === 'Textbook Content' ? (
+                            <span className="px-1 py-px bg-slate-100 text-slate-600 rounded text-[7.5px] font-bold border border-slate-200 uppercase">
+                                📖 Textbook
+                            </span>
+                        ) : (
+                            <span className="px-1 py-px bg-purple-50 text-purple-700 rounded text-[7.5px] font-bold border border-purple-100 uppercase">
+                                🏛️ {q.sourceReference}
+                            </span>
+                        )
+                    )
+                )}
+                <span className="px-1 py-px bg-slate-50 text-slate-600 rounded text-[7.5px] font-bold border border-slate-200">
+                    {examInfo.language === 'Bangla' ? `${toBnNum(defaultMarksMap[q.type] || 1)} মার্কস` : `${defaultMarksMap[q.type] || 1} M`}
+                </span>
+            </div>
+
+            {/* ── Stimulus (Left accent line banner - Ultra-Slim layout) ── */}
+            {(() => {
+                let stimulusContent = null;
+                if (q.stimulus) {
+                    const cleanStimulus = q.stimulus.replace(/<[^>]*>/g, '').trim().toLowerCase();
+                    const isPlaceholder = 
+                        cleanStimulus === '' || 
+                        cleanStimulus === 'generated question' || 
+                        cleanStimulus === 'dynamic question' || 
+                        cleanStimulus === 'ডায়নামিক প্রশ্ন' ||
+                        cleanStimulus === 'ডায়নামিক প্রশ্ন';
+                    if (!isPlaceholder) {
+                        stimulusContent = q.stimulus;
+                    }
+                }
+                
+                if (!stimulusContent && q.type === 'CQ' && q.questionText && q.questionText.includes('<div class="cq-questions">')) {
+                    const parts = q.questionText.split('<div class="cq-questions">');
+                    const prospectiveStimulus = parts[0].trim();
+                    const cleanProspective = prospectiveStimulus.replace(/<[^>]*>/g, '').trim();
+                    if (cleanProspective.length > 0) {
+                        stimulusContent = prospectiveStimulus;
+                    }
+                }
+                
+                if (!stimulusContent) return null;
+                
+                return (
+                    <div className="w-full mb-1.5 px-2 py-1 bg-indigo-50/20 border-l-4 border-l-indigo-500 rounded-r-md text-[11px] sm:text-[12px] text-slate-700 font-semibold leading-normal shadow-sm">
+                        <span className="block text-[8px] font-black text-indigo-600 uppercase tracking-wider mb-0.5">Stimulus / উদ্দীপক:</span>
+                        <MarkdownRenderer content={parseMarkdownImages(stimulusContent)} />
+                    </div>
+                );
+            })()}
+
+            {/* ── Question Text (Ultra-Compact & highly readable) ── */}
+            <div className="w-full mb-1.5 text-[12px] sm:text-[13px] font-bold text-slate-800 leading-snug">
+                {q.type === 'CQ' ? (
+                    <CQCombinedRenderer q={q} showAnswer={showAnswer} showExplanation={showExplanation} />
+                ) : q.dynamicData ? (
+                    <DynamicQuestionViewer q={q} mode="list" showAnswer={showAnswer} showExplanation={showExplanation} />
+                ) : (
+                    <MarkdownRenderer content={parseMarkdownImages(examInfo.language === 'Bangla' ? formatBanglaNumbers(q.questionText) : q.questionText)} />
+                )}
+                
+                {!q.dynamicData && q.mcqType === 'MULTIPLE_COMPLETION' && q.statements && q.statements.length > 0 && (
+                    <div className="mt-1 pl-2.5 border-l border-slate-350 space-y-0.5">
+                        {q.statements.map((stmt, sIdx) => (
+                            <div key={sIdx} className="text-[11px] text-slate-650 font-semibold leading-snug">
+                                <MarkdownRenderer content={parseMarkdownImages(examInfo.language === 'Bangla' ? formatBanglaNumbers(stmt) : stmt)} />
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* ── MCQ Options (Ultra-Compact Grid) ── */}
+            {q.type === 'MCQ' && q.options && q.options.length > 0 && (
+                <div className="w-full mb-1 grid grid-cols-1 sm:grid-cols-2 gap-0.5 sm:gap-1">
+                    {q.options.map((opt, idx) => {
+                        const isEnglish = q.language && q.language.toLowerCase() === 'english';
+                        const displayLabel = isEnglish ? String.fromCharCode(65 + idx) : (['ক', 'খ', 'গ', 'ঘ'][idx] || String.fromCharCode(65 + idx));
+                        const isCorrect = opt.isCorrect || opt.correct;
+                        return (
+                            <div key={opt.id} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-md border text-[10.5px] sm:text-[11px] font-medium transition-all duration-300 ${
+                                showAnswer && isCorrect
+                                    ? 'bg-emerald-50 border-emerald-350 text-emerald-800 shadow-sm'
+                                    : showAnswer && !isCorrect
+                                    ? 'bg-white border-slate-100 text-slate-400 opacity-60'
+                                    : 'bg-slate-50/50 border-slate-150 text-slate-700 hover:bg-slate-100/50 hover:border-slate-250'
+                            }`}>
+                                <span className={`shrink-0 flex items-center justify-center w-5.5 h-5.5 rounded-full text-[10.5px] font-black transition-all duration-300 ${
+                                    showAnswer && isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'
+                                }`}>
+                                    {displayLabel}
+                                </span>
+                                <span className="flex-1 min-w-0 leading-tight text-[11px] sm:text-xs [&_p]:m-0 [&_p]:my-0"><MarkdownRenderer content={parseMarkdownImages(opt.optionText)} /></span>
+                                {showAnswer && isCorrect && <CheckCircle size={10} className="text-emerald-500 ml-auto shrink-0 animate-in zoom-in-50 duration-200" />}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* ── Non-MCQ Correct Answer Block ── */}
+            {showAnswer && q.type !== 'MCQ' && !q.dynamicData && (q.type !== 'CQ' || !isStructuredCQAnswer) && (
+                hasAnswer ? (
+                    <div className="w-full mb-1.5 px-2 py-1.5 bg-emerald-50/60 border border-emerald-200 rounded-lg text-[11.5px] text-emerald-950 font-semibold leading-snug flex items-start gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                        <CheckCircle size={12} className="text-emerald-500 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                            {q.type === 'CQ' && <span className="block text-[8px] font-black text-emerald-600 uppercase tracking-wide mb-0.5">উত্তর (CQ):</span>}
+                            <span><MarkdownRenderer content={parseMarkdownImages(q.correctAnswer)} /></span>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="w-full mb-1.5 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[10.5px] text-slate-400 italic">No answer available.</div>
+                )
+            )}
+
+            {/* ── Toggles Grid ── */}
+            <div className="w-full mb-2 grid grid-cols-2 gap-1.5">
+                <button
+                    onClick={() => setShowAnswer(!showAnswer)}
+                    className="flex items-center justify-center gap-1 py-1 px-2.5 text-[10px] font-extrabold text-white rounded-lg transition-all duration-300 active:scale-[0.97] border border-white/10"
+                    style={{ 
+                        background: showAnswer
+                            ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                            : 'linear-gradient(135deg, #e91e8c 0%, #a855f7 100%)',
+                        boxShadow: showAnswer
+                            ? '0 1px 4px rgba(16, 185, 129, 0.15)'
+                            : '0 1px 4px rgba(168, 85, 247, 0.15)'
+                    }}
+                >
+                    <Eye size={11} /> {showAnswer ? 'Hide Answer' : 'Show Answer'}
+                </button>
+
+                <button
+                    onClick={() => setShowExplanation(!showExplanation)}
+                    className="flex items-center justify-center gap-1 py-1 px-2.5 text-[10px] font-extrabold rounded-lg transition-all duration-300 active:scale-[0.97] border"
+                    style={{ 
+                        background: showExplanation
+                            ? 'linear-gradient(135deg, #a855f7 0%, #e91e8c 100%)'
+                            : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                        borderColor: showExplanation ? 'rgba(255,255,255,0.1)' : '#e2e8f0',
+                        boxShadow: showExplanation
+                            ? '0 1px 4px rgba(168, 85, 247, 0.15)'
+                            : '0 1px 2px rgba(0,0,0,0.01)',
+                    }}
+                >
+                    <FileText size={11} className={showExplanation ? 'text-white' : 'text-slate-600'} />
+                    <span className={showExplanation ? 'text-white font-extrabold' : 'text-slate-600'}>Explanation</span>
+                </button>
+            </div>
+
+            {/* ── Explanation Block ── */}
+            {showExplanation && !q.dynamicData && (q.type !== 'CQ' || !isStructuredCQExplanation) && (
+                hasExplanation ? (
+                    <div className="w-full mb-1.5 px-2 py-1.5 bg-blue-50/60 border border-blue-200 rounded-lg text-[11.5px] text-blue-950 leading-snug flex items-start gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                        <BookOpen size={12} className="text-blue-500 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                            {q.type === 'CQ' && <span className="block text-[8px] font-black text-blue-600 uppercase tracking-wide mb-0.5">ব্যাখ্যা (CQ):</span>}
+                            <span><MarkdownRenderer content={parseMarkdownImages(finalExplanation)} /></span>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="w-full mb-1.5 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[10.5px] text-slate-400 italic">No explanation available.</div>
+                )
+            )}
+
+            {/* ── Source / Action Footer (Ultra Slim) ── */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-1.5 border-t border-slate-100 gap-1.5">
+                {/* Source */}
+                <div className="flex items-center gap-1 text-[8.5px] flex-1 min-w-0 flex-wrap">
+                    {q.classSubject ? (
+                        <div className="flex flex-wrap items-center gap-1 px-1 py-0.5 bg-indigo-50/80 border border-indigo-100 rounded text-indigo-700 font-bold">
+                            <FileText size={9} className="text-indigo-400 shrink-0" />
+                            <span className="bg-white text-indigo-800 px-1 py-px rounded border border-indigo-100 text-[7.5px] font-bold shrink-0">{q.classSubject?.subject?.name}</span>
+                            <span className="text-indigo-300 shrink-0">›</span>
+                            <span className="shrink-0">{q.classSubject?.academicClass?.name}</span>
+                            {q.chapter && <><span className="text-indigo-300 shrink-0">›</span><span className="shrink-0">{q.chapter?.name}</span></>}
+                        </div>
+                    ) : q.sourceReference ? (
+                        <div className="flex flex-wrap items-center gap-1 px-1 py-0.5 bg-violet-50/80 border border-violet-100 rounded text-violet-700 font-bold">
+                            <FileText size={9} className="text-violet-400 shrink-0" />
+                            <span className="font-bold">{q.sourceReference}</span>
+                        </div>
+                    ) : null}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-between sm:justify-end gap-1.5 w-full sm:w-auto shrink-0 pt-1 sm:pt-0">
+                    <button 
+                        onClick={() => onToggleSave(q)}
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[9.5px] font-black transition-all duration-300 border ${
+                            isSaved 
+                                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent shadow-sm active:scale-[0.97]' 
+                                : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-500 hover:text-amber-500 hover:border-amber-200 active:scale-[0.97]'
+                        }`}
+                    >
+                        {isSaved ? <BookmarkCheck size={10} className="fill-current" /> : <Bookmark size={10} />}
+                        <span>{isSaved ? 'Saved' : 'Save'}</span>
+                    </button>
+
+                    <button
+                        onClick={() => onAdd(q)}
+                        disabled={inCart || addLoading === q.id || cartLength >= targetQs}
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[9.5px] font-black transition-all duration-300 border active:scale-[0.97] ${
+                            inCart 
+                                ? 'bg-emerald-100 border-emerald-300 text-emerald-700 cursor-not-allowed shadow-sm' 
+                                : (cartLength >= targetQs)
+                                ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'bg-gradient-to-r from-indigo-500 to-violet-600 text-white border-transparent shadow-sm hover:-translate-y-px'
+                        }`}
+                    >
+                        {addLoading === q.id ? (
+                            <Loader2 size={10} className="animate-spin" />
+                        ) : inCart ? (
+                            <><Check size={10} strokeWidth={3} /> Added</>
+                        ) : (
+                            <><Plus size={10} strokeWidth={3} /> Add to Exam</>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+});
+
+
 const ManualExamBuilder = () => {
     const navigate = useNavigate();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [examId, setExamId] = useState(null);
     const [activeTab, setActiveTab] = useState('results'); // 'filters' | 'results' | 'cart'
+    const [displayLimit, setDisplayLimit] = useState(100);
+    const [serverPage, setServerPage] = useState(0);
+
+    const handleGoBackStep1 = () => {
+        if (window.confirm("আপনি কি নিশ্চিতভাবে শ্রেণী ও বিষয় পরিবর্তন করতে চান? আপনার বর্তমান প্রশ্ন নির্বাচনের অগ্রগতি (draft) সংরক্ষিত থাকবে।")) {
+            setStep(1);
+        }
+    };
+
+    const handleExitBuilder = () => {
+        if (window.confirm("আপনি কি নিশ্চিতভাবে এক্সাম বিল্ডার থেকে বের হতে চান? আপনার ড্রাফট পরীক্ষাটি সংরক্ষিত থাকবে, আপনি পরে 'সেভড এক্সাম' ড্রাইভ থেকে এটি পুনরায় এডিট করতে পারবেন।")) {
+            if (window.ReactNativeWebView) {
+                try {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'close_webview'
+                    }));
+                } catch (e) {}
+            } else {
+                navigate('/exams/generate/saved');
+            }
+        }
+    };
 
     const {
         levels, streams, classes, subjects, chapters: subjectChapters,
         levelId, streamId, classId, subjectId,
         setLevelId, setStreamId, setClassId, setSubjectId,
-    } = useAcademicHierarchy();
+    } = useAcademicHierarchy({ activeOnly: true });
 
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : {};
@@ -67,6 +429,29 @@ const ManualExamBuilder = () => {
         examType: 'MODEL_TEST'
     });
 
+    const availableLanguages = React.useMemo(() => {
+        const langs = [];
+        if (hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) {
+            langs.push('Bangla');
+        }
+        if (hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) {
+            langs.push('English');
+        }
+        if (hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) {
+            langs.push('Bilingual');
+        }
+        return langs;
+    }, [hasFullLangAccess, user?.instituteMedium]);
+
+
+
+    // Auto-select Language if there's only one option
+    useEffect(() => {
+        if (availableLanguages.length === 1 && examInfo.language !== availableLanguages[0]) {
+            setExamInfo(prev => ({ ...prev, language: availableLanguages[0] }));
+        }
+    }, [availableLanguages, examInfo.language]);
+
     // Reverted frontend auto-filtering logic per user request to allow simple database-driven dropdown mapping
 
     const [dynamicSections, setDynamicSections] = useState([]);
@@ -77,24 +462,125 @@ const ManualExamBuilder = () => {
     const [chapters, setChapters] = useState([]);
     const [topics, setTopics] = useState([]);
     const [filters, setFilters] = useState({
-        chapterId: '', topicId: '', type: '', difficulty: '', keyword: ''
+        chapterId: '', topicId: '', type: '', difficulty: '', bloomLevel: '', keyword: '', board: '', year: '', school: ''
     });
 
     const [searchResults, setSearchResults] = useState([]);
     const [searching, setSearching] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMoreRemote, setHasMoreRemote] = useState(true);
     const [addLoading, setAddLoading] = useState(null); 
     const [cart, setCart] = useState([]); 
 
     // Background Caching & UI Toggle States
     const [questionsCache, setQuestionsCache] = useState([]);
+    const observerTarget = useRef(null);
     const [backgroundLoading, setBackgroundLoading] = useState(false);
     const [cacheLoadedSubjectId, setCacheLoadedSubjectId] = useState(null);
     const [savedQuestionIds, setSavedQuestionIds] = useState([]);
     const [visibleAnswers, setVisibleAnswers] = useState({});
     const [visibleExplanations, setVisibleExplanations] = useState({}); 
 
+    const displayLimitRef = useRef(displayLimit);
+    useEffect(() => {
+        displayLimitRef.current = displayLimit;
+    }, [displayLimit]);
+
+    const searchResultsRef = useRef(searchResults);
+    useEffect(() => {
+        searchResultsRef.current = searchResults;
+    }, [searchResults]);
+
+    const hasMoreRemoteRef = useRef(hasMoreRemote);
+    useEffect(() => {
+        hasMoreRemoteRef.current = hasMoreRemote;
+    }, [hasMoreRemote]);
+
+    // Dynamic Filter Options based on available questions in cache or searchResults
+    const dynamicOptions = React.useMemo(() => {
+        const sourceList = (questionsCache && questionsCache.length > 0) ? questionsCache : searchResults;
+        if (!sourceList || sourceList.length === 0) {
+            return {
+                types: ['MCQ', 'CQ', 'SHORT'],
+                difficulties: ['EASY', 'MEDIUM', 'HARD'],
+                blooms: ['KNOWLEDGE', 'COMPREHENSION', 'APPLICATION', 'HIGHER_ORDER'],
+                boards: [],
+                years: [],
+                schools: []
+            };
+        }
+        
+        const types = [...new Set(sourceList.map(q => q.type))].filter(Boolean);
+        const diffs = [...new Set(sourceList.map(q => q.difficulty))].filter(Boolean);
+        
+        // Extract rich sources dynamically!
+        const extractedBoards = new Set();
+        const extractedYears = new Set();
+        const extractedSchools = new Set();
+
+        sourceList.forEach(q => {
+            if (q.sources && q.sources.length > 0) {
+                q.sources.forEach(src => {
+                    const type = src.sourceType;
+                    const org = src.organizationName;
+                    const year = src.examYear;
+                    
+                    if (year) {
+                        extractedYears.add(year.toString());
+                    }
+                    if (org) {
+                        if (type === 'BOARD_EXAM' || type === 'UNIVERSITY_ADMISSION') {
+                            extractedBoards.add(org);
+                        } else if (type === 'INSTITUTION_TEST') {
+                            extractedSchools.add(org);
+                        }
+                    }
+                });
+            } else if (q.sourceReference) {
+                const sRef = q.sourceReference;
+                if (sRef !== 'Textbook Content' && !sRef.toLowerCase().includes('chunk')) {
+                    extractedBoards.add(sRef);
+                }
+            }
+        });
+        
+        const rawBlooms = [...new Set(sourceList.map(q => q.bloomLevel))].filter(Boolean);
+        const normalizedBlooms = [];
+        
+        const bloomMapping = {
+            'KNOWLEDGE': 'KNOWLEDGE', 'REMEMBERING': 'KNOWLEDGE', 'KNOW': 'KNOWLEDGE', 'জ্ঞান': 'KNOWLEDGE',
+            'COMPREHENSION': 'COMPREHENSION', 'UNDERSTANDING': 'COMPREHENSION', 'COMP': 'COMPREHENSION', 'অনুধাবন': 'COMPREHENSION',
+            'APPLICATION': 'APPLICATION', 'APPLYING': 'APPLICATION', 'APPL': 'APPLICATION', 'প্রয়োগ': 'APPLICATION',
+            'HIGHER_ORDER': 'HIGHER_ORDER', 'ANALYZING': 'HIGHER_ORDER', 'EVALUATING': 'HIGHER_ORDER', 'CREATING': 'HIGHER_ORDER', 'HIGH': 'HIGHER_ORDER', 'উচ্চতর': 'HIGHER_ORDER'
+        };
+        
+        rawBlooms.forEach(b => {
+            const normalized = bloomMapping[b.toUpperCase()] || b.toUpperCase();
+            if (!normalizedBlooms.includes(normalized)) {
+                normalizedBlooms.push(normalized);
+            }
+        });
+        
+        return {
+            types,
+            difficulties: diffs,
+            blooms: normalizedBlooms.length > 0 ? normalizedBlooms : ['KNOWLEDGE', 'COMPREHENSION', 'APPLICATION', 'HIGHER_ORDER'],
+            boards: Array.from(extractedBoards).sort(),
+            years: Array.from(extractedYears).sort((a, b) => b.localeCompare(a)), // Sort years descending
+            schools: Array.from(extractedSchools).sort()
+        };
+    }, [questionsCache, searchResults]); 
+
     const currentMarks = cart.reduce((sum, q) => sum + (q.marks || 0), 0);
-    const defaultMarksMap = { 'MCQ': 1, 'CQ': 10, 'SHORT': 2 };
+
+    const cartCounts = React.useMemo(() => {
+        const counts = {};
+        cart.forEach(q => {
+            const type = q.type || 'MCQ';
+            counts[type] = (counts[type] || 0) + 1;
+        });
+        return counts;
+    }, [cart]);
 
     const targetTotals = Object.entries(userStructure).reduce((acc, [type, struct]) => {
         const count = parseInt(struct.count) || 0;
@@ -250,12 +736,11 @@ const ManualExamBuilder = () => {
             let currentPage = 0;
             let hasMore = true;
             let accumulated = [];
-            
             while (hasMore) {
                 const params = { 
                     classSubjectId: subId, 
                     language: lang,
-                    size: 150, 
+                    size: 80, 
                     page: currentPage 
                 };
                 const res = await examService.searchQuestionsForManualExam(params);
@@ -270,9 +755,12 @@ const ManualExamBuilder = () => {
                         accumulated.forEach(q => uniqueMap.set(q.id, q));
                         const uniqueList = Array.from(uniqueMap.values());
                         
-                        setQuestionsCache(uniqueList);
+                        // Throttled state updates every 5 pages to prevent React render-freezes
+                        if (currentPage % 5 === 0 || fetched.length < 80) {
+                            setQuestionsCache(uniqueList);
+                        }
                         
-                        if (fetched.length < 150) {
+                        if (fetched.length < 80) {
                             hasMore = false;
                         } else {
                             currentPage++;
@@ -284,11 +772,13 @@ const ManualExamBuilder = () => {
                 // Delay to protect server load
                 await new Promise(r => setTimeout(r, 250));
             }
+            
+            // Ensure final full list is successfully cached once complete
+            const finalUniqueMap = new Map();
+            accumulated.forEach(q => finalUniqueMap.set(q.id, q));
+            setQuestionsCache(Array.from(finalUniqueMap.values()));
+            
             setCacheLoadedSubjectId(subId);
-            // Caching complete, sync UI once
-            setTimeout(() => {
-                searchQuestions();
-            }, 50);
         } catch (e) {
             console.error("Background caching error:", e);
         } finally {
@@ -303,15 +793,35 @@ const ManualExamBuilder = () => {
         }
     }, [step, subjectId, examInfo.language]);
 
+    // Sync local searchResults when caching completes to avoid closure issues
+    useEffect(() => {
+        if (step === 2 && cacheLoadedSubjectId === subjectId && questionsCache.length > 0) {
+            searchQuestions(null, { preserveScroll: true });
+        }
+    }, [cacheLoadedSubjectId, subjectId, questionsCache.length, step]);
+
     // Dynamic Main Header updates to prevent double-headers
     useEffect(() => {
         if (step === 2 && examInfo.title) {
             window.dispatchEvent(new CustomEvent('setDynamicPageTitle', {
                 detail: {
                     title: examInfo.title,
-                    subtitle: 'Manual Selection Mode'
+                    subtitle: 'Manual Selection Mode',
+                    hideLayoutBars: true
                 }
             }));
+            
+            // Signal Expo Go / React Native WebView to hide app headers & bottom navigation bars
+            if (window.ReactNativeWebView) {
+                try {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'hide_layout_bars',
+                        hide: true
+                    }));
+                } catch (e) {
+                    console.error("RN postMessage failed", e);
+                }
+            }
         } else {
             window.dispatchEvent(new CustomEvent('setDynamicPageTitle', {
                 detail: {
@@ -319,18 +829,41 @@ const ManualExamBuilder = () => {
                     subtitle: 'Handpick Questions'
                 }
             }));
+            
+            // Signal Expo Go / React Native WebView to restore app headers & bottom navigation bars
+            if (window.ReactNativeWebView) {
+                try {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'hide_layout_bars',
+                        hide: false
+                    }));
+                } catch (e) {
+                    console.error("RN postMessage failed", e);
+                }
+            }
         }
         return () => {
             window.dispatchEvent(new CustomEvent('setDynamicPageTitle', { detail: null }));
+            if (window.ReactNativeWebView) {
+                try {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'hide_layout_bars',
+                        hide: false
+                    }));
+                } catch (e) {}
+            }
         };
     }, [step, examInfo.title]);
 
-    const searchQuestions = async (e) => {
+    const searchQuestions = async (e, options = {}) => {
         if (e) e.preventDefault();
-        setSearching(true);
+        const preserveScroll = options.preserveScroll || false;
+        if (!preserveScroll) {
+            setSearching(true);
+        }
         
-        // If we have cached questions, filter locally for instant response!
-        if (questionsCache.length > 0) {
+        // If caching is fully complete for this subject, filter locally for instant response!
+        if (cacheLoadedSubjectId === subjectId && questionsCache.length > 0) {
             let filtered = [...questionsCache];
             
             if (filters.chapterId) {
@@ -345,6 +878,25 @@ const ManualExamBuilder = () => {
             if (filters.difficulty) {
                 filtered = filtered.filter(q => q.difficulty === filters.difficulty);
             }
+            if (filters.bloomLevel) {
+                const normFilter = filters.bloomLevel.toUpperCase();
+                filtered = filtered.filter(q => {
+                    const normQ = q.bloomLevel?.toUpperCase() || '';
+                    if (normFilter === 'KNOWLEDGE') {
+                        return normQ === 'KNOWLEDGE' || normQ === 'REMEMBERING' || normQ.includes('জ্ঞান');
+                    }
+                    if (normFilter === 'COMPREHENSION') {
+                        return normQ === 'COMPREHENSION' || normQ === 'UNDERSTANDING' || normQ.includes('অনুধাবন');
+                    }
+                    if (normFilter === 'APPLICATION') {
+                        return normQ === 'APPLICATION' || normQ === 'APPLYING' || normQ.includes('প্রয়োগ');
+                    }
+                    if (normFilter === 'HIGHER_ORDER') {
+                        return normQ === 'HIGHER_ORDER' || normQ === 'ANALYZING' || normQ === 'EVALUATING' || normQ === 'CREATING' || normQ.includes('উচ্চতর');
+                    }
+                    return normQ === normFilter;
+                });
+            }
             if (filters.keyword) {
                 const kw = filters.keyword.toLowerCase();
                 filtered = filtered.filter(q => 
@@ -352,27 +904,143 @@ const ManualExamBuilder = () => {
                     (q.stimulus && q.stimulus.toLowerCase().includes(kw))
                 );
             }
+            if (filters.board) {
+                filtered = filtered.filter(q => {
+                    if (q.sources && q.sources.length > 0) {
+                        return q.sources.some(src => src.organizationName === filters.board);
+                    }
+                    return q.sourceReference === filters.board;
+                });
+            }
+            if (filters.year) {
+                filtered = filtered.filter(q => {
+                    if (q.sources && q.sources.length > 0) {
+                        return q.sources.some(src => src.examYear && src.examYear.toString() === filters.year);
+                    }
+                    return false;
+                });
+            }
+            if (filters.school) {
+                filtered = filtered.filter(q => {
+                    if (q.sources && q.sources.length > 0) {
+                        return q.sources.some(src => src.organizationName === filters.school);
+                    }
+                    return false;
+                });
+            }
             
             setSearchResults(filtered);
+            if (preserveScroll) {
+                setDisplayLimit(prev => Math.max(prev, 100));
+            } else {
+                setDisplayLimit(100); // Reset render limit on filter changes
+            }
             setSearching(false);
             return;
         }
 
-        // Fallback to direct API search if cache is not ready
+        // Fallback to direct API search if cache is not fully ready
         try {
             const cleanFilters = {};
             Object.entries(filters).forEach(([k, v]) => {
                 if (v !== '') cleanFilters[k] = v;
             });
-            const params = { classSubjectId: subjectId, language: examInfo.language, ...cleanFilters, size: 50 };
+            const params = { 
+                classSubjectId: subjectId, 
+                language: examInfo.language, 
+                ...cleanFilters, 
+                size: 50, 
+                page: 0 
+            };
             const res = await examService.searchQuestionsForManualExam(params);
-            if (res.success) setSearchResults(res.data.content);
+            if (res.success && res.data) {
+                const content = res.data.content || [];
+                setSearchResults(content);
+                setServerPage(0); // Reset server-side pagination page count
+                setDisplayLimit(100); // Reset render limit
+                setHasMoreRemote(content.length >= 50);
+            }
         } catch (e) {
             console.error("Search Questions Error:", e);
             const errMsg = e.response?.data?.message || e.response?.data?.error || e.message || "Unknown Search Error";
             alert(`Error fetching questions: ${errMsg}`);
         } finally {
             setSearching(false);
+        }
+    };
+
+    // Intersection Observer for Infinite Scrolling / Auto Loading More
+    useEffect(() => {
+        if (searching || loadingMore) return;
+        
+        const observer = new IntersectionObserver(
+            entries => {
+                const entry = entries[0];
+                if (entry.isIntersecting && !searching && !loadingMore) {
+                    if (cacheLoadedSubjectId === subjectId) {
+                        // Local cache ready: expand displayLimit
+                        if (searchResultsRef.current.length > displayLimitRef.current) {
+                            setDisplayLimit(prev => prev + 100);
+                        }
+                    } else {
+                        // Remote server fallback: paginated load
+                        if (searchResultsRef.current.length >= 50 && hasMoreRemoteRef.current) {
+                            handleLoadMoreRemote();
+                        }
+                    }
+                }
+            },
+            { rootMargin: '0px' }
+        );
+
+        const target = observerTarget.current;
+        if (target) {
+            observer.observe(target);
+        }
+
+        return () => {
+            if (target) observer.unobserve(target);
+            observer.disconnect();
+        };
+    }, [searching, loadingMore, cacheLoadedSubjectId, subjectId]);
+
+    // Remote Server-Side Load More fallback when background cache is still loading or empty
+    const handleLoadMoreRemote = async () => {
+        if (searching || loadingMore || !hasMoreRemote) return;
+        setLoadingMore(true);
+        try {
+            const nextPage = serverPage + 1;
+            const cleanFilters = {};
+            Object.entries(filters).forEach(([k, v]) => {
+                if (v !== '') cleanFilters[k] = v;
+            });
+            const params = { 
+                classSubjectId: subjectId, 
+                language: examInfo.language, 
+                ...cleanFilters, 
+                size: 50, 
+                page: nextPage 
+            };
+            const res = await examService.searchQuestionsForManualExam(params);
+            if (res.success && res.data && res.data.content) {
+                const fetched = res.data.content;
+                if (fetched.length > 0) {
+                    setSearchResults(prev => {
+                        const existingIds = new Set(prev.map(q => q.id));
+                        const uniqueNew = fetched.filter(q => !existingIds.has(q.id));
+                        return [...prev, ...uniqueNew];
+                    });
+                    setServerPage(nextPage);
+                    setDisplayLimit(prev => prev + fetched.length);
+                    setHasMoreRemote(fetched.length >= 50);
+                } else {
+                    setHasMoreRemote(false);
+                }
+            }
+        } catch (e) {
+            console.error("Load more remote error:", e);
+        } finally {
+            setLoadingMore(false);
         }
     };
 
@@ -448,7 +1116,7 @@ const ManualExamBuilder = () => {
             }, 300);
             return () => clearTimeout(timer);
         }
-    }, [filters.chapterId, filters.topicId, filters.type, filters.difficulty, filters.keyword, examInfo.language, step]);
+    }, [filters.chapterId, filters.topicId, filters.type, filters.difficulty, filters.bloomLevel, filters.keyword, filters.board, filters.year, filters.school, examInfo.language, step]);
 
     const handleAddQuestion = async (q, marks) => {
         if (cart.length >= targetTotals.qs) return alert("Maximum question limit reached for this exam!");
@@ -492,23 +1160,51 @@ const ManualExamBuilder = () => {
     if (step === 2) {
         return (
             <div className="min-h-screen bg-slate-50 font-outfit text-slate-800 flex flex-col h-screen overflow-hidden">
+                {/* Top Sticky Glassmorphic Header */}
+                <div className="bg-white/90 backdrop-blur-md border-b border-slate-200 px-3 py-1.5 sm:px-4 sm:py-2.5 sticky top-0 z-45 flex justify-between items-center shadow-[0_2px_12px_rgba(0,0,0,0.03)] shrink-0">
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleGoBackStep1}
+                            className="flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 rounded-lg border border-slate-200 transition-all duration-300"
+                        >
+                            <ChevronLeft size={12} strokeWidth={2.5} />
+                            <span>শ্রেণী ও বিষয় পরিবর্তন</span>
+                        </button>
+                    </div>
+                    
+                    <div className="hidden md:flex flex-col items-center">
+                        <h1 className="font-extrabold text-slate-800 text-xs tracking-tight">{examInfo.title || 'Draft Exam'}</h1>
+                        <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
+                            {subjects.find(s => s.classSubjectId == subjectId)?.subjectName || 'Subject'} • {classes.find(c => c.id == classId)?.name || 'Class'}
+                        </p>
+                    </div>
+
+                    <button
+                        onClick={handleExitBuilder}
+                        className="flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-black text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 hover:border-rose-300 rounded-lg transition-all duration-300 active:scale-95"
+                    >
+                        <Trash2 size={11} />
+                        <span>বাতিল করে ফিরে যান</span>
+                    </button>
+                </div>
+
                 {/* Mobile Tab Swapper Bar */}
                 <div className="lg:hidden flex border-b border-slate-200 bg-white shrink-0">
                     <button
                         onClick={() => setActiveTab('filters')}
-                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${activeTab === 'filters' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/20' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                        className={`flex-1 py-2 text-[10.5px] font-bold uppercase tracking-wider border-b-2 transition-all ${activeTab === 'filters' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/20' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                     >
                         Filters
                     </button>
                     <button
                         onClick={() => setActiveTab('results')}
-                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all relative ${activeTab === 'results' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/20' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                        className={`flex-1 py-2 text-[10.5px] font-bold uppercase tracking-wider border-b-2 transition-all relative ${activeTab === 'results' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/20' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                     >
                         Questions ({searchResults.length})
                     </button>
                     <button
                         onClick={() => setActiveTab('cart')}
-                        className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all relative ${activeTab === 'cart' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/20' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                        className={`flex-1 py-2 text-[10.5px] font-bold uppercase tracking-wider border-b-2 transition-all relative ${activeTab === 'cart' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/20' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                     >
                         Cart ({cart.length})
                     </button>
@@ -536,23 +1232,64 @@ const ManualExamBuilder = () => {
                                         {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                     </select>
                                 </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Board / University</label>
+                                    <select value={filters.board} onChange={(e) => setFilters({ ...filters, board: e.target.value })} className={selectCls}>
+                                        <option value="">All Boards & Universities</option>
+                                        {dynamicOptions.boards && dynamicOptions.boards.map(b => (
+                                            <option key={b} value={b}>{b}</option>
+                                        ))}
+                                    </select>
+                                </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Type</label>
-                                        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} className={selectCls}>
-                                            <option value="">Any</option>
-                                            <option value="MCQ">MCQ</option>
-                                            <option value="CQ">CQ</option>
-                                            <option value="SHORT">Short</option>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Year</label>
+                                        <select value={filters.year} onChange={(e) => setFilters({ ...filters, year: e.target.value })} className={selectCls}>
+                                            <option value="">Any Year</option>
+                                            {dynamicOptions.years && dynamicOptions.years.map(y => (
+                                                <option key={y} value={y}>{y}</option>
+                                            ))}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Difficulty</label>
-                                        <select value={filters.difficulty} onChange={(e) => setFilters({ ...filters, difficulty: e.target.value })} className={selectCls}>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">School / College</label>
+                                        <select value={filters.school} onChange={(e) => setFilters({ ...filters, school: e.target.value })} className={selectCls}>
+                                            <option value="">Any School</option>
+                                            {dynamicOptions.schools && dynamicOptions.schools.map(s => (
+                                                <option key={s} value={s}>{s}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Type</label>
+                                        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} className="w-full bg-white/50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all hover:border-slate-300">
                                             <option value="">Any</option>
-                                            <option value="EASY">Easy</option>
-                                            <option value="MEDIUM">Med</option>
-                                            <option value="HARD">Hard</option>
+                                            {dynamicOptions.types.map(t => {
+                                                const label = t === 'MCQ' ? 'MCQ' : t === 'CQ' ? 'CQ' : t === 'SHORT' ? 'Short' : t;
+                                                return <option key={t} value={t}>{label}</option>;
+                                            })}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Diff</label>
+                                        <select value={filters.difficulty} onChange={(e) => setFilters({ ...filters, difficulty: e.target.value })} className="w-full bg-white/50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all hover:border-slate-300">
+                                            <option value="">Any</option>
+                                            {dynamicOptions.difficulties.map(d => {
+                                                const label = d === 'EASY' ? 'Easy' : d === 'MEDIUM' ? 'Med' : d === 'HARD' ? 'Hard' : d;
+                                                return <option key={d} value={d}>{label}</option>;
+                                            })}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Bloom</label>
+                                        <select value={filters.bloomLevel} onChange={(e) => setFilters({ ...filters, bloomLevel: e.target.value })} className="w-full bg-white/50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all hover:border-slate-300">
+                                            <option value="">Any</option>
+                                            {dynamicOptions.blooms.map(b => {
+                                                const label = b === 'KNOWLEDGE' ? 'Know' : b === 'COMPREHENSION' ? 'Comp' : b === 'APPLICATION' ? 'Appl' : b === 'HIGHER_ORDER' ? 'High' : b;
+                                                return <option key={b} value={b}>{label}</option>;
+                                            })}
                                         </select>
                                     </div>
                                 </div>
@@ -590,7 +1327,7 @@ const ManualExamBuilder = () => {
                                 <span className="text-[11px] bg-slate-200 text-slate-700 px-3 py-1.5 rounded-full font-black uppercase tracking-wider">{searchResults.length} found</span>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4 bg-slate-50/30">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 xs:p-4 sm:p-5 space-y-4 bg-slate-50/30" style={{ overflowAnchor: 'none', position: 'relative' }}>
                             {searching ? (
                                 <div className="flex items-center justify-center h-full text-slate-400"><Loader2 size={32} className="animate-spin" /></div>
                             ) : searchResults.length === 0 ? (
@@ -599,210 +1336,48 @@ const ManualExamBuilder = () => {
                                     <p className="font-bold">No questions found.</p>
                                 </div>
                             ) : (
-                                searchResults.map((q, idx) => {
-                                    const inCart = isInCart(q.id);
+                                <div className="flex flex-col gap-4 relative" style={{ overflowAnchor: 'none' }}>
+                                    <div 
+                                        ref={observerTarget} 
+                                        style={{ position: 'absolute', bottom: 0, height: '2500px', width: '100%', pointerEvents: 'none', zIndex: -1 }} 
+                                    />
+                                    {searchResults.slice(0, displayLimit).map((q, idx) => (
+                                        <QuestionCard 
+                                            key={q.id}
+                                            q={q}
+                                            idx={idx}
+                                            inCart={isInCart(q.id)}
+                                            onAdd={handleAddQuestion}
+                                            addLoading={addLoading}
+                                            cartLength={cart.length}
+                                            targetQs={targetTotals.qs}
+                                            isSaved={isQuestionSaved(q.id)}
+                                            onToggleSave={handleToggleSaveQuestion}
+                                            examInfo={examInfo}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                            {loadingMore && (
+                                <div className="py-6 flex flex-col items-center justify-center w-full">
+                                    <div className="flex flex-col items-center gap-2 opacity-75">
+                                        <div className="w-6 h-6 border-2 border-emerald-100 border-t-emerald-500 rounded-full animate-spin"></div>
+                                        <span className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">Loading More...</span>
+                                    </div>
+                                </div>
+                            )}
 
-                                    // Extract fallback explanations for dynamic questions
-                                    let finalExplanation = q.explanation;
-                                    if (!finalExplanation && q.dynamicData) {
-                                        let dData = q.dynamicData;
-                                        if (typeof dData === 'string') {
-                                            try { dData = JSON.parse(dData); } catch (e) {}
-                                        }
-                                        if (dData && typeof dData === 'object') {
-                                            const expKey = Object.keys(dData).find(k => k.toLowerCase().includes('explanation'));
-                                            if (expKey) finalExplanation = dData[expKey];
-                                        }
-                                    }
-
-                                    const isStructuredCQAnswer = q.type === 'CQ' && q.correctAnswer && q.correctAnswer.includes('cq-ans-part');
-                                    const isStructuredCQExplanation = q.type === 'CQ' && finalExplanation && finalExplanation.includes('cq-exp-part');
-                                    const hasCQAnswer = q.correctAnswer && q.correctAnswer.replace(/<[^>]*>/g, '').trim().length > 0;
-                                    const hasCQExplanation = finalExplanation && finalExplanation.replace(/<[^>]*>/g, '').trim().length > 0;
-
-                                    const typeLabel = q.type === 'MCQ' ? 'Multiple Choice' : q.type === 'CQ' ? 'Creative' : q.type === 'SHORT' ? 'Short Answer' : q.type;
-
-                                    const showAnswer = isAnswerVisible(q.id);
-                                    const showExplanation = isExplanationVisible(q.id);
-
-                                    return (
-                                        <div key={q.id} className={`p-4 sm:p-5 rounded-2xl border transition-all flex gap-3 sm:gap-5 items-start ${inCart ? 'border-emerald-300 bg-emerald-50/50 opacity-80' : 'border-slate-200 bg-white hover:border-emerald-200 hover:shadow-md'}`}>
-                                            <div className="flex-1 min-w-0">
-                                                {/* Unified Badge Metadata Row */}
-                                                <div className="flex items-center gap-2 flex-wrap mb-3.5">
-                                                    <span className="text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">Q #{idx + 1}</span>
-                                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-bold border border-slate-200">{typeLabel}</span>
-                                                    
-                                                    {q.status === 'APPROVED' && <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md text-[10px] font-bold uppercase border border-emerald-100">Approved</span>}
-                                                    {q.status === 'PENDING' && <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md text-[10px] font-bold uppercase border border-amber-100">Pending</span>}
-                                                    {q.status === 'REVISED' && <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-md text-[10px] font-bold uppercase animate-pulse border border-rose-200">Revised</span>}
-                                                    {q.aiGenerated && <span className="px-2 py-0.5 bg-violet-50 text-violet-700 rounded-md text-[10px] font-bold uppercase border border-violet-100">AI Synced</span>}
-                                                    
-                                                    <span className="px-2 py-0.5 bg-slate-50 text-slate-600 rounded-md text-[10px] font-bold border border-slate-200">
-                                                        {q.difficulty}
-                                                    </span>
-                                                    <span className="px-2 py-0.5 bg-slate-50 text-slate-600 rounded-md text-[10px] font-bold border border-slate-200">
-                                                        {examInfo.language === 'Bangla' ? `${toBnNum(defaultMarksMap[q.type] || 1)} মার্কস` : `${defaultMarksMap[q.type] || 1} Marks`}
-                                                    </span>
-                                                </div>
-
-                                                {/* CQ Stimulus/Stem rendering (if not already embedded in questionText) */}
-                                                {(() => {
-                                                    if (!q.stimulus) return null;
-                                                    const cleanStimulus = q.stimulus.replace(/<[^>]*>/g, '').trim().toLowerCase();
-                                                    const isPlaceholder = 
-                                                        cleanStimulus === '' || 
-                                                        cleanStimulus === 'generated question' || 
-                                                        cleanStimulus === 'dynamic question' || 
-                                                        cleanStimulus === 'ডায়নামিক প্রশ্ন' ||
-                                                        cleanStimulus === 'ডায়নামিক প্রশ্ন';
-                                                    if (isPlaceholder) return null;
-                                                    return (
-                                                        <div className="mb-3 px-4 py-3 bg-slate-50 border border-slate-200 border-l-4 border-l-indigo-400 rounded-r-xl text-[13px] text-slate-700 font-medium leading-relaxed">
-                                                            <MarkdownRenderer content={parseMarkdownImages(q.stimulus)} />
-                                                        </div>
-                                                    );
-                                                })()}
-
-                                                {/* Question text with structured support */}
-                                                <div className="text-[14px] font-semibold text-slate-800 leading-snug">
-                                                    {q.type === 'CQ' ? (
-                                                        <CQCombinedRenderer q={q} showAnswer={showAnswer} showExplanation={showExplanation} />
-                                                    ) : q.dynamicData ? (
-                                                        <DynamicQuestionViewer q={q} mode="list" showAnswer={showAnswer} showExplanation={showExplanation} />
-                                                    ) : (
-                                                        <MarkdownRenderer content={parseMarkdownImages(examInfo.language === 'Bangla' ? formatBanglaNumbers(q.questionText) : q.questionText)} />
-                                                    )}
-                                                </div>
-                                                
-                                                {/* Statements for MULTIPLE_COMPLETION */}
-                                                {!q.dynamicData && q.mcqType === 'MULTIPLE_COMPLETION' && q.statements && q.statements.length > 0 && (
-                                                    <div className="mt-2 pl-4 border-l-2 border-primary/20 space-y-1">
-                                                        {q.statements.map((stmt, sIdx) => (
-                                                            <div key={sIdx} className="text-[12px] text-slate-600 font-medium leading-snug">
-                                                                <MarkdownRenderer content={parseMarkdownImages(examInfo.language === 'Bangla' ? formatBanglaNumbers(stmt) : stmt)} />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-
-                                                {/* MCQ Options with high premium correct option highlight */}
-                                                {q.type === 'MCQ' && q.options && q.options.length > 0 && (
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3.5">
-                                                        {q.options.map((opt, oIdx) => {
-                                                            const isEnglish = q.language && q.language.toLowerCase() === 'english';
-                                                            const displayLabel = isEnglish ? String.fromCharCode(65 + oIdx) : (['ক', 'খ', 'গ', 'ঘ'][oIdx] || String.fromCharCode(65 + oIdx));
-                                                            return (
-                                                                <div key={opt.id} className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border text-[13px] font-medium transition-all duration-300 ${
-                                                                    showAnswer && opt.isCorrect
-                                                                        ? 'bg-emerald-50 border-emerald-400 text-emerald-800 shadow-sm'
-                                                                        : showAnswer && !opt.isCorrect
-                                                                        ? 'bg-white border-slate-200 text-slate-400 opacity-60'
-                                                                        : 'bg-slate-50/50 border-slate-200 text-slate-700 hover:bg-slate-100/70 hover:border-slate-300'
-                                                                }`}>
-                                                                    <span className={`shrink-0 flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-black transition-all duration-300 ${
-                                                                        showAnswer && opt.isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'
-                                                                    }`}>
-                                                                        {displayLabel}
-                                                                    </span>
-                                                                    <span className="flex-1 min-w-0"><MarkdownRenderer content={parseMarkdownImages(opt.optionText)} /></span>
-                                                                    {showAnswer && opt.isCorrect && <CheckCircle size={14} className="text-emerald-500 ml-auto shrink-0 animate-in zoom-in-50 duration-200" />}
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-
-                                                {/* Non-MCQ: Correct Answer Block */}
-                                                {showAnswer && q.type !== 'MCQ' && !q.dynamicData && (q.type !== 'CQ' || !isStructuredCQAnswer) && q.correctAnswer && hasCQAnswer && (
-                                                    <div className="mt-3.5 p-4 bg-emerald-50 border border-emerald-300 rounded-2xl text-[13px] text-emerald-900 font-semibold leading-relaxed flex items-start gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
-                                                        <CheckCircle size={15} className="text-emerald-500 mt-0.5 shrink-0" />
-                                                        <div className="flex-1 min-w-0">
-                                                            {q.type === 'CQ' && <span className="block text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1 pl-0.5">সৃজনশীল উত্তর (পুরাতন/আনস্ট্রাকচার্ড ফরম্যাট):</span>}
-                                                            <span><MarkdownRenderer content={parseMarkdownImages(q.correctAnswer)} /></span>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Non-MCQ: Explanation Block */}
-                                                {showExplanation && !q.dynamicData && (q.type !== 'CQ' || !isStructuredCQExplanation) && finalExplanation && hasCQExplanation && (
-                                                    <div className="mt-3.5 p-4 bg-blue-50 border border-blue-200 rounded-2xl text-[13px] text-blue-900 leading-relaxed flex items-start gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
-                                                        <BookOpen size={15} className="text-blue-500 mt-0.5 shrink-0" />
-                                                        <div className="flex-1 min-w-0">
-                                                            {q.type === 'CQ' && <span className="block text-[10px] font-bold text-blue-600 uppercase tracking-wide mb-1 pl-0.5">সৃজনশীল ব্যাখ্যা (পুরাতন/আনস্ট্রাকচার্ড ফরম্যাট):</span>}
-                                                            <span><MarkdownRenderer content={parseMarkdownImages(finalExplanation)} /></span>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="w-28 sm:w-32 shrink-0 flex flex-col items-stretch justify-between border-l border-slate-100 pl-3 sm:pl-4 gap-4 self-stretch">
-                                                <div className="flex flex-col items-stretch w-full gap-2.5 sticky top-3">
-                                                    {/* Top Marks - visual label */}
-                                                    <div className="text-[10px] font-black text-slate-400 text-center uppercase tracking-wider mb-0.5">
-                                                        {examInfo.language === 'Bangla' ? `${toBnNum(defaultMarksMap[q.type] || 1)} মার্কস` : `${defaultMarksMap[q.type] || 1} Marks`}
-                                                    </div>
-
-                                                    {/* Show Answer Toggle */}
-                                                    <button 
-                                                        onClick={() => toggleAnswerVisibility(q.id)}
-                                                        className={`text-[10px] sm:text-[11px] font-black px-2 py-2 rounded-xl border transition-all flex items-center justify-center gap-1.5 active:scale-95 w-full ${
-                                                            showAnswer
-                                                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                                                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
-                                                        }`}
-                                                    >
-                                                        {showAnswer ? (
-                                                            <><EyeOff size={12} strokeWidth={2.5} /> Hide Ans</>
-                                                        ) : (
-                                                            <><Eye size={12} strokeWidth={2.5} /> Show Ans</>
-                                                        )}
-                                                    </button>
-
-                                                    {/* Show Explanation Toggle */}
-                                                    <button 
-                                                        onClick={() => toggleExplanationVisibility(q.id)}
-                                                        className={`text-[10px] sm:text-[11px] font-black px-2 py-2 rounded-xl border transition-all flex items-center justify-center gap-1.5 active:scale-95 w-full ${
-                                                            showExplanation
-                                                                ? 'bg-violet-50 border-violet-200 text-violet-700'
-                                                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
-                                                        }`}
-                                                    >
-                                                        {showExplanation ? (
-                                                            <><EyeOff size={12} strokeWidth={2.5} /> Hide Exp</>
-                                                        ) : (
-                                                            <><Eye size={12} strokeWidth={2.5} /> Show Exp</>
-                                                        )}
-                                                    </button>
-
-                                                    {/* Save Button */}
-                                                    <button 
-                                                        onClick={() => handleToggleSaveQuestion(q)}
-                                                        className={`text-[10px] sm:text-[11px] font-black px-2 py-2 rounded-xl border transition-all flex items-center justify-center gap-1.5 active:scale-95 w-full ${
-                                                            isQuestionSaved(q.id) 
-                                                                ? 'bg-amber-50 border-amber-200 text-amber-700' 
-                                                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
-                                                        }`}
-                                                    >
-                                                        {isQuestionSaved(q.id) ? (
-                                                            <><BookmarkCheck size={12} strokeWidth={2.5} className="fill-amber-500 text-amber-600" /> Saved</>
-                                                        ) : (
-                                                            <><Bookmark size={12} strokeWidth={2.5} /> Save</>
-                                                        )}
-                                                    </button>
-
-                                                    {/* Add to exam button */}
-                                                    <button
-                                                        onClick={() => handleAddQuestion(q)}
-                                                        disabled={inCart || addLoading === q.id || cart.length >= targetTotals.qs}
-                                                        className={`w-full py-2.5 rounded-xl text-[10px] sm:text-xs font-black flex items-center justify-center gap-1 transition-all mt-1 ${inCart ? 'bg-emerald-100 text-emerald-700 cursor-not-allowed border border-emerald-200' : 'bg-white border text-slate-700 hover:bg-slate-50 hover:border-slate-300 border-slate-200 active:scale-95'}`}
-                                                    >
-                                                        {addLoading === q.id ? <Loader2 size={12} className="animate-spin" /> : inCart ? <><Check size={12} strokeWidth={3} /> Added</> : <><Plus size={12} strokeWidth={3} /> Add</>}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })
+                            {((cacheLoadedSubjectId === subjectId && searchResults.length > displayLimit) || (cacheLoadedSubjectId !== subjectId && hasMoreRemote)) && !loadingMore && (
+                                <button 
+                                    onClick={cacheLoadedSubjectId === subjectId ? () => setDisplayLimit(prev => prev + 100) : handleLoadMoreRemote}
+                                    disabled={searching || loadingMore}
+                                    className="w-full py-4 bg-white hover:bg-slate-50 text-slate-600 font-black border border-dashed border-slate-300 hover:border-slate-400 rounded-2xl transition-all text-center flex items-center justify-center gap-2 mt-4 active:scale-95 disabled:opacity-50"
+                                >
+                                    <Plus size={16} />
+                                    {cacheLoadedSubjectId === subjectId 
+                                        ? `Load More Questions (Showing ${displayLimit} of ${searchResults.length})` 
+                                        : "Load More Questions (Server-Side Pagination)"}
+                                </button>
                             )}
                         </div>
                     </div>
@@ -814,14 +1389,83 @@ const ManualExamBuilder = () => {
                             <h2 className="font-black flex items-center gap-2 text-slate-800 text-lg mb-4">
                                 <BookOpen size={20} className="text-emerald-500" /> Exam Cart
                             </h2>
-                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                                <div className="flex justify-between text-[11px] font-black uppercase mb-2">
-                                    <span className={currentMarks > targetTotals.marks ? 'text-rose-500' : 'text-slate-500'}>Score: {currentMarks}</span>
-                                    <span className="text-emerald-600">Target: {targetTotals.marks}</span>
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4 shadow-inner">
+                                {/* Marks Progress Bar */}
+                                <div>
+                                    <div className="flex justify-between text-[11px] font-black uppercase mb-1.5">
+                                        <span className={currentMarks > targetTotals.marks ? 'text-rose-500' : 'text-slate-500'}>
+                                            Score: {currentMarks}
+                                        </span>
+                                        <span className="text-emerald-600">Target: {targetTotals.marks} M</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden shadow-sm">
+                                        <div 
+                                            className={`h-full transition-all duration-500 ${currentMarks > targetTotals.marks ? 'bg-rose-500' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'}`} 
+                                            style={{ width: `${Math.min((currentMarks / targetTotals.marks) * 100, 100)}%` }}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
-                                    <div className={`h-full transition-all ${currentMarks > targetTotals.marks ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min((currentMarks / targetTotals.marks) * 100, 100)}%` }}></div>
+
+                                {/* Questions Progress Bar */}
+                                <div>
+                                    <div className="flex justify-between text-[11px] font-black uppercase mb-1.5">
+                                        <span className={cart.length > targetTotals.qs ? 'text-rose-500' : 'text-slate-500'}>
+                                            Questions: {cart.length}
+                                        </span>
+                                        <span className="text-emerald-600">Target: {targetTotals.qs} Qs</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden shadow-sm">
+                                        <div 
+                                            className={`h-full transition-all duration-500 ${cart.length > targetTotals.qs ? 'bg-rose-500' : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'}`} 
+                                            style={{ width: `${Math.min((cart.length / targetTotals.qs) * 100, 100)}%` }}
+                                        />
+                                    </div>
                                 </div>
+
+                                {/* Dynamic Section Breakdown */}
+                                {Object.entries(userStructure).filter(([_, struct]) => (parseInt(struct.count) || 0) > 0).length > 0 && (
+                                    <div className="pt-3 border-t border-slate-200/80 space-y-2.5">
+                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-0.5">Section Breakdown</div>
+                                        {Object.entries(userStructure)
+                                            .filter(([_, struct]) => (parseInt(struct.count) || 0) > 0)
+                                            .map(([type, struct]) => {
+                                                const target = parseInt(struct.count) || 0;
+                                                const current = cartCounts[type] || 0;
+                                                const pct = Math.min((current / target) * 100, 100);
+                                                const isFulfilled = current === target;
+                                                const isOver = current > target;
+
+                                                let barColor = "bg-indigo-500";
+                                                let textColor = "text-slate-600 font-bold";
+                                                if (isFulfilled) {
+                                                    barColor = "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]";
+                                                    textColor = "text-emerald-600 font-black";
+                                                } else if (isOver) {
+                                                    barColor = "bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.4)]";
+                                                    textColor = "text-rose-600 font-black";
+                                                } else if (current > 0) {
+                                                    barColor = "bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.4)]";
+                                                    textColor = "text-amber-600 font-black";
+                                                }
+
+                                                return (
+                                                    <div key={type} className="space-y-1">
+                                                        <div className="flex justify-between text-[10.5px]">
+                                                            <span className="text-slate-500 font-bold">{type}</span>
+                                                            <span className={textColor}>{current} / {target}</span>
+                                                        </div>
+                                                        <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                                                            <div 
+                                                                className={`h-full ${barColor} transition-all duration-500`} 
+                                                                style={{ width: `${pct}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        }
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 bg-slate-50/50">
@@ -850,21 +1494,51 @@ const ManualExamBuilder = () => {
                 {/* Floating Action Bar for Step 2 */}
                 <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/90 border-t border-slate-200 p-3 sm:p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
                     <div className="max-w-[1600px] w-full mx-auto flex flex-row justify-between items-center gap-3">
-                        <div className="flex flex-col items-start">
-                            <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Cart Target</div>
-                            <div className="text-xs sm:text-sm font-black text-slate-700">
-                                {cart.length} / {targetTotals.qs} Qs 
-                                <span className="text-slate-300 mx-1.5 sm:mx-2">•</span> 
-                                <span className="text-emerald-600">{currentMarks} / {targetTotals.marks} Marks</span>
+                        <div className="flex flex-col items-start gap-1 min-w-0 flex-1">
+                            <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Cart Target & Progress</div>
+                            <div 
+                                className="flex flex-row items-center gap-1.5 overflow-x-auto w-full whitespace-nowrap"
+                                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                            >
+                                {Object.entries(userStructure)
+                                    .filter(([_, struct]) => (parseInt(struct.count) || 0) > 0)
+                                    .map(([type, struct]) => {
+                                        const target = parseInt(struct.count) || 0;
+                                        const current = cartCounts[type] || 0;
+                                        const isFulfilled = current === target;
+                                        const isOver = current > target;
+
+                                        let badgeColor = "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100";
+                                        if (isFulfilled) {
+                                            badgeColor = "bg-emerald-500 text-white border-transparent shadow-[0_2px_8px_rgba(16,185,129,0.3)]";
+                                        } else if (isOver) {
+                                            badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
+                                        } else if (current > 0) {
+                                            badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
+                                        }
+
+                                        return (
+                                            <span 
+                                                key={type} 
+                                                className={`text-[9px] sm:text-[10px] font-extrabold px-1.5 sm:px-2 py-0.5 rounded-md border transition-all duration-300 shrink-0 shadow-sm ${badgeColor}`}
+                                            >
+                                                {type}: {current}/{target}
+                                            </span>
+                                        );
+                                    })
+                                }
                             </div>
                         </div>
                         <button 
                             onClick={handlePublish} 
                             disabled={loading || cart.length === 0} 
-                            className={`px-4 sm:px-8 py-2.5 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 transition-all shadow-xl hover:-translate-y-0.5 ${cart.length > 0 && !loading ? 'bg-slate-800 hover:bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                            className={`px-2.5 sm:px-8 py-1.5 sm:py-3.5 rounded-xl font-black text-[10px] sm:text-sm flex items-center gap-1 sm:gap-2 transition-all shadow-xl hover:-translate-y-0.5 shrink-0 ${cart.length > 0 && !loading ? 'bg-slate-800 hover:bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
                         >
-                            {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} 
-                            Publish Paper
+                            {loading ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} 
+                            <span className="whitespace-nowrap font-black tracking-tight">
+                                <span className="hidden sm:inline">Publish Paper</span>
+                                <span className="inline sm:hidden">Publish</span>
+                            </span>
                         </button>
                     </div>
                 </div>
@@ -891,22 +1565,69 @@ const ManualExamBuilder = () => {
                                         <input type="text" value={examInfo.title} onChange={e => setExamInfo({...examInfo, title: e.target.value})} className={inputCls} placeholder="e.g. Weekly Manual Test" />
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Level</label><select value={levelId} onChange={e => setLevelId(e.target.value)} className={selectCls}><option value="">Select Level</option>{levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
-                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Stream</label><select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!levelId} className={selectCls}><option value="">Select Stream</option>{streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Class</label><select value={classId} onChange={e => setClassId(e.target.value)} disabled={!streamId} className={selectCls}><option value="">Select Class</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Subject</label><select value={subjectId} onChange={e => setSubjectId(e.target.value)} disabled={!classId} className={selectCls}><option value="">Select Subject</option>{subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}</select></div>
-                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Language</label><select value={examInfo.language} onChange={e => setExamInfo({...examInfo, language: e.target.value})} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className={selectCls + (!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual') ? ' opacity-50' : '')}>{(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}{(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}{(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}</select></div>
-                                        <div><label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Duration (Min)</label><input type="number" value={examInfo.durationMinutes} onChange={e => setExamInfo({...examInfo, durationMinutes: e.target.value})} className={inputCls} /></div>
+                                        {levels.length > 1 && (
+                                            <div>
+                                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Level</label>
+                                                <select value={levelId} onChange={e => setLevelId(e.target.value)} className={selectCls}>
+                                                    <option value="">Select Level</option>
+                                                    {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
+                                        {!(levelId && streams.length === 1) && (
+                                            <div>
+                                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Stream</label>
+                                                <select value={streamId} onChange={e => setStreamId(e.target.value)} disabled={!levelId} className={selectCls}>
+                                                    <option value="">Select Stream</option>
+                                                    {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
+                                        {!(streamId && classes.length === 1) && (
+                                            <div>
+                                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Class</label>
+                                                <select value={classId} onChange={e => setClassId(e.target.value)} disabled={!streamId} className={selectCls}>
+                                                    <option value="">Select Class</option>
+                                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
+                                        <div>
+                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Subject</label>
+                                            <select value={subjectId} onChange={e => setSubjectId(e.target.value)} disabled={!classId} className={selectCls}>
+                                                <option value="">Select Subject</option>
+                                                {subjects.map(s => <option key={s.classSubjectId} value={s.classSubjectId}>{s.subjectName}</option>)}
+                                            </select>
+                                        </div>
+                                        {availableLanguages.length > 1 && (
+                                            <div>
+                                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Language</label>
+                                                <select value={examInfo.language} onChange={e => setExamInfo({...examInfo, language: e.target.value})} disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')} className={selectCls + (!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual') ? ' opacity-50' : '')}>
+                                                    {availableLanguages.map(lang => <option key={lang} value={lang}>{lang}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
+                                        <div>
+                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Duration (Min)</label>
+                                            <input type="number" value={examInfo.durationMinutes} onChange={e => setExamInfo({...examInfo, durationMinutes: e.target.value})} className={inputCls} />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            {/* RIGHT: Blueprint Structure */}
-                            <div className="lg:col-span-4 space-y-6">
+                        {/* RIGHT: Blueprint Structure */}
+                        <div className="lg:col-span-4 space-y-6">
                                 <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col h-full relative overflow-hidden">
                                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-100 rounded-bl-full -mr-10 -mt-10 opacity-50 z-0"></div>
                                     <div className="relative z-10">
                                         <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2 mb-2"><Target className="text-emerald-500" /> Target Blueprint</h2>
+                                        {subjectId && (
+                                            <div className="text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-1.5 mb-4 inline-flex items-center gap-1.5 shadow-sm">
+                                                <BookOpen size={12} className="text-emerald-500" />
+                                                Subject: {subjects.find(s => s.classSubjectId == subjectId)?.subjectName}
+                                            </div>
+                                        )}
                                         <p className="text-sm text-slate-500 mb-6 font-medium">Define your target question counts for manual picking.</p>
 
                                         {loadingBlueprint ? (
@@ -942,25 +1663,42 @@ const ManualExamBuilder = () => {
                         </div>
                     </div>
                 </div>
-            </div>
 
             <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/90 border-t border-slate-200 p-3 sm:p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
                 <div className="max-w-[1600px] w-full mx-auto flex flex-row justify-between items-center gap-3">
-                    <div className="flex flex-col items-start">
+                    <div className="flex flex-col items-start gap-1 min-w-0 flex-1">
                         <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Blueprint Target</div>
-                        <div className="text-xs sm:text-sm font-black text-slate-700">
-                            {targetTotals.qs} Qs 
-                            <span className="text-slate-300 mx-1.5 sm:mx-2">•</span> 
-                            <span className="text-emerald-600">{targetTotals.marks} Marks</span>
+                        <div 
+                            className="flex flex-row items-center gap-1.5 overflow-x-auto w-full whitespace-nowrap"
+                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                        >
+                            {Object.entries(userStructure)
+                                .filter(([_, struct]) => (parseInt(struct.count) || 0) > 0)
+                                .map(([type, struct]) => (
+                                    <span 
+                                        key={type} 
+                                        className="text-[9px] sm:text-[10px] font-extrabold bg-slate-50 text-slate-600 border border-slate-200 px-1.5 sm:px-2 py-0.5 rounded-md shrink-0 shadow-sm"
+                                    >
+                                        {type}: {struct.count}
+                                    </span>
+                                ))
+                            }
                         </div>
                     </div>
                     <button 
                         onClick={handleCreateDraft}
                         disabled={loading || !subjectId || targetTotals.qs === 0}
-                        className="px-6 sm:px-10 py-2.5 sm:py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 transition-all shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
+                        className="px-2.5 sm:px-10 py-1.5 sm:py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-[10px] sm:text-sm flex items-center gap-1 sm:gap-2 transition-all shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 shrink-0"
                     >
-                        {loading ? <Loader2 className="animate-spin" size={16} /> : <span>Start Manual Selection</span>}
-                        {!loading && <ChevronRight size={16} />}
+                        {loading ? (
+                            <Loader2 className="animate-spin" size={12} />
+                        ) : (
+                            <span className="whitespace-nowrap font-black tracking-tight">
+                                <span className="hidden sm:inline">Start Manual Selection</span>
+                                <span className="inline sm:hidden">Start</span>
+                            </span>
+                        )}
+                        {!loading && <ChevronRight size={12} />}
                     </button>
                 </div>
             </div>

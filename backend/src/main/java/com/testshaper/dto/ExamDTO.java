@@ -66,8 +66,12 @@ public class ExamDTO {
         private String explanation;
         private String correctAnswer;
         private String dynamicData;
+        private String sourceReference;
         private UUID sectionId;
+        private UUID chapterId;
+        private UUID topicId;
         private List<OptionDTO> options;
+        private List<QuestionSourceDTO> sources;
     }
 
     @Data
@@ -75,5 +79,15 @@ public class ExamDTO {
         private UUID id;
         private String optionText;
         private boolean correct;
+    }
+
+    @Data
+    public static class QuestionSourceDTO {
+        private String sourceType;
+        private Integer examYear;
+        private String organizationName;
+        private String examName;
+        private String session;
+        private String note;
     }
 }

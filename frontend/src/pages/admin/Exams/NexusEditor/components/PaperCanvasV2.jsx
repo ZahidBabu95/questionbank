@@ -25,6 +25,29 @@ import { formatDurationString } from '../../../../../utils/formatUtils';
 const getDisplayQuestionText = (q) => {
     if (!q) return '';
     let text = q.questionText || '';
+    
+    if (q.stimulus) {
+        const cleanStim = q.stimulus.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
+        const isStimPlaceholder = cleanStim === '' || 
+                                  cleanStim.startsWith('generated question') || 
+                                  cleanStim.startsWith('dynamic question') || 
+                                  cleanStim.startsWith('ডায়নামিক প্রশ্ন') || 
+                                  cleanStim.startsWith('ডায়নামিক প্রশ্ন');
+        if (!isStimPlaceholder) {
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const stem = doc.querySelector('.cq-stem');
+                if (stem) {
+                    stem.remove();
+                    text = doc.body.innerHTML;
+                }
+            } catch (e) {
+                console.error("Failed to strip cq-stem in getDisplayQuestionText:", e);
+            }
+        }
+    }
+
     const cleanText = text.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
     const isPlaceholder = cleanText.startsWith('generated question') || 
                           cleanText.startsWith('dynamic question') || 
@@ -91,7 +114,6 @@ const StrictHeaderExtension = Extension.create({
             dom = document.createElement('div');
             dom.className = 'nexus-native-header-portal-container';
             dom.setAttribute('contenteditable', 'false');
-            dom.setAttribute('data-html2canvas-ignore', 'true');
             dom.style.width = '100%';
             dom.style.display = 'block';
             dom.style.userSelect = 'none';
@@ -393,10 +415,11 @@ const PaperCanvasV2 = React.memo(({
         };
     }, [editor, editorMode]);
 
-    const paddingTop = mmToPx(s.marginTop || 20);
-    const paddingBottom = mmToPx(s.marginBottom || 20);
-    const paddingLeft = mmToPx(s.marginLeft || 25);
-    const paddingRight = mmToPx(s.marginRight || 20);
+    const borderOffset = s.outerBorder ? (s.outerBorderWidth || 1) * 3 + 12 : 0;
+    const paddingTop = mmToPx(s.marginTop || 20) + borderOffset;
+    const paddingBottom = mmToPx(s.marginBottom || 20) + borderOffset;
+    const paddingLeft = mmToPx(s.marginLeft || 25) + borderOffset;
+    const paddingRight = mmToPx(s.marginRight || 20) + borderOffset;
 
     const containerRef = useRef(null);
     const pageCount = usePageCountObserver(containerRef, editor, totalH, paddingTop, paddingBottom, onPageCountChange);
@@ -458,6 +481,7 @@ const PaperCanvasV2 = React.memo(({
             <div 
                 ref={containerRef}
                 className={`paper-canvas-container relative origin-top-left print:block print:m-0 print:p-0 theme-${canvasTheme}`}
+                data-outer-border={s.outerBorder ? "true" : "false"}
                 style={{ 
                     transform: `scale(${zoom / 100})`, 
                     width: `${w}px`, 
@@ -468,12 +492,12 @@ const PaperCanvasV2 = React.memo(({
             {/* Background Pages Array */}
             <div className="absolute top-0 left-0 w-full h-full z-0 pointer-events-none flex flex-col" style={{ gap: `${gap}px` }}>
                 {Array.from({ length: pageCount }).map((_, i) => (
-                    <div key={i} className="w-full relative overflow-hidden transition-colors duration-300" style={{ 
+                    <div key={i} className="paper-page-background w-full relative overflow-hidden transition-colors duration-300" style={{ 
                         height: `${h}px`,
                         backgroundColor: canvasTheme === 'cream' ? '#fbf0d9' : canvasTheme === 'dark' ? '#1e293b' : '#ffffff',
-                        border: s.outerBorder ? `${s.outerBorderWidth}px solid ${canvasBorderColor}` : 'none',
+                        border: s.outerBorder ? `double ${s.outerBorderWidth + 2}px ${canvasBorderColor}` : 'none',
                         borderBottom: gap === 0 && i < pageCount - 1 ? (canvasTheme === 'dark' ? '1px dashed #475569' : '1px dashed #cbd5e1') : undefined,
-                        margin: s.outerBorder ? `${s.outerBorderWidth}px` : '0',
+                        boxSizing: 'border-box',
                         boxShadow: gap > 0 ? '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)' : (i === 0 ? '0 4px 6px -1px rgb(0 0 0 / 0.1)' : 'none')
                     }}>
                         {/* Watermark Overlay per page */}
@@ -482,6 +506,25 @@ const PaperCanvasV2 = React.memo(({
                                 <div className="transform -rotate-45 text-8xl font-black text-slate-800" style={{ fontFamily: s.enFont }}>
                                     {s.watermark === "কাস্টম" ? s.watermarkCustom : s.watermark === "Confidential" ? "CONFIDENTIAL" : s.institute}
                                 </div>
+                            </div>
+                        )}
+                        
+                        {/* Page Break / Page Number indicator inside editor */}
+                        {i < pageCount - 1 && (
+                            <div 
+                                data-html2canvas-ignore="true"
+                                className="absolute bottom-0 left-0 w-full flex items-center justify-between px-6 py-2 select-none pointer-events-none print:hidden z-20" 
+                                style={{
+                                    borderBottom: canvasTheme === 'dark' ? '2px dashed #475569' : '2px dashed #cbd5e1',
+                                    opacity: 0.85
+                                }}
+                            >
+                                <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-md shadow-sm border border-slate-100 dark:border-slate-700/50">
+                                    {uiLang === 'bn' ? 'পৃষ্ঠা বিভাজক' : 'Page Break'}
+                                </span>
+                                <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-md shadow-sm border border-slate-100 dark:border-slate-700/50">
+                                    {uiLang === 'bn' ? `পৃষ্ঠা ${convertDigits(i + 1, 'BANGLA')}` : `Page ${i + 1}`}
+                                </span>
                             </div>
                         )}
                     </div>

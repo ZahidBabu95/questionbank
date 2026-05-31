@@ -439,6 +439,41 @@ public class ManualExamServiceImpl {
         dto.setLanguage(q.getLanguage());
         dto.setMarks(q.getMarks());
         dto.setDynamicData(q.getDynamicData());
+        dto.setCorrectAnswer(q.getCorrectAnswer());
+        dto.setExplanation(q.getExplanation());
+        // If there are board/school sources, map them beautifully, otherwise fallback to sourceReference (chunk)
+        if (q.getSources() != null && !q.getSources().isEmpty()) {
+            // Join all board names beautifully
+            String joinedSources = q.getSources().stream()
+                .map(src -> {
+                    String org = src.getOrganizationName() != null ? src.getOrganizationName().trim() : "";
+                    String year = src.getExamYear() != null ? src.getExamYear().toString() : "";
+                    if (!org.isEmpty() && !year.isEmpty()) {
+                        return org + " " + year;
+                    } else if (!org.isEmpty()) {
+                        return org;
+                    } else {
+                        return year;
+                    }
+                })
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.joining(", "));
+            
+            if (!joinedSources.isEmpty()) {
+                dto.setSourceReference(joinedSources);
+            } else {
+                mapFallbackSourceReference(dto, q);
+            }
+        } else {
+            mapFallbackSourceReference(dto, q);
+        }
+
+        if (q.getChapter() != null) {
+            dto.setChapterId(q.getChapter().getId());
+        }
+        if (q.getTopic() != null) {
+            dto.setTopicId(q.getTopic().getId());
+        }
         if (q.getOptions() != null) {
             dto.setOptions(q.getOptions().stream().map(opt -> {
                 ExamDTO.OptionDTO odto = new ExamDTO.OptionDTO();
@@ -448,6 +483,34 @@ public class ManualExamServiceImpl {
                 return odto;
             }).collect(Collectors.toList()));
         }
+        if (q.getSources() != null) {
+            dto.setSources(q.getSources().stream().map(src -> {
+                ExamDTO.QuestionSourceDTO sdto = new ExamDTO.QuestionSourceDTO();
+                sdto.setSourceType(src.getSourceType() != null ? src.getSourceType().name() : null);
+                sdto.setExamYear(src.getExamYear());
+                sdto.setOrganizationName(src.getOrganizationName());
+                sdto.setExamName(src.getExamName());
+                sdto.setSession(src.getSession());
+                sdto.setNote(src.getNote());
+                return sdto;
+            }).collect(Collectors.toList()));
+        }
         return dto;
+    }
+
+    private void mapFallbackSourceReference(ExamDTO.ExamQuestionDTO dto, Question q) {
+        String rawRef = q.getSourceReference();
+        if (rawRef != null) {
+            String clean = rawRef.trim().toLowerCase();
+            // Check if it is a raw UUID or starts with chunk_ and a UUID
+            if (clean.matches("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$") || 
+                clean.startsWith("chunk_") || 
+                clean.contains("chunk_") ||
+                clean.matches(".*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}.*")) {
+                dto.setSourceReference("Textbook Content");
+            } else {
+                dto.setSourceReference(rawRef);
+            }
+        }
     }
 }

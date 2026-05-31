@@ -394,7 +394,7 @@ const Signup = () => {
                                 </div>
                                 <div className="ml-3 text-xs">
                                     <label htmlFor="terms" className="font-medium text-slate-600">
-                                        I agree to the <a href="#" className="font-bold text-primary hover:text-blue-700">Terms of Service</a> and <a href="#" className="font-bold text-primary hover:text-blue-700">Privacy Policy</a>
+                                        I agree to the <Link to="/terms" target="_blank" className="font-bold text-primary hover:text-blue-700">Terms of Service</Link> and <Link to="/privacy" target="_blank" className="font-bold text-primary hover:text-blue-700">Privacy Policy</Link>
                                     </label>
                                 </div>
                             </div>

@@ -69,16 +69,18 @@ echo  [2] Stop Application (Safe Port Kill)
 echo  [3] Build Production WAR
 echo  [4] View Frontend
 echo  [5] Start Mobile App (Expo)
-echo  [6] Exit
+echo  [6] Build Production Mobile APK
+echo  [7] Exit
 echo.
-set /p choice="Select an option [1-6]: "
+set /p choice="Select an option [1-7]: "
 
 if "%choice%"=="1" goto start_app
 if "%choice%"=="2" goto stop_app
 if "%choice%"=="3" goto build_app
 if "%choice%"=="4" goto view_app
 if "%choice%"=="5" goto start_mobile
-if "%choice%"=="6" goto end
+if "%choice%"=="6" goto build_mobile
+if "%choice%"=="7" goto end
 
 echo Invalid choice.
 pause
@@ -164,6 +166,71 @@ echo.
 echo [INFO] Starting Mobile App (Expo) on port 8081...
 start "QuestionShaper Mobile" cmd /k "set "PATH=!PATH!" && cd mobile && npx expo start -c"
 echo [SUCCESS] Expo dev server launched.
+pause
+goto menu
+
+:build_mobile
+echo.
+echo [WARNING] Please DO NOT save or edit files while building!
+echo [INFO] Building Production Android APK...
+echo [INFO] Setting Android Sdk Environment...
+set "ANDROID_HOME=C:\Users\zahid\AppData\Local\Android\Sdk"
+set "PATH=!ANDROID_HOME!\platform-tools;!ANDROID_HOME!\emulator;!PATH!"
+
+echo [INFO] Cleaning up old native folder to enforce clean verified package build...
+if exist "mobile\android" (
+    rmdir /s /q "mobile\android"
+    echo [SUCCESS] Stale native folders cleaned.
+)
+
+cd mobile
+echo [INFO] Running Expo Prebuild...
+call npx expo prebuild --platform android
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [ERROR] Expo Prebuild Failed! Please check the output above.
+    cd ..
+    pause
+    goto menu
+)
+
+echo [INFO] Patching gradle build files for ultimate device compatibility...
+cd ..
+call python patch_gradle.py
+cd mobile
+
+cd android
+echo [INFO] Compiling native Release APK with Gradle...
+call .\gradlew.bat assembleRelease
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [ERROR] Gradle Compilation Failed! Please check the output above.
+    cd ..\..
+    pause
+    goto menu
+)
+cd ..\..
+
+if not exist "production" mkdir "production"
+set "BUILD_VER=unknown"
+if exist "production\latest_build.txt" (
+    set /p BUILD_VER=<production\latest_build.txt
+)
+echo [INFO] Copying fresh APK to production and uploads folders...
+if not exist "uploads" mkdir "uploads"
+copy /Y "mobile\android\app\build\outputs\apk\release\app-release.apk" "production\QuestionShaper.apk" >nul
+copy /Y "mobile\android\app\build\outputs\apk\release\app-release.apk" "uploads\QuestionShaper.apk" >nul
+
+if not "%BUILD_VER%"=="unknown" (
+    copy /Y "mobile\android\app\build\outputs\apk\release\app-release.apk" "production\QuestionShaper_%BUILD_VER%.apk" >nul
+    echo [SUCCESS] Versioned APK archived at: production\QuestionShaper_%BUILD_VER%.apk
+    echo [INFO] Release notes generated at: production\ReleaseNotes_%BUILD_VER%.txt
+) else (
+    echo [INFO] Release APK file is ready at: production\QuestionShaper.apk
+)
+
+echo.
+echo [SUCCESS] Mobile APK Built and Archived Successfully!
 pause
 goto menu
 
