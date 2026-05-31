@@ -2,7 +2,7 @@
   "expo": {
     "name": "AI.QB",
     "slug": "mobile",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -17,7 +17,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.aiqb.app"
+      "package": "com.aiqb.app",
+      "versionCode": 4
     },
     "web": {
       "favicon": "./assets/favicon.png"
