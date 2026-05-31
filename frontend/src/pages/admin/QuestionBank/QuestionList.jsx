@@ -401,15 +401,19 @@ const QuestionList = () => {
     }, [selectedSubjectId, showAllOverride, viewMode]);
 
     useEffect(() => {
-        const handleScroll = () => {
-            if (window.scrollY > 30) {
+        const handleScroll = (e) => {
+            const scrollTop = e.target.scrollTop || 
+                              (e.target.documentElement && e.target.documentElement.scrollTop) || 
+                              window.scrollY || 
+                              0;
+            if (scrollTop > 30) {
                 setIsScrolled(true);
             } else {
                 setIsScrolled(false);
             }
         };
-        window.addEventListener('scroll', handleScroll, { passive: true });
-        return () => window.removeEventListener('scroll', handleScroll);
+        document.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+        return () => document.removeEventListener('scroll', handleScroll, { capture: true });
     }, []);
 
     // Run fetchInitialFilters once on mount
