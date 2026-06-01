@@ -213,11 +213,16 @@ const CurriculumRules = () => {
             // 2. Fetch Saved JSON Rule (graceful — if API fails, use default schema)
             try {
                 const { data: kbData } = await axios.get('/v1/support/knowledge');
-                const targetTag = `RULE_FOR_${ruleTarget.subjectName.replace(/\s/g, '')}`;
-                const existingRule = kbData.find(kb => kb.tags && kb.tags.includes(targetTag));
+                const clsStringClean = (ruleTarget.className || 'Any Class').replace(/\s/g, '');
+                const targetTag = `RULE_FOR_${ruleTarget.subjectName.replace(/\s/g, '')}_${clsStringClean}`;
+                const classlessTag = `RULE_FOR_${ruleTarget.subjectName.replace(/\s/g, '')}`;
+                
+                const existingRule = kbData.find(kb => kb.tags && kb.tags.includes(targetTag))
+                                  || kbData.find(kb => kb.tags && kb.tags.includes(classlessTag));
                 
                 if (existingRule) {
-                    setJsonRuleId(existingRule.id);
+                    const hasClassSpecificTag = existingRule.tags && existingRule.tags.includes(targetTag);
+                    setJsonRuleId(hasClassSpecificTag ? existingRule.id : null);
                     setJsonSchema(existingRule.content);
                 } else {
                     setJsonRuleId(null);
@@ -240,10 +245,11 @@ const CurriculumRules = () => {
         setIsSaving(true);
         try {
             const clsString = ruleTarget.className || 'Any Class';
+            const clsStringClean = clsString.replace(/\s/g, '');
             const subString = ruleTarget.subjectName;
             
-            // Map each selected subject to its own RULE_FOR_ tag
-            const subjectTags = subString.split(',').map(s => `RULE_FOR_${s.trim().replace(/\s/g, '')}`).join(', ');
+            // Map each selected subject to its own RULE_FOR_ tag with class name
+            const subjectTags = subString.split(',').map(s => `RULE_FOR_${s.trim().replace(/\s/g, '')}_${clsStringClean}`).join(', ');
 
             const fullTitle = `Scraping Rule for ${subString} (${clsString})`;
             const payload = {

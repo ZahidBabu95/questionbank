@@ -434,8 +434,38 @@ public class AIQuestionServiceImpl implements AIQuestionService {
         try {
             String subject = knownContext != null ? knownContext.getOrDefault("subject", "") : "";
             if (!subject.isBlank()) {
-                String subjectTag = "RULE_FOR_" + subject.replaceAll("\\s", "");
-                List<AiKnowledgeBase> rules = knowledgeBaseRepository.findActiveCurriculumRules(subjectTag);
+                String className = knownContext.getOrDefault("className", "");
+                String classSpecificTag = "RULE_FOR_" + subject.replaceAll("\\s", "") + (!className.isBlank() ? "_" + className.replaceAll("\\s", "") : "");
+                List<AiKnowledgeBase> rules = knowledgeBaseRepository.findActiveCurriculumRules(classSpecificTag);
+                
+                if (rules.isEmpty() && !className.isBlank()) {
+                    // Fallback to classless rule tag
+                    String classlessTag = "RULE_FOR_" + subject.replaceAll("\\s", "");
+                    List<AiKnowledgeBase> classlessRules = knowledgeBaseRepository.findActiveCurriculumRules(classlessTag);
+                    
+                    // Filter exact classless matches
+                    for (AiKnowledgeBase r : classlessRules) {
+                        if (r.getTags() != null) {
+                            String[] tags = r.getTags().split(",");
+                            boolean hasExactClassless = false;
+                            for (String t : tags) {
+                                if (t.trim().equals(classlessTag)) {
+                                    hasExactClassless = true;
+                                    break;
+                                }
+                            }
+                            if (hasExactClassless) {
+                                rules = List.of(r);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (rules.isEmpty() && !classlessRules.isEmpty()) {
+                        rules = List.of(classlessRules.get(0));
+                    }
+                }
+                
                 if (!rules.isEmpty()) {
                     AiKnowledgeBase rule = rules.get(0);
                     curriculumRuleSection.append("\n═══════ CURRICULUM PARSING RULE (set by admin) ═══════\n");
@@ -443,7 +473,7 @@ public class AIQuestionServiceImpl implements AIQuestionService {
                     curriculumRuleSection.append("Use this as the EXPECTED PATTERN when extracting questions. Follow the question types, marks, and structure closely.\n");
                     curriculumRuleSection.append("RULE CONTENT:\n").append(rule.getContent()).append("\n");
                     curriculumRuleSection.append("════════════════════════════════════════════════════\n");
-                    log.info("✅ Curriculum Rule '{}' injected into prompt for subject: {}", rule.getTitle(), subject);
+                    log.info("✅ Curriculum Rule '{}' injected into prompt for subject: {} (class: {})", rule.getTitle(), subject, className);
                 }
             }
         } catch (Exception e) {

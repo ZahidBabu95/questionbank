@@ -606,8 +606,39 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 }
                 
                 String subjectName = cs.getSubject() != null ? cs.getSubject().getName() : "";
+                String className = (cs.getAcademicClass() != null) ? cs.getAcademicClass().getName() : "";
                 if (!subjectName.isEmpty()) {
-                    List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(subjectName);
+                    String classSpecificTag = "RULE_FOR_" + subjectName.replaceAll("\\s+", "") + (!className.isEmpty() ? "_" + className.replaceAll("\\s+", "") : "");
+                    List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(classSpecificTag);
+                    
+                    if (rules.isEmpty() && !className.isEmpty()) {
+                        // Fallback to classless rule tag
+                        String classlessTag = "RULE_FOR_" + subjectName.replaceAll("\\s+", "");
+                        List<AiKnowledgeBase> classlessRules = aiKnowledgeBaseRepository.findActiveCurriculumRules(classlessTag);
+                        
+                        // Filter exact classless matches
+                        for (AiKnowledgeBase r : classlessRules) {
+                            if (r.getTags() != null) {
+                                String[] tags = r.getTags().split(",");
+                                boolean hasExactClassless = false;
+                                for (String t : tags) {
+                                    if (t.trim().equals(classlessTag)) {
+                                        hasExactClassless = true;
+                                        break;
+                                    }
+                                }
+                                if (hasExactClassless) {
+                                    rules = List.of(r);
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (rules.isEmpty() && !classlessRules.isEmpty()) {
+                            rules = List.of(classlessRules.get(0));
+                        }
+                    }
+                    
                     if (!rules.isEmpty()) {
                         metadata.put("curriculumRules", rules.get(0).getContent());
                     }
@@ -653,7 +684,37 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                     }
                     if (cs.getSubject() != null && cs.getSubject().getName() != null) {
                         metadata.put("subjectName", cs.getSubject().getName());
-                        List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(cs.getSubject().getName());
+                        String subjectName = cs.getSubject().getName();
+                        String className = (cs.getAcademicClass() != null) ? cs.getAcademicClass().getName() : "";
+                        String classSpecificTag = "RULE_FOR_" + subjectName.replaceAll("\\s+", "") + (!className.isEmpty() ? "_" + className.replaceAll("\\s+", "") : "");
+                        List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(classSpecificTag);
+                        
+                        if (rules.isEmpty() && !className.isEmpty()) {
+                            String classlessTag = "RULE_FOR_" + subjectName.replaceAll("\\s+", "");
+                            List<AiKnowledgeBase> classlessRules = aiKnowledgeBaseRepository.findActiveCurriculumRules(classlessTag);
+                            
+                            for (AiKnowledgeBase r : classlessRules) {
+                                if (r.getTags() != null) {
+                                    String[] tags = r.getTags().split(",");
+                                    boolean hasExactClassless = false;
+                                    for (String t : tags) {
+                                        if (t.trim().equals(classlessTag)) {
+                                            hasExactClassless = true;
+                                            break;
+                                        }
+                                    }
+                                    if (hasExactClassless) {
+                                        rules = List.of(r);
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (rules.isEmpty() && !classlessRules.isEmpty()) {
+                                rules = List.of(classlessRules.get(0));
+                            }
+                        }
+                        
                         if (!rules.isEmpty()) {
                             metadata.put("curriculumRules", rules.get(0).getContent());
                         }
@@ -708,7 +769,37 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                     }
                     if (cs.getSubject() != null && cs.getSubject().getName() != null) {
                         metadata.put("subjectName", cs.getSubject().getName());
-                        List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(cs.getSubject().getName());
+                        String subjectName = cs.getSubject().getName();
+                        String className = (cs.getAcademicClass() != null) ? cs.getAcademicClass().getName() : "";
+                        String classSpecificTag = "RULE_FOR_" + subjectName.replaceAll("\\s+", "") + (!className.isEmpty() ? "_" + className.replaceAll("\\s+", "") : "");
+                        List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(classSpecificTag);
+                        
+                        if (rules.isEmpty() && !className.isEmpty()) {
+                            String classlessTag = "RULE_FOR_" + subjectName.replaceAll("\\s+", "");
+                            List<AiKnowledgeBase> classlessRules = aiKnowledgeBaseRepository.findActiveCurriculumRules(classlessTag);
+                            
+                            for (AiKnowledgeBase r : classlessRules) {
+                                if (r.getTags() != null) {
+                                    String[] tags = r.getTags().split(",");
+                                    boolean hasExactClassless = false;
+                                    for (String t : tags) {
+                                        if (t.trim().equals(classlessTag)) {
+                                            hasExactClassless = true;
+                                            break;
+                                        }
+                                    }
+                                    if (hasExactClassless) {
+                                        rules = List.of(r);
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (rules.isEmpty() && !classlessRules.isEmpty()) {
+                                rules = List.of(classlessRules.get(0));
+                            }
+                        }
+                        
                         if (!rules.isEmpty()) {
                             metadata.put("curriculumRules", rules.get(0).getContent());
                         }
@@ -761,7 +852,37 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                     }
                     if (cs.getSubject() != null && cs.getSubject().getName() != null) {
                         metadata.put("subjectName", cs.getSubject().getName());
-                        List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(cs.getSubject().getName());
+                        String subjectName = cs.getSubject().getName();
+                        String className = (cs.getAcademicClass() != null) ? cs.getAcademicClass().getName() : "";
+                        String classSpecificTag = "RULE_FOR_" + subjectName.replaceAll("\\s+", "") + (!className.isEmpty() ? "_" + className.replaceAll("\\s+", "") : "");
+                        List<AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(classSpecificTag);
+                        
+                        if (rules.isEmpty() && !className.isEmpty()) {
+                            String classlessTag = "RULE_FOR_" + subjectName.replaceAll("\\s+", "");
+                            List<AiKnowledgeBase> classlessRules = aiKnowledgeBaseRepository.findActiveCurriculumRules(classlessTag);
+                            
+                            for (AiKnowledgeBase r : classlessRules) {
+                                if (r.getTags() != null) {
+                                    String[] tags = r.getTags().split(",");
+                                    boolean hasExactClassless = false;
+                                    for (String t : tags) {
+                                        if (t.trim().equals(classlessTag)) {
+                                            hasExactClassless = true;
+                                            break;
+                                        }
+                                    }
+                                    if (hasExactClassless) {
+                                        rules = List.of(r);
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if (rules.isEmpty() && !classlessRules.isEmpty()) {
+                                rules = List.of(classlessRules.get(0));
+                            }
+                        }
+                        
                         if (!rules.isEmpty()) {
                             metadata.put("curriculumRules", rules.get(0).getContent());
                         }

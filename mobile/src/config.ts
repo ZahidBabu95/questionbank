@@ -1,10 +1,10 @@
 export const APP_CONFIG = {
-  VERSION_CODE: 3, // Incrementing to code 3 for the new v1.0.3 release
-  VERSION_NAME: '1.0.3',
+  VERSION_CODE: 5,
+  VERSION_NAME: '1.0.4',
   CHANGELOG: [
-    '• Resolved academic filters modal hijacking issue in Question Bank using selection state guards',
-    '• Implemented premium dynamic scroll-aware Back navigation FAB transitioning smoothly on scroll',
-    '• Added auto-resizing textareas and rich editor containers in RevisePanel drawer',
-    '• Cleaned mobile backdrop layout and added responsive rose-colored filter close controls'
+    '• Integrated premium In-App APK Downloader & Installer for seamless updates',
+    '• Added dynamic frosted glass progress overlay modal with real-time percentage indicators',
+    '• Implemented secure sandboxed cache downloading to prevent local file manager clutter',
+    '• Preserved original file names with unique hash suffixes for all Cloudflare R2 downloads'
   ]
 };

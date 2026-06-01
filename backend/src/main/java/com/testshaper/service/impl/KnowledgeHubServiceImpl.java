@@ -1809,8 +1809,40 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         
         if (!schemaFound && classSubject != null && classSubject.getSubject() != null) {
             String subjectName = classSubject.getSubject().getName();
-            String tagToSearch = "RULE_FOR_" + subjectName.replaceAll("\\s+", "");
-            java.util.List<com.testshaper.entity.AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(tagToSearch);
+            String className = (classSubject.getAcademicClass() != null) ? classSubject.getAcademicClass().getName() : "";
+            
+            String classSpecificTag = "RULE_FOR_" + subjectName.replaceAll("\\s+", "") + (!className.isBlank() ? "_" + className.replaceAll("\\s+", "") : "");
+            java.util.List<com.testshaper.entity.AiKnowledgeBase> rules = aiKnowledgeBaseRepository.findActiveCurriculumRules(classSpecificTag);
+            
+            if (rules.isEmpty() && !className.isBlank()) {
+                // Fallback to classless rule tag
+                String classlessTag = "RULE_FOR_" + subjectName.replaceAll("\\s+", "");
+                java.util.List<com.testshaper.entity.AiKnowledgeBase> classlessRules = aiKnowledgeBaseRepository.findActiveCurriculumRules(classlessTag);
+                
+                // Filter to find the one that has an exact classless tag to prevent accidental cross-class leak
+                for (com.testshaper.entity.AiKnowledgeBase r : classlessRules) {
+                    if (r.getTags() != null) {
+                        String[] tags = r.getTags().split(",");
+                        boolean hasExactClassless = false;
+                        for (String t : tags) {
+                            if (t.trim().equals(classlessTag)) {
+                                hasExactClassless = true;
+                                break;
+                            }
+                        }
+                        if (hasExactClassless) {
+                            rules = java.util.List.of(r);
+                            break;
+                        }
+                    }
+                }
+                
+                // Ultimate fallback if exact filtering didn't yield result but we have classless rules
+                if (rules.isEmpty() && !classlessRules.isEmpty()) {
+                    rules = java.util.List.of(classlessRules.get(0));
+                }
+            }
+            
             if (!rules.isEmpty()) {
                 ruleSchema = rules.get(0).getContent(); 
             }

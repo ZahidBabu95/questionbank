@@ -461,9 +461,22 @@ const ManualExamBuilder = () => {
     // Builder States
     const [chapters, setChapters] = useState([]);
     const [topics, setTopics] = useState([]);
+    const [availability, setAvailability] = useState({ chapters: {}, topics: {} });
     const [filters, setFilters] = useState({
         chapterId: '', topicId: '', type: '', difficulty: '', bloomLevel: '', keyword: '', board: '', year: '', school: ''
     });
+
+    const getTopicQuestionCount = React.useCallback((topId) => {
+        if (!availability?.topics || !availability.topics[topId]) return 0;
+        let total = 0;
+        const types = availability.topics[topId];
+        Object.values(types).forEach(diffs => {
+            Object.values(diffs).forEach(count => {
+                total += count;
+            });
+        });
+        return total;
+    }, [availability]);
 
     const [searchResults, setSearchResults] = useState([]);
     const [searching, setSearching] = useState(false);
@@ -496,80 +509,132 @@ const ManualExamBuilder = () => {
         hasMoreRemoteRef.current = hasMoreRemote;
     }, [hasMoreRemote]);
 
+    const getFilteredPool = React.useCallback((excludeKey = null) => {
+        const pool = (questionsCache && questionsCache.length > 0) ? questionsCache : searchResults;
+        if (!pool || pool.length === 0) return [];
+        
+        return pool.filter(q => {
+            if (excludeKey !== 'chapterId' && filters.chapterId) {
+                if (q.chapter?.id !== filters.chapterId && q.chapterId !== filters.chapterId) return false;
+            }
+            if (excludeKey !== 'topicId' && filters.topicId) {
+                if (q.topic?.id !== filters.topicId && q.topicId !== filters.topicId) return false;
+            }
+            if (excludeKey !== 'type' && filters.type) {
+                if (q.type !== filters.type) return false;
+            }
+            if (excludeKey !== 'difficulty' && filters.difficulty) {
+                if (q.difficulty !== filters.difficulty) return false;
+            }
+            if (excludeKey !== 'bloomLevel' && filters.bloomLevel) {
+                const normFilter = filters.bloomLevel.toUpperCase();
+                const normQ = q.bloomLevel?.toUpperCase() || '';
+                let bloomMatch = false;
+                if (normFilter === 'KNOWLEDGE') {
+                    bloomMatch = normQ === 'KNOWLEDGE' || normQ === 'REMEMBERING' || normQ.includes('জ্ঞান');
+                } else if (normFilter === 'COMPREHENSION') {
+                    bloomMatch = normQ === 'COMPREHENSION' || normQ === 'UNDERSTANDING' || normQ.includes('অনুধাবন');
+                } else if (normFilter === 'APPLICATION') {
+                    bloomMatch = normQ === 'APPLICATION' || normQ === 'APPLYING' || normQ.includes('প্রয়োগ');
+                } else if (normFilter === 'HIGHER_ORDER') {
+                    bloomMatch = normQ === 'HIGHER_ORDER' || normQ === 'ANALYZING' || normQ === 'EVALUATING' || normQ === 'CREATING' || normQ.includes('উচ্চতর');
+                } else {
+                    bloomMatch = normQ === normFilter;
+                }
+                if (!bloomMatch) return false;
+            }
+            if (excludeKey !== 'board' && filters.board) {
+                const hasBoard = q.sources?.some(src => src.organizationName === filters.board) || q.sourceReference === filters.board;
+                if (!hasBoard) return false;
+            }
+            if (excludeKey !== 'year' && filters.year) {
+                const hasYear = q.sources?.some(src => src.examYear?.toString() === filters.year);
+                if (!hasYear) return false;
+            }
+            if (excludeKey !== 'school' && filters.school) {
+                const hasSchool = q.sources?.some(src => src.organizationName === filters.school);
+                if (!hasSchool) return false;
+            }
+            return true;
+        });
+    }, [questionsCache, searchResults, filters]);
+
     // Dynamic Filter Options based on available questions in cache or searchResults
     const dynamicOptions = React.useMemo(() => {
-        const sourceList = (questionsCache && questionsCache.length > 0) ? questionsCache : searchResults;
-        if (!sourceList || sourceList.length === 0) {
-            return {
-                types: ['MCQ', 'CQ', 'SHORT'],
-                difficulties: ['EASY', 'MEDIUM', 'HARD'],
-                blooms: ['KNOWLEDGE', 'COMPREHENSION', 'APPLICATION', 'HIGHER_ORDER'],
-                boards: [],
-                years: [],
-                schools: []
-            };
-        }
-        
-        const types = [...new Set(sourceList.map(q => q.type))].filter(Boolean);
-        const diffs = [...new Set(sourceList.map(q => q.difficulty))].filter(Boolean);
-        
-        // Extract rich sources dynamically!
-        const extractedBoards = new Set();
-        const extractedYears = new Set();
-        const extractedSchools = new Set();
+        const extractUniqueFields = (pool) => {
+            const extractedBoards = new Set();
+            const extractedYears = new Set();
+            const extractedSchools = new Set();
+            const types = new Set();
+            const difficulties = new Set();
+            const blooms = new Set();
 
-        sourceList.forEach(q => {
-            if (q.sources && q.sources.length > 0) {
-                q.sources.forEach(src => {
-                    const type = src.sourceType;
-                    const org = src.organizationName;
-                    const year = src.examYear;
-                    
-                    if (year) {
-                        extractedYears.add(year.toString());
-                    }
-                    if (org) {
-                        if (type === 'BOARD_EXAM' || type === 'UNIVERSITY_ADMISSION') {
-                            extractedBoards.add(org);
-                        } else if (type === 'INSTITUTION_TEST') {
-                            extractedSchools.add(org);
-                        }
-                    }
-                });
-            } else if (q.sourceReference) {
-                const sRef = q.sourceReference;
-                if (sRef !== 'Textbook Content' && !sRef.toLowerCase().includes('chunk')) {
-                    extractedBoards.add(sRef);
+            const bloomMapping = {
+                'KNOWLEDGE': 'KNOWLEDGE', 'REMEMBERING': 'KNOWLEDGE', 'KNOW': 'KNOWLEDGE', 'জ্ঞান': 'KNOWLEDGE',
+                'COMPREHENSION': 'COMPREHENSION', 'UNDERSTANDING': 'COMPREHENSION', 'COMP': 'COMPREHENSION', 'অনুধাবন': 'COMPREHENSION',
+                'APPLICATION': 'APPLICATION', 'APPLYING': 'APPLICATION', 'APPL': 'APPLICATION', 'প্রয়োগ': 'APPLICATION',
+                'HIGHER_ORDER': 'HIGHER_ORDER', 'ANALYZING': 'HIGHER_ORDER', 'EVALUATING': 'HIGHER_ORDER', 'CREATING': 'HIGHER_ORDER', 'HIGH': 'HIGHER_ORDER', 'উচ্চতর': 'HIGHER_ORDER'
+            };
+
+            pool.forEach(q => {
+                if (q.type) types.add(q.type);
+                if (q.difficulty) difficulties.add(q.difficulty);
+                if (q.bloomLevel) {
+                    const norm = bloomMapping[q.bloomLevel.toUpperCase()] || q.bloomLevel.toUpperCase();
+                    blooms.add(norm);
                 }
-            }
-        });
-        
-        const rawBlooms = [...new Set(sourceList.map(q => q.bloomLevel))].filter(Boolean);
-        const normalizedBlooms = [];
-        
-        const bloomMapping = {
-            'KNOWLEDGE': 'KNOWLEDGE', 'REMEMBERING': 'KNOWLEDGE', 'KNOW': 'KNOWLEDGE', 'জ্ঞান': 'KNOWLEDGE',
-            'COMPREHENSION': 'COMPREHENSION', 'UNDERSTANDING': 'COMPREHENSION', 'COMP': 'COMPREHENSION', 'অনুধাবন': 'COMPREHENSION',
-            'APPLICATION': 'APPLICATION', 'APPLYING': 'APPLICATION', 'APPL': 'APPLICATION', 'প্রয়োগ': 'APPLICATION',
-            'HIGHER_ORDER': 'HIGHER_ORDER', 'ANALYZING': 'HIGHER_ORDER', 'EVALUATING': 'HIGHER_ORDER', 'CREATING': 'HIGHER_ORDER', 'HIGH': 'HIGHER_ORDER', 'উচ্চতর': 'HIGHER_ORDER'
+
+                if (q.sources && q.sources.length > 0) {
+                    q.sources.forEach(src => {
+                        const type = src.sourceType;
+                        const org = src.organizationName;
+                        const year = src.examYear;
+                        
+                        if (year) {
+                            extractedYears.add(year.toString());
+                        }
+                        if (org) {
+                            if (type === 'BOARD_EXAM' || type === 'UNIVERSITY_ADMISSION') {
+                                extractedBoards.add(org);
+                            } else if (type === 'INSTITUTION_TEST') {
+                                extractedSchools.add(org);
+                            }
+                        }
+                    });
+                } else if (q.sourceReference) {
+                    const sRef = q.sourceReference;
+                    if (sRef !== 'Textbook Content' && !sRef.toLowerCase().includes('chunk')) {
+                        extractedBoards.add(sRef);
+                    }
+                }
+            });
+
+            return {
+                types: Array.from(types),
+                difficulties: Array.from(difficulties),
+                blooms: Array.from(blooms),
+                boards: Array.from(extractedBoards).sort(),
+                years: Array.from(extractedYears).sort((a, b) => b.localeCompare(a)),
+                schools: Array.from(extractedSchools).sort()
+            };
         };
-        
-        rawBlooms.forEach(b => {
-            const normalized = bloomMapping[b.toUpperCase()] || b.toUpperCase();
-            if (!normalizedBlooms.includes(normalized)) {
-                normalizedBlooms.push(normalized);
-            }
-        });
-        
+
+        const boardPool = getFilteredPool('board');
+        const yearPool = getFilteredPool('year');
+        const schoolPool = getFilteredPool('school');
+        const typePool = getFilteredPool('type');
+        const difficultyPool = getFilteredPool('difficulty');
+        const bloomPool = getFilteredPool('bloomLevel');
+
         return {
-            types,
-            difficulties: diffs,
-            blooms: normalizedBlooms.length > 0 ? normalizedBlooms : ['KNOWLEDGE', 'COMPREHENSION', 'APPLICATION', 'HIGHER_ORDER'],
-            boards: Array.from(extractedBoards).sort(),
-            years: Array.from(extractedYears).sort((a, b) => b.localeCompare(a)), // Sort years descending
-            schools: Array.from(extractedSchools).sort()
+            boards: extractUniqueFields(boardPool).boards,
+            years: extractUniqueFields(yearPool).years,
+            schools: extractUniqueFields(schoolPool).schools,
+            types: typePool.length > 0 ? extractUniqueFields(typePool).types : ['MCQ', 'CQ', 'SHORT'],
+            difficulties: difficultyPool.length > 0 ? extractUniqueFields(difficultyPool).difficulties : ['EASY', 'MEDIUM', 'HARD'],
+            blooms: bloomPool.length > 0 ? extractUniqueFields(bloomPool).blooms : ['KNOWLEDGE', 'COMPREHENSION', 'APPLICATION', 'HIGHER_ORDER']
         };
-    }, [questionsCache, searchResults]); 
+    }, [getFilteredPool]); 
 
     const currentMarks = cart.reduce((sum, q) => sum + (q.marks || 0), 0);
 
@@ -677,6 +742,21 @@ const ManualExamBuilder = () => {
             setTopics([]);
         }
     }, [filters.chapterId]);
+
+    useEffect(() => {
+        if (subjectId) {
+            questionService.getQuestionAvailability(subjectId, examInfo.language)
+                .then(data => {
+                    setAvailability(data || { chapters: {}, topics: {} });
+                })
+                .catch(err => {
+                    console.error("Failed to load availability", err);
+                    setAvailability({ chapters: {}, topics: {} });
+                });
+        } else {
+            setAvailability({ chapters: {}, topics: {} });
+        }
+    }, [subjectId, examInfo.language]);
 
     const handleCreateDraft = async () => {
         if (!examInfo.title || !subjectId) return alert("Please enter exam name and select subject.");
@@ -1229,7 +1309,14 @@ const ManualExamBuilder = () => {
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Topic</label>
                                     <select value={filters.topicId} onChange={(e) => setFilters({ ...filters, topicId: e.target.value })} className={selectCls}>
                                         <option value="">All Topics</option>
-                                        {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                        {topics.map(t => {
+                                            const count = getTopicQuestionCount(t.id);
+                                            return (
+                                                <option key={t.id} value={t.id}>
+                                                    {t.name} ({count})
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 </div>
                                 <div>

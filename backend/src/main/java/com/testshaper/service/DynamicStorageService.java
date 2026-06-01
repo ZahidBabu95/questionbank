@@ -91,11 +91,18 @@ public class DynamicStorageService {
                 .build();
 
         String originalFileName = file.getOriginalFilename();
+        String cleanOriginalName = "file";
+        if (originalFileName != null) {
+            cleanOriginalName = originalFileName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        }
         String extension = "";
         if (originalFileName != null && originalFileName.contains(".")) {
             extension = originalFileName.substring(originalFileName.lastIndexOf("."));
+            if (cleanOriginalName.contains(".")) {
+                cleanOriginalName = cleanOriginalName.substring(0, cleanOriginalName.lastIndexOf("."));
+            }
         }
-        String fileName = subFolder + "/" + UUID.randomUUID().toString() + extension;
+        String fileName = subFolder + "/" + cleanOriginalName + "_" + UUID.randomUUID().toString().substring(0, 8) + extension;
 
         PutObjectRequest putOb = PutObjectRequest.builder()
                 .bucket(bucketName)
@@ -136,11 +143,18 @@ public class DynamicStorageService {
                 .forcePathStyle(true)
                 .build();
 
+        String cleanOriginalName = "file";
+        if (originalFileName != null) {
+            cleanOriginalName = originalFileName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        }
         String extension = "";
         if (originalFileName != null && originalFileName.contains(".")) {
             extension = originalFileName.substring(originalFileName.lastIndexOf("."));
+            if (cleanOriginalName.contains(".")) {
+                cleanOriginalName = cleanOriginalName.substring(0, cleanOriginalName.lastIndexOf("."));
+            }
         }
-        String fileName = subFolder + "/" + UUID.randomUUID().toString() + extension;
+        String fileName = subFolder + "/" + cleanOriginalName + "_" + UUID.randomUUID().toString().substring(0, 8) + extension;
 
         PutObjectRequest putOb = PutObjectRequest.builder()
                 .bucket(bucketName)
@@ -334,11 +348,18 @@ public class DynamicStorageService {
                 String originalName = fData.get("name");
                 String contentType = fData.get("type");
 
+                String cleanOriginalName = "file";
+                if (originalName != null) {
+                    cleanOriginalName = originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
+                }
                 String extension = "";
                 if (originalName != null && originalName.contains(".")) {
                     extension = originalName.substring(originalName.lastIndexOf("."));
+                    if (cleanOriginalName.contains(".")) {
+                        cleanOriginalName = cleanOriginalName.substring(0, cleanOriginalName.lastIndexOf("."));
+                    }
                 }
-                String fileKey = subFolder + "/" + UUID.randomUUID().toString() + extension;
+                String fileKey = subFolder + "/" + cleanOriginalName + "_" + UUID.randomUUID().toString().substring(0, 8) + extension;
 
                 PutObjectRequest putOb = PutObjectRequest.builder()
                         .bucket(bucketName)

@@ -29,6 +29,9 @@ import apiClient, { LOCAL_DEV_IP, getWebAppBaseUrl, BASE_URL } from '../api/apiC
 import { APP_CONFIG } from '../config';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
+import * as Sharing from 'expo-sharing';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -130,6 +133,9 @@ export const DashboardScreen: React.FC = () => {
   // Auto-Update States
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [downloadStatusText, setDownloadStatusText] = useState<string>('');
 
   // Tab: 'home' | 'notifications' | 'profile' | 'saved-exams' | 'ai-workspace'
   const [activeTab, setActiveTab] = useState<'home' | 'notifications' | 'profile' | 'saved-exams' | 'ai-workspace'>('home');
@@ -496,6 +502,84 @@ export const DashboardScreen: React.FC = () => {
       }
     } catch (error) {
       console.log('Failed to check for app updates:', error);
+    }
+  };
+
+  const downloadAndInstallApk = async (downloadUrl: string) => {
+    if (!downloadUrl) return;
+    
+    setIsDownloading(true);
+    setDownloadProgress(0);
+    setDownloadStatusText('আপডেট ডাউনলোড শুরু হচ্ছে...');
+
+    try {
+      const filename = downloadUrl.split('/').pop() || 'update.apk';
+      const localApkUri = `${FileSystem.cacheDirectory}${filename}`;
+
+      // Create download resumable to track progress
+      const downloadResumable = FileSystem.createDownloadResumable(
+        downloadUrl,
+        localApkUri,
+        {},
+        (downloadProgressEvent) => {
+          const progress = downloadProgressEvent.totalBytesWritten / downloadProgressEvent.totalBytesExpectedToWrite;
+          setDownloadProgress(progress);
+          const percent = Math.round(progress * 100);
+          const writtenMb = (downloadProgressEvent.totalBytesWritten / (1024 * 1024)).toFixed(1);
+          const totalMb = (downloadProgressEvent.totalBytesExpectedToWrite / (1024 * 1024)).toFixed(1);
+          setDownloadStatusText(`ডাউনলোড হচ্ছে: ${percent}% (${writtenMb}MB / ${totalMb}MB)`);
+        }
+      );
+
+      setDownloadStatusText('ফাইল ডাউনলোড করা হচ্ছে...');
+      const downloadResult = await downloadResumable.downloadAsync();
+      
+      if (!downloadResult || !downloadResult.uri) {
+        throw new Error('Download failed: uri is null');
+      }
+
+      setDownloadProgress(1);
+      setDownloadStatusText('ডাউনলোড সম্পন্ন! ইনস্টলেশন শুরু হচ্ছে...');
+
+      if (Platform.OS === 'android') {
+        const contentUri = await FileSystem.getContentUriAsync(downloadResult.uri);
+        setDownloadStatusText('ইনস্টল করার অনুমতি চাওয়া হচ্ছে...');
+        
+        await IntentLauncher.startActivityAsync('android.intent.action.INSTALL_PACKAGE', {
+          data: contentUri,
+          flags: 1, // Intent.FLAG_GRANT_READ_URI_PERMISSION
+        });
+      } else {
+        // Fallback for iOS/other platforms (using native sharing picker to save/install)
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(downloadResult.uri, {
+            mimeType: 'application/vnd.android.package-archive',
+            dialogTitle: 'Install QuestionShaper Update',
+          });
+        } else {
+          Alert.alert('Download Complete', `Update saved to: ${downloadResult.uri}`);
+        }
+      }
+      
+      // Close the modals
+      setShowUpdateModal(false);
+      setIsDownloading(false);
+    } catch (error: any) {
+      console.log('App update failed:', error);
+      Alert.alert(
+        'Update Failed',
+        'অ্যাপটি স্বয়ংক্রিয়ভাবে ডাউনলোড ও ইনস্টল করতে ব্যর্থ হয়েছে। আপনি কি ব্রাউজার থেকে সরাসরি ডাউনলোড করতে চান?',
+        [
+          { text: 'Later', style: 'cancel', onPress: () => setIsDownloading(false) },
+          { 
+            text: 'Download in Chrome', 
+            onPress: () => {
+              setIsDownloading(false);
+              Linking.openURL(downloadUrl);
+            } 
+          }
+        ]
+      );
     }
   };
 
@@ -2169,7 +2253,13 @@ export const DashboardScreen: React.FC = () => {
                 style={styles.updateButton}
                 onPress={() => {
                   if (updateInfo?.downloadUrl) {
-                    Linking.openURL(updateInfo.downloadUrl);
+                    // For Android APK file uploads, use the new in-app downloader
+                    if (Platform.OS === 'android' && updateInfo.releaseType === 'FILE_UPLOAD') {
+                      downloadAndInstallApk(updateInfo.downloadUrl);
+                    } else {
+                      // Fallback for iOS / store links
+                      Linking.openURL(updateInfo.downloadUrl);
+                    }
                   }
                 }}
                 activeOpacity={0.8}
@@ -2187,6 +2277,38 @@ export const DashboardScreen: React.FC = () => {
                   <Text style={styles.skipButtonText}>Later</Text>
                 </TouchableOpacity>
               )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- In-App Download Progress Overlay Modal --- */}
+      <Modal
+        visible={isDownloading}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {}} // Block dismissal
+      >
+        <View style={styles.updateModalOverlay}>
+          <View style={styles.updateModalContainer}>
+            <View style={styles.updateModalHeader}>
+              <View style={[styles.updateIconContainer, { backgroundColor: 'rgba(37, 99, 235, 0.08)' }]}>
+                <ActivityIndicator size="large" color="#2563EB" />
+              </View>
+              <Text style={styles.updateModalTitle}>Downloading Update</Text>
+              <Text style={[styles.updateModalSubtitle, { color: theme.colors.textMuted }]}>
+                দয়া করে অপেক্ষা করুন, প্রজেক্ট আপডেট ফাইলটি সংগ্রহ করা হচ্ছে...
+              </Text>
+            </View>
+
+            {/* Custom linear progress bar */}
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBarBackground}>
+                <View style={[styles.progressBarFill, { width: `${downloadProgress * 100}%` }]} />
+              </View>
+              <Text style={styles.progressText}>
+                {downloadStatusText}
+              </Text>
             </View>
           </View>
         </View>
@@ -3572,6 +3694,32 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  progressContainer: {
+    width: '100%',
+    paddingHorizontal: 12,
+    marginTop: 16,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  progressBarBackground: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#2563EB',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: 'bold',
+    marginTop: 8,
+    textAlign: 'center',
   },
 
 });

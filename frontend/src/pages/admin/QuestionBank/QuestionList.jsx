@@ -394,6 +394,11 @@ const QuestionList = () => {
         return total;
     }, [availability]);
 
+    const visibleTopics = React.useMemo(() => {
+        return topics.filter(t => getTopicQuestionCount(t.id) > 0);
+    }, [topics, getTopicQuestionCount]);
+
+
     useEffect(() => {
         if (selectedSubjectId || showAllOverride || viewMode === 'FAVORITES') {
             setHasSelectedOnce(true);
@@ -1723,7 +1728,7 @@ const QuestionList = () => {
                         )}
 
                         {/* Topic Dropdown */}
-                        {topics.length > 1 && (
+                        {visibleTopics.length > 1 && (
                             <div className="relative group shrink-0">
                                 <select 
                                     value={selectedTopicId} 
@@ -1731,7 +1736,7 @@ const QuestionList = () => {
                                     className={`appearance-none h-9 pl-3 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 max-w-[130px] sm:max-w-[160px] truncate ${selectedTopicId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
                                 >
                                     <option value="">সব টপিক</option>
-                                    {topics.map(t => {
+                                    {visibleTopics.map(t => {
                                         const count = getTopicQuestionCount(t.id);
                                         return (
                                             <option key={t.id} value={t.id}>
@@ -2006,7 +2011,7 @@ const QuestionList = () => {
                             )}
 
                             {/* Topic Filter */}
-                            {topics.length > 1 && (
+                            {visibleTopics.length > 1 && (
                                 <div className="flex flex-col gap-1.5 text-left">
                                     <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-1 flex items-center gap-1.5">
                                         <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Topic / টপিক
@@ -2018,7 +2023,7 @@ const QuestionList = () => {
                                             className={`appearance-none h-10 w-full pl-3.5 pr-8 rounded-xl text-[11px] font-bold transition-all duration-300 cursor-pointer shadow-sm outline-none border focus:ring-4 truncate ${selectedTopicId ? 'bg-indigo-50/70 border-indigo-500 text-indigo-800 focus:ring-indigo-500/10' : 'bg-slate-50/80 hover:bg-indigo-50/40 border-slate-200/80 hover:border-indigo-400 focus:ring-indigo-500/10 text-slate-700'}`}
                                         >
                                             <option value="">সব টপিক</option>
-                                            {topics.map(t => {
+                                            {visibleTopics.map(t => {
                                                 const count = getTopicQuestionCount(t.id);
                                                 return (
                                                     <option key={t.id} value={t.id}>
