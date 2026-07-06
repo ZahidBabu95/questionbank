@@ -58,6 +58,7 @@ import AiUploadHistory from './pages/admin/AiUploadHistory';
 import AiApiKeys from './pages/admin/QuestionBank/AiApiKeys';
 import LectureBuilder from './pages/admin/Lectures/LectureBuilder';
 import LectureList from './pages/admin/Lectures/LectureList';
+import LectureEditor from './pages/admin/Lectures/LectureEditor';
 import UsageAnalytics from './pages/admin/Reports/UsageAnalytics';
 import PerformanceAnalytics from './pages/admin/Reports/PerformanceAnalytics';
 import KnowledgeHubReport from './pages/admin/Reports/KnowledgeHubReport';
@@ -82,8 +83,16 @@ import DigitizationWorkspace from './pages/admin/KnowledgeHub/DigitizationWorksp
 import ProofreadingWorkspace from './pages/admin/KnowledgeHub/ProofreadingWorkspace';
 import KnowledgeMapWorkspace from './pages/admin/KnowledgeHub/KnowledgeMapWorkspace';
 import CurriculumMappingList from './pages/admin/KnowledgeHub/CurriculumMappingList';
+import GeneralBookReader from './pages/admin/KnowledgeHub/GeneralBookReader';
+import AiBookReader from './pages/admin/KnowledgeHub/AiBookReader';
+import OmrTemplateGenerator from './pages/admin/Omr/OmrTemplateGenerator';
+import OmrScanner from './pages/admin/Omr/OmrScanner';
+import OmrResults from './pages/admin/Omr/OmrResults';
+import ExamTaker from './pages/student/ExamTaker';
+import StudentResultView from './pages/student/StudentResultView';
 import { useParams } from 'react-router-dom';
 import { UploadProvider } from './context/UploadContext';
+import { LanguageProvider } from './context/LanguageContext';
 
 const ProtectedRoute = ({ children }) => {
     const token = localStorage.getItem('token');
@@ -110,8 +119,9 @@ const RedirectToEditor = () => {
 function App() {
     return (
         <BrandingProvider>
-            <UploadProvider>
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <LanguageProvider>
+                <UploadProvider>
+                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                 <Routes>
                     {/* Public Routes */}
                     <Route path="/" element={<LandingPage />} />
@@ -166,9 +176,13 @@ function App() {
                         <Route path="/exams/*" element={<UnderDevelopment featureName="Exam Management" />} />
 
                         {/* Lecture Sheets */}
-                        <Route path="/lectures/create" element={<LectureBuilder />} />
-                        <Route path="/lectures/attach" element={<LectureList />} />
-                        <Route path="/lectures/*" element={<UnderDevelopment featureName="Lecture Sheet Management" />} />
+                        <Route path="/lectures">
+                            <Route path="create" element={<LectureBuilder />} />
+                            <Route path="attach" element={<LectureList />} />
+                            <Route path="editor" element={<LectureEditor />} />
+                            <Route path="editor/:id" element={<LectureEditor />} />
+                            <Route path="*" element={<UnderDevelopment featureName="Lecture Sheet Management" />} />
+                        </Route>
 
                         {/* Reports */}
                         <Route path="/reports/usage" element={<UsageAnalytics />} />
@@ -201,7 +215,20 @@ function App() {
                         <Route path="/knowledge-hub/proofreading/:bookId" element={<ProofreadingWorkspace />} />
                         <Route path="/knowledge-hub/mapping" element={<CurriculumMappingList />} />
                         <Route path="/knowledge-hub/mapping/:id" element={<KnowledgeMapWorkspace />} />
+                        <Route path="/knowledge-hub/reader" element={<GeneralBookReader />} />
+                        <Route path="/knowledge-hub/reader/:bookId" element={<GeneralBookReader />} />
+                        <Route path="/knowledge-hub/ai-reader" element={<AiBookReader />} />
+                        <Route path="/knowledge-hub/ai-reader/:bookId" element={<AiBookReader />} />
                         <Route path="/knowledge-hub/*" element={<UnderDevelopment featureName="Knowledge Hub & AI Brain" />} />
+
+                        {/* OMR System */}
+                        <Route path="/omr/generate" element={<OmrTemplateGenerator />} />
+                        <Route path="/omr/scan" element={<OmrScanner />} />
+                        <Route path="/omr/results" element={<OmrResults />} />
+
+                        {/* Student Portal */}
+                        <Route path="/student/exams/take/:id" element={<ExamTaker />} />
+                        <Route path="/student/results/view/:id" element={<StudentResultView />} />
 
                         {/* Academic */}
                         <Route path="/admin/academic" element={<AcademicLayout />}>
@@ -224,6 +251,7 @@ function App() {
                         <Route path="/questions/pending" element={<QuestionList />} />
                         <Route path="/questions/approved" element={<QuestionList />} />
                         <Route path="/questions/rejected" element={<QuestionList />} />
+                        <Route path="/questions/revised" element={<QuestionList />} />
                         <Route path="/questions/sources" element={<SourceManagement />} />
                         <Route path="/questions/create/mcq" element={<MCQCreate />} />
                         <Route path="/questions/add/cq" element={<CQCreate />} />
@@ -259,8 +287,9 @@ function App() {
                     {/* Fallback */}
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
-            </BrowserRouter>
-            </UploadProvider>
+                </BrowserRouter>
+                </UploadProvider>
+            </LanguageProvider>
         </BrandingProvider>
     );
 }

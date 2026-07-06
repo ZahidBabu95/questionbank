@@ -74,4 +74,7 @@ public interface ExamRepository extends JpaRepository<Exam, UUID> {
         @org.springframework.transaction.annotation.Transactional
         @Query(value = "DELETE FROM exams WHERE id = :id AND deleted = true", nativeQuery = true)
         void hardDeleteExam(@Param("id") String id);
+
+        @Query("SELECT e FROM Exam e WHERE e.classSubject.academicClass.id = :classId AND e.status = com.testshaper.entity.Exam$ExamStatus.ONLINE_EXAM AND e.deleted = false")
+        java.util.List<Exam> findActiveExamsByClassId(@Param("classId") UUID classId);
 }

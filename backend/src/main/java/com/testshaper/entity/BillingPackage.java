@@ -80,7 +80,7 @@ public class BillingPackage extends BaseEntity {
     @Column(name = "sort_order")
     private Integer sortOrder = 0;
 
-    @Column(name = "associated_role")
+    @Column(name = "associated_role", nullable = false)
     private String associatedRole;
 
     @JdbcTypeCode(SqlTypes.JSON)

@@ -113,7 +113,8 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
         swapTarget, setSwapTarget,
         editorConfig, rawContent, docSettings,
         setPendingInsertQuestion, setPendingSwapQuestion,
-        documentQuestions, addToast, examData
+        documentQuestions, addToast, examData,
+        editor, editorMode
     } = useNexusEditor();
 
     React.useEffect(() => {
@@ -121,6 +122,32 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
     }, [leftPanelWidth]);
 
     const [revisingQuestionNode, setRevisingQuestionNode] = useState(null);
+
+    const handleLinkAsAlternative = (q, idx) => {
+        if (idx === 0 || !editor) return;
+        const parentQ = documentQuestions[idx - 1];
+        if (!parentQ) return;
+        const parentId = parentQ.attrs.questionId;
+
+        const tr = editor.state.tr;
+        tr.setNodeMarkup(q.pos, undefined, {
+            ...q.attrs,
+            alternativeToId: parentId
+        });
+        editor.view.dispatch(tr);
+        addToast(uiLang === 'bn' ? 'পূর্ববর্তী প্রশ্নের অথবা হিসেবে লিঙ্ক করা হয়েছে।' : 'Linked as alternative to previous question.', 'success');
+    };
+
+    const handleUnlinkAlternative = (q) => {
+        if (!editor) return;
+        const tr = editor.state.tr;
+        tr.setNodeMarkup(q.pos, undefined, {
+            ...q.attrs,
+            alternativeToId: null
+        });
+        editor.view.dispatch(tr);
+        addToast(uiLang === 'bn' ? 'লিঙ্ক বাতিল করা হয়েছে।' : 'Alternative link removed.', 'info');
+    };
 
     const filters = useAcademicFilters();
     const userStr = localStorage.getItem('user');
@@ -327,10 +354,14 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
             transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
             visibility: (isMobileApp && !isLeftPanelOpen) ? 'hidden' : 'visible'
         }}
-             className={`${!isDraggingLeft ? 'transition-all' : ''} bg-white border-r border-slate-200/80 shrink-0 flex flex-col z-30 absolute lg:relative left-0 top-0 h-full shadow-2xl lg:shadow-none rounded-r-2xl lg:rounded-none overflow-hidden print:hidden`}>
+             className={`${!isDraggingLeft ? 'transition-all' : ''} bg-white border-r border-slate-200/80 shrink-0 flex flex-col top-0 left-0 h-full overflow-hidden print:hidden ${
+                 isMobileApp 
+                     ? 'absolute z-30 shadow-2xl rounded-r-2xl' 
+                     : 'relative shadow-none'
+             }`}>
             {/* Resize Handle */}
             <div onMouseDown={() => setIsDraggingLeft(true)}
-                 className={`absolute top-0 right-[-3px] w-[6px] h-full cursor-col-resize z-40 hidden lg:block transition-colors hover:bg-indigo-400 ${isDraggingLeft ? 'bg-indigo-500' : 'bg-transparent'}`} />
+                 className={`absolute top-0 right-[-3px] w-[6px] h-full cursor-col-resize z-40 transition-colors hover:bg-indigo-400 ${!isMobileApp ? 'block' : 'hidden'} ${isDraggingLeft ? 'bg-indigo-500' : 'bg-transparent'}`} />
             
             <div className="h-full flex flex-col bg-white w-full">
                 <div className="p-4 border-b border-slate-100 shrink-0">
@@ -512,44 +543,102 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                             {documentQuestions.length === 0 ? (
                                 <div className="text-center py-10 text-slate-400 text-sm italic">No questions in document.</div>
                             ) : (
-                                documentQuestions.map((q, idx) => (
-                                    <div key={`${q.attrs.questionId}-${idx}`} className="bg-white border border-slate-200 rounded-lg p-3 hover:border-indigo-300 transition-colors group relative">
-                                        <div className="flex items-start gap-2 mb-2">
-                                            <span className="shrink-0 bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded">{idx + 1}</span>
-                                            <div className="text-xs font-medium text-slate-700 line-clamp-2 leading-relaxed" dangerouslySetInnerHTML={{__html: (getDisplayQuestionText(q.attrs) || '').replace(/<[^>]*>?/gm, '')}} />
+                                    documentQuestions.map((q, idx) => (
+                                        <div key={`${q.attrs.questionId}-${idx}`} className="bg-white border border-slate-200 rounded-lg p-3 hover:border-indigo-300 transition-colors group relative">
+                                            <div className="flex items-start gap-2 mb-2">
+                                                <span className="shrink-0 bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                                    {q.attrs.alternativeToId ? 'অথবা' : idx + 1}
+                                                </span>
+                                                <div className="text-xs font-medium text-slate-700 line-clamp-2 leading-relaxed flex-grow" dangerouslySetInnerHTML={{__html: (getDisplayQuestionText(q.attrs) || '').replace(/<[^>]*>?/gm, '')}} />
+                                                {q.attrs.alternativeToId && (
+                                                    <span className="shrink-0 bg-amber-50 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-200/50 font-sans">
+                                                        OR / অথবা
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-wrap items-center justify-end gap-1.5 mt-2 pt-2 border-t border-slate-100 opacity-50 group-hover:opacity-100 transition-opacity">
+                                                {q.attrs.alternativeToId ? (
+                                                    <button 
+                                                        onClick={() => handleUnlinkAlternative(q)} 
+                                                        className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-[10px] font-bold rounded shadow-sm transition-all"
+                                                        title={uiLang === 'bn' ? 'লিঙ্ক বাতিল করুন' : 'Unlink alternative'}
+                                                    >
+                                                        {uiLang === 'bn' ? 'লিঙ্ক বাতিল' : 'Unlink'}
+                                                    </button>
+                                                ) : (
+                                                    idx > 0 && (
+                                                        <button 
+                                                            onClick={() => handleLinkAsAlternative(q, idx)} 
+                                                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-700 text-[10px] font-bold rounded shadow-sm transition-all"
+                                                            title={uiLang === 'bn' ? 'পূর্ববর্তী প্রশ্নের সাথে অথবা হিসেবে লিঙ্ক করুন' : 'Link as alternative to previous question'}
+                                                        >
+                                                            {uiLang === 'bn' ? 'অথবা লিঙ্ক' : 'Link alternative'}
+                                                        </button>
+                                                    )
+                                                )}
+                                                {editorMode === 'FREE_EDIT' ? (
+                                                    <button 
+                                                        onClick={() => setRevisingQuestionNode(q)} 
+                                                        className="p-1.5 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded flex items-center gap-1 border border-transparent hover:border-emerald-100 transition-all" 
+                                                        title={uiLang === 'bn' ? 'প্রশ্ন সম্পাদন করুন' : 'Edit Question'}
+                                                    >
+                                                        <Edit3 size={12} />
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider">
+                                                            {uiLang === 'bn' ? 'এডিট' : 'Edit'}
+                                                        </span>
+                                                    </button>
+                                                ) : (
+                                                    <button 
+                                                        onClick={() => setRevisingQuestionNode(q)} 
+                                                        className="p-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded flex items-center gap-1 border border-transparent hover:border-amber-100 transition-all" 
+                                                        title={uiLang === 'bn' ? 'সংশোধন প্রস্তাব করুন' : 'Suggest a Revision'}
+                                                    >
+                                                        <RotateCcw size={12} />
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider">
+                                                            {uiLang === 'bn' ? 'রিভাইস' : 'Revise'}
+                                                        </span>
+                                                    </button>
+                                                )}
+                                                <button onClick={() => handleAutoSwap(q)} className="p-1.5 px-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded flex items-center gap-1 border border-transparent hover:border-indigo-100" title="Auto Swap"><RefreshCw size={12} /> <span className="text-[10px] font-bold uppercase tracking-wider">Auto</span></button>
+                                                <button onClick={() => {
+                                                    window.dispatchEvent(new CustomEvent('nexusSwapRequested', { detail: { pos: q.pos, nodeSize: q.nodeSize, attrs: q.attrs } }));
+                                                }} className="p-1.5 px-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded flex items-center gap-1 border border-transparent hover:border-blue-100" title="Manual Swap"><RefreshCw size={12} /> <span className="text-[10px] font-bold uppercase tracking-wider">Manual</span></button>
+                                                <button onClick={() => {
+                                                    if(window.confirm("Are you sure you want to delete this question?")) {
+                                                        window.dispatchEvent(new CustomEvent('nexusDeleteNodeRequested', { detail: { pos: q.pos, nodeSize: q.nodeSize } }));
+                                                        addToast(uiLang === 'bn' ? 'প্রশ্নটি মুছে ফেলা হয়েছে।' : 'Question has been deleted.', 'info');
+                                                    }
+                                                }} className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded" title="Delete Question"><Trash2 size={14} /></button>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center justify-end gap-1.5 mt-2 pt-2 border-t border-slate-100 opacity-50 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => setRevisingQuestionNode(q)} className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded" title="Revise Options"><RotateCcw size={14} /></button>
-                                            <button onClick={() => handleAutoSwap(q)} className="p-1.5 px-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded flex items-center gap-1 border border-transparent hover:border-indigo-100" title="Auto Swap"><RefreshCw size={12} /> <span className="text-[10px] font-bold uppercase tracking-wider">Auto</span></button>
-                                            <button onClick={() => {
-                                                window.dispatchEvent(new CustomEvent('nexusSwapRequested', { detail: { pos: q.pos, nodeSize: q.nodeSize, attrs: q.attrs } }));
-                                            }} className="p-1.5 px-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded flex items-center gap-1 border border-transparent hover:border-blue-100" title="Manual Swap"><RefreshCw size={12} /> <span className="text-[10px] font-bold uppercase tracking-wider">Manual</span></button>
-                                            <button onClick={() => {
-                                                if(window.confirm("Are you sure you want to delete this question?")) {
-                                                    window.dispatchEvent(new CustomEvent('nexusDeleteNodeRequested', { detail: { pos: q.pos, nodeSize: q.nodeSize } }));
-                                                    addToast(uiLang === 'bn' ? 'প্রশ্নটি মুছে ফেলা হয়েছে।' : 'Question has been deleted.', 'info');
-                                                }
-                                            }} className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded" title="Delete Question"><Trash2 size={14} /></button>
-                                        </div>
-                                    </div>
-                                ))
+                                    ))
                             )}
                         </div>
                     )}
                 </div>
             </div>
-
+ 
             {revisingQuestionNode && createPortal(
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:hidden animate-in fade-in zoom-in-95 duration-200">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col relative border border-slate-200">
                         <div className="flex justify-between items-center p-6 border-b border-slate-200 bg-white shadow-sm z-10">
                             <div className="flex items-center gap-4">
                                 <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-xl shadow-md">
-                                    <RotateCcw size={22} strokeWidth={2.5} />
+                                    {editorMode === 'FREE_EDIT' ? <Edit3 size={22} strokeWidth={2.5} /> : <RotateCcw size={22} strokeWidth={2.5} />}
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-black text-slate-800 tracking-tight">Suggest a Revision</h2>
-                                    <p className="text-sm text-slate-500 font-medium mt-0.5">Your changes will update the canvas instantly and await admin approval.</p>
+                                    <h2 className="text-xl font-black text-slate-800 tracking-tight">
+                                        {editorMode === 'FREE_EDIT' 
+                                            ? (uiLang === 'bn' ? 'প্রশ্ন সম্পাদনা করুন' : 'Edit Question') 
+                                            : (uiLang === 'bn' ? 'প্রশ্ন সংশোধন (রিভিশন)' : 'Suggest a Revision')
+                                        }
+                                    </h2>
+                                    <p className="text-sm text-slate-500 font-medium mt-0.5">
+                                        {editorMode === 'FREE_EDIT'
+                                            ? (uiLang === 'bn' ? 'আপনার পরিবর্তনগুলো সরাসরি ক্যানভাস এবং প্রশ্ন ব্যাংকে সংরক্ষিত হবে।' : 'Your changes will update the canvas instantly and await admin approval.')
+                                            : (uiLang === 'bn' ? 'আপনার পরিবর্তনগুলো ক্যানভাসে দেখা যাবে এবং অ্যাডমিনের অনুমোদনের অপেক্ষায় থাকবে।' : 'Your changes will update the canvas instantly and await admin approval.')
+                                        }
+                                    </p>
                                 </div>
                             </div>
                             <button onClick={() => setRevisingQuestionNode(null)} className="p-2.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all active:scale-95 border border-transparent hover:border-slate-200">
@@ -559,7 +648,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                         <div className="flex-1 overflow-auto custom-scrollbar bg-slate-50 relative">
                             <QuestionEdit 
                                 inlineId={revisingQuestionNode.attrs.questionId} 
-                                forceMode="revise" 
+                                forceMode={editorMode === 'FREE_EDIT' ? 'edit' : 'revise'} 
                                 onSaveComplete={(revisedData) => {
                                     setRevisingQuestionNode(null);
                                     if (revisedData) {

@@ -32,6 +32,7 @@ public class ExamDTO {
     private boolean aiGenerated;
     private String createdBy;
     private LocalDateTime createdAt;
+    private String tenantId;
 
     // Nexus Engine fields
     private ExamEditorMode editorMode;
@@ -55,6 +56,7 @@ public class ExamDTO {
         private UUID originalQuestionId;
         private Integer order;
         private Double marks;
+        private UUID alternativeToId;
         private String questionText;
         private String stimulus;
         private String type;

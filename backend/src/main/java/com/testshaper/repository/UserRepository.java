@@ -76,6 +76,23 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
         long countNewUsersBetween(@Param("start") java.time.LocalDateTime start,
                                   @Param("end") java.time.LocalDateTime end);
 
+        // Tenant-specific count queries
+        long countByInstituteIdAndDeletedFalse(UUID instituteId);
+        long countByInstituteIdAndActiveTrueAndDeletedFalse(UUID instituteId);
+        long countByInstituteIdAndActiveFalseAndDeletedFalse(UUID instituteId);
+        long countByInstituteIdAndAccountLockedTrueAndDeletedFalse(UUID instituteId);
+
+        @Query("SELECT COUNT(DISTINCT u) FROM User u JOIN u.roles r WHERE u.institute.id = :instituteId AND r.name = :roleName AND u.deleted = false")
+        long countByInstituteIdAndRoleName(@Param("instituteId") UUID instituteId, @Param("roleName") String roleName);
+
+        @Query("SELECT COUNT(u) FROM User u WHERE u.institute.id = :instituteId AND u.createdAt >= :since AND u.deleted = false")
+        long countNewUsersByInstituteSince(@Param("instituteId") UUID instituteId, @Param("since") java.time.LocalDateTime since);
+
+        @Query("SELECT COUNT(u) FROM User u WHERE u.institute.id = :instituteId AND u.createdAt >= :start AND u.createdAt < :end AND u.deleted = false")
+        long countNewUsersByInstituteBetween(@Param("instituteId") UUID instituteId,
+                                             @Param("start") java.time.LocalDateTime start,
+                                             @Param("end") java.time.LocalDateTime end);
+
         @Query("SELECT DISTINCT u FROM User u JOIN u.roles r WHERE r.name = 'SUPER_ADMIN' AND u.deleted = false AND u.active = true")
         java.util.List<User> findAllSuperAdmins();
 }

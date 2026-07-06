@@ -19,6 +19,10 @@ public class LectureDTO {
     private LocalDateTime createdAt;
 
     // Academic fields
+    private UUID classId;
+    private UUID classSubjectId;
+    private UUID chapterId;
+    private UUID topicId;
     private String className;
     private String subjectName;
     private String chapterName;
@@ -53,5 +57,25 @@ public class LectureDTO {
         private Double marks;
         private String mcqType;
         private java.util.List<String> statements;
+        private String stimulus;
+        private String explanation;
+        private String correctAnswer;
+        private String chapterName;
+        private List<LectureQuestionOptionDTO> options;
+    }
+
+    @Data
+    public static class LectureQuestionOptionDTO {
+        private String optionLabel;
+        private String optionText;
+        private boolean isCorrect;
+
+        public boolean getIsCorrect() {
+            return isCorrect;
+        }
+
+        public boolean getCorrect() {
+            return isCorrect;
+        }
     }
 }

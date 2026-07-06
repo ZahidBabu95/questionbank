@@ -19,6 +19,8 @@ public interface UserMapper {
     @Mappings({
             @Mapping(target = "instituteId", expression = "java(user.getInstitute() != null ? user.getInstitute().getId() : null)"),
             @Mapping(target = "instituteName", expression = "java(user.getInstitute() != null ? user.getInstitute().getName() : null)"),
+            @Mapping(target = "instituteNameEn", expression = "java(user.getUserInstituteNameEn() != null && !user.getUserInstituteNameEn().isEmpty() ? user.getUserInstituteNameEn() : (user.getInstitute() != null ? user.getInstitute().getNameEn() : null))"),
+            @Mapping(target = "instituteNameBn", expression = "java(user.getUserInstituteNameBn() != null && !user.getUserInstituteNameBn().isEmpty() ? user.getUserInstituteNameBn() : (user.getInstitute() != null ? user.getInstitute().getNameBn() : null))"),
             @Mapping(target = "instituteMedium", expression = "java(user.getInstitute() != null ? user.getInstitute().getMedium() : null)"),
             @Mapping(target = "instituteStatus", expression = "java(user.getInstitute() != null && user.getInstitute().getStatus() != null ? user.getInstitute().getStatus().name() : null)"),
             @Mapping(target = "subscriptionPackage", expression = "java(user.getInstitute() != null && user.getInstitute().getSubscriptionPackage() != null ? user.getInstitute().getSubscriptionPackage().getName() : (user.getInstitute() != null && user.getInstitute().getPlanType() != null ? user.getInstitute().getPlanType().name() : null))"),
@@ -37,15 +39,21 @@ public interface UserMapper {
             @Mapping(target = "expiryDate", expression = "java(user.getInstitute() != null ? user.getInstitute().getExpiryDate() : null)"),
             @Mapping(source = "active", target = "active"),
             @Mapping(source = "roles", target = "roles", qualifiedByName = "mapRolesToStrings"),
-            @Mapping(source = "roles", target = "permissions", qualifiedByName = "mapPermissionsToStrings")
+            @Mapping(source = "roles", target = "permissions", qualifiedByName = "mapPermissionsToStrings"),
+            @Mapping(target = "classId", expression = "java(user.getAcademicClass() != null ? user.getAcademicClass().getId() : null)"),
+            @Mapping(target = "className", expression = "java(user.getAcademicClass() != null ? user.getAcademicClass().getName() : null)")
     })
     UserDTO toDTO(User user);
 
     @Mappings({
             @Mapping(target = "instituteId", expression = "java(user.getInstitute() != null ? user.getInstitute().getId() : null)"),
             @Mapping(target = "instituteName", expression = "java(user.getInstitute() != null ? user.getInstitute().getName() : null)"),
+            @Mapping(target = "instituteNameEn", expression = "java(user.getUserInstituteNameEn() != null && !user.getUserInstituteNameEn().isEmpty() ? user.getUserInstituteNameEn() : (user.getInstitute() != null ? user.getInstitute().getNameEn() : null))"),
+            @Mapping(target = "instituteNameBn", expression = "java(user.getUserInstituteNameBn() != null && !user.getUserInstituteNameBn().isEmpty() ? user.getUserInstituteNameBn() : (user.getInstitute() != null ? user.getInstitute().getNameBn() : null))"),
             @Mapping(source = "active", target = "active"),
-            @Mapping(source = "roles", target = "roles", qualifiedByName = "mapRolesToStrings")
+            @Mapping(source = "roles", target = "roles", qualifiedByName = "mapRolesToStrings"),
+            @Mapping(target = "classId", expression = "java(user.getAcademicClass() != null ? user.getAcademicClass().getId() : null)"),
+            @Mapping(target = "className", expression = "java(user.getAcademicClass() != null ? user.getAcademicClass().getName() : null)")
             // Intentionally excluding permissions mapping for lightweight listing
     })
     com.testshaper.dto.UserSummaryDTO toSummaryDTO(User user);
@@ -62,7 +70,8 @@ public interface UserMapper {
             @Mapping(target = "active", constant = "true"), // Active by default, restricted by Institute status
             @Mapping(target = "failedLoginAttempts", ignore = true),
             @Mapping(target = "accountLocked", ignore = true),
-            @Mapping(target = "lockTime", ignore = true)
+            @Mapping(target = "lockTime", ignore = true),
+            @Mapping(target = "academicClass", ignore = true)
     })
     User toEntity(CreateUserDTO dto);
 
@@ -79,7 +88,8 @@ public interface UserMapper {
             @Mapping(target = "failedLoginAttempts", ignore = true),
             @Mapping(target = "accountLocked", ignore = true),
             @Mapping(target = "lockTime", ignore = true),
-            @Mapping(target = "active", source = "active")
+            @Mapping(target = "active", source = "active"),
+            @Mapping(target = "academicClass", ignore = true)
     })
     void updateEntityFromDTO(UpdateUserDTO dto, @org.mapstruct.MappingTarget User user);
 

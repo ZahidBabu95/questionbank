@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Package, Clock, LogOut, CheckCircle, ArrowRight } from 'lucide-react';
+import { Lock, Package, Clock, LogOut, CheckCircle, ArrowRight, Globe } from 'lucide-react';
 import axios from '../../utils/axios';
 import { useNavigate } from 'react-router-dom';
 import academicService from '../../services/academicService';
 
 const WorkspaceStatusOverlay = ({ user, onLogout }) => {
-    const [step, setStep] = useState(1);
+    const isMissingInstituteInfo = !user?.instituteNameEn || !user?.instituteNameBn;
+    const [step, setStep] = useState((user?.instituteStatus === 'ACTIVE' && isMissingInstituteInfo) ? 3 : 1);
     const [packages, setPackages] = useState([]);
     const [selectedPackage, setSelectedPackage] = useState(null);
     const [subjects, setSubjects] = useState([]);
@@ -16,6 +17,9 @@ const WorkspaceStatusOverlay = ({ user, onLogout }) => {
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState(user?.instituteStatus);
     const [direction, setDirection] = useState(1);
+
+    const [instituteNameEn, setInstituteNameEn] = useState(user?.instituteNameEn || '');
+    const [instituteNameBn, setInstituteNameBn] = useState(user?.instituteNameBn || '');
 
     useEffect(() => {
         if (status === 'INACTIVE') {
@@ -92,7 +96,61 @@ const WorkspaceStatusOverlay = ({ user, onLogout }) => {
         }
     };
 
-    if (status === 'ACTIVE' || status === 'SUSPENDED' || user?.instituteName === 'DEFAULT' || user?.roles?.includes('SUPER_ADMIN')) {
+    const handleSaveInstituteInfo = async () => {
+        if (!instituteNameEn.trim() || !instituteNameBn.trim()) {
+            alert('উভয় ফিল্ড পূরণ করা আবশ্যক / Both fields are required');
+            return;
+        }
+        setLoading(true);
+        try {
+            const profileRes = await axios.patch('/v1/users/profile', {
+                name: user.name,
+                phone: user.phone || '',
+                instituteNameEn: instituteNameEn.trim(),
+                instituteNameBn: instituteNameBn.trim()
+            });
+
+            if (profileRes.data.success) {
+                const updatedProfile = profileRes.data.data;
+                
+                if (status === 'INACTIVE') {
+                    await axios.post('/v1/institutes/request', {
+                        packageId: selectedPackage,
+                        subjectIds: selectedSubjects,
+                        subjectVersions: subjectVersions,
+                        medium: Object.values(subjectVersions).flat().join(',') || 'Bangla'
+                    });
+                }
+
+                const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                const newUserData = {
+                    ...storedUser,
+                    name: updatedProfile.name,
+                    phone: updatedProfile.phone,
+                    instituteNameEn: updatedProfile.instituteNameEn,
+                    instituteNameBn: updatedProfile.instituteNameBn,
+                    instituteStatus: status === 'INACTIVE' ? 'ACTIVE' : storedUser.instituteStatus
+                };
+                localStorage.setItem('user', JSON.stringify(newUserData));
+                window.location.reload();
+            }
+        } catch (error) {
+            console.error('Failed to save institute info:', error);
+            alert(error.response?.data?.message || 'তথ্য সংরক্ষণ করতে ব্যর্থ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const isDefaultOrSuper = user?.instituteName?.toUpperCase() === 'DEFAULT' || 
+                             user?.roles?.includes('SUPER_ADMIN') || 
+                             user?.roles?.includes('ROLE_SUPER_ADMIN') || 
+                             user?.email === 'admin' || 
+                             user?.email?.includes('admin@');
+
+    const showStepUI = status === 'INACTIVE' || (status === 'ACTIVE' && isMissingInstituteInfo);
+
+    if (isDefaultOrSuper || (status === 'ACTIVE' && !isMissingInstituteInfo)) {
         return null;
     }
 
@@ -164,7 +222,7 @@ const WorkspaceStatusOverlay = ({ user, onLogout }) => {
                         </div>
                     </div>
 
-                    {status === 'INACTIVE' ? (
+                    {showStepUI ? (
                         <>
                             {/* Scrollable step contents */}
                             <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
@@ -219,7 +277,7 @@ const WorkspaceStatusOverlay = ({ user, onLogout }) => {
                                                 ))}
                                             </div>
                                         </motion.div>
-                                    ) : (
+                                    ) : step === 2 ? (
                                         <motion.div
                                             key="step2"
                                             custom={direction}
@@ -379,6 +437,64 @@ const WorkspaceStatusOverlay = ({ user, onLogout }) => {
                                                 )}
                                             </div>
                                         </motion.div>
+                                    ) : (
+                                        <motion.div
+                                            key="step3"
+                                            custom={direction}
+                                            variants={slideVariants}
+                                            initial="enter"
+                                            animate="center"
+                                            exit="exit"
+                                            className="space-y-6"
+                                        >
+                                            <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-5 text-indigo-950 text-sm">
+                                                <h4 className="font-bold text-indigo-900 mb-2 flex items-center gap-2">
+                                                    <Globe size={18} className="text-indigo-600" />
+                                                    প্রতিষ্ঠানের নাম যুক্ত করার গাইডলাইন
+                                                </h4>
+                                                <p className="text-slate-600 text-xs md:text-sm leading-relaxed">
+                                                    আপনার প্রতিষ্ঠানের নাম বাংলা এবং ইংরেজি উভয় ভাষায় নির্ভুলভাবে প্রদান করুন। এটি আপনার তৈরি করা প্রশ্নপত্র, নোটিশ বোর্ড এবং অন্যান্য সমস্ত ডকুমেন্টের হেডার বা শিরোনামে ব্যবহৃত হবে।
+                                                </p>
+                                                <ul className="mt-3 space-y-1.5 text-xs text-slate-500 list-disc pl-5">
+                                                    <li><strong>বাংলা নাম:</strong> এটি বাংলা ভার্সন বা বাংলা মাধ্যমের প্রশ্নপত্র তৈরিতে ব্যবহৃত হবে। (যেমন: আইডিয়াল স্কুল এন্ড কলেজ)</li>
+                                                    <li><strong>ইংরেজি নাম:</strong> এটি ইংরেজি ভার্সন বা ইংরেজি মাধ্যমের প্রশ্নপত্র তৈরিতে ব্যবহৃত হবে। (যেমন: Ideal School and College)</li>
+                                                </ul>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-700 mb-2">
+                                                        প্রতিষ্ঠানের নাম (বাংলায়) <span className="text-rose-500">*</span>
+                                                    </label>
+                                                    <div className="relative">
+                                                        <Globe className="absolute left-4 top-3.5 text-slate-400" size={18} />
+                                                        <input
+                                                            type="text"
+                                                            value={instituteNameBn}
+                                                            onChange={(e) => setInstituteNameBn(e.target.value)}
+                                                            placeholder="যেমন: আইডিয়াল স্কুল এন্ড কলেজ"
+                                                            className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none rounded-2xl text-slate-800 text-sm font-semibold transition duration-200"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-700 mb-2">
+                                                        Institution Name (in English) <span className="text-rose-500">*</span>
+                                                    </label>
+                                                    <div className="relative">
+                                                        <Globe className="absolute left-4 top-3.5 text-slate-400" size={18} />
+                                                        <input
+                                                            type="text"
+                                                            value={instituteNameEn}
+                                                            onChange={(e) => setInstituteNameEn(e.target.value)}
+                                                            placeholder="e.g. Ideal School and College"
+                                                            className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none rounded-2xl text-slate-800 text-sm font-semibold transition duration-200"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </motion.div>
                                     )}
                                 </AnimatePresence>
                             </div>
@@ -402,7 +518,7 @@ const WorkspaceStatusOverlay = ({ user, onLogout }) => {
                                             <ArrowRight size={18} />
                                         </button>
                                     </>
-                                ) : (
+                                ) : step === 2 ? (
                                     <>
                                         <button
                                             onClick={() => { setDirection(-1); setStep(1); }}
@@ -435,15 +551,42 @@ const WorkspaceStatusOverlay = ({ user, onLogout }) => {
                                                         <div className="text-xl font-black text-blue-600">৳{totalPrice.toFixed(0)}</div>
                                                     </div>
                                                     <button
-                                                        onClick={handleSubmit}
-                                                        disabled={loading || !isValid}
+                                                        onClick={() => { setDirection(1); setStep(3); }}
+                                                        disabled={!isValid}
                                                         className="flex items-center justify-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/30 w-full sm:w-auto"
                                                     >
-                                                        {loading ? 'Submitting...' : `Submit Request`}
+                                                        Next Step
+                                                        <ArrowRight size={18} />
                                                     </button>
                                                 </div>
                                             );
                                         })()}
+                                    </>
+                                ) : (
+                                    <>
+                                        {user?.instituteStatus === 'ACTIVE' ? (
+                                            <button
+                                                onClick={onLogout}
+                                                className="flex items-center justify-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors w-full sm:w-auto px-4 py-2"
+                                            >
+                                                <LogOut size={16} /> Logout
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => { setDirection(-1); setStep(2); }}
+                                                className="text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors px-4 py-2 w-full sm:w-auto"
+                                            >
+                                                Back
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={handleSaveInstituteInfo}
+                                            disabled={loading || !instituteNameEn.trim() || !instituteNameBn.trim()}
+                                            className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/30 w-full sm:w-auto"
+                                        >
+                                            {loading ? 'সংরক্ষণ করা হচ্ছে...' : 'সংরক্ষণ করুন ও ড্যাশবোর্ডে যান'}
+                                            <ArrowRight size={18} />
+                                        </button>
                                     </>
                                 )}
                             </div>

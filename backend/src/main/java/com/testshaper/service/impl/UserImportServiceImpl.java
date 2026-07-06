@@ -7,6 +7,8 @@ import com.testshaper.entity.User;
 import com.testshaper.repository.InstituteRepository;
 import com.testshaper.repository.RoleRepository;
 import com.testshaper.repository.UserRepository;
+import com.testshaper.repository.AcademicClassRepository;
+import com.testshaper.entity.AcademicClass;
 import com.testshaper.service.UserImportService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,7 @@ public class UserImportServiceImpl implements UserImportService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final InstituteRepository instituteRepository;
+    private final AcademicClassRepository academicClassRepository;
     private final PasswordEncoder passwordEncoder;
 
     private static final String DEFAULT_TEMP_PASSWORD = "Welcome@123";
@@ -63,6 +66,8 @@ public class UserImportServiceImpl implements UserImportService {
             String name  = clean(row[0]);
             String email = clean(row[1]);
             String phone = row.length > 2 ? clean(row[2]) : null;
+            String className = row.length > 3 ? clean(row[3]) : null;
+            String roll = row.length > 4 ? clean(row[4]) : null;
 
             if (name.isEmpty() || email.isEmpty()) { errors.add("Row " + (i+1) + ": name/email required"); skipped++; continue; }
             if (userRepository.existsByEmail(email)) { errors.add("Row " + (i+1) + ": " + email + " already exists"); skipped++; continue; }
@@ -75,7 +80,20 @@ public class UserImportServiceImpl implements UserImportService {
                 user.setPassword(passwordEncoder.encode(DEFAULT_TEMP_PASSWORD));
                 user.setActive(true);
                 if (role != null) user.setRoles(new HashSet<>(Set.of(role)));
-                if (institute != null) user.setInstitute(institute);
+                if (institute != null) {
+                    user.setInstitute(institute);
+                    
+                    // Resolve Academic Class if it is student role
+                    if (role != null && "STUDENT".equals(role.getName()) && className != null && !className.isBlank()) {
+                        String tenantId = institute.getId().toString();
+                        AcademicClass academicClass = academicClassRepository.findByTenantIdAndNameIgnoreCase(tenantId, className)
+                            .orElseGet(() -> academicClassRepository.findByTenantIdAndNameIgnoreCase("DEFAULT", className).orElse(null));
+                        user.setAcademicClass(academicClass);
+                    }
+                }
+                if (roll != null && !roll.isBlank()) {
+                    user.setStudentRoll(roll);
+                }
                 userRepository.save(user);
                 created++;
             } catch (Exception e) {
@@ -95,9 +113,9 @@ public class UserImportServiceImpl implements UserImportService {
 
     @Override
     public byte[] generateCsvTemplate() {
-        String csv = "Name,Email,Phone\n" +
-                     "মোহাম্মদ রহিম,rahim@school.edu,01700000001\n" +
-                     "ফাতেমা খানম,fatema@school.edu,01800000002\n";
+        String csv = "Name,Email,Phone,Class,Roll\n" +
+                     "মোহাম্মদ রহিম,rahim@school.edu,01700000001,Class 10,101\n" +
+                     "ফাতেমা খানম,fatema@school.edu,01800000002,Class 9,102\n";
         return csv.getBytes(StandardCharsets.UTF_8);
     }
 
@@ -123,7 +141,7 @@ public class UserImportServiceImpl implements UserImportService {
             for (Row row : sheet) {
                 if (header) { header = false; continue; }
                 List<String> cells = new ArrayList<>();
-                for (int c = 0; c < 3; c++) {
+                for (int c = 0; c < 5; c++) {
                     Cell cell = row.getCell(c, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
                     cells.add(cell != null ? getCellValue(cell) : "");
                 }

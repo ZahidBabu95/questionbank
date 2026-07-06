@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Feather, AntDesign } from '@expo/vector-icons';
 import { theme } from '../theme/theme';
+import { getRegistrationRoles, Role } from '../api/authService';
 import { useAuth } from '../context/AuthContext';
 import { useBranding } from '../context/BrandingContext';
 import { TERMS_OF_SERVICE, PRIVACY_POLICY } from '../utils/legalContent';
@@ -42,6 +43,9 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
   const [secureText, setSecureText] = useState(true);
   const [secureConfirmText, setSecureConfirmText] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [selectedRole, setSelectedRole] = useState('TEACHER');
+  const [rolesLoading, setRolesLoading] = useState(true);
   
   // Validation and error states
   const [nameError, setNameError] = useState('');
@@ -62,6 +66,23 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
     }
   }, [globalError]);
 
+  useEffect(() => {
+    const fetchRoles = async () => {
+      try {
+        const res = await getRegistrationRoles();
+        if (res.success && res.data.length > 0) {
+          setRoles(res.data);
+          setSelectedRole(res.data[0].name);
+        }
+      } catch (err) {
+        console.log('Error fetching registration roles:', err);
+      } finally {
+        setRolesLoading(false);
+      }
+    };
+    fetchRoles();
+  }, []);
+
   // Legal Modal states
   const [legalModalVisible, setLegalModalVisible] = useState(false);
   const [legalModalType, setLegalModalType] = useState<'terms' | 'privacy'>('terms');
@@ -74,6 +95,17 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
   
   // Track focused fields for premium outline animation
   const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const handleFocusField = (fieldName: string) => {
+    setFocusedField(fieldName);
+    if (['password', 'confirmPassword'].includes(fieldName)) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  };
 
   // Password validation rules checker helper
   const getPasswordRules = (pass: string) => {
@@ -158,7 +190,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
         email: email.trim().toLowerCase(),
         password,
         phone: phone.trim() || undefined,
-        roles: ['TEACHER'], // Default role matching web signup behavior
+        roles: [selectedRole],
       };
 
       await register(payload);
@@ -195,10 +227,12 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
       <View style={styles.glowBlob2} pointerEvents="none" />
 
       <KeyboardAvoidingView 
+        enabled={true}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={styles.keyboardView}
       >
         <ScrollView 
+          ref={scrollViewRef}
           contentContainerStyle={[styles.scrollContent, isTablet && styles.tabletScroll]} 
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -280,7 +314,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                       if (nameError) setNameError('');
                     }}
                     autoCorrect={false}
-                    onFocus={() => setFocusedField('name')}
+                    onFocus={() => handleFocusField('name')}
                     onBlur={() => setFocusedField(null)}
                     textContentType="name"
                     autoComplete="name"
@@ -316,7 +350,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                     autoCapitalize="none"
                     keyboardType="email-address"
                     autoCorrect={false}
-                    onFocus={() => setFocusedField('email')}
+                    onFocus={() => handleFocusField('email')}
                     onBlur={() => {
                       setFocusedField(null);
                       if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -355,7 +389,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                       if (phoneError) setPhoneError('');
                     }}
                     keyboardType="phone-pad"
-                    onFocus={() => setFocusedField('phone')}
+                    onFocus={() => handleFocusField('phone')}
                     onBlur={() => {
                       setFocusedField(null);
                       if (phone.trim() && !/^(\+8801|8801|01)[3-9]\d{8}$/.test(phone.trim())) {
@@ -369,6 +403,49 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                 {/* Inline Error */}
                 {!!phoneError && <Text style={styles.errorText}>{phoneError}</Text>}
               </View>
+
+              {/* Dynamic Registration Roles Selection */}
+              {!rolesLoading && roles.length > 0 && (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{i18n.language === 'bn' ? 'আমি নিবন্ধন করছি একজন' : 'I am registering as a'} *</Text>
+                  <View style={styles.rolesGrid}>
+                    {roles.map((role) => {
+                      const isSelected = selectedRole === role.name;
+                      return (
+                        <TouchableOpacity
+                          key={role.name}
+                          activeOpacity={0.8}
+                          onPress={() => setSelectedRole(role.name)}
+                          style={[
+                            styles.roleCard,
+                            isSelected && styles.roleCardActive
+                          ]}
+                        >
+                          <View style={styles.roleCardHeader}>
+                            <Text style={[
+                              styles.roleCardName,
+                              isSelected && styles.roleCardNameActive
+                            ]}>
+                              {role.name}
+                            </Text>
+                            {isSelected && (
+                              <View style={styles.roleCheckCircle}>
+                                <AntDesign name="check" size={10} color="#FFF" />
+                              </View>
+                            )}
+                          </View>
+                          <Text style={[
+                            styles.roleCardDesc,
+                            isSelected && styles.roleCardDescActive
+                          ]}>
+                            {role.description || (role.name === 'TEACHER' ? 'Create exams & question banks' : 'Access papers & study materials')}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
 
               {/* Password & Confirm Grid for tablet, row for mobile */}
               <View style={isTablet ? styles.passwordRowTablet : styles.passwordCol}>
@@ -399,7 +476,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                       }}
                       autoCapitalize="none"
                       autoCorrect={false}
-                      onFocus={() => setFocusedField('password')}
+                      onFocus={() => handleFocusField('password')}
                       onBlur={() => setFocusedField(null)}
                       textContentType="newPassword"
                       autoComplete="password-new"
@@ -438,7 +515,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
                       }}
                       autoCapitalize="none"
                       autoCorrect={false}
-                      onFocus={() => setFocusedField('confirmPassword')}
+                      onFocus={() => handleFocusField('confirmPassword')}
                       onBlur={() => {
                         setFocusedField(null);
                         if (confirmPassword && password !== confirmPassword) {
@@ -1105,5 +1182,55 @@ const styles = StyleSheet.create({
   },
   globalErrorClose: {
     padding: 4,
+  },
+  rolesGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  roleCard: {
+    flex: 1,
+    height: 96,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    padding: 12,
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF',
+    ...theme.shadows.sm,
+  },
+  roleCardActive: {
+    borderColor: theme.colors.primary,
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(59, 130, 246, 0.04)',
+  },
+  roleCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  roleCardName: {
+    fontSize: theme.typography.sizes.sm,
+    fontWeight: theme.typography.weights.bold,
+    color: theme.colors.textMuted,
+  },
+  roleCardNameActive: {
+    color: theme.colors.primary,
+  },
+  roleCheckCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleCardDesc: {
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    lineHeight: 13,
+  },
+  roleCardDescActive: {
+    color: theme.colors.primary,
   },
 });

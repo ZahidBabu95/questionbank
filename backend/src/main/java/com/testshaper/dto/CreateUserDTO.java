@@ -27,4 +27,10 @@ public class CreateUserDTO {
     private UUID instituteId;
 
     private Set<String> roles; // List of Role names
+
+    private UUID classId;
+
+    private String studentRoll;
+
+    private UUID packageId;
 }

@@ -31,6 +31,9 @@ public class ManualExamServiceImpl {
     private final QuestionFavoriteRepository favoriteRepository;
     private final UserRepository userRepository;
 
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
     // ── Create Manual Exam (draft, no questions yet) ──────────────────────────
     @Transactional
     public ExamDTO createExam(ManualExamRequest req, String createdBy) {
@@ -264,16 +267,193 @@ public class ManualExamServiceImpl {
         String language = (params.getLanguage() != null && !params.getLanguage().isBlank()) ? params.getLanguage()
                 : null;
 
-        return questionRepository.searchApproved(
-                tenantId,
-                params.getClassSubjectId(),
-                params.getChapterId(),
-                params.getTopicId(),
-                type,
-                difficulty,
-                language,
-                keyword,
-                pageable).map(this::toQuestionDTO);
+        // Base JPQL
+        StringBuilder jpql = new StringBuilder("SELECT DISTINCT q FROM Question q ");
+
+        // 1. Joins
+        if ("FAVORITES".equalsIgnoreCase(params.getSourceMode())) {
+            jpql.append("JOIN QuestionFavorite qf ON qf.question = q ");
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(params.getSourceMode()) && params.getLectureIds() != null && !params.getLectureIds().isEmpty()) {
+            jpql.append("JOIN LectureQuestion lq ON lq.question = q ");
+        }
+
+        boolean hasBoard = params.getBoards() != null && !params.getBoards().isEmpty();
+        boolean hasYear = params.getYears() != null && !params.getYears().isEmpty();
+        boolean hasSchool = params.getSchools() != null && !params.getSchools().isEmpty();
+
+        if (hasBoard || hasYear || hasSchool) {
+            jpql.append("JOIN q.sources qs ");
+        }
+
+        // 2. Base conditions
+        jpql.append("WHERE q.status = 'APPROVED' AND q.deleted = false ");
+        if (params.getClassSubjectId() != null) {
+            jpql.append("AND q.classSubject.id = :classSubjectId ");
+        }
+        if (params.getChapterId() != null) {
+            jpql.append("AND q.chapter.id = :chapterId ");
+            jpql.append("AND (q.chapter.isActive = true OR q.chapter.isActive IS NULL) ");
+        }
+        if (params.getTopicId() != null) {
+            jpql.append("AND q.topic.id = :topicId ");
+            jpql.append("AND (q.chapter.isActive = true OR q.chapter.isActive IS NULL) ");
+        }
+        if (type != null) {
+            jpql.append("AND q.type = :type ");
+        }
+        if (difficulty != null) {
+            jpql.append("AND q.difficulty = :difficulty ");
+        }
+        if (language != null) {
+            jpql.append("AND (q.language = :language OR q.language = 'Bilingual' OR :language = 'Bilingual' OR q.language IS NULL OR q.language = '') ");
+        }
+        if (keyword != null) {
+            jpql.append("AND LOWER(q.questionText) LIKE LOWER(:keyword) ");
+        }
+
+        // 3. Source Mode filters
+        if ("FAVORITES".equalsIgnoreCase(params.getSourceMode())) {
+            String currentUser = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            jpql.append("AND qf.user.email = :currentUser ");
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(params.getSourceMode()) && params.getLectureIds() != null && !params.getLectureIds().isEmpty()) {
+            jpql.append("AND lq.lecture.id IN :lectureIds ");
+        }
+
+        // 4. Board/Year/School filters
+        if (hasBoard) {
+            jpql.append("AND qs.sourceType = :boardExamType AND LOWER(qs.organizationName) IN :boards ");
+        }
+        if (hasYear) {
+            jpql.append("AND qs.examYear IN :years ");
+        }
+        if (hasSchool) {
+            jpql.append("AND qs.sourceType = :institutionTestType AND LOWER(qs.organizationName) IN :schools ");
+        }
+
+        // Add sorting (always order by q.createdAt desc for consistency)
+        jpql.append("ORDER BY q.createdAt DESC");
+
+        // Count Query JPQL
+        StringBuilder countJpql = new StringBuilder("SELECT COUNT(DISTINCT q) FROM Question q ");
+        if ("FAVORITES".equalsIgnoreCase(params.getSourceMode())) {
+            countJpql.append("JOIN QuestionFavorite qf ON qf.question = q ");
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(params.getSourceMode()) && params.getLectureIds() != null && !params.getLectureIds().isEmpty()) {
+            countJpql.append("JOIN LectureQuestion lq ON lq.question = q ");
+        }
+        if (hasBoard || hasYear || hasSchool) {
+            countJpql.append("JOIN q.sources qs ");
+        }
+
+        // Count conditions
+        countJpql.append("WHERE q.status = 'APPROVED' AND q.deleted = false ");
+        if (params.getClassSubjectId() != null) {
+            countJpql.append("AND q.classSubject.id = :classSubjectId ");
+        }
+        if (params.getChapterId() != null) {
+            countJpql.append("AND q.chapter.id = :chapterId ");
+            countJpql.append("AND (q.chapter.isActive = true OR q.chapter.isActive IS NULL) ");
+        }
+        if (params.getTopicId() != null) {
+            countJpql.append("AND q.topic.id = :topicId ");
+            countJpql.append("AND (q.chapter.isActive = true OR q.chapter.isActive IS NULL) ");
+        }
+        if (type != null) {
+            countJpql.append("AND q.type = :type ");
+        }
+        if (difficulty != null) {
+            countJpql.append("AND q.difficulty = :difficulty ");
+        }
+        if (language != null) {
+            countJpql.append("AND (q.language = :language OR q.language = 'Bilingual' OR :language = 'Bilingual' OR q.language IS NULL OR q.language = '') ");
+        }
+        if (keyword != null) {
+            countJpql.append("AND LOWER(q.questionText) LIKE LOWER(:keyword) ");
+        }
+        if ("FAVORITES".equalsIgnoreCase(params.getSourceMode())) {
+            String currentUser = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            countJpql.append("AND qf.user.email = :currentUser ");
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(params.getSourceMode()) && params.getLectureIds() != null && !params.getLectureIds().isEmpty()) {
+            countJpql.append("AND lq.lecture.id IN :lectureIds ");
+        }
+        if (hasBoard) {
+            countJpql.append("AND qs.sourceType = :boardExamType AND LOWER(qs.organizationName) IN :boards ");
+        }
+        if (hasYear) {
+            countJpql.append("AND qs.examYear IN :years ");
+        }
+        if (hasSchool) {
+            countJpql.append("AND qs.sourceType = :institutionTestType AND LOWER(qs.organizationName) IN :schools ");
+        }
+
+        // Build Queries
+        jakarta.persistence.TypedQuery<Question> query = entityManager.createQuery(jpql.toString(), Question.class);
+        jakarta.persistence.TypedQuery<Long> countQuery = entityManager.createQuery(countJpql.toString(), Long.class);
+
+        // Bind parameters
+        if (params.getClassSubjectId() != null) {
+            query.setParameter("classSubjectId", params.getClassSubjectId());
+            countQuery.setParameter("classSubjectId", params.getClassSubjectId());
+        }
+        if (params.getChapterId() != null) {
+            query.setParameter("chapterId", params.getChapterId());
+            countQuery.setParameter("chapterId", params.getChapterId());
+        }
+        if (params.getTopicId() != null) {
+            query.setParameter("topicId", params.getTopicId());
+            countQuery.setParameter("topicId", params.getTopicId());
+        }
+        if (type != null) {
+            query.setParameter("type", type);
+            countQuery.setParameter("type", type);
+        }
+        if (difficulty != null) {
+            query.setParameter("difficulty", difficulty);
+            countQuery.setParameter("difficulty", difficulty);
+        }
+        if (language != null) {
+            query.setParameter("language", language);
+            countQuery.setParameter("language", language);
+        }
+        if (keyword != null) {
+            String likeKeyword = "%" + keyword.toLowerCase() + "%";
+            query.setParameter("keyword", likeKeyword);
+            countQuery.setParameter("keyword", likeKeyword);
+        }
+        if ("FAVORITES".equalsIgnoreCase(params.getSourceMode())) {
+            String currentUser = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            query.setParameter("currentUser", currentUser);
+            countQuery.setParameter("currentUser", currentUser);
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(params.getSourceMode()) && params.getLectureIds() != null && !params.getLectureIds().isEmpty()) {
+            query.setParameter("lectureIds", params.getLectureIds());
+            countQuery.setParameter("lectureIds", params.getLectureIds());
+        }
+        if (hasBoard) {
+            List<String> lowerBoards = params.getBoards().stream().map(String::toLowerCase).collect(Collectors.toList());
+            query.setParameter("boards", lowerBoards);
+            countQuery.setParameter("boards", lowerBoards);
+            query.setParameter("boardExamType", com.testshaper.entity.QuestionSource.SourceType.BOARD_EXAM);
+            countQuery.setParameter("boardExamType", com.testshaper.entity.QuestionSource.SourceType.BOARD_EXAM);
+        }
+        if (hasYear) {
+            query.setParameter("years", params.getYears());
+            countQuery.setParameter("years", params.getYears());
+        }
+        if (hasSchool) {
+            List<String> lowerSchools = params.getSchools().stream().map(String::toLowerCase).collect(Collectors.toList());
+            query.setParameter("schools", lowerSchools);
+            countQuery.setParameter("schools", lowerSchools);
+            query.setParameter("institutionTestType", com.testshaper.entity.QuestionSource.SourceType.INSTITUTION_TEST);
+            countQuery.setParameter("institutionTestType", com.testshaper.entity.QuestionSource.SourceType.INSTITUTION_TEST);
+        }
+
+        // Paginate
+        query.setFirstResult((int) pageable.getOffset());
+        query.setMaxResults(pageable.getPageSize());
+
+        List<Question> questions = query.getResultList();
+        long total = countQuery.getSingleResult();
+
+        return new org.springframework.data.domain.PageImpl<>(questions, pageable, total).map(this::toQuestionDTO);
     }
 
     // ── Get Exam ──────────────────────────────────────────────────────────────
@@ -357,6 +537,7 @@ public class ManualExamServiceImpl {
     private ExamDTO toDTO(Exam exam) {
         ExamDTO dto = new ExamDTO();
         dto.setId(exam.getId());
+        dto.setTenantId(exam.getTenantId());
         dto.setTitle(exam.getTitle());
         dto.setExamType(exam.getExamType());
         dto.setStatus(exam.getStatus());
@@ -397,6 +578,7 @@ public class ManualExamServiceImpl {
                     qDto.setId(eq.getId());
                     qDto.setOrder(eq.getQuestionOrder());
                     qDto.setMarks(eq.getMarks());
+                    qDto.setAlternativeToId(eq.getAlternativeToId());
                     if (eq.getSection() != null) {
                         qDto.setSectionId(eq.getSection().getId());
                     }

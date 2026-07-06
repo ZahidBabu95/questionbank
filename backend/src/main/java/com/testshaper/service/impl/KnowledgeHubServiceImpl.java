@@ -92,6 +92,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     private final com.testshaper.repository.QuestionTypeRepository questionTypeRepository;
     private final com.testshaper.repository.QuestionSourceRepository questionSourceRepository;
     private final com.testshaper.repository.CurriculumDocumentChunkRepository curriculumDocumentChunkRepository;
+    private final com.testshaper.repository.InstituteRepository instituteRepository;
     private final RestTemplate restTemplate = createRestTemplateWithTimeouts();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -987,16 +988,34 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         return mapToDto(saved);
     }
 
+    private String globalTenantIdCache = null;
+
+    private String getGlobalTenantId() {
+        if (globalTenantIdCache != null) {
+            return globalTenantIdCache;
+        }
+        try {
+            java.util.Optional<com.testshaper.entity.Institute> instOpt = instituteRepository.findByCode("DEFAULT-001");
+            if (instOpt.isPresent()) {
+                globalTenantIdCache = String.valueOf(instOpt.get().getId());
+                return globalTenantIdCache;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to find Default Institute ID: {}", e.getMessage());
+        }
+        return "0c430840-39f2-4645-b2e4-53d62c8e4b49"; // Fallback
+    }
+
     @Override
     public List<SourceBookMasterDto> getAllSourceBooks() {
-        List<SourceBookMaster> books = sourceBookMasterRepository.findByTenantIdOrderByCreatedAtDesc(TenantContext.getTenantId());
+        List<SourceBookMaster> books = sourceBookMasterRepository.findByTenantIdOrderByCreatedAtDesc(TenantContext.getTenantId(), getGlobalTenantId());
         return mapToDtos(books);
     }
 
     @Override
     public org.springframework.data.domain.Page<SourceBookMasterDto> getPaginatedSourceBooks(String searchTerm, String bookType, java.util.List<UUID> classSubjectIds, int page, int size) {
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
-        org.springframework.data.domain.Page<SourceBookMaster> pageResult = sourceBookMasterRepository.searchBooks(TenantContext.getTenantId(), searchTerm, bookType, classSubjectIds, pageable);
+        org.springframework.data.domain.Page<SourceBookMaster> pageResult = sourceBookMasterRepository.searchBooks(TenantContext.getTenantId(), getGlobalTenantId(), searchTerm, bookType, classSubjectIds, pageable);
         
         List<SourceBookMasterDto> dtos = mapToDtos(pageResult.getContent());
         return new org.springframework.data.domain.PageImpl<>(dtos, pageable, pageResult.getTotalElements());
@@ -1011,7 +1030,11 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     public SourceBookMasterDto getSourceBook(UUID id) {
         SourceBookMaster entity = sourceBookMasterRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Source Book not found"));
-        if(!"DEFAULT".equals(TenantContext.getTenantId()) && !entity.getTenantId().equals(TenantContext.getTenantId())) {
+        String currentTenant = TenantContext.getTenantId();
+        boolean isAuthorized = "DEFAULT".equals(currentTenant)
+                || entity.getTenantId().equals(currentTenant)
+                || entity.getTenantId().equals(getGlobalTenantId());
+        if(!isAuthorized) {
              throw new RuntimeException("Unauthorized");
         }
         return mapToDto(entity);
@@ -1925,11 +1948,19 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
             bookLanguageInstruction = "7. **LANGUAGE VERSION**: The source material is in [" + book.getLanguage() + "] version. You MUST generate or extract the questions exactly in [" + book.getLanguage() + "] language. If the version is English, output strictly in English. If Bangla, output strictly in Bangla. If Bilingual, follow the source text format.\n";
         }
 
+        String instructions1And2 = "";
+        if ("TEXTBOOK".equals(bType)) {
+            instructions1And2 = "1. Since the source material is a TEXTBOOK, your primary task is to **GENERATE new, high-quality, creative questions** based on the theories and concepts inside. Do NOT look for past examination sources or try to extract existing board questions.\n" +
+                                "2. Do NOT fill the 'sources' array or populate any source metadata in the JSON response. Keep it empty or null (e.g. `\"sources\": []`), as these are new textbook-based generated questions.\n";
+        } else {
+            instructions1And2 = "1. If the text contains existing examination questions or exercises, your primary task is to **EXTRACT EXACT EXISTING QUESTIONS**. Do NOT make up variations.\n" +
+                                "2. If the text is an educational chapter with NO existing questions, your task is to **GENERATE high-quality questions** based on the theories inside.\n";
+        }
+
         String prompt = "You are an expert curriculum question setter and data parser. Read the provided TEXT context below.\n" +
                         "INSTRUCTIONS:\n" +
                         sourceTypeInstruction +
-                        "1. If the text contains existing examination questions or exercises, your primary task is to **EXTRACT EXACT EXISTING QUESTIONS**. Do NOT make up variations.\n" +
-                        "2. If the text is an educational chapter with NO existing questions, your task is to **GENERATE high-quality questions** based on the theories inside.\n" +
+                        instructions1And2 +
                         "3. If the text is just a Table of Contents (সূচিপত্র/Index), Title Page, Copyright Page, or noise, do **NOT** generate questions. Simply return an empty JSON array [].\n" +
                         "4. **PRESERVE IMAGES (CRITICAL):** If the markdown text contains images `![alt](url)`, you MUST pair them with the appropriate question! Put the image markdown in the `stimulus` field or `questionText` field. Do NOT lose the image link!\n" +
                         "5. **STRIP NUMBERS:** Remove any serial numbers (e.g. '1. ', '১। ', 'Q:') from the beginning of `questionText`.\n" +
@@ -2183,20 +2214,82 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                             q.setAiModelName(model);
                             q.setSourceReference("chunk_" + chunkId.toString());
 
+                            // কাস্টম উত্তর ভ্যালু ইনডেক্স ম্যাপিং লজিক
+                            String correctAnswerVal = q.getCorrectAnswer() != null ? q.getCorrectAnswer().trim() : "";
+                            int correctOptionIndex = -1;
+                            if (correctAnswerVal.equals("ক") || correctAnswerVal.equalsIgnoreCase("A") || correctAnswerVal.equals("১")) {
+                                correctOptionIndex = 0;
+                            } else if (correctAnswerVal.equals("খ") || correctAnswerVal.equalsIgnoreCase("B") || correctAnswerVal.equals("২")) {
+                                correctOptionIndex = 1;
+                            } else if (correctAnswerVal.equals("গ") || correctAnswerVal.equalsIgnoreCase("C") || correctAnswerVal.equals("৩")) {
+                                correctOptionIndex = 2;
+                            } else if (correctAnswerVal.equals("ঘ") || correctAnswerVal.equalsIgnoreCase("D") || correctAnswerVal.equals("৪")) {
+                                correctOptionIndex = 3;
+                            }
+
                             com.fasterxml.jackson.databind.JsonNode optionsNode = rootNode.hasNonNull("options") ? rootNode.get("options") : qNode.get("options");
                             if (optionsNode != null && optionsNode.isArray()) {
                                 int limit = Math.min(optionsNode.size(), 4);
                                 for (int i = 0; i < limit; i++) {
+                                    com.fasterxml.jackson.databind.JsonNode optNode = optionsNode.get(i);
+                                    
+                                    // ১. অপশন লেবেল নির্ধারণ (optionLabel বা label বা A/B/C/D)
+                                    String label = "";
+                                    if (optNode.hasNonNull("optionLabel")) {
+                                        label = optNode.get("optionLabel").asText();
+                                    } else if (optNode.hasNonNull("label")) {
+                                        label = optNode.get("label").asText();
+                                    } else {
+                                        label = String.valueOf((char)('A' + i));
+                                    }
+                                    
+                                    // ২. অপশন টেক্সট নির্ধারণ (optionText বা text বা raw string value)
+                                    String text = "";
+                                    if (optNode.hasNonNull("optionText")) {
+                                        text = optNode.get("optionText").asText();
+                                    } else if (optNode.hasNonNull("text")) {
+                                        text = optNode.get("text").asText();
+                                    } else {
+                                        text = optNode.asText();
+                                    }
+                                    
                                     com.testshaper.entity.QuestionOption opt = new com.testshaper.entity.QuestionOption();
                                     opt.setQuestion(q);
-                                    opt.setOptionLabel(optionsNode.get(i).path("optionLabel").asText(String.valueOf((char)('A' + i))));
-                                    opt.setOptionText(optionsNode.get(i).path("optionText").asText(optionsNode.get(i).asText()));
+                                    opt.setOptionLabel(label);
+                                    opt.setOptionText(text);
                                     
-                                    if (optionsNode.get(i).hasNonNull("isCorrect")) {
-                                        opt.setCorrect(optionsNode.get(i).get("isCorrect").asBoolean());
+                                    // ৩. সঠিক উত্তর নির্ধারণ
+                                    boolean isOptCorrect = false;
+                                    if (optNode.hasNonNull("isCorrect")) {
+                                        isOptCorrect = optNode.get("isCorrect").asBoolean();
+                                    } else if (optNode.hasNonNull("correct")) {
+                                        isOptCorrect = optNode.get("correct").asBoolean();
                                     } else {
-                                        opt.setCorrect(opt.getOptionText().equals(q.getCorrectAnswer()));
+                                        if (correctOptionIndex == i) {
+                                            isOptCorrect = true;
+                                        } else if (!label.isEmpty() && label.equalsIgnoreCase(correctAnswerVal)) {
+                                            isOptCorrect = true;
+                                        } else {
+                                            String cleanText = text.trim();
+                                            if (cleanText.startsWith("ক.") || cleanText.startsWith("খ.") || cleanText.startsWith("গ.") || cleanText.startsWith("ঘ.") ||
+                                                cleanText.startsWith("A.") || cleanText.startsWith("B.") || cleanText.startsWith("C.") || cleanText.startsWith("D.") ||
+                                                cleanText.startsWith("a.") || cleanText.startsWith("b.") || cleanText.startsWith("c.") || cleanText.startsWith("d.")) {
+                                                cleanText = cleanText.substring(2).trim();
+                                            } else if (cleanText.startsWith("ক/") || cleanText.startsWith("খ/") || cleanText.startsWith("গ/") || cleanText.startsWith("ঘ/")) {
+                                                cleanText = cleanText.substring(2).trim();
+                                            }
+                                            
+                                            String cleanAns = correctAnswerVal;
+                                            if (cleanAns.startsWith("ক.") || cleanAns.startsWith("খ.") || cleanAns.startsWith("গ.") || cleanAns.startsWith("ঘ.") ||
+                                                cleanAns.startsWith("A.") || cleanAns.startsWith("B.") || cleanAns.startsWith("C.") || cleanAns.startsWith("D.") ||
+                                                cleanAns.startsWith("a.") || cleanAns.startsWith("b.") || cleanAns.startsWith("c.") || cleanAns.startsWith("d.")) {
+                                                cleanAns = cleanAns.substring(2).trim();
+                                            }
+                                            
+                                            isOptCorrect = cleanText.equalsIgnoreCase(cleanAns);
+                                        }
                                     }
+                                    opt.setCorrect(isOptCorrect);
                                     
                                     q.getOptions().add(opt);
                                 }
@@ -2210,51 +2303,53 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
 
                             questionRepository.save(q);
                             
-                            com.fasterxml.jackson.databind.JsonNode sourcesNode = rootNode.hasNonNull("sources") ? rootNode.get("sources") : qNode.get("sources");
-                            if (sourcesNode != null && sourcesNode.isArray()) {
-                                for(com.fasterxml.jackson.databind.JsonNode sNode : sourcesNode) {
-                                    com.testshaper.entity.QuestionSource qs = new com.testshaper.entity.QuestionSource();
-                                    qs.setQuestion(q);
-                                    
-                                    try {
-                                        if (sNode.hasNonNull("sourceType")) {
-                                            qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.valueOf(sNode.get("sourceType").asText().toUpperCase()));
-                                        } else {
-                                            qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER);
-                                        }
-                                    } catch(Exception ignored) { qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER); }
-                                    
-                                    if(sNode.hasNonNull("examYear")) qs.setExamYear(sNode.get("examYear").asInt());
-                                    if(sNode.hasNonNull("organizationName") && !sNode.get("organizationName").asText().isBlank()) qs.setOrganizationName(sNode.get("organizationName").asText());
-                                    if(sNode.hasNonNull("examName") && !sNode.get("examName").asText().isBlank()) qs.setExamName(sNode.get("examName").asText());
-                                    if(sNode.hasNonNull("session") && !sNode.get("session").asText().isBlank()) qs.setSession(sNode.get("session").asText());
-                                    if(sNode.hasNonNull("note") && !sNode.get("note").asText().isBlank()) qs.setNote(sNode.get("note").asText());
-                                    
-                                    questionSourceRepository.save(qs);
-                                }
-                            } else if (chunk.getMetadata() != null && !chunk.getMetadata().isBlank()) {
-                                // Fallback: Inject chunk metadata as QuestionSource if AI didn't provide sources
-                                try {
-                                    com.fasterxml.jackson.databind.JsonNode chunkMetadataNode = objectMapper.readTree(chunk.getMetadata());
-                                    if (chunkMetadataNode.isArray()) {
-                                        for (com.fasterxml.jackson.databind.JsonNode mNode : chunkMetadataNode) {
-                                            com.testshaper.entity.QuestionSource qs = new com.testshaper.entity.QuestionSource();
-                                            qs.setQuestion(q);
-                                            try {
-                                                if (mNode.hasNonNull("sourceType")) qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.valueOf(mNode.get("sourceType").asText().toUpperCase()));
-                                                else qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER);
-                                            } catch(Exception ignored) { qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER); }
-                                            
-                                            if(mNode.hasNonNull("examYear")) qs.setExamYear(mNode.get("examYear").asInt());
-                                            if(mNode.hasNonNull("organizationName") && !mNode.get("organizationName").asText().isBlank()) qs.setOrganizationName(mNode.get("organizationName").asText());
-                                            if(mNode.hasNonNull("examName") && !mNode.get("examName").asText().isBlank()) qs.setExamName(mNode.get("examName").asText());
-                                            if(mNode.hasNonNull("session") && !mNode.get("session").asText().isBlank()) qs.setSession(mNode.get("session").asText());
-                                            if(mNode.hasNonNull("note") && !mNode.get("note").asText().isBlank()) qs.setNote(mNode.get("note").asText());
-                                            
-                                            questionSourceRepository.save(qs);
-                                        }
+                            if (!"TEXTBOOK".equals(bType)) {
+                                com.fasterxml.jackson.databind.JsonNode sourcesNode = rootNode.hasNonNull("sources") ? rootNode.get("sources") : qNode.get("sources");
+                                if (sourcesNode != null && sourcesNode.isArray()) {
+                                    for(com.fasterxml.jackson.databind.JsonNode sNode : sourcesNode) {
+                                        com.testshaper.entity.QuestionSource qs = new com.testshaper.entity.QuestionSource();
+                                        qs.setQuestion(q);
+                                        
+                                        try {
+                                            if (sNode.hasNonNull("sourceType")) {
+                                                qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.valueOf(sNode.get("sourceType").asText().toUpperCase()));
+                                            } else {
+                                                qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER);
+                                            }
+                                        } catch(Exception ignored) { qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER); }
+                                        
+                                        if(sNode.hasNonNull("examYear")) qs.setExamYear(sNode.get("examYear").asInt());
+                                        if(sNode.hasNonNull("organizationName") && !sNode.get("organizationName").asText().isBlank()) qs.setOrganizationName(sNode.get("organizationName").asText());
+                                        if(sNode.hasNonNull("examName") && !sNode.get("examName").asText().isBlank()) qs.setExamName(sNode.get("examName").asText());
+                                        if(sNode.hasNonNull("session") && !sNode.get("session").asText().isBlank()) qs.setSession(sNode.get("session").asText());
+                                        if(sNode.hasNonNull("note") && !sNode.get("note").asText().isBlank()) qs.setNote(sNode.get("note").asText());
+                                        
+                                        questionSourceRepository.save(qs);
                                     }
-                                } catch (Exception ignored) {}
+                                } else if (chunk.getMetadata() != null && !chunk.getMetadata().isBlank()) {
+                                    // Fallback: Inject chunk metadata as QuestionSource if AI didn't provide sources
+                                    try {
+                                        com.fasterxml.jackson.databind.JsonNode chunkMetadataNode = objectMapper.readTree(chunk.getMetadata());
+                                        if (chunkMetadataNode.isArray()) {
+                                            for (com.fasterxml.jackson.databind.JsonNode mNode : chunkMetadataNode) {
+                                                com.testshaper.entity.QuestionSource qs = new com.testshaper.entity.QuestionSource();
+                                                qs.setQuestion(q);
+                                                try {
+                                                    if (mNode.hasNonNull("sourceType")) qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.valueOf(mNode.get("sourceType").asText().toUpperCase()));
+                                                    else qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER);
+                                                } catch(Exception ignored) { qs.setSourceType(com.testshaper.entity.QuestionSource.SourceType.OTHER); }
+                                                
+                                                if(mNode.hasNonNull("examYear")) qs.setExamYear(mNode.get("examYear").asInt());
+                                                if(mNode.hasNonNull("organizationName") && !mNode.get("organizationName").asText().isBlank()) qs.setOrganizationName(mNode.get("organizationName").asText());
+                                                if(mNode.hasNonNull("examName") && !mNode.get("examName").asText().isBlank()) qs.setExamName(mNode.get("examName").asText());
+                                                if(mNode.hasNonNull("session") && !mNode.get("session").asText().isBlank()) qs.setSession(mNode.get("session").asText());
+                                                if(mNode.hasNonNull("note") && !mNode.get("note").asText().isBlank()) qs.setNote(mNode.get("note").asText());
+                                                
+                                                questionSourceRepository.save(qs);
+                                            }
+                                        }
+                                    } catch (Exception ignored) {}
+                                }
                             }
 
                             savedCount++;

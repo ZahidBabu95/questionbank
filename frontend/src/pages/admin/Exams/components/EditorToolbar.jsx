@@ -67,7 +67,7 @@ const EditorToolbar = ({
                 <RibbonTab id="home" label="Home" icon={HomeIcon} active={activeTab === 'home'} onClick={() => handleTabClick('home')} />
                 <RibbonTab id="insert" label="Insert" icon={Plus} active={activeTab === 'insert'} onClick={() => handleTabClick('insert')} />
                 <RibbonTab id="layout" label="Layout" icon={LayoutGrid} active={activeTab === 'layout'} onClick={() => handleTabClick('layout')} />
-                <RibbonTab id="bank" label="Pro Settings" icon={Settings} active={activeTab === 'bank'} onClick={() => handleTabClick('bank')} />
+                <RibbonTab id="metadata" label="Header & Meta" icon={FileText} active={activeTab === 'metadata'} onClick={() => handleTabClick('metadata')} />
                 <RibbonTab id="design" label="Design" icon={Palette} active={activeTab === 'design'} onClick={() => handleTabClick('design')} />
 
                 <div className="ml-auto flex items-center gap-3 pr-4 mb-2">
@@ -92,17 +92,19 @@ const EditorToolbar = ({
                 {activeTab === 'home' && (
                     <>
                         <ToolbarGroup label="Undo/Redo">
-                            <ToolButton icon={RotateCcw} label="Undo" onMouseDown={(e) => applyCommand(e, 'undo')} />
-                            <ToolButton icon={RotateCw} label="Redo" onMouseDown={(e) => applyCommand(e, 'redo')} />
+                            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-md divide-x divide-slate-200 overflow-hidden shadow-sm">
+                                <button title="Undo" onMouseDown={(e) => applyCommand(e, 'undo')} className="p-2 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center"><RotateCcw size={14} /></button>
+                                <button title="Redo" onMouseDown={(e) => applyCommand(e, 'redo')} className="p-2 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center"><RotateCw size={14} /></button>
+                            </div>
                         </ToolbarGroup>
                         <ToolbarGroup label="Font">
                             <div className="flex flex-col gap-1.5 justify-center h-full">
                                 {/* Row 1 */}
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1.5">
                                     <select
                                         value={config.fontFamily}
                                         onChange={e => setConfig({ ...config, fontFamily: e.target.value })}
-                                        className="bg-slate-50 border border-slate-200 hover:border-slate-300 rounded px-2 py-1 text-[11px] font-semibold outline-none focus:border-indigo-500 w-32"
+                                        className="bg-slate-50 border border-slate-200 hover:border-slate-300 rounded px-2 py-1 text-[11px] font-semibold outline-none focus:border-indigo-500 w-32 shadow-sm cursor-pointer"
                                     >
                                         <option value="font-serif">Classic Serif</option>
                                         <option value="font-sans">Modern Sans</option>
@@ -114,80 +116,79 @@ const EditorToolbar = ({
                                         type="number"
                                         value={config.fontSize}
                                         onChange={e => setConfig({ ...config, fontSize: parseInt(e.target.value) })}
-                                        className="w-12 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded text-[11px] font-semibold outline-none px-1 py-1 text-center"
+                                        className="w-12 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded text-[11px] font-semibold outline-none px-1.5 py-1 text-center shadow-sm"
                                     />
-                                    <div className="w-[1px] h-4 bg-slate-200 mx-1"></div>
-                                    <div className="flex items-center gap-0.5 bg-slate-50 border border-slate-200 rounded p-[2px]">
-                                        <button title="Highlight Yellow" onMouseDown={(e) => applyCommand(e, 'hiliteColor', '#fef08a')} className="p-1 rounded transition-all hover:bg-white"><div className="w-3.5 h-3.5 bg-yellow-300 rounded-sm"></div></button>
-                                        <button title="Text Color Red" onMouseDown={(e) => applyCommand(e, 'foreColor', '#ef4444')} className="p-1 rounded transition-all hover:bg-white flex items-center justify-center font-bold text-[9px] text-red-500 border-b-[1.5px] border-red-500 leading-none pb-[2px]">A</button>
+                                    <div className="flex items-center bg-slate-50 border border-slate-200 rounded-md divide-x divide-slate-200 overflow-hidden shadow-sm">
+                                        <button title="Highlight Yellow" onMouseDown={(e) => applyCommand(e, 'hiliteColor', '#fef08a')} className="p-1 hover:bg-slate-150 flex items-center justify-center"><div className="w-3.5 h-3.5 bg-yellow-400 rounded-sm"></div></button>
+                                        <button title="Text Color Red" onMouseDown={(e) => applyCommand(e, 'foreColor', '#ef4444')} className="p-1 px-2 hover:bg-slate-150 flex items-center justify-center font-black text-[10px] text-red-600 leading-none pb-[2px] relative">A<div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-3.5 h-[1.5px] bg-red-600 rounded"></div></button>
                                     </div>
                                 </div>
                                 {/* Row 2 */}
                                 <div className="flex items-center gap-2">
-                                    <div className="flex gap-0.5 bg-slate-50 border border-slate-200 rounded p-[2px]">
-                                        <ToolButton icon={Bold} label="Bold" onMouseDown={(e) => applyCommand(e, 'bold')} />
-                                        <ToolButton icon={Italic} label="Italic" onMouseDown={(e) => applyCommand(e, 'italic')} />
-                                        <ToolButton icon={Underline} label="Underline" onMouseDown={(e) => applyCommand(e, 'underline')} />
-                                        <ToolButton icon={Strikethrough} label="Strikethrough" onMouseDown={(e) => applyCommand(e, 'strikethrough')} />
+                                    <div className="flex items-center bg-slate-50 border border-slate-200 rounded-md divide-x divide-slate-200 overflow-hidden shadow-sm">
+                                        <button title="Bold" onMouseDown={(e) => applyCommand(e, 'bold')} className="p-1 px-2.5 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center font-bold text-[11px]">B</button>
+                                        <button title="Italic" onMouseDown={(e) => applyCommand(e, 'italic')} className="p-1 px-2.5 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center italic text-[11px]">I</button>
+                                        <button title="Underline" onMouseDown={(e) => applyCommand(e, 'underline')} className="p-1 px-2.5 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center underline text-[11px]">U</button>
+                                        <button title="Strikethrough" onMouseDown={(e) => applyCommand(e, 'strikethrough')} className="p-1 px-2.5 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center line-through text-[11px]">S</button>
                                     </div>
-                                    <div className="flex gap-0.5 bg-slate-50 border border-slate-200 rounded p-[2px]">
-                                        <ToolButton icon={Subscript} label="Subscript" onMouseDown={(e) => applyCommand(e, 'subscript')} />
-                                        <ToolButton icon={Superscript} label="Superscript" onMouseDown={(e) => applyCommand(e, 'superscript')} />
+                                    <div className="flex items-center bg-slate-50 border border-slate-200 rounded-md divide-x divide-slate-200 overflow-hidden shadow-sm">
+                                        <button title="Subscript" onMouseDown={(e) => applyCommand(e, 'subscript')} className="p-1 px-2 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center text-[10px]">x<sub>2</sub></button>
+                                        <button title="Superscript" onMouseDown={(e) => applyCommand(e, 'superscript')} className="p-1 px-2 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center text-[10px]">x<sup>2</sup></button>
                                     </div>
                                 </div>
                             </div>
                         </ToolbarGroup>
                         <ToolbarGroup label="Paragraph">
                             <div className="flex flex-col gap-1.5 justify-center h-full">
-                                <div className="flex gap-0.5 bg-slate-50 border border-slate-200 rounded p-[2px]">
-                                    <ToolButton icon={AlignLeft} label="Left Align" onMouseDown={(e) => applyCommand(e, 'justifyLeft')} />
-                                    <ToolButton icon={AlignCenter} label="Center Align" onMouseDown={(e) => applyCommand(e, 'justifyCenter')} />
-                                    <ToolButton icon={AlignRight} label="Right Align" onMouseDown={(e) => applyCommand(e, 'justifyRight')} />
+                                <div className="flex items-center bg-slate-50 border border-slate-200 rounded-md divide-x divide-slate-200 overflow-hidden shadow-sm">
+                                    <button title="Left Align" onMouseDown={(e) => applyCommand(e, 'justifyLeft')} className="p-1.5 px-2.5 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center"><AlignLeft size={12} /></button>
+                                    <button title="Center Align" onMouseDown={(e) => applyCommand(e, 'justifyCenter')} className="p-1.5 px-2.5 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center"><AlignCenter size={12} /></button>
+                                    <button title="Right Align" onMouseDown={(e) => applyCommand(e, 'justifyRight')} className="p-1.5 px-2.5 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center"><AlignRight size={12} /></button>
                                 </div>
-                                <div className="flex gap-0.5 bg-slate-50 border border-slate-200 rounded p-[2px]">
-                                    <ToolButton icon={Outdent} label="Decrease Indent" onMouseDown={(e) => applyCommand(e, 'outdent')} />
-                                    <ToolButton icon={Indent} label="Increase Indent" onMouseDown={(e) => applyCommand(e, 'indent')} />
+                                <div className="flex items-center bg-slate-50 border border-slate-200 rounded-md divide-x divide-slate-200 overflow-hidden shadow-sm">
+                                    <button title="Decrease Indent" onMouseDown={(e) => applyCommand(e, 'outdent')} className="p-1.5 px-3 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center"><Outdent size={12} /></button>
+                                    <button title="Increase Indent" onMouseDown={(e) => applyCommand(e, 'indent')} className="p-1.5 px-3 hover:bg-slate-100 text-slate-700 active:scale-95 flex items-center justify-center"><Indent size={12} /></button>
                                 </div>
                             </div>
                         </ToolbarGroup>
                         <ToolbarGroup label="Spacing">
-                            <div className="flex flex-col gap-1.5 justify-center h-full">
-                                <div className="flex items-center gap-1.5 px-1">
-                                    <span className="text-[10px] font-semibold text-slate-500 w-[55px]">Line Gap</span>
+                            <div className="flex flex-col gap-1 justify-center h-full">
+                                <div className="flex items-center gap-1">
+                                    <span className="text-[10px] font-bold text-slate-500 w-14 text-right">Line Gap</span>
                                     <input
                                         type="number"
                                         step="0.1"
                                         value={config.lineSpacing}
                                         onChange={e => setConfig({ ...config, lineSpacing: parseFloat(e.target.value) })}
-                                        className="w-[50px] bg-slate-50 border border-slate-200 hover:border-slate-300 rounded text-[11px] font-semibold outline-none px-1 py-0.5 text-center"
+                                        className="w-12 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded text-[10px] font-semibold outline-none px-1 py-0.5 text-center shadow-sm"
                                     />
                                 </div>
-                                <div className="flex items-center gap-1.5 px-1">
-                                    <span className="text-[10px] font-semibold text-slate-500 w-[55px]">Char Gap</span>
+                                <div className="flex items-center gap-1">
+                                    <span className="text-[10px] font-bold text-slate-500 w-14 text-right">Char Gap</span>
                                     <input
                                         type="number"
                                         step="0.5"
                                         value={config.letterSpacing}
                                         onChange={e => setConfig({ ...config, letterSpacing: parseFloat(e.target.value) })}
-                                        className="w-[50px] bg-slate-50 border border-slate-200 hover:border-slate-300 rounded text-[11px] font-semibold outline-none px-1 py-0.5 text-center"
+                                        className="w-12 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded text-[10px] font-semibold outline-none px-1 py-0.5 text-center shadow-sm"
                                     />
                                 </div>
-                                <div className="flex items-center gap-1.5 px-1">
-                                    <span className="text-[10px] font-semibold text-slate-500 w-[55px]">Q Gap</span>
+                                <div className="flex items-center gap-1">
+                                    <span className="text-[10px] font-bold text-slate-500 w-14 text-right">Q Gap</span>
                                     <input
                                         type="number"
                                         step="0.1"
                                         value={config.questionGap}
                                         onChange={e => setConfig({ ...config, questionGap: parseFloat(e.target.value) })}
-                                        className="w-[50px] bg-slate-50 border border-slate-200 hover:border-slate-300 rounded text-[11px] font-semibold outline-none px-1 py-0.5 text-center"
+                                        className="w-12 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded text-[10px] font-semibold outline-none px-1 py-0.5 text-center shadow-sm"
                                     />
                                 </div>
                             </div>
                         </ToolbarGroup>
                         <ToolbarGroup label="Reset">
-                            <button onClick={() => setExam(BLANK_EXAM)} className="flex flex-col items-center justify-center gap-1.5 px-3 h-full hover:bg-rose-50 rounded transition-colors group border border-transparent hover:border-rose-200">
+                            <button onClick={() => setExam(BLANK_EXAM)} className="flex flex-col items-center justify-center gap-1 px-4 h-full hover:bg-rose-50 rounded-lg transition-colors group">
                                 <RotateCcw size={18} className="text-rose-500 group-hover:rotate-[-45deg] transition-all" />
-                                <span className="text-[10px] font-bold text-rose-600">Clear All</span>
+                                <span className="text-[10px] font-bold text-rose-500">Clear All</span>
                             </button>
                         </ToolbarGroup>
                     </>
@@ -204,7 +205,7 @@ const EditorToolbar = ({
                                 <Edit3 size={22} className="text-emerald-600" />
                                 <span className="text-[11px] font-medium text-slate-700">Written</span>
                             </button>
-                            <button onClick={() => setIsBankOpen(true)} className="flex flex-col items-center gap-1 px-4 hover:bg-slate-50 rounded py-1 transition-colors">
+                            <button id="toolbar-bank-btn" onClick={() => setIsBankOpen(true)} className="flex flex-col items-center gap-1 px-4 hover:bg-slate-50 rounded py-1 transition-colors">
                                 <BookOpen size={22} className="text-amber-500" />
                                 <span className="text-[11px] font-medium text-slate-700">Bank</span>
                             </button>
@@ -216,7 +217,7 @@ const EditorToolbar = ({
                             </button>
                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageSelect} />
 
-                            <button onMouseDown={(e) => { e.preventDefault(); setEquationModalOpen(true); }} className="flex flex-col items-center gap-1 px-4 hover:bg-slate-50 rounded py-1 transition-colors">
+                            <button id="toolbar-equation-btn" onMouseDown={(e) => { e.preventDefault(); setEquationModalOpen(true); }} className="flex flex-col items-center gap-1 px-4 hover:bg-slate-50 rounded py-1 transition-colors">
                                 <Sigma size={22} className="text-blue-600" />
                                 <span className="text-[11px] font-medium text-slate-700">Math</span>
                             </button>
@@ -352,39 +353,11 @@ const EditorToolbar = ({
                     </>
                 )}
 
-                {activeTab === 'bank' && (
-                    <>
-                        <ToolbarGroup label="Question Visibility">
-                            <div className="flex flex-col gap-2 justify-center h-full px-2">
-                                <div className="flex items-center gap-2">
-                                    <input type="checkbox" checked={config.showQuestionNumbers} onChange={e => setConfig({ ...config, showQuestionNumbers: e.target.checked })} id="show-qn" className="accent-indigo-600" />
-                                    <label htmlFor="show-qn" className="text-[11px] font-bold text-slate-700 cursor-pointer">Show Q. Numbers</label>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <input type="checkbox" checked={config.showMarks} onChange={e => setConfig({ ...config, showMarks: e.target.checked })} id="show-marks" className="accent-indigo-600" />
-                                    <label htmlFor="show-marks" className="text-[11px] font-bold text-slate-700 cursor-pointer">Show Marks</label>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <input type="checkbox" checked={config.includeAnswers} onChange={e => setConfig({ ...config, includeAnswers: e.target.checked })} id="show-ans" className="accent-indigo-600" />
-                                    <label htmlFor="show-ans" className="text-[11px] font-bold text-emerald-600 cursor-pointer">Highlight Answers</label>
-                                </div>
-                            </div>
-                        </ToolbarGroup>
-                        <ToolbarGroup label="Option Layout">
-                            <div className="flex flex-col gap-1.5 px-3 justify-center h-full">
-                                <span className="text-[11px] font-bold text-slate-600 mb-1">MCQ Options Layout:</span>
-                                <select
-                                    value={config.optionCols}
-                                    onChange={e => setConfig({ ...config, optionCols: parseInt(e.target.value) })}
-                                    className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-[11px] font-bold outline-none text-slate-800"
-                                >
-                                    <option value={1}>Vertical (Up & Down)</option>
-                                    <option value={2}>Grid (Side by Side - 2)</option>
-                                    <option value={4}>Horizontal (Side by Side - 4)</option>
-                                </select>
-                            </div>
-                        </ToolbarGroup>
-                    </>
+                {activeTab === 'metadata' && (
+                    <div className="flex items-center px-4 py-2.5 text-xs font-bold text-slate-500 gap-2">
+                        <FileText size={14} className="text-indigo-600 animate-pulse" />
+                        <span>ডান প্রপার্টিজ প্যানেলে পরীক্ষার হেডার ও মেটাডেটা এডিট করুন।</span>
+                    </div>
                 )}
 
                 {activeTab === 'design' && (

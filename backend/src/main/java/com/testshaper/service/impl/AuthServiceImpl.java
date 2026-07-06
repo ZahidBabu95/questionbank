@@ -37,16 +37,29 @@ public class AuthServiceImpl implements AuthService {
 
             if (user.isAccountLocked()) {
                 long lockDuration = securityService.getAccountLockDurationMinutes(tenantId);
-                if (user.getLockTime() != null &&
-                        user.getLockTime().plusMinutes(lockDuration).isBefore(java.time.LocalDateTime.now())) {
+                java.time.LocalDateTime lockTime = user.getLockTime();
+                java.time.LocalDateTime now = java.time.LocalDateTime.now();
+                java.time.LocalDateTime unlockTime = lockTime != null 
+                        ? lockTime.plusMinutes(lockDuration) 
+                        : now.plusMinutes(lockDuration);
+
+                if (unlockTime.isBefore(now)) {
                     // Unlock
                     user.setAccountLocked(false);
                     user.setFailedLoginAttempts(0);
                     user.setLockTime(null);
                     userRepository.save(user);
                 } else {
-                    throw new org.springframework.security.authentication.LockedException(
-                            "Account is locked. Try again later.");
+                    java.time.Duration duration = java.time.Duration.between(now, unlockTime);
+                    long minutesRemaining = duration.toMinutes();
+                    if (minutesRemaining <= 0) {
+                        long secondsRemaining = duration.toSeconds();
+                        throw new org.springframework.security.authentication.LockedException(
+                                "Account is locked. Please try again in " + (secondsRemaining > 0 ? secondsRemaining : 0) + " seconds.");
+                    } else {
+                        throw new org.springframework.security.authentication.LockedException(
+                                "Account is locked. Please try again in " + minutesRemaining + " minutes.");
+                    }
                 }
             }
         }
@@ -88,17 +101,38 @@ public class AuthServiceImpl implements AuthService {
                 if (newAttempts >= maxAttempts) {
                     user.setAccountLocked(true);
                     user.setLockTime(java.time.LocalDateTime.now());
+                    userRepository.save(user);
+                    
+                    // Record failed login
+                    UserLoginHistory h = new UserLoginHistory();
+                    h.setUserId(user.getId());
+                    h.setEmail(email);
+                    h.setSuccess(false);
+                    h.setFailureReason("Account locked");
+                    h.setIpAddress(ipAddress);
+                    h.setUserAgent(userAgent);
+                    loginHistoryRepo.save(h);
+
+                    long lockDuration = securityService.getAccountLockDurationMinutes(tenantId);
+                    throw new org.springframework.security.authentication.LockedException(
+                            "Too many failed login attempts. Your account has been locked for " + lockDuration + " minutes.");
+                } else {
+                    userRepository.save(user);
+                    
+                    // Record failed login
+                    UserLoginHistory h = new UserLoginHistory();
+                    h.setUserId(user.getId());
+                    h.setEmail(email);
+                    h.setSuccess(false);
+                    h.setFailureReason("Wrong password");
+                    h.setIpAddress(ipAddress);
+                    h.setUserAgent(userAgent);
+                    loginHistoryRepo.save(h);
+
+                    int remaining = maxAttempts - newAttempts;
+                    throw new org.springframework.security.authentication.BadCredentialsException(
+                            "Invalid credentials. You have " + remaining + " attempts remaining before your account is locked.");
                 }
-                userRepository.save(user);
-                // Record failed login
-                UserLoginHistory h = new UserLoginHistory();
-                h.setUserId(user.getId());
-                h.setEmail(email);
-                h.setSuccess(false);
-                h.setFailureReason(newAttempts >= maxAttempts ? "Account locked" : "Wrong password");
-                h.setIpAddress(ipAddress);
-                h.setUserAgent(userAgent);
-                loginHistoryRepo.save(h);
             }
             throw e;
         }

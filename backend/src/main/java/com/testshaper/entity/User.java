@@ -56,6 +56,19 @@ public class User extends BaseEntity {
     @Column(name = "contribution_points")
     private Integer contributionPoints = 0;
 
+    @Column(name = "user_institute_name_en")
+    private String userInstituteNameEn;
+
+    @Column(name = "user_institute_name_bn")
+    private String userInstituteNameBn;
+
+    @Column(name = "student_roll")
+    private String studentRoll;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "class_id")
+    private AcademicClass academicClass;
+
     public Integer getContributionPoints() {
         return contributionPoints == null ? 0 : contributionPoints;
     }

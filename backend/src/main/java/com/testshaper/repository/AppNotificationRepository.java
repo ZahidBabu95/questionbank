@@ -12,4 +12,8 @@ import java.util.UUID;
 public interface AppNotificationRepository extends JpaRepository<AppNotification, UUID> {
     Page<AppNotification> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
     long countByUserIdAndReadFalse(UUID userId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("DELETE FROM AppNotification n WHERE n.relatedEntityId = :relatedEntityId")
+    void deleteByRelatedEntityId(String relatedEntityId);
 }

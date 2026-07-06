@@ -3,6 +3,7 @@ package com.testshaper.controller;
 import com.testshaper.dto.AddQuestionRequest;
 import com.testshaper.dto.LectureDTO;
 import com.testshaper.dto.LectureRequest;
+import com.testshaper.dto.ExamDTO;
 import com.testshaper.service.impl.LectureService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -56,10 +57,11 @@ public class LectureController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER')")
     public ResponseEntity<Map<String, Object>> listLectures(
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) UUID classSubjectId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<LectureDTO> lectures = lectureService.listLectures(search, pageable);
+        Page<LectureDTO> lectures = lectureService.listLectures(search, classSubjectId, pageable);
         return ResponseEntity.ok(Map.of("success", true, "data", lectures));
     }
 
@@ -98,17 +100,62 @@ public class LectureController {
     }
 
     // AI Features
+    @GetMapping("/chapter-metadata/{chapterId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER')")
+    public ResponseEntity<Map<String, Object>> getChapterMetadata(@PathVariable UUID chapterId) {
+        Map<String, Object> metadata = lectureService.getChapterMetadata(chapterId);
+        return ResponseEntity.ok(Map.of("success", true, "data", metadata));
+    }
 
     @PostMapping("/ai-generate")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER')")
     public ResponseEntity<Map<String, Object>> aiGenerate(
             @RequestBody Map<String, String> payload) {
         String topic = payload.get("topic");
+        String topicIdStr = payload.get("topicId");
         String classLevel = payload.get("class");
         String diff = payload.get("difficulty");
         String lang = payload.get("language");
 
-        Map<String, Object> aiContent = lectureService.generateAILectureContent(topic, classLevel, diff, lang);
+        UUID topicId = null;
+        if (topicIdStr != null && !topicIdStr.isEmpty()) {
+            try {
+                topicId = UUID.fromString(topicIdStr);
+            } catch (Exception e) {
+                // ignore invalid UUID
+            }
+        }
+
+        Map<String, Object> aiContent = lectureService.generateAILectureContent(topic, topicId, classLevel, diff, lang);
         return ResponseEntity.ok(Map.of("success", true, "data", aiContent));
+    }
+
+    @PostMapping("/ai-generate-rag")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER')")
+    public ResponseEntity<Map<String, Object>> aiGenerateRag(
+            @RequestBody Map<String, String> payload) {
+        String classSubjectId = payload.get("classSubjectId");
+        String chapterId = payload.get("chapterId");
+        String diff = payload.get("difficulty");
+        String lang = payload.get("language");
+
+        Map<String, Object> aiContent = lectureService.generateRAGLectureContent(
+                classSubjectId != null ? UUID.fromString(classSubjectId) : null,
+                chapterId != null ? UUID.fromString(chapterId) : null,
+                diff,
+                lang);
+        return ResponseEntity.ok(Map.of("success", true, "data", aiContent));
+    }
+
+    @PostMapping("/{id}/create-exam")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER')")
+    public ResponseEntity<Map<String, Object>> createExamFromLecture(
+            @PathVariable UUID id,
+            Authentication auth) {
+        ExamDTO exam = lectureService.createExamFromLecture(id, auth.getName());
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Exam created successfully from lecture",
+                "data", exam));
     }
 }

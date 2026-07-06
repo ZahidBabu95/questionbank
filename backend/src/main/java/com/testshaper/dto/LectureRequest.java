@@ -24,6 +24,7 @@ public class LectureRequest {
     private String tags;
 
     private List<LectureSectionRequest> sections = new ArrayList<>();
+    private List<UUID> questionIds = new ArrayList<>();
 
     @Data
     public static class LectureSectionRequest {
@@ -32,5 +33,6 @@ public class LectureRequest {
         private String sectionTitle;
         private String content;
         private Integer sectionOrder;
+        private List<UUID> questionIds = new ArrayList<>();
     }
 }

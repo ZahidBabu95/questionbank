@@ -510,8 +510,8 @@ const KnowledgeHubReport = () => {
                             <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Boxes className="text-emerald-500"/> Syllabus Mapping Status
                             </h3>
-                            <div className="h-72 w-full">
-                                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
+                            <div className="h-72 w-full relative">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                     <PieChart>
                                         <Pie
                                             data={[
@@ -537,8 +537,8 @@ const KnowledgeHubReport = () => {
                             <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <FileText className="text-indigo-500"/> Document Type Distribution
                             </h3>
-                            <div className="h-72 w-full">
-                                <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={1}>
+                            <div className="h-72 w-full relative">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                     <ReBarChart data={metrics.typeData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                         <XAxis type="number" axisLine={false} tickLine={false} />

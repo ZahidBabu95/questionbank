@@ -7,9 +7,12 @@ import com.testshaper.entity.Institute;
 import com.testshaper.entity.Role;
 import com.testshaper.entity.User;
 import com.testshaper.mapper.UserMapper;
+import com.testshaper.repository.AcademicClassRepository;
 import com.testshaper.repository.InstituteRepository;
 import com.testshaper.repository.RoleRepository;
 import com.testshaper.repository.UserRepository;
+import com.testshaper.repository.BillingPackageRepository;
+import com.testshaper.entity.BillingPackage;
 import com.testshaper.service.SecuritySettingService;
 import com.testshaper.service.UserService;
 import com.testshaper.service.EmailService;
@@ -44,6 +47,8 @@ public class UserServiceImpl implements UserService {
     private final EmailService emailService;
     private final UserActivityLogService activityLogService;
     private final DynamicStorageService storageService;
+    private final AcademicClassRepository academicClassRepository;
+    private final BillingPackageRepository billingPackageRepository;
 
     @Override
     @Transactional
@@ -72,8 +77,34 @@ public class UserServiceImpl implements UserService {
             personalInstitute.setName(dto.getName() + "'s Workspace");
             personalInstitute.setCode("PERS-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase());
             personalInstitute.setType(Institute.InstituteType.PERSONAL);
-            personalInstitute.setPlanType(Institute.SubscriptionPlan.BETA);
-            personalInstitute.setStatus(Institute.InstituteStatus.INACTIVE);
+            personalInstitute.setStatus(Institute.InstituteStatus.ACTIVE);
+
+            // Assign billing package if selected
+            if (dto.getPackageId() != null) {
+                BillingPackage pkg = billingPackageRepository.findById(dto.getPackageId()).orElse(null);
+                if (pkg != null) {
+                    personalInstitute.setSubscriptionPackage(pkg);
+                    personalInstitute.setMaxTeachers(pkg.getMaxTeachers() != null ? pkg.getMaxTeachers() : 5);
+                    personalInstitute.setMaxStudents(pkg.getMaxStudents() != null ? pkg.getMaxStudents() : 50);
+                    personalInstitute.setAiLimitPerMonth(pkg.getAiLimitPerMonth() != null ? pkg.getAiLimitPerMonth() : 100000);
+                    personalInstitute.setMaxQuestions(pkg.getMaxQuestions() != null ? pkg.getMaxQuestions() : 500);
+                    personalInstitute.setStorageLimitMb(pkg.getStorageLimitMb() != null ? pkg.getStorageLimitMb() : 500);
+                    
+                    if (pkg.getPackageCode().contains("PREMIUM")) {
+                        personalInstitute.setPlanType(Institute.SubscriptionPlan.PREMIUM);
+                    } else if (pkg.getPackageCode().contains("BASIC")) {
+                        personalInstitute.setPlanType(Institute.SubscriptionPlan.BASIC);
+                    } else if (pkg.getPackageCode().contains("ENTERPRISE")) {
+                        personalInstitute.setPlanType(Institute.SubscriptionPlan.ENTERPRISE);
+                    } else {
+                        personalInstitute.setPlanType(Institute.SubscriptionPlan.BETA);
+                    }
+                } else {
+                    personalInstitute.setPlanType(Institute.SubscriptionPlan.BETA);
+                }
+            } else {
+                personalInstitute.setPlanType(Institute.SubscriptionPlan.BETA);
+            }
             
             personalInstitute = instituteRepository.save(personalInstitute);
             instituteIdToUse = personalInstitute.getId();
@@ -93,10 +124,21 @@ public class UserServiceImpl implements UserService {
         // Handle Roles
         if (dto.getRoles() != null && !dto.getRoles().isEmpty()) {
             Set<Role> roles = new HashSet<>();
+            org.springframework.security.core.Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            boolean isPublicSelfRegistration = auth == null ||
+                    auth instanceof org.springframework.security.authentication.AnonymousAuthenticationToken ||
+                    !auth.isAuthenticated();
+
             for (String roleName : dto.getRoles()) {
                 Role role = roleRepository.findByName(roleName)
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                                 "Role not found: " + roleName));
+                
+                if (isPublicSelfRegistration && !role.isAllowSelfRegistration()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Role not allowed for public registration: " + roleName);
+                }
+                
                 roles.add(role);
             }
             user.setRoles(roles);
@@ -110,11 +152,46 @@ public class UserServiceImpl implements UserService {
             }
         }
 
-        // Handle Institute
+        // Handle Institute & Limits Enforcement
         if (instituteIdToUse != null) {
             Institute institute = instituteRepository.findById(instituteIdToUse)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Institute not found"));
+            
+            // Check limits for TEACHER or STUDENT creation (unless creator is SUPER_ADMIN)
+            if (!isCreatorSuperAdmin) {
+                boolean isTeacher = dto.getRoles() == null || dto.getRoles().isEmpty() || dto.getRoles().contains("TEACHER");
+                boolean isStudent = dto.getRoles() != null && dto.getRoles().contains("STUDENT");
+                
+                if (isTeacher) {
+                    long currentTeachers = userRepository.countByInstituteIdAndRoleName(instituteIdToUse, "TEACHER");
+                    Integer maxTeachers = institute.getMaxTeachers();
+                    if (maxTeachers != null && currentTeachers >= maxTeachers) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                            "Teacher limit reached (" + maxTeachers + "). Please upgrade your package.");
+                    }
+                }
+                
+                if (isStudent) {
+                    long currentStudents = userRepository.countByInstituteIdAndRoleName(instituteIdToUse, "STUDENT");
+                    Integer maxStudents = institute.getMaxStudents();
+                    if (maxStudents != null && currentStudents >= maxStudents) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                            "Student limit reached (" + maxStudents + "). Please upgrade your package.");
+                    }
+                }
+            }
+            
             user.setInstitute(institute);
+        }
+
+        // Handle Academic Class & Student Roll
+        if (dto.getClassId() != null) {
+            com.testshaper.entity.AcademicClass academicClass = academicClassRepository.findById(dto.getClassId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Academic Class not found"));
+            user.setAcademicClass(academicClass);
+        }
+        if (dto.getStudentRoll() != null) {
+            user.setStudentRoll(dto.getStudentRoll());
         }
 
         User savedUser = userRepository.save(user);
@@ -174,6 +251,16 @@ public class UserServiceImpl implements UserService {
             user.setInstitute(institute);
         }
 
+        // Update Academic Class & Student Roll
+        if (dto.getClassId() != null) {
+            com.testshaper.entity.AcademicClass academicClass = academicClassRepository.findById(dto.getClassId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Academic Class not found"));
+            user.setAcademicClass(academicClass);
+        } else {
+            user.setAcademicClass(null);
+        }
+        user.setStudentRoll(dto.getStudentRoll());
+
         return userMapper.toDTO(userRepository.save(user));
     }
 
@@ -185,6 +272,8 @@ public class UserServiceImpl implements UserService {
 
         user.setName(dto.getName());
         user.setPhone(dto.getPhone());
+        user.setUserInstituteNameEn(dto.getInstituteNameEn());
+        user.setUserInstituteNameBn(dto.getInstituteNameBn());
         
         return userMapper.toDTO(userRepository.save(user));
     }
@@ -221,7 +310,18 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public void resetPassword(@NonNull UUID id) {
+    public void unlockUser(@NonNull UUID id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        user.setAccountLocked(false);
+        user.setFailedLoginAttempts(0);
+        user.setLockTime(null);
+        userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public String resetPassword(@NonNull UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         String newPassword = "QS@" + (int)(Math.random() * 90000 + 10000); // e.g. QS@47293
@@ -234,6 +334,7 @@ public class UserServiceImpl implements UserService {
         String actor = SecurityContextHolder.getContext().getAuthentication().getName();
         activityLogService.log(null, actor, user.getId(), user.getName(),
             "RESET_PASSWORD", "Password reset by " + actor, null);
+        return newPassword;
     }
 
     @Override
@@ -256,10 +357,20 @@ public class UserServiceImpl implements UserService {
             boolean includeDeleted, Pageable pageable) {
 
         String currentEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        User currentUser = userRepository.findByEmail(currentEmail).orElse(null);
+        UUID targetInstituteId = instituteId;
+        
+        if (currentUser != null) {
+            boolean isSuperAdmin = currentUser.getRoles().stream()
+                    .anyMatch(r -> r.getName().equals("SUPER_ADMIN"));
+            if (!isSuperAdmin) {
+                targetInstituteId = currentUser.getInstitute() != null ? currentUser.getInstitute().getId() : null;
+            }
+        }
 
         org.springframework.data.jpa.domain.Specification<User> spec = 
             com.testshaper.specification.UserSpecification.filterUsers(
-                query, instituteId, role, active, accountLocked, includeDeleted, currentEmail
+                query, targetInstituteId, role, active, accountLocked, includeDeleted, currentEmail
             );
 
         return userRepository.findAll(spec, pageable).map(userMapper::toSummaryDTO);
@@ -286,7 +397,28 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public java.util.Map<String, Object> getUserStats() {
+        String currentEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        User currentUser = userRepository.findByEmail(currentEmail).orElse(null);
         java.time.LocalDateTime thirtyDaysAgo = java.time.LocalDateTime.now().minusDays(30);
+
+        if (currentUser != null) {
+            boolean isSuperAdmin = currentUser.getRoles().stream()
+                    .anyMatch(r -> r.getName().equals("SUPER_ADMIN"));
+            if (!isSuperAdmin && currentUser.getInstitute() != null) {
+                UUID instId = currentUser.getInstitute().getId();
+                return java.util.Map.of(
+                    "total",        userRepository.countByInstituteIdAndDeletedFalse(instId),
+                    "active",       userRepository.countByInstituteIdAndActiveTrueAndDeletedFalse(instId),
+                    "inactive",     userRepository.countByInstituteIdAndActiveFalseAndDeletedFalse(instId),
+                    "locked",       userRepository.countByInstituteIdAndAccountLockedTrueAndDeletedFalse(instId),
+                    "teachers",     userRepository.countByInstituteIdAndRoleName(instId, "TEACHER"),
+                    "students",     userRepository.countByInstituteIdAndRoleName(instId, "STUDENT"),
+                    "admins",       userRepository.countByInstituteIdAndRoleName(instId, "INSTITUTE_ADMIN"),
+                    "newLast30Days", userRepository.countNewUsersByInstituteSince(instId, thirtyDaysAgo)
+                );
+            }
+        }
+
         return java.util.Map.of(
             "total",        userRepository.countByDeletedFalse(),
             "active",       userRepository.countByActiveTrueAndDeletedFalse(),

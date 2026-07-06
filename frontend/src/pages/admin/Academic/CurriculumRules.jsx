@@ -363,8 +363,24 @@ const CurriculumRules = () => {
             },
             generation_blueprint: {
                 mandatory_sections: [
-                    { name: "বহুনির্বাচনি প্রশ্ন (MCQ)", type: "MCQ", target_ratio: "30%" },
-                    { name: "সৃজনশীল প্রশ্ন (CQ)", type: "CQ", target_ratio: "70%" }
+                    { 
+                        name: "বহুনির্বাচনি প্রশ্ন (MCQ)", 
+                        type: "MCQ", 
+                        target_ratio: "30%",
+                        instructions: "সকল প্রশ্নের উত্তর দেওয়া বাধ্যতামূলক। সঠিক উত্তরের বৃত্তটি কালো বলপয়েন্ট কলম দিয়ে ভরাট করো।",
+                        conditions: "মান: ১x৩০=৩০",
+                        questionsToAnswer: 30,
+                        marksPerQuestion: 1
+                    },
+                    { 
+                        name: "সৃজনশীল প্রশ্ন (CQ)", 
+                        type: "CQ", 
+                        target_ratio: "70%",
+                        instructions: "যেকোনো ৫টি প্রশ্নের উত্তর দাও।",
+                        conditions: "মান: ১০x৫=৫০",
+                        questionsToAnswer: 5,
+                        marksPerQuestion: 10
+                    }
                 ],
                 bloom_target: {
                     KNOWLEDGE: 30,

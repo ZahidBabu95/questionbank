@@ -4,7 +4,7 @@ import { Toggle, FL, G2, Num, Sel, Inp, Slide, ST, Seg, FieldDisplay, NumDisplay
 import { UI_TEXT } from './translations';
 import { Lock, Unlock, AlignLeft, AlignCenter, AlignRight, AlignJustify, Trash2, ArrowUp, ArrowDown, FileText, Settings, ChevronDown, ChevronRight } from 'lucide-react';
 
-export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
+export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang, documentQuestions }) {
     const t = UI_TEXT[uiLang];
     const [isEditMode, setIsEditMode] = React.useState(true);
     const [sectionTabs, setSectionTabs] = React.useState({});
@@ -826,6 +826,190 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang }) {
                             <Toggle checked={s.includeAnswerSheet} onChange={e => u("includeAnswerSheet", e.target.checked)}/>
                         </div>
                     </div>
+
+                    {/* Inline Answer/Explanation/Source Controls */}
+                    <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
+                        <div className="text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-1">
+                            {uiLang === 'bn' ? 'উত্তর ও ব্যাখ্যা প্রদর্শন' : 'Inline Answer & Explanation'}
+                        </div>
+                        <p className="text-[10px] text-emerald-700 leading-relaxed">
+                            {uiLang === 'bn' 
+                                ? 'প্রতিটি প্রশ্নের নিচে সরাসরি উত্তর ও ব্যাখ্যা দেখান। শিক্ষকের গাইড বা সমাধানপত্র তৈরিতে ব্যবহার করুন।' 
+                                : 'Show answers and explanations inline below each question.'}
+                        </p>
+                        {[
+                            { key: 'showAnswersInline', labelBn: 'সঠিক উত্তর দেখান', labelEn: 'Show Correct Answers', descBn: 'প্রতিটি প্রশ্নের নিচে উত্তর', descEn: 'Answer below each question' },
+                            { key: 'showExplanationInline', labelBn: 'ব্যাখ্যা দেখান', labelEn: 'Show Explanations', descBn: 'বিস্তারিত ব্যাখ্যা প্রদর্শন', descEn: 'Detailed explanation' },
+                            { key: 'showSources', labelBn: 'সোর্স/অধ্যায় দেখান', labelEn: 'Show Source/Chapter', descBn: 'প্রশ্নের পাশে উৎস দেখাবে', descEn: 'Source chapter next to question' }
+                        ].map(item => (
+                            <div key={item.key} className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-emerald-100">
+                                <div>
+                                    <span className="text-[11px] font-bold text-slate-700 block">{uiLang === 'bn' ? item.labelBn : item.labelEn}</span>
+                                    <span className="text-[9px] text-slate-400">{uiLang === 'bn' ? item.descBn : item.descEn}</span>
+                                </div>
+                                <Toggle checked={s[item.key] || false} onChange={e => u(item.key, e.target.checked)}/>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>}
+
+            {activeTab === "setCode" && <div className="space-y-4">
+                <div className="bg-slate-50 rounded-xl border border-slate-200/60 p-4 shadow-sm">
+                    {/* Header Banner */}
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3.5 mb-4 flex items-start gap-3">
+                        <div className="p-2 bg-indigo-100/50 rounded-lg text-indigo-600 shrink-0">
+                            <Settings size={18} />
+                        </div>
+                        <div>
+                            <h3 className="text-xs font-black text-indigo-900 leading-tight">
+                                {uiLang === 'bn' ? 'সেট কোড সেটিংস' : 'Set Code Settings'}
+                            </h3>
+                            <p className="text-[11px] text-indigo-750/90 leading-normal font-semibold mt-1">
+                                {uiLang === 'bn' 
+                                    ? 'ওএমআর (OMR) মূল্যায়নের জন্য একই পরীক্ষার একাধিক সেট কোড তৈরি করুন। প্রতিটি সেটের প্রশ্ন ও অপশনের ডিস্ট্রিবিউশন সিকোয়েন্স ওএমআর রিডারের সাথে স্বয়ংক্রিয়ভাবে সিঙ্ক হবে।'
+                                    : 'Create multiple sets of the exam for OMR grading. The question and option shuffle sequences are generated deterministically.'}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Enable Toggle */}
+                    <div className="flex items-center justify-between bg-white border border-slate-200 p-4 rounded-xl shadow-sm mb-4">
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-800">{uiLang === 'bn' ? 'মাল্টিপল সেট সক্রিয় করুন' : 'Enable Multiple Sets'}</span>
+                            <span className="text-[11px] text-slate-400">{uiLang === 'bn' ? 'MCQ প্রশ্নের একাধিক সেট জেনারেট করুন' : 'Generate multiple sets for MCQ questions'}</span>
+                        </div>
+                        <Toggle 
+                            checked={s.multipleSetsEnabled || false} 
+                            onChange={e => {
+                                const enabled = e.target.checked;
+                                const updates = { multipleSetsEnabled: enabled };
+                                if (enabled && !s.setCodeSeedSalt) {
+                                    updates.setCodeSeedSalt = Math.floor(Math.random() * 1000000) + 1;
+                                }
+                                uMulti(updates);
+                            }}
+                        />
+                    </div>
+
+                    {s.multipleSetsEnabled && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-top-3 duration-250">
+                            {/* Set Count */}
+                            <FL label={uiLang === 'bn' ? 'সেট সংখ্যা' : 'Number of Sets'}>
+                                <Seg 
+                                    value={s.setCount || 4} 
+                                    onChange={v => u("setCount", Number(v))} 
+                                    opts={[
+                                        { v: 2, l: uiLang === 'bn' ? '২টি সেট (ক, খ)' : '2 Sets (A, B)' },
+                                        { v: 4, l: uiLang === 'bn' ? '৪টি সেট (ক, খ, গ, ঘ)' : '4 Sets (A, B, C, D)' }
+                                    ]}
+                                />
+                            </FL>
+
+                            {/* Set Naming Language */}
+                            <FL label={uiLang === 'bn' ? 'সেটের নাম' : 'Set Naming Type'}>
+                                <Seg 
+                                    value={s.setLanguage || 'BN'} 
+                                    onChange={v => u("setLanguage", v)} 
+                                    opts={[
+                                        { v: 'BN', l: uiLang === 'bn' ? 'বাংলা (ক, খ...)' : 'Bangla (ক, খ...)' },
+                                        { v: 'EN', l: uiLang === 'bn' ? 'ইংরেজি (A, B...)' : 'English (A, B...)' }
+                                    ]}
+                                />
+                            </FL>
+
+                            {/* Shuffle Type */}
+                            <FL label={uiLang === 'bn' ? 'শাফল করার নিয়ম' : 'Shuffle Configuration'}>
+                                <Seg 
+                                    value={s.shuffleType || 'QUESTIONS_AND_OPTIONS'} 
+                                    onChange={v => u("shuffleType", v)} 
+                                    opts={[
+                                        { v: 'QUESTIONS_ONLY', l: uiLang === 'bn' ? 'শুধু প্রশ্ন' : 'Questions Only' },
+                                        { v: 'QUESTIONS_AND_OPTIONS', l: uiLang === 'bn' ? 'প্রশ্ন ও অপশন' : 'Questions & Options' }
+                                    ]}
+                                />
+                            </FL>
+
+                            {/* Seed Salt Display */}
+                            <div className="bg-slate-100 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between text-[11px] font-bold text-slate-500">
+                                <span>{uiLang === 'bn' ? 'ইউনিক সীড সল্ট' : 'Unique Seed Salt'}: <span className="font-mono text-indigo-600">{s.setCodeSeedSalt || 'N/A'}</span></span>
+                                <button 
+                                    type="button" 
+                                    onClick={() => u("setCodeSeedSalt", Math.floor(Math.random() * 1000000) + 1)}
+                                    className="px-2 py-0.5 bg-white border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50 transition-colors shadow-sm text-[10px]"
+                                >
+                                    {uiLang === 'bn' ? 'নতুন সীড দিন' : 'Regenerate'}
+                                </button>
+                            </div>
+
+                            {/* Matrix Title */}
+                            <div className="border-t border-slate-200 pt-4 mt-2">
+                                <span className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-3">
+                                    {uiLang === 'bn' ? 'শাফল সিকোয়েন্স ম্যাট্রিক্স (OMR Mapping)' : 'Shuffle Sequence Matrix'}
+                                </span>
+                                
+                                {(() => {
+                                    const mcqs = (documentQuestions || []).filter(q => q.attrs?.type === 'MCQ');
+                                    if (mcqs.length === 0) {
+                                        return (
+                                            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[11px] p-3 rounded-lg font-bold">
+                                                {uiLang === 'bn' 
+                                                    ? 'প্রশ্নপত্রে কোনো বহুনির্বাচনি (MCQ) প্রশ্ন পাওয়া যায়নি। ম্যাট্রিক্স দেখতে প্রথমে MCQ প্রশ্ন যোগ করুন।' 
+                                                    : 'No MCQ questions found in the document. Please add MCQ questions first.'}
+                                            </div>
+                                        );
+                                    }
+
+                                    const count = s.setCount || 4;
+                                    const lang = s.setLanguage || 'BN';
+                                    const setNames = lang === 'EN' 
+                                        ? (count === 2 ? ['A', 'B'] : ['A', 'B', 'C', 'D'])
+                                        : (count === 2 ? ['ক', 'খ'] : ['ক', 'খ', 'গ', 'ঘ']);
+
+                                    const mappings = s.setMappings || {};
+                                    const masterSet = setNames[0];
+
+                                    return (
+                                        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-inner max-h-[400px] custom-scrollbar">
+                                            <table className="w-full text-left border-collapse">
+                                                <thead>
+                                                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase">
+                                                        <th className="p-2 border-r border-slate-200 text-center">{uiLang === 'bn' ? `মূল (${masterSet})` : `Master (${masterSet})`}</th>
+                                                        {setNames.slice(1).map(setName => (
+                                                            <th key={setName} className="p-2 border-r border-slate-200 text-center">{uiLang === 'bn' ? `সেট ${setName}` : `Set ${setName}`}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {mcqs.map((q, idx) => {
+                                                        const qId = q.attrs?.questionId || `temp-q-${idx}`;
+                                                        const qNumText = `${idx + 1}`;
+                                                        
+                                                        return (
+                                                            <tr key={qId} className="border-b border-slate-100 hover:bg-slate-50/50 text-[11px] font-semibold text-slate-700">
+                                                                <td className="p-2 border-r border-slate-200 text-center bg-indigo-50/30 text-indigo-700 font-bold">{qNumText}</td>
+                                                                {setNames.slice(1).map(setName => {
+                                                                    const setQList = mappings[setName]?.questions || [];
+                                                                    const shuffledIndex = setQList.indexOf(qId);
+                                                                    const shuffledNum = shuffledIndex !== -1 ? shuffledIndex + 1 : '—';
+                                                                    
+                                                                    return (
+                                                                        <td key={setName} className="p-2 border-r border-slate-200 text-center font-mono font-bold">
+                                                                            {shuffledNum}
+                                                                        </td>
+                                                                    );
+                                                                })}
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>}
         </div>

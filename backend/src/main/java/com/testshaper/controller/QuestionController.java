@@ -10,6 +10,7 @@ import com.testshaper.service.DynamicStorageService;
 import com.testshaper.service.AcademicAutoLinkService;
 import com.testshaper.service.QuestionImportService;
 import com.testshaper.service.QuestionService;
+import com.testshaper.dto.QuestionSearchParams;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -140,6 +141,12 @@ public class QuestionController {
         return ResponseEntity.ok(questionService.getQuestion(id));
     }
 
+    @PostMapping("/batch")
+    public ResponseEntity<List<Question>> getQuestionsBatch(@RequestBody List<UUID> ids) {
+        return ResponseEntity.ok(questionService.getQuestionsBatch(ids));
+    }
+
+
     @PostMapping("/my-revisions")
     public ResponseEntity<Map<UUID, Question>> getMyPendingRevisions(@RequestBody List<UUID> originalQuestionIds, Authentication auth) {
         String email = auth.getName();
@@ -195,8 +202,37 @@ public class QuestionController {
     @GetMapping("/availability")
     public ResponseEntity<Map<String, Object>> getQuestionAvailability(
             @RequestParam UUID classSubjectId,
-            @RequestParam(required = false) String language) {
-        return ResponseEntity.ok(questionService.getQuestionAvailability(classSubjectId, language));
+            @RequestParam(required = false) String language,
+            @RequestParam(required = false) String sourceMode,
+            @RequestParam(required = false) List<UUID> lectureIds,
+            @RequestParam(required = false) List<String> boards,
+            @RequestParam(required = false) List<Integer> years,
+            @RequestParam(required = false) List<String> schools) {
+        
+        System.out.println(">>> getQuestionAvailability params: classSubjectId=" + classSubjectId 
+                + ", language=" + language + ", sourceMode=" + sourceMode 
+                + ", lectureIds=" + lectureIds + ", boards=" + boards 
+                + ", years=" + years + ", schools=" + schools);
+        
+        QuestionSearchParams params = new QuestionSearchParams();
+        params.setClassSubjectId(classSubjectId);
+        params.setLanguage(language);
+        params.setSourceMode(sourceMode != null ? sourceMode : "ALL");
+        params.setLectureIds(lectureIds);
+        params.setBoards(boards);
+        params.setYears(years);
+        params.setSchools(schools);
+
+        return ResponseEntity.ok(questionService.getQuestionAvailability(params));
+    }
+
+    @PostMapping("/availability/bulk")
+    public ResponseEntity<Map<UUID, Boolean>> getQuestionAvailabilityBulk(
+            @RequestBody BulkAvailabilityRequest request) {
+        return ResponseEntity.ok(questionService.getQuestionsAvailabilityBulk(
+                request.getClassSubjectIds(), 
+                request.getLanguage()
+        ));
     }
 
     // --- Revision / Contribution System ---
@@ -472,5 +508,11 @@ public class QuestionController {
         private List<QuestionOption> options;
         private String revisionNotes;
         private Question.QuestionStatus status;
+    }
+
+    @Data
+    public static class BulkAvailabilityRequest {
+        private List<UUID> classSubjectIds;
+        private String language;
     }
 }

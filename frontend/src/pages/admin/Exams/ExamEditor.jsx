@@ -20,6 +20,16 @@ import LeftNavigator from './components/LeftNavigator';
 import RightProperties from './components/RightProperties';
 import PaperCanvas from './components/PaperCanvas';
 
+const generateUUID = () => {
+    if (window.crypto && window.crypto.randomUUID) {
+        return window.crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+};
+
 const ExamEditor = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -335,7 +345,8 @@ const ExamEditor = () => {
             : '<p>Enter stem...</p><br/><div style="margin-top: 8px;"><p>(a) ...</p><p>(b) ...</p><p>(c) ...</p><p>(d) ...</p></div>';
             
         const newQ = {
-            id: `new-${Date.now()}`,
+            id: generateUUID(),
+            originalQuestionId: null,
             questionText: type === 'CQ' ? cqTemplate : (isBengaliFont ? 'নতুন প্রশ্ন...' : 'Type your question here...'),
             type: type,
             marks: type === 'MCQ' ? 1 : 10,
@@ -353,7 +364,8 @@ const ExamEditor = () => {
     const importQuestion = (q) => {
         const newQ = {
             ...q,
-            id: `imported-${Date.now()}-${q.id}`,
+            id: generateUUID(),
+            originalQuestionId: q.id,
             order: (exam.questions?.length || 0) + 1
         };
         setExam(prev => ({ ...prev, questions: [...prev.questions, newQ] }));
@@ -390,11 +402,10 @@ const ExamEditor = () => {
 
     const handleTabClick = (tabId) => {
         setActiveTab(tabId);
-        setRightPanelTab('properties');
         setRightPanelOpen(true);
-        if (tabId === 'layout' || tabId === 'design') setSelection({ type: 'page', id: null });
-        if (tabId === 'bank') setSelection({ type: 'page', id: null });
-        if (tabId === 'home') setSelection({ type: 'page', id: null });
+        if (tabId === 'layout' || tabId === 'design' || tabId === 'metadata' || tabId === 'home') {
+            setSelection({ type: 'page', id: null });
+        }
     };
 
     if (loading) return (
@@ -491,8 +502,7 @@ const ExamEditor = () => {
                 {/* 4. RIGHT SIDEBAR (Properties & Templates) */}
                 <RightProperties
                     rightPanelOpen={rightPanelOpen}
-                    rightPanelTab={rightPanelTab}
-                    setRightPanelTab={setRightPanelTab}
+                    activeTab={activeTab}
                     selection={selection}
                     setSelection={setSelection}
                     exam={exam}

@@ -11,6 +11,9 @@ export interface User {
   instituteStatus?: string;
   subscriptionPackage?: string;
   permissions?: string[];
+  instituteNameEn?: string;
+  instituteNameBn?: string;
+  profileImageUrl?: string;
 }
 
 export interface LoginResponse {
@@ -47,9 +50,25 @@ export const signup = async (payload: {
   return data;
 };
 
+export interface Role {
+  name: string;
+  description: string;
+}
+
+export interface RolesResponse {
+  success: boolean;
+  data: Role[];
+}
+
+export const getRegistrationRoles = async (): Promise<RolesResponse> => {
+  const { data } = await apiClient.get('/auth/roles');
+  return data;
+};
+
 const authService = {
   login,
   signup,
+  getRegistrationRoles,
 };
 
 export default authService;

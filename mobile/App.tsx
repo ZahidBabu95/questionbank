@@ -18,6 +18,7 @@ import { DashboardScreen } from './src/screens/DashboardScreen';
 import './src/utils/i18n'; // Force i18n initialization
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const Stack = createStackNavigator();
 
@@ -67,10 +68,11 @@ const NavigationWrapper = () => {
   }
 
   // Workspace status check:
-  // If logged in, check if they need workspace activation
+  // If logged in, check if they need workspace activation or have missing institute names
   const isSuperAdmin = user?.roles?.includes('SUPER_ADMIN');
   const isDefaultInstitute = user?.instituteName === 'DEFAULT' || user?.instituteName === 'Default Institute';
-  const isWorkspaceActive = user?.instituteStatus === 'ACTIVE' || isSuperAdmin || isDefaultInstitute;
+  const isMissingInstituteInfo = !isSuperAdmin && !isDefaultInstitute && (!user?.instituteNameEn || !user?.instituteNameBn);
+  const isWorkspaceActive = (user?.instituteStatus === 'ACTIVE' || isSuperAdmin || isDefaultInstitute) && !isMissingInstituteInfo;
 
   return (
     <NavigationContainer>
@@ -96,13 +98,15 @@ const NavigationWrapper = () => {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <BrandingProvider>
-        <AuthProvider>
-          <NavigationWrapper />
-        </AuthProvider>
-      </BrandingProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <BrandingProvider>
+          <AuthProvider>
+            <NavigationWrapper />
+          </AuthProvider>
+        </BrandingProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

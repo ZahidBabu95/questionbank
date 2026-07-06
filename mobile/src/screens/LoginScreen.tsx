@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -53,6 +53,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
   // Track focused fields for premium outline animation
   const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const handleFocusField = (fieldName: string) => {
+    setFocusedField(fieldName);
+    if (fieldName === 'password') {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  };
 
   // Simple validation checks
   const validateForm = () => {
@@ -120,10 +131,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       <View style={styles.glowBlob2} pointerEvents="none" />
 
       <KeyboardAvoidingView 
+        enabled={true}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={styles.keyboardView}
       >
         <ScrollView 
+          ref={scrollViewRef}
           contentContainerStyle={[styles.scrollContent, isTablet && styles.tabletScroll]} 
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -207,7 +220,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                     autoCapitalize="none"
                     keyboardType="email-address"
                     autoCorrect={false}
-                    onFocus={() => setFocusedField('email')}
+                    onFocus={() => handleFocusField('email')}
                     onBlur={() => {
                       setFocusedField(null);
                       if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -253,7 +266,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                     }}
                     autoCapitalize="none"
                     autoCorrect={false}
-                    onFocus={() => setFocusedField('password')}
+                    onFocus={() => handleFocusField('password')}
                     onBlur={() => setFocusedField(null)}
                     textContentType="password"
                     autoComplete="password"

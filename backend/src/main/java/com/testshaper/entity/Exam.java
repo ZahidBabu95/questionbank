@@ -123,6 +123,6 @@ public class Exam extends BaseTenantEntity {
     }
 
     public enum ExamStatus {
-        DRAFT, PUBLISHED, ARCHIVED
+        DRAFT, PUBLISHED, ARCHIVED, ONLINE_EXAM
     }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,10 +10,17 @@ import {
   useWindowDimensions,
   Platform,
   UIManager,
-  LayoutAnimation
+  LayoutAnimation,
+  TextInput,
+  KeyboardAvoidingView,
+  Keyboard,
+  Animated
 } from 'react-native';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+const KeyboardView = KeyboardAvoidingView;
+
+// Only enable LayoutAnimation on iOS to prevent Android keyboard/focus bugs
+if (Platform.OS === 'ios' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -64,16 +71,78 @@ export const WorkspaceStatusScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const isTablet = width > 600;
 
-  const [step, setStep] = useState(1);
+  const isMissingInstituteInfo = !user?.instituteNameEn || !user?.instituteNameBn;
+  const [step, setStep] = useState((user?.instituteStatus === 'ACTIVE' && isMissingInstituteInfo) ? 3 : 1);
   const [packages, setPackages] = useState<Package[]>([]);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [hierarchy, setHierarchy] = useState<Hierarchy | null>(null);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [subjectVersions, setSubjectVersions] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(false);
-  const [apiLoading, setApiLoading] = useState(true);
+  const [apiLoading, setApiLoading] = useState(user?.instituteStatus === 'INACTIVE');
+
+  const [instituteNameEn, setInstituteNameEn] = useState(user?.instituteNameEn || '');
+  const [instituteNameBn, setInstituteNameBn] = useState(user?.instituteNameBn || '');
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const focusedFieldRef = useRef<string | null>(null);
+
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        const height = e.endCoordinates.height;
+        setKeyboardHeight(height);
+        setKeyboardVisible(true);
+        
+        if (focusedFieldRef.current) {
+          setTimeout(() => {
+            if (focusedFieldRef.current === 'instituteEn') {
+              scrollViewRef.current?.scrollToEnd({ animated: true });
+            } else if (focusedFieldRef.current === 'instituteBn') {
+              scrollViewRef.current?.scrollTo({ y: 120, animated: true });
+            }
+          }, 100);
+        }
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+        setKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
+  const handleFocusField = (fieldName: string) => {
+    setFocusedField(fieldName);
+    focusedFieldRef.current = fieldName;
+    setTimeout(() => {
+      if (fieldName === 'instituteEn') {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      } else if (fieldName === 'instituteBn') {
+        scrollViewRef.current?.scrollTo({ y: 120, animated: true });
+      }
+    }, 100);
+  };
+
+  const handleBlurField = () => {
+    setFocusedField(null);
+    focusedFieldRef.current = null;
+  };
 
   const status = user?.instituteStatus || 'INACTIVE';
+  const showStepUI = status === 'INACTIVE' || (status === 'ACTIVE' && isMissingInstituteInfo);
 
   useEffect(() => {
     if (status === 'INACTIVE') {
@@ -104,14 +173,20 @@ export const WorkspaceStatusScreen: React.FC = () => {
     }
   };
 
+  const safeLayoutAnimation = () => {
+    if (Platform.OS === 'ios') {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
+  };
+
   const handleNext = () => {
     if (!selectedPackageId) return;
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    safeLayoutAnimation();
     setStep(2);
   };
 
   const toggleSubject = (classSubjectId: string, allowedVersions: string[] = []) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    safeLayoutAnimation();
     setSelectedSubjects(prev => {
       if (prev.includes(classSubjectId)) {
         return prev.filter(id => id !== classSubjectId);
@@ -126,7 +201,7 @@ export const WorkspaceStatusScreen: React.FC = () => {
   };
 
   const toggleVersion = (classSubjectId: string, version: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    safeLayoutAnimation();
     setSubjectVersions(prev => {
       const conf = prev[classSubjectId] || [];
       const newVersions = conf.includes(version)
@@ -147,9 +222,9 @@ export const WorkspaceStatusScreen: React.FC = () => {
         medium: Object.values(subjectVersions).flat().join(',') || 'Bangla'
       });
 
-      // Update local context user status to PENDING
+      // Update local context user status to ACTIVE
       if (user) {
-        const updatedUser = { ...user, instituteStatus: 'PENDING' };
+        const updatedUser = { ...user, instituteStatus: 'ACTIVE' };
         await updateUser(updatedUser);
       }
     } catch (error) {
@@ -160,8 +235,57 @@ export const WorkspaceStatusScreen: React.FC = () => {
     }
   };
 
+  const handleSaveInstituteInfo = async () => {
+    if (!instituteNameEn.trim() || !instituteNameBn.trim()) {
+      Alert.alert('Error', 'উভয় ফিল্ড পূরণ করা আবশ্যক / Both fields are required');
+      return;
+    }
+    setLoading(true);
+    try {
+      const profileRes = await apiClient.patch('/users/profile', {
+        name: user?.name,
+        phone: user?.phone || '',
+        instituteNameEn: instituteNameEn.trim(),
+        instituteNameBn: instituteNameBn.trim()
+      });
+
+      if (profileRes.data.success) {
+        const updatedProfile = profileRes.data.data;
+
+        if (status === 'INACTIVE') {
+          await apiClient.post('/institutes/request', {
+            packageId: selectedPackageId,
+            subjectIds: selectedSubjects,
+            subjectVersions: subjectVersions,
+            medium: Object.values(subjectVersions).flat().join(',') || 'Bangla'
+          });
+        }
+
+        if (user) {
+          const updatedUser = {
+            ...user,
+            name: updatedProfile.name,
+            phone: updatedProfile.phone,
+            instituteNameEn: updatedProfile.instituteNameEn,
+            instituteNameBn: updatedProfile.instituteNameBn,
+            instituteStatus: status === 'INACTIVE' ? 'ACTIVE' : user.instituteStatus
+          };
+          await updateUser(updatedUser);
+        }
+      }
+    } catch (error: any) {
+      console.error('Failed to save institute info:', error);
+      Alert.alert(
+        'Error',
+        error.response?.data?.message || 'তথ্য সংরক্ষণ করতে ব্যর্থ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ─── Render Restricted / Pending / Suspended State Views ───
-  if (status !== 'INACTIVE') {
+  if (!showStepUI) {
     const isSuspended = status === 'SUSPENDED';
 
     return (
@@ -243,18 +367,31 @@ export const WorkspaceStatusScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={containerStyle}>
-      <View style={[
-        styles.card,
-        isTablet ? styles.tabletCard : styles.mobileFullCard
-      ]}>
+      <KeyboardView
+        enabled={true}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <View style={[
+          styles.card,
+          isTablet ? styles.tabletCard : styles.mobileFullCard
+        ]}>
         
         <View style={styles.headerArea}>
-          <MaterialCommunityIcons name="office-building-cog" size={38} color={theme.colors.primary} />
+          <MaterialCommunityIcons 
+            name={step === 3 ? "school" : "office-building-cog"} 
+            size={38} 
+            color={theme.colors.primary} 
+          />
           <Text style={styles.headerTitle}>
-            {step === 1 ? 'Select Subscription' : 'Select Subjects'}
+            {step === 1 ? 'Select Subscription' : step === 2 ? 'Select Subjects' : 'প্রতিষ্ঠানের নাম লিখুন'}
           </Text>
           <Text style={styles.headerSubtitle}>
-            {step === 1 ? 'Choose a package to activate your workspace.' : 'Choose the subjects to manage.'}
+            {step === 1 
+              ? 'Choose a package to activate your workspace.' 
+              : step === 2 
+              ? 'Choose the subjects to manage.' 
+              : 'প্রতিষ্ঠানের নাম বাংলা ও ইংরেজিতে প্রদান করুন।'}
           </Text>
         </View>
 
@@ -283,9 +420,9 @@ export const WorkspaceStatusScreen: React.FC = () => {
                       
                       <Text style={styles.pkgPrice}>৳{pkg.price}</Text>
                       <Text style={styles.pkgCycle}>{pkg.billingCycle}</Text>
-
+                      
                       <View style={styles.pkgDivider} />
-
+                      
                       <View style={styles.pkgFeatures}>
                         <View style={styles.featureRow}>
                           <View style={styles.bullet} />
@@ -301,7 +438,7 @@ export const WorkspaceStatusScreen: React.FC = () => {
                 })}
               </View>
             </ScrollView>
-          ) : (
+          ) : step === 2 ? (
             // ─── Step 2: Subject & Version Selection ───
             <>
               {hierarchy ? (
@@ -425,6 +562,96 @@ export const WorkspaceStatusScreen: React.FC = () => {
                 </View>
               )}
             </>
+          ) : (
+            // ─── Step 3: Institute Name Collection ───
+            <ScrollView 
+              ref={scrollViewRef}
+              showsVerticalScrollIndicator={false} 
+              contentContainerStyle={[
+                styles.scrollPadding,
+                { paddingBottom: 120 }
+              ]}
+              onContentSizeChange={() => {
+                if (isKeyboardVisible && focusedFieldRef.current) {
+                  if (focusedFieldRef.current === 'instituteEn') {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                  } else if (focusedFieldRef.current === 'instituteBn') {
+                    scrollViewRef.current?.scrollTo({ y: 120, animated: true });
+                  }
+                }
+              }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.guideBox}>
+                <View style={styles.guideHeaderRow}>
+                  <Feather name="info" size={18} color="#312E81" />
+                  <Text style={styles.guideTitle}>প্রতিষ্ঠানের নাম যুক্ত করার গাইডলাইন</Text>
+                </View>
+                <Text style={styles.guideText}>
+                  আপনার প্রতিষ্ঠানের নাম বাংলা এবং ইংরেজি উভয় ভাষায় নির্ভুলভাবে প্রদান করুন। এটি আপনার তৈরি করা প্রশ্নপত্র, নোটিশ বোর্ড এবং অন্যান্য সমস্ত ডকুমেন্টের হেডার বা শিরোনামে ব্যবহৃত হবে।
+                </Text>
+                <View style={styles.guideList}>
+                  <Text style={styles.guideItem}>
+                    • <Text style={styles.boldText}>বাংলা নাম:</Text> এটি বাংলা ভার্সন বা বাংলা মাধ্যমের প্রশ্নপত্র তৈরিতে ব্যবহৃত হবে। (যেমন: আইডিয়াল স্কুল এন্ড কলেজ)
+                  </Text>
+                  <Text style={styles.guideItem}>
+                    • <Text style={styles.boldText}>ইংরেজি নাম:</Text> এটি ইংরেজি ভার্সন বা ইংরেজি মাধ্যমের প্রশ্নপত্র তৈরিতে ব্যবহৃত হবে। (যেমন: Ideal School and College)
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  প্রতিষ্ঠানের নাম (বাংলায়) <Text style={styles.requiredAsterisk}>*</Text>
+                </Text>
+                <View style={[
+                  styles.inputWrapper,
+                  focusedField === 'instituteBn' && styles.inputWrapperFocused
+                ]}>
+                  <Feather 
+                    name="globe" 
+                    size={18} 
+                    color={focusedField === 'instituteBn' ? theme.colors.primary : theme.colors.textMuted} 
+                    style={styles.inputIcon} 
+                  />
+                  <TextInput
+                    value={instituteNameBn}
+                    onChangeText={setInstituteNameBn}
+                    placeholder="যেমন: আইডিয়াল স্কুল এন্ড কলেজ"
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.textInput}
+                    onFocus={() => handleFocusField('instituteBn')}
+                    onBlur={handleBlurField}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  Institution Name (in English) <Text style={styles.requiredAsterisk}>*</Text>
+                </Text>
+                <View style={[
+                  styles.inputWrapper,
+                  focusedField === 'instituteEn' && styles.inputWrapperFocused
+                ]}>
+                  <Feather 
+                    name="globe" 
+                    size={18} 
+                    color={focusedField === 'instituteEn' ? theme.colors.primary : theme.colors.textMuted} 
+                    style={styles.inputIcon} 
+                  />
+                  <TextInput
+                    value={instituteNameEn}
+                    onChangeText={setInstituteNameEn}
+                    placeholder="e.g. Ideal School and College"
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.textInput}
+                    onFocus={() => handleFocusField('instituteEn')}
+                    onBlur={handleBlurField}
+                  />
+                </View>
+              </View>
+            </ScrollView>
           )}
         </View>
 
@@ -454,26 +681,57 @@ export const WorkspaceStatusScreen: React.FC = () => {
                   <Feather name="arrow-right" size={16} color="#FFF" style={{ marginLeft: 6 }} />
                 </TouchableOpacity>
               </>
-            ) : (
+            ) : step === 2 ? (
               <>
                 <TouchableOpacity style={styles.backBtnLight} onPress={() => {
-                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  safeLayoutAnimation();
                   setStep(1);
                 }}>
                   <Text style={styles.backBtnLightText}>Back</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  style={[styles.submitBtn, (!isStep2Valid || loading) && styles.disabledBtn]} 
-                  onPress={handleSubmit}
-                  disabled={!isStep2Valid || loading}
+                  style={[styles.nextBtn, !isStep2Valid && styles.disabledBtn]} 
+                  onPress={() => {
+                    safeLayoutAnimation();
+                    setStep(3);
+                  }}
+                  disabled={!isStep2Valid}
+                >
+                  <Text style={styles.nextBtnText}>Next Step</Text>
+                  <Feather name="arrow-right" size={16} color="#FFF" style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                {user?.instituteStatus === 'ACTIVE' ? (
+                  <TouchableOpacity style={styles.backLink} onPress={logout}>
+                    <Feather name="log-out" size={16} color={theme.colors.textSecondary} />
+                    <Text style={styles.backLinkText}>Logout</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.backBtnLight} onPress={() => {
+                    safeLayoutAnimation();
+                    setStep(2);
+                  }}>
+                    <Text style={styles.backBtnLightText}>Back</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity 
+                  style={[
+                    styles.submitBtn, 
+                    (!instituteNameEn.trim() || !instituteNameBn.trim() || loading) && styles.disabledBtn
+                  ]} 
+                  onPress={handleSaveInstituteInfo}
+                  disabled={!instituteNameEn.trim() || !instituteNameBn.trim() || loading}
                 >
                   {loading ? (
                     <ActivityIndicator size="small" color="#FFF" />
                   ) : (
                     <>
-                      <Text style={styles.submitBtnText}>Submit Request</Text>
-                      <Feather name="send" size={16} color="#FFF" style={{ marginLeft: 6 }} />
+                      <Text style={styles.submitBtnText}>সংরক্ষণ করুন</Text>
+                      <Feather name="check" size={16} color="#FFF" style={{ marginLeft: 6 }} />
                     </>
                   )}
                 </TouchableOpacity>
@@ -483,6 +741,7 @@ export const WorkspaceStatusScreen: React.FC = () => {
         </View>
 
       </View>
+      </KeyboardView>
     </SafeAreaView>
   );
 };
@@ -491,6 +750,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FC',
+  },
+  keyboardView: {
+    flex: 1,
+    width: '100%',
   },
   tabletContainer: {
     alignItems: 'center',
@@ -887,5 +1150,76 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: theme.typography.sizes.base,
     fontWeight: theme.typography.weights.bold,
+  },
+  guideBox: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+    borderRadius: theme.borderRadius.lg,
+    padding: 16,
+    marginBottom: 20,
+  },
+  guideHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  guideTitle: {
+    fontSize: theme.typography.sizes.base,
+    fontWeight: theme.typography.weights.bold,
+    color: '#312E81',
+  },
+  guideText: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
+  },
+  guideList: {
+    marginTop: 10,
+    gap: 6,
+  },
+  guideItem: {
+    fontSize: theme.typography.sizes.sm - 1,
+    color: theme.colors.textSecondary,
+    paddingLeft: 4,
+  },
+  boldText: {
+    fontWeight: theme.typography.weights.bold,
+    color: theme.colors.text,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: theme.typography.sizes.sm,
+    fontWeight: theme.typography.weights.bold,
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
+  },
+  requiredAsterisk: {
+    color: theme.colors.danger,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: '#FFF',
+    paddingHorizontal: 12,
+    height: 48,
+  },
+  inputWrapperFocused: {
+    borderColor: theme.colors.primary,
+  },
+  inputIcon: {
+    marginRight: 10,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: theme.typography.sizes.base,
+    color: theme.colors.text,
+    height: '100%',
   },
 });

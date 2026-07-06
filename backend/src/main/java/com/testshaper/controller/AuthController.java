@@ -21,6 +21,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final com.testshaper.service.UserService userService;
+    private final com.testshaper.service.RoleService roleService;
 
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(
@@ -64,6 +65,14 @@ public class AuthController {
                 "success", true,
                 "message", "User registered successfully",
                 "data", user));
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/roles")
+    public ResponseEntity<Map<String, Object>> getRegistrationRoles() {
+        java.util.List<com.testshaper.dto.RoleDTO> roles = roleService.getSelfRegistrationRoles();
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "data", roles));
     }
 
     @PostMapping("/impersonate/{userId}")

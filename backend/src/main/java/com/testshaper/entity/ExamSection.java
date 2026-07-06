@@ -41,6 +41,12 @@ public class ExamSection {
     @Column(name = "instructions", columnDefinition = "TEXT")
     private String instructions;
 
+    @Column(name = "questions_to_answer")
+    private Integer questionsToAnswer;
+
+    @Column(name = "marks_per_question")
+    private Double marksPerQuestion;
+
     @OneToMany(mappedBy = "section", cascade = CascadeType.ALL, orphanRemoval = false)
     @OrderBy("questionOrder ASC")
     private List<ExamQuestion> questions = new ArrayList<>();

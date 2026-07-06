@@ -49,7 +49,16 @@ const MarkdownRenderer = ({ content, className = '' }) => {
                         if (src.includes('r2.dev') && !src.includes('proxy-image')) {
                             src = `/api/v1/public/proxy-image?url=${encodeURIComponent(src)}`;
                         }
-                        return <img {...props} src={src} referrerPolicy="no-referrer" className="max-w-full h-auto rounded-lg shadow-sm border border-slate-200 mt-2 mb-3 inline-block" />;
+                        return (
+                            <span className="flex justify-center my-6 w-full">
+                                <img 
+                                    {...props} 
+                                    src={src} 
+                                    referrerPolicy="no-referrer" 
+                                    className="max-w-[90%] md:max-w-[80%] h-auto rounded-lg shadow-md border border-slate-200/60 transition-transform duration-300 hover:scale-[1.02]" 
+                                />
+                            </span>
+                        );
                     },
                     a: ({ node, ...props }) => {
                         let href = props.href || '';
@@ -58,7 +67,16 @@ const MarkdownRenderer = ({ content, className = '' }) => {
                             if (src.includes('r2.dev') && !src.includes('proxy-image')) {
                                 src = `/api/v1/public/proxy-image?url=${encodeURIComponent(src)}`;
                             }
-                            return <img src={src} alt={typeof props.children === 'string' ? props.children : 'Image link'} referrerPolicy="no-referrer" className="max-w-full h-auto rounded-lg shadow-sm border border-slate-200 mt-2 mb-3 inline-block" />;
+                            return (
+                                <span className="flex justify-center my-6 w-full">
+                                    <img 
+                                        src={src} 
+                                        alt={typeof props.children === 'string' ? props.children : 'Image link'} 
+                                        referrerPolicy="no-referrer" 
+                                        className="max-w-[90%] md:max-w-[80%] h-auto rounded-lg shadow-md border border-slate-200/60 transition-transform duration-300 hover:scale-[1.02]" 
+                                    />
+                                </span>
+                            );
                         }
                         return (
                             <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">

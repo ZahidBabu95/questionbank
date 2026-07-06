@@ -231,6 +231,10 @@ const PaperCanvasV2 = React.memo(({
         onUpdate: ({ editor }) => {
             const html = editor.getHTML();
             lastEditorContentRef.current = html;
+            const proseMirror = editor.view.dom.querySelector('.ProseMirror') || editor.view.dom;
+            const isShuffled = proseMirror.getAttribute('data-is-shuffled') === 'true';
+            if (isShuffled) return;
+
             // Debounce to prevent lag when typing
             if (editorUpdateTimeoutRef.current) clearTimeout(editorUpdateTimeoutRef.current);
             editorUpdateTimeoutRef.current = setTimeout(() => {
@@ -365,9 +369,21 @@ const PaperCanvasV2 = React.memo(({
     // Dynamically apply Question Setup settings to existing question nodes and upgrade legacy headers
     useCanvasSync(editor, s);
 
+    useEffect(() => {
+        if (editor) {
+            editor.docSettings = s;
+            editor.documentQuestions = documentQuestions;
+            window.dispatchEvent(new CustomEvent('nexus-editor-rerender'));
+        }
+    }, [editor, s.activeSet, s.multipleSetsEnabled, s.setMappings, documentQuestions]);
+
     if (!editor) {
         return <div className="animate-pulse h-[800px] bg-slate-100 rounded-lg w-full"></div>;
     }
+
+    // Attach settings to editor instance for ReactNodeViews to access
+    editor.docSettings = s;
+    editor.documentQuestions = documentQuestions;
 
     const dimensions = {
         'A4': { w: 794, h: 1123, gap: 0 },
@@ -414,6 +430,160 @@ const PaperCanvasV2 = React.memo(({
             editor.off('update', updateContainer);
         };
     }, [editor, editorMode]);
+
+    // Handle Editability of editor based on selected set
+    useEffect(() => {
+        if (!editor) return;
+        const count = s.setCount || 4;
+        const lang = s.setLanguage || 'BN';
+        const setNames = lang === 'EN' 
+            ? (count === 2 ? ['A', 'B'] : ['A', 'B', 'C', 'D'])
+            : (count === 2 ? ['ক', 'খ'] : ['ক', 'খ', 'গ', 'ঘ']);
+        const masterSet = setNames[0] || 'ক';
+        
+        const isMultipleSets = s.multipleSetsEnabled;
+        const currentSet = s.activeSet || masterSet;
+        
+        const shouldBeReadOnly = isMultipleSets && currentSet !== masterSet;
+        
+        if (shouldBeReadOnly) {
+            editor.setEditable(false);
+            editor.view.dom.classList.add('strict-analytics-mode');
+        } else {
+            editor.setEditable(true);
+            editor.view.dom.classList.toggle('strict-analytics-mode', editorMode === 'STRICT_LINKED');
+        }
+    }, [editor, s.multipleSetsEnabled, s.activeSet, s.setCount, s.setLanguage, editorMode]);
+
+    // Handle Visual Shuffling of MCQ questions in Tiptap DOM using DOM rearrangement
+    useEffect(() => {
+        if (!editor) return;
+        const dom = editor.view.dom;
+        if (!dom) return;
+
+        const proseMirror = dom.querySelector('.ProseMirror') || dom;
+        
+        const count = s.setCount || 4;
+        const lang = s.setLanguage || 'BN';
+        const setNames = lang === 'EN' 
+            ? (count === 2 ? ['A', 'B'] : ['A', 'B', 'C', 'D'])
+            : (count === 2 ? ['ক', 'খ'] : ['ক', 'খ', 'গ', 'ঘ']);
+        const masterSet = setNames[0] || 'ক';
+        
+        const isMultipleSets = s.multipleSetsEnabled;
+        const currentSet = s.activeSet || masterSet;
+        const isShuffledSet = isMultipleSets && currentSet !== masterSet;
+
+        if (!isShuffledSet) {
+            // Restore original DOM order if it was previously shuffled
+            if (proseMirror.getAttribute('data-is-shuffled') === 'true') {
+                const originalQIds = [];
+                editor.state.doc.descendants((node) => {
+                    if (node.type.name === 'questionBlock') {
+                        const qType = node.attrs.type;
+                        if (qType === 'MCQ') {
+                            originalQIds.push(node.attrs.questionId);
+                        }
+                    }
+                });
+
+                const children = Array.from(proseMirror.children);
+                const mcqElements = [];
+                const mcqIndices = [];
+
+                children.forEach((child, idx) => {
+                    const qBlock = child.getAttribute('questionid')
+                        ? child
+                        : child.querySelector('[questionid]');
+                    
+                    if (qBlock) {
+                        const qType = qBlock.getAttribute('type') || qBlock.getAttribute('data-qtype') || '';
+                        const hasOptions = qBlock.querySelector('.options-grid') || qType === 'MCQ';
+                        if (hasOptions) {
+                            mcqElements.push({ child, qBlock, originalIdx: idx });
+                            mcqIndices.push(idx);
+                        }
+                    }
+                });
+
+                if (mcqElements.length > 0) {
+                    const elementMap = {};
+                    mcqElements.forEach(item => {
+                        const qId = item.qBlock.getAttribute('questionid');
+                        if (qId) elementMap[qId] = item.child;
+                    });
+
+                    const newChildrenOrder = [...children];
+                    originalQIds.forEach((qId, shuffledIdx) => {
+                        const childNode = elementMap[qId];
+                        const targetIdx = mcqIndices[shuffledIdx];
+                        if (childNode && targetIdx !== undefined) {
+                            newChildrenOrder[targetIdx] = childNode;
+                        }
+                    });
+
+                    newChildrenOrder.forEach(child => {
+                        proseMirror.appendChild(child);
+                    });
+                }
+
+                proseMirror.setAttribute('data-is-shuffled', 'false');
+                window.dispatchEvent(new CustomEvent('nexus-editor-rerender'));
+            }
+            return;
+        }
+
+        const mappings = s.setMappings || {};
+        const setMapping = mappings[currentSet];
+        if (!setMapping || !setMapping.questions) return;
+
+        const shuffledQIds = setMapping.questions;
+        const children = Array.from(proseMirror.children);
+
+        const mcqElements = [];
+        const mcqIndices = [];
+
+        children.forEach((child, idx) => {
+            const qBlock = child.getAttribute('questionid')
+                ? child
+                : child.querySelector('[questionid]');
+            
+            if (qBlock) {
+                const qType = qBlock.getAttribute('type') || qBlock.getAttribute('data-qtype') || '';
+                const hasOptions = qBlock.querySelector('.options-grid') || qType === 'MCQ';
+                if (hasOptions) {
+                    mcqElements.push({ child, qBlock, originalIdx: idx });
+                    mcqIndices.push(idx);
+                }
+            }
+        });
+
+        if (mcqElements.length > 0) {
+            const elementMap = {};
+            mcqElements.forEach(item => {
+                const qId = item.qBlock.getAttribute('questionid');
+                if (qId) elementMap[qId] = item.child;
+            });
+
+            // Reconstruct the children array with shuffled MCQ DOM nodes
+            const newChildrenOrder = [...children];
+            
+            shuffledQIds.forEach((qId, shuffledIdx) => {
+                const childNode = elementMap[qId];
+                const targetIdx = mcqIndices[shuffledIdx];
+                if (childNode && targetIdx !== undefined) {
+                    newChildrenOrder[targetIdx] = childNode;
+                }
+            });
+
+            // Re-append all children to proseMirror in the new shuffled order
+            newChildrenOrder.forEach(child => {
+                proseMirror.appendChild(child);
+            });
+
+            proseMirror.setAttribute('data-is-shuffled', 'true');
+        }
+    }, [editor, s.multipleSetsEnabled, s.activeSet, s.setMappings, s.setCount, s.setLanguage, rawContent]);
 
     const borderOffset = s.outerBorder ? (s.outerBorderWidth || 1) * 3 + 12 : 0;
     const paddingTop = mmToPx(s.marginTop || 20) + borderOffset;
@@ -543,56 +713,73 @@ const PaperCanvasV2 = React.memo(({
                 color: canvasTextColor
             }}>
                 {/* Render Native Header inside ProseMirror via React Portal */}
-                {headerPortalContainer && createPortal(
-                    <div className="nexus-native-header" style={{
-                        fontFamily: s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'), 
-                        borderBottom: s.headerStyle === 'ডাবল বর্ডার' ? 'none' : 
-                                      s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 
-                                      s.headerStyle === 'থিক টপ লাইন' ? '3px solid ' + canvasBorderColor : 
-                                      (s.showDivider ? (s.dividerStyle === 'double' ? 'none' : s.dividerStyle === 'dashed' ? '1px dashed ' + canvasBorderColor : '1px solid ' + canvasBorderColor) : 'none'),
-                        borderTop: s.headerStyle === 'থিক টপ লাইন' ? '3px solid ' + canvasBorderColor : 
-                                   s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
-                        borderLeft: s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
-                        borderRight: s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
-                        padding: s.headerStyle === 'বক্স স্টাইল' ? '10px' : '0 0 4px 0',
-                        marginBottom: (s.headerStyle === 'ডাবল বর্ডার' || (s.showDivider && s.dividerStyle === 'double')) ? 12 : 20
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', minHeight: '28px', marginBottom: 4, width: '100%', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-                            {/* Left: Subject Code */}
-                            <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start', minWidth: 0 }}>
-                                {(s.showSubjectCode !== false && s.subjectCode) && (
-                                    <div style={{display: 'inline-block', border: '1px solid ' + canvasBorderColor, padding: '2px 8px', fontSize: ptToPx(s.bodyFontSize), fontWeight: 'bold', borderRadius: '4px', whiteSpace: 'nowrap'}}>
-                                        {s.language === 'ENGLISH' ? 'Sub Code' : 'বিষয় কোড'}: {convertDigits(s.subjectCode, s.language)}
-                                    </div>
-                                )}
-                            </div>
+                {headerPortalContainer && (() => {
+                    const headerLH = s.headerLineHeight !== undefined ? Number(s.headerLineHeight) : 1.2;
+                    const safeHeaderLH = s.language === 'ENGLISH' ? headerLH : Math.max(1.25, headerLH);
+                    
+                    const subHeaderItemMargin = Math.round((headerLH - 0.9) * 10);
+                    const rowGapVal = subHeaderItemMargin;
+                    const subHeaderMarginBottom = Math.round(8 * headerLH);
+                    const candidateMarginTop = Math.round(12 * headerLH);
+                    const candItemMargin = Math.round(8 * headerLH);
+                    const hasCandidates = !!(s.showName || s.showRoll || s.showReg);
+                    const doubleBorderMarginTop = hasCandidates ? Math.round(8 * headerLH) : Math.round(14 * headerLH);
+                    const actualHeaderGap = s.headerGap !== undefined ? Number(s.headerGap) : ((s.headerStyle === 'ডাবল বর্ডার' || (s.showDivider && s.dividerStyle === 'double')) ? 12 : 20);
 
-                            {/* Center: Institute Name */}
-                            <div style={{ flex: '0 1 auto', textAlign: 'center', maxWidth: '60%', padding: '0 10px' }}>
-                                {s.showInstitute !== false && (
-                                    <div style={{fontSize: ptToPx(s.headerFontSize), fontWeight: s.boldInstitute ? 'bold' : 'normal', wordBreak: 'break-word', lineHeight: s.headerLineHeight || 1.2}}>
-                                        {s.institute || 'প্রতিষ্ঠানের নাম'}
-                                    </div>
-                                )}
-                            </div>
+                    return createPortal(
+                        <div className="nexus-native-header" style={{
+                            fontFamily: s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'), 
+                            borderBottom: s.headerStyle === 'ডাবল বর্ডার' ? 'none' : 
+                                          s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 
+                                          s.headerStyle === 'থিক টপ লাইন' ? '3px solid ' + canvasBorderColor : 
+                                          (s.showDivider ? (s.dividerStyle === 'double' ? 'none' : s.dividerStyle === 'dashed' ? '1px dashed ' + canvasBorderColor : '1px solid ' + canvasBorderColor) : 'none'),
+                            borderTop: s.headerStyle === 'থিক টপ লাইন' ? '3px solid ' + canvasBorderColor : 
+                                       s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
+                            borderLeft: s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
+                            borderRight: s.headerStyle === 'বক্স স্টাইল' ? '1px solid ' + canvasBorderColor : 'none',
+                            padding: s.headerStyle === 'বক্স স্টাইল' ? '10px' : '0 0 4px 0',
+                            marginBottom: actualHeaderGap
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', minHeight: '28px', marginBottom: rowGapVal, width: '100%', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+                                {/* Left: Subject Code */}
+                                <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start', minWidth: 0 }}>
+                                    {(s.showSubjectCode !== false && s.subjectCode) && (
+                                        <div style={{display: 'inline-block', border: '1px solid ' + canvasBorderColor, padding: '2px 8px', fontSize: ptToPx(s.bodyFontSize), fontWeight: 'bold', borderRadius: '4px', whiteSpace: 'nowrap'}}>
+                                            {s.language === 'ENGLISH' ? 'Sub Code' : 'বিষয় কোড'}: {convertDigits(s.subjectCode, s.language)}
+                                        </div>
+                                    )}
+                                </div>
 
-                            {/* Right: Set Code */}
-                            <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', minWidth: 0 }}>
-                                {(s.showSetCode !== false && s.setCode) && (
-                                    <div style={{display: 'inline-block', border: '1px solid ' + canvasBorderColor, padding: '2px 8px', fontSize: ptToPx(s.bodyFontSize), fontWeight: 'bold', borderRadius: '4px', whiteSpace: 'nowrap'}}>
-                                        {s.language === 'ENGLISH' ? 'Set Code' : 'সেট কোড'}: {convertDigits(s.setCode, s.language)}
-                                    </div>
-                                )}
+                                {/* Center: Institute Name */}
+                                <div style={{ flex: '0 1 auto', textAlign: 'center', maxWidth: '60%', padding: '0 10px' }}>
+                                    {s.showInstitute !== false && (
+                                        <div style={{fontSize: ptToPx(s.headerFontSize), fontWeight: s.boldInstitute ? 'bold' : 'normal', wordBreak: 'break-word', lineHeight: safeHeaderLH}}>
+                                            {s.institute || 'প্রতিষ্ঠানের নাম'}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Right: Set Code */}
+                                <div className="nexus-header-set-code" style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', minWidth: 0 }}>
+                                    {s.multipleSetsEnabled ? (
+                                        <div style={{display: 'inline-block', border: '1px solid ' + canvasBorderColor, padding: '2px 8px', fontSize: ptToPx(s.bodyFontSize), fontWeight: 'bold', borderRadius: '4px', whiteSpace: 'nowrap'}}>
+                                            {s.language === 'ENGLISH' ? 'Set Code' : 'সেট কোড'}: {s.activeSet || 'ক'}
+                                        </div>
+                                    ) : (s.showSetCode !== false && s.setCode) && (
+                                        <div style={{display: 'inline-block', border: '1px solid ' + canvasBorderColor, padding: '2px 8px', fontSize: ptToPx(s.bodyFontSize), fontWeight: 'bold', borderRadius: '4px', whiteSpace: 'nowrap'}}>
+                                            {s.language === 'ENGLISH' ? 'Set Code' : 'সেট কোড'}: {convertDigits(s.setCode, s.language)}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                            <div style={{textAlign: 'center', fontSize: ptToPx(s.subHeaderFontSize), fontWeight: s.boldSubject ? 'bold' : 'normal', marginBottom: 8, lineHeight: s.headerLineHeight || 1.2}}>
+                            <div style={{textAlign: 'center', fontSize: ptToPx(s.subHeaderFontSize), fontWeight: s.boldSubject ? 'bold' : 'normal', marginBottom: subHeaderMarginBottom, lineHeight: safeHeaderLH}}>
                                 {(s.showBoard !== false && s.board) && (
-                                    <div style={{marginBottom: 2}}>
+                                    <div style={{marginBottom: subHeaderItemMargin}}>
                                         {s.board} {s.language === 'ENGLISH' ? 'Board' : 'বอร์ด'}
                                     </div>
                                 )}
                                 {(s.showExamType !== false || s.showYear !== false) && (
-                                    <div>
+                                    <div style={{marginBottom: subHeaderItemMargin}}>
                                         {[s.showExamType !== false ? s.exam : null, s.showYear !== false ? convertDigits(s.year, s.language) : null].filter(Boolean).join(' - ')}
                                     </div>
                                 )}
@@ -607,46 +794,52 @@ const PaperCanvasV2 = React.memo(({
                                 )}
                             </div>
                             {(s.showTime !== false || s.showTotalMarks !== false) && (
-                                <div style={{display:'flex', justifyContent:'space-between', fontSize: ptToPx((s.subHeaderFontSize || 14) * 0.85), fontWeight: 'bold', lineHeight: 1}}>
-                                    <span>{s.showTime !== false ? `${s.language === 'ENGLISH' ? 'Time' : 'সময়'}: ${convertDigits(formatDurationString(s.time, s.language), s.language)}` : ''}</span>
+                                <div style={{display:'flex', justifyContent:'space-between', fontSize: ptToPx((s.subHeaderFontSize || 14) * 0.85), fontWeight: 'bold', lineHeight: safeHeaderLH}}>
+                                    <span>{s.showTime !== false ? `${s.language === 'ENGLISH' ? 'Time' : 'সময়'}: ${convertDigits(formatDurationString(s.time, s.language), s.language)}` : ''}</span>
                                     <span>{s.showTotalMarks !== false ? `${s.language === 'ENGLISH' ? 'Full Marks' : 'পূর্ণমান'}: ${convertDigits(s.totalMarks, s.language)}` : ''}</span>
                                 </div>
                             )}
-                        {(s.showName || s.showRoll || s.showReg) && (
-                            <div style={{ marginTop: 12, fontSize: ptToPx(s.bodyFontSize) }}>
-                                {s.candidateLayout === 'inline' ? (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 15, flexWrap: 'wrap' }}>
-                                        {s.showName && <div style={{flex: 1}}><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Name' : 'নাম'}:</span> <span style={{display:'inline-block', width:'calc(100% - 40px)', borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
-                                        <div style={{display:'flex', gap: 15, flexShrink: 0}}>
-                                            {s.showRoll && <div><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Roll No' : 'রোল নম্বর'}:</span> <span style={{display:'inline-block', width:80, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
-                                            {s.showReg && <div><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Reg No' : 'রেজিঃ নম্বর'}:</span> <span style={{display:'inline-block', width:90, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {s.showName && <div style={{marginBottom: 8, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Name' : 'নাম'}:</span> <span style={{flex: 1, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
-                                        {(s.showRoll || s.showReg) && (
-                                            <div style={{display:'flex', justifyContent: (s.showRoll && s.showReg) ? 'space-between' : 'flex-start', gap: 40}}>
-                                                {s.showRoll && <div style={{flex: 1, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Roll No' : 'রোল নম্বর'}:</span> <span style={{flex: 1, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
-                                                {s.showReg && <div style={{flex: 1, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Reg No' : 'রেজিঃ নম্বর'}:</span> <span style={{flex: 1, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
+                            {(s.showName || s.showRoll || s.showReg) && (
+                                <div style={{ marginTop: candidateMarginTop, fontSize: ptToPx(s.bodyFontSize) }}>
+                                    {s.candidateLayout === 'inline' ? (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 15, flexWrap: 'wrap' }}>
+                                            {s.showName && <div style={{flex: 1}}><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Name' : 'নাম'}:</span> <span style={{display:'inline-block', width:'calc(100% - 40px)', borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
+                                            <div style={{display:'flex', gap: 15, flexShrink: 0}}>
+                                                {s.showRoll && <div><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Roll No' : 'রোল নম্বর'}:</span> <span style={{display:'inline-block', width:80, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
+                                                {s.showReg && <div><span style={{whiteSpace:'nowrap'}}>{s.language === 'ENGLISH' ? 'Reg No' : 'রেজিঃ নম্বর'}:</span> <span style={{display:'inline-block', width:90, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
                                             </div>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        )}
-                        {/* Double line emulation for html2canvas compatibility */}
-                        {(s.headerStyle === 'ডাবল বর্ডার' || (s.headerStyle !== 'বক্স স্টাইল' && s.headerStyle !== 'থিক টপ লাইন' && s.showDivider && s.dividerStyle === 'double')) && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '100%', marginTop: '4px', marginBottom: '0px' }}>
-                                <div style={{ borderTop: '1px solid ' + canvasBorderColor, width: '100%', height: '0px' }}></div>
-                                <div style={{ borderTop: '1px solid ' + canvasBorderColor, width: '100%', height: '0px' }}></div>
-                            </div>
-                        )}
-                    </div>,
-                    headerPortalContainer
-                )}
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {s.showName && <div style={{marginBottom: candItemMargin, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Name' : 'নাম'}:</span> <span style={{flex: 1, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
+                                            {(s.showRoll || s.showReg) && (
+                                                <div style={{display:'flex', justifyContent: (s.showRoll && s.showReg) ? 'space-between' : 'flex-start', gap: 40}}>
+                                                    {s.showRoll && <div style={{flex: 1, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Roll No' : 'রোল নম্বর'}:</span> <span style={{flex: 1, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
+                                                    {s.showReg && <div style={{flex: 1, display:'flex'}}><span style={{whiteSpace:'nowrap', marginRight: 5}}>{s.language === 'ENGLISH' ? 'Reg No' : 'রেজিঃ নম্বর'}:</span> <span style={{flex: 1, borderBottom:'1px dashed ' + canvasBorderColor}}></span></div>}
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                            {/* Double line emulation for html2canvas compatibility */}
+                            {(s.headerStyle === 'ডাবল বন্টার' || s.headerStyle === 'ডাবল বর্ডার' || (s.headerStyle !== 'বক্স স্টাইল' && s.headerStyle !== 'থিক টপ লাইন' && s.showDivider && s.dividerStyle === 'double')) && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '100%', marginTop: doubleBorderMarginTop, marginBottom: '0px' }}>
+                                    <div style={{ borderTop: '1px solid ' + canvasBorderColor, width: '100%', height: '0px' }}></div>
+                                    <div style={{ borderTop: '1px solid ' + canvasBorderColor, width: '100%', height: '0px' }}></div>
+                                </div>
+                            )}
+                        </div>,
+                        headerPortalContainer
+                    );
+                })()}
                 {/* Tiptap Content */}
-                <div className={(s.includeAnswerSheet && s.ansLayout !== 'compact') ? `show-answers-${s.ansLayout || 'highlighted'}` : ''}>
+                <div className={[
+                    (s.includeAnswerSheet && s.ansLayout !== 'compact') ? `show-answers-${s.ansLayout || 'highlighted'}` : '',
+                    s.showAnswersInline ? 'show-answers-inline' : '',
+                    s.showExplanationInline ? 'show-explanation-inline' : '',
+                    s.showSources ? 'show-sources-inline' : ''
+                ].filter(Boolean).join(' ')}>
                     <EditorContent editor={editor} />
                 </div>
 
@@ -737,7 +930,7 @@ const PaperCanvasV2 = React.memo(({
                                                                 <td className={`border border-slate-800 py-1.5 px-1 font-bold text-slate-700 bg-slate-50/50 ${colIdx > 0 ? 'border-l-2' : ''}`} style={{ fontSize: ptToPx(qFontSize) }}>
                                                                     {displayNum}
                                                                 </td>
-                                                                <td className="border border-slate-800 py-1.5 px-2 font-bold text-indigo-700" style={{ fontSize: ptToPx(qFontSize) }} dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                                <td className="border border-slate-800 py-1.5 px-2 font-bold text-slate-900" style={{ fontSize: ptToPx(qFontSize) }} dangerouslySetInnerHTML={{ __html: ansText }} />
                                                             </React.Fragment>
                                                         );
                                                     } else {
@@ -786,20 +979,20 @@ const PaperCanvasV2 = React.memo(({
                                                         <div className="font-semibold text-slate-800 inline-block" dangerouslySetInnerHTML={{ __html: content }} />
                                                     </div>
                                                     {hasSubParts ? (
-                                                        <div className="pl-6 mt-1.5 space-y-2 text-indigo-700 font-bold">
+                                                        <div className="pl-6 mt-1.5 space-y-2 text-slate-900 font-bold">
                                                             {dynamicDataParsed.sub_parts.map((part, pIdx) => {
                                                                 const label = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
                                                                 return (
-                                                                    <div key={pIdx} className="flex flex-col gap-0.5 pb-1 border-b border-indigo-50/30 last:border-0 last:pb-0">
+                                                                    <div key={pIdx} className="flex flex-col gap-0.5 pb-1 border-b border-slate-100 last:border-0 last:pb-0">
                                                                         {part.answer && (
                                                                             <div className="flex items-start gap-1 font-bold">
                                                                                 <span className="text-xs text-slate-800 font-bold shrink-0">({label}) {s.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
-                                                                                <div className="inline font-bold text-indigo-700" dangerouslySetInnerHTML={{ __html: part.answer }} />
+                                                                                <div className="inline font-bold text-slate-900" dangerouslySetInnerHTML={{ __html: part.answer }} />
                                                                             </div>
                                                                         )}
                                                                         {part.explanation && (
                                                                             <div className="flex items-start gap-1 pl-4 text-xs font-normal text-slate-600">
-                                                                                <span className="font-semibold shrink-0 text-emerald-700">{!part.answer ? `(${label}) ` : ''}{s.language === 'ENGLISH' ? 'Explanation:' : 'ব্যাখ্যা:'}</span>
+                                                                                <span className="font-semibold shrink-0 text-slate-800">{!part.answer ? `(${label}) ` : ''}{s.language === 'ENGLISH' ? 'Explanation:' : 'ব্যাখ্যা:'}</span>
                                                                                 <div className="inline text-slate-700 font-normal" dangerouslySetInnerHTML={{ __html: part.explanation }} />
                                                                             </div>
                                                                         )}
@@ -808,7 +1001,7 @@ const PaperCanvasV2 = React.memo(({
                                                             })}
                                                         </div>
                                                     ) : (
-                                                        <div className="pl-6 mt-1 text-indigo-700 font-bold">
+                                                        <div className="pl-6 mt-1 text-slate-900 font-bold">
                                                             <span className="text-xs text-slate-500 font-normal mr-1.5">{s.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
                                                             <div className="inline" dangerouslySetInnerHTML={{ __html: ansText }} />
                                                         </div>

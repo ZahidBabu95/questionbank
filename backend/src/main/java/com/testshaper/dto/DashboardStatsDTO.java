@@ -28,6 +28,35 @@ public class DashboardStatsDTO {
     private List<ActivityStat> activityAnalytics;
     private List<RecentActivity> recentActivities;
     private List<SubjectQuestionStat> subjectQuestions;
+    private List<ClassStats> classStats;
+
+    @Data
+    @Builder
+    public static class ClassStats {
+        private String classId;
+        private String className;
+        private String levelId;
+        private String levelName;
+        private String streamId;
+        private String streamName;
+        private long totalBooks;
+        private long booksWithQuestions;
+        private long booksWithoutQuestions;
+        private long totalQuestions;
+        private List<BookStats> books;
+    }
+
+    @Data
+    @Builder
+    public static class BookStats {
+        private String bookId;
+        private String title;
+        private String subjectName;
+        private String bookType;
+        private long questionCount;
+        private String status;
+    }
+
 
     @Data
     @Builder

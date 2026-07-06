@@ -49,7 +49,21 @@ export const useAiImporter = () => {
                             const explanationText = q.explanation ? q.explanation.replace(/"/g, "&quot;") : "";
                             const answerText = q.answer ? q.answer.replace(/"/g, "&quot;") : "";
                             const qIdAttr = q.originalQuestionId ? q.originalQuestionId : `ai-${Math.random()}`;
-                            const dynamicDataJson = q.dynamicData ? (typeof q.dynamicData === 'object' ? JSON.stringify(q.dynamicData).replace(/'/g, "&#39;") : q.dynamicData.replace(/'/g, "&#39;")) : "";
+                            let dynamicDataObj = {};
+                            if (q.dynamicData) {
+                                try {
+                                    dynamicDataObj = typeof q.dynamicData === 'string' ? JSON.parse(q.dynamicData) : q.dynamicData;
+                                } catch (e) { console.error("Error parsing dynamicData", e); }
+                            }
+                            if (q.sources && q.sources.length > 0 && (!dynamicDataObj.sources || dynamicDataObj.sources.length === 0)) {
+                                dynamicDataObj.sources = q.sources.map(src => ({
+                                    organizationName: src.organizationName || src.organization_name,
+                                    examYear: src.examYear || src.exam_year,
+                                    examName: src.examName || src.exam_name,
+                                    sourceType: src.sourceType || src.source_type
+                                }));
+                            }
+                            const dynamicDataJson = JSON.stringify(dynamicDataObj).replace(/'/g, "&#39;");
                             
                             return `
                             <div data-type="question-block" 
@@ -130,7 +144,7 @@ export const useAiImporter = () => {
                             if (title && title.trim() !== '') {
                                 try {
                                     const user = JSON.parse(localStorage.getItem('user') || '{}');
-                                    const instName = user.instituteName || "";
+                                    const instName = user.instituteNameBn || user.instituteName || "";
                                     const payload = {
                                         title: title.trim(),
                                         examCode: "NEXUS-AI-" + Math.floor(Math.random() * 10000),

@@ -38,6 +38,7 @@ public class ExamGenerationServiceImpl {
     private final ObjectMapper objectMapper;
     private final com.testshaper.repository.QuestionFavoriteRepository favoriteRepository;
     private final com.testshaper.repository.UserRepository userRepository;
+    private final com.testshaper.repository.QuestionOptionRepository questionOptionRepository;
 
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
@@ -252,6 +253,7 @@ public class ExamGenerationServiceImpl {
             genRule.setQuestionType(rule.getQuestionType());
             genRule.setQuestionCount(rule.getCount());
             genRule.setMarksPerQuestion(rule.getMarksPerQuestion());
+            genRule.setQuestionsToAnswer(rule.getQuestionsToAnswer());
             exam.getGenerationRules().add(genRule);
         }
 
@@ -324,11 +326,16 @@ public class ExamGenerationServiceImpl {
             // Remove questions not in the incoming list
             exam.getExamQuestions().removeIf(eq -> !incomingMap.containsKey(eq.getId()));
 
-            // Update remaining questions
+            Set<UUID> existingIds = exam.getExamQuestions().stream()
+                    .map(ExamQuestion::getId)
+                    .collect(Collectors.toSet());
+
+            // 1. Update remaining existing questions
             for (ExamQuestion eq : exam.getExamQuestions()) {
                 ExamDTO.ExamQuestionDTO qDto = incomingMap.get(eq.getId());
                 eq.setQuestionOrder(qDto.getOrder());
                 eq.setMarks(qDto.getMarks());
+                eq.setAlternativeToId(qDto.getAlternativeToId());
 
                 String originalText = eq.getQuestion().getQuestionText() != null ? eq.getQuestion().getQuestionText()
                         : "";
@@ -351,6 +358,80 @@ public class ExamGenerationServiceImpl {
                     }
                 } else {
                     eq.setOverrideOptionsJson(null);
+                }
+            }
+
+            // 2. Insert new questions (either custom or imported)
+            for (ExamDTO.ExamQuestionDTO qDto : dto.getQuestions()) {
+                if (qDto.getId() != null && !existingIds.contains(qDto.getId())) {
+                    ExamQuestion newEq = new ExamQuestion();
+                    newEq.setId(qDto.getId()); // Use the frontend-generated UUID
+                    newEq.setExam(exam);
+                    newEq.setQuestionOrder(qDto.getOrder());
+                    newEq.setMarks(qDto.getMarks() != null ? qDto.getMarks() : 1.0);
+                    newEq.setAlternativeToId(qDto.getAlternativeToId());
+
+                    Question qEntity = null;
+                    if (qDto.getOriginalQuestionId() != null) {
+                        // Imported from question bank
+                        qEntity = questionRepository.findById(qDto.getOriginalQuestionId()).orElse(null);
+                    }
+
+                    if (qEntity == null) {
+                        // Brand new custom question
+                        qEntity = new Question();
+                        qEntity.setTenantId(exam.getTenantId());
+                        qEntity.setType(qDto.getType() != null ? qDto.getType() : "MCQ");
+                        qEntity.setQuestionText(qDto.getQuestionText() != null ? qDto.getQuestionText() : "");
+                        qEntity.setDifficulty(qDto.getDifficulty() != null ? qDto.getDifficulty() : Question.DifficultyLevel.MEDIUM);
+                        qEntity.setMarks(qDto.getMarks() != null ? qDto.getMarks() : 1.0);
+                        qEntity.setLanguage(exam.getLanguage() != null ? exam.getLanguage() : "Bangla");
+                        qEntity.setStatus(Question.QuestionStatus.APPROVED);
+                        qEntity.setCreatedBy(exam.getCreatedBy());
+                        qEntity.setStimulus(qDto.getStimulus());
+                        qEntity.setBloomLevel(qDto.getBloomLevel());
+                        qEntity.setClassSubject(exam.getClassSubject());
+
+                        qEntity = questionRepository.save(qEntity);
+
+                        // If MCQ, save the custom options
+                        if ("MCQ".equals(qEntity.getType()) && qDto.getOptions() != null) {
+                            List<QuestionOption> qOptions = new ArrayList<>();
+                            int optIdx = 0;
+                            char optChar = 'A';
+                            for (ExamDTO.OptionDTO oDto : qDto.getOptions()) {
+                                QuestionOption opt = new QuestionOption();
+                                opt.setQuestion(qEntity);
+                                opt.setOptionLabel(String.valueOf((char) (optChar + optIdx)));
+                                opt.setOptionText(oDto.getOptionText() != null ? oDto.getOptionText() : "");
+                                opt.setCorrect(oDto.isCorrect());
+                                opt.setTenantId(qEntity.getTenantId());
+                                qOptions.add(opt);
+                                optIdx++;
+                            }
+                            questionOptionRepository.saveAll(qOptions);
+                            qEntity.setOptions(qOptions);
+                        }
+                    }
+
+                    newEq.setQuestion(qEntity);
+
+                    // Track question text override
+                    String originalText = qEntity.getQuestionText() != null ? qEntity.getQuestionText() : "";
+                    if (qDto.getQuestionText() != null && !qDto.getQuestionText().trim().equals(originalText.trim())) {
+                        newEq.setOverrideQuestionText(qDto.getQuestionText());
+                    }
+
+                    // Track options override
+                    if (qDto.getOptions() != null && !qDto.getOptions().isEmpty()) {
+                        try {
+                            newEq.setOverrideOptionsJson(objectMapper.writeValueAsString(qDto.getOptions()));
+                        } catch (JsonProcessingException e) {
+                            log.error("Failed to serialize options for new ExamQuestion {}", newEq.getId(), e);
+                        }
+                    }
+
+                    exam.getExamQuestions().add(newEq);
                 }
             }
         }
@@ -487,7 +568,8 @@ public class ExamGenerationServiceImpl {
         List<String> preferredEasyBloom = getPreferredBloomLevels(bloomDeficits);
         List<Question> easyPool = fetchPool(tenantId, globalClassSubjectId,
                 rule.getQuestionType(), Question.DifficultyLevel.EASY, preferredEasyBloom,
-                request.getLanguage(), chapterIds, topicIds, currentExcludedIds, easyCount);
+                request.getLanguage(), chapterIds, topicIds, currentExcludedIds, easyCount,
+                request, exam.getCreatedBy());
         pool.addAll(easyPool);
         easyPool.forEach(q -> {
             currentExcludedIds.add(q.getId());
@@ -501,7 +583,8 @@ public class ExamGenerationServiceImpl {
         List<String> preferredMediumBloom = getPreferredBloomLevels(bloomDeficits);
         List<Question> mediumPool = fetchPool(tenantId, globalClassSubjectId,
                 rule.getQuestionType(), Question.DifficultyLevel.MEDIUM, preferredMediumBloom,
-                request.getLanguage(), chapterIds, topicIds, currentExcludedIds, mediumCount);
+                request.getLanguage(), chapterIds, topicIds, currentExcludedIds, mediumCount,
+                request, exam.getCreatedBy());
         pool.addAll(mediumPool);
         mediumPool.forEach(q -> {
             currentExcludedIds.add(q.getId());
@@ -515,7 +598,8 @@ public class ExamGenerationServiceImpl {
         List<String> preferredHardBloom = getPreferredBloomLevels(bloomDeficits);
         List<Question> hardPool = fetchPool(tenantId, globalClassSubjectId,
                 rule.getQuestionType(), Question.DifficultyLevel.HARD, preferredHardBloom,
-                request.getLanguage(), chapterIds, topicIds, currentExcludedIds, hardCount);
+                request.getLanguage(), chapterIds, topicIds, currentExcludedIds, hardCount,
+                request, exam.getCreatedBy());
         pool.addAll(hardPool);
         hardPool.forEach(q -> {
             currentExcludedIds.add(q.getId());
@@ -544,7 +628,8 @@ public class ExamGenerationServiceImpl {
                 List<String> preferredFallbackBloom = getPreferredBloomLevels(bloomDeficits);
                 List<Question> fallbackPool = fetchPool(tenantId, globalClassSubjectId,
                         rule.getQuestionType(), level, preferredFallbackBloom,
-                        request.getLanguage(), chapterIds, topicIds, currentExcludedIds, deficit);
+                        request.getLanguage(), chapterIds, topicIds, currentExcludedIds, deficit,
+                        request, exam.getCreatedBy());
                 if (!fallbackPool.isEmpty()) {
                     pool.addAll(fallbackPool);
                     fallbackPool.forEach(q -> {
@@ -589,7 +674,8 @@ public class ExamGenerationServiceImpl {
                     List<String> preferredFallbackBloom = getPreferredBloomLevels(bloomDeficits);
                     List<Question> fallbackPool = fetchPool(tenantId, globalClassSubjectId,
                             fallbackType, level, preferredFallbackBloom,
-                            request.getLanguage(), chapterIds, topicIds, currentExcludedIds, deficit);
+                            request.getLanguage(), chapterIds, topicIds, currentExcludedIds, deficit,
+                            request, exam.getCreatedBy());
                     if (!fallbackPool.isEmpty()) {
                         pool.addAll(fallbackPool);
                         fallbackPool.forEach(q -> {
@@ -625,73 +711,187 @@ public class ExamGenerationServiceImpl {
             Set<UUID> chapterIds,
             Set<UUID> topicIds,
             Set<UUID> excludedIds,
-            int needed) {
-            
+            int needed,
+            ExamGenerationRequest request,
+            String createdBy) {
+
         if (needed <= 0) return new ArrayList<>();
 
-        String globalTenantId = null;
-        try {
-            Object result = entityManager.createNativeQuery("SELECT CAST(id AS CHAR) FROM institutes WHERE code = 'DEFAULT-001'")
-                    .setMaxResults(1)
-                    .getSingleResult();
-            if (result != null) {
-                globalTenantId = result.toString();
+        // If usedPercent is specified, partition the query
+        if (request.getUsedPercent() != null && request.getUsedPercent() >= 0 && request.getUsedPercent() <= 100) {
+            int targetUsed = (int) Math.round(needed * request.getUsedPercent() / 100.0);
+            int targetUnused = needed - targetUsed;
+
+            List<Question> usedList = queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
+                    language, chapterIds, topicIds, excludedIds, targetUsed, request, createdBy, true);
+
+            Set<UUID> updatedExclusions = new HashSet<>(excludedIds);
+            usedList.forEach(q -> updatedExclusions.add(q.getId()));
+
+            List<Question> unusedList = queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
+                    language, chapterIds, topicIds, updatedExclusions, targetUnused, request, createdBy, false);
+
+            List<Question> combined = new ArrayList<>();
+            combined.addAll(usedList);
+            combined.addAll(unusedList);
+
+            if (combined.size() < needed) {
+                // Fallback: fetch remainder from general pool (ignore used/unused partition)
+                int deficit = needed - combined.size();
+                Set<UUID> finalExclusions = new HashSet<>(excludedIds);
+                combined.forEach(q -> finalExclusions.add(q.getId()));
+
+                List<Question> fallbackList = queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
+                        language, chapterIds, topicIds, finalExclusions, deficit, request, createdBy, null);
+                combined.addAll(fallbackList);
             }
-        } catch (Exception e) {
-            log.warn("Failed to resolve globalTenantId via native query, falling back to default UUID: {}", e.getMessage());
-        }
-        if (globalTenantId == null) {
-            globalTenantId = "0c430840-39f2-4645-b2e4-53d62c8e4b49"; // Default Institute UUID fallback
-        }
-
-        log.info("DEBUG fetchPool values: tenantId='{}', globalTenantId='{}', classSubjectId='{}', type='{}', difficulty='{}', language='{}', chapterIds='{}', needed={}",
-                tenantId, globalTenantId, classSubjectId, type, difficulty, language, chapterIds, needed);
-
-        Set<UUID> safeExclusions = excludedIds.isEmpty()
-                ? Set.of(UUID.randomUUID()) // avoids empty IN clause issues
-                : excludedIds;
-
-        Set<UUID> eligibleIdsSet = new HashSet<>();
-        String typeStr = type;
-
-        if (chapterIds == null && topicIds == null) {
-            eligibleIdsSet.addAll(questionPoolRepository.findEligibleQuestionIds(
-                    tenantId, globalTenantId, classSubjectId, typeStr, difficulty, language, null, safeExclusions));
+            return combined;
         } else {
-            if (chapterIds != null && !chapterIds.isEmpty()) {
-                eligibleIdsSet.addAll(questionPoolRepository.findEligibleQuestionIds(
-                        tenantId, globalTenantId, classSubjectId, typeStr, difficulty, language, chapterIds, safeExclusions));
-            }
-            if (topicIds != null && !topicIds.isEmpty()) {
-                eligibleIdsSet.addAll(questionPoolRepository.findEligibleQuestionIdsByTopic(
-                        tenantId, globalTenantId, classSubjectId, typeStr, difficulty, language, topicIds, safeExclusions));
+            // General query
+            return queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
+                    language, chapterIds, topicIds, excludedIds, needed, request, createdBy, null);
+        }
+    }
+
+    private List<Question> queryPool(
+            String tenantId,
+            UUID classSubjectId,
+            String type,
+            Question.DifficultyLevel difficulty,
+            List<String> preferredBloomLevels,
+            String language,
+            Set<UUID> chapterIds,
+            Set<UUID> topicIds,
+            Set<UUID> excludedIds,
+            int needed,
+            ExamGenerationRequest request,
+            String createdBy,
+            Boolean fetchUsedOnly) {
+
+        if (needed <= 0) return new ArrayList<>();
+
+        StringBuilder jpql = new StringBuilder("SELECT DISTINCT q.id FROM Question q ");
+
+        // 1. Joins
+        if ("FAVORITES".equalsIgnoreCase(request.getSourceMode())) {
+            jpql.append("JOIN QuestionFavorite qf ON qf.question = q ");
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(request.getSourceMode()) && request.getLectureIds() != null && !request.getLectureIds().isEmpty()) {
+            jpql.append("JOIN LectureQuestion lq ON lq.question = q ");
+        }
+
+        boolean hasBoard = request.getBoards() != null && !request.getBoards().isEmpty();
+        boolean hasYear = request.getYears() != null && !request.getYears().isEmpty();
+        boolean hasSchool = request.getSchools() != null && !request.getSchools().isEmpty();
+
+        if (hasBoard || hasYear || hasSchool) {
+            jpql.append("JOIN q.sources qs ");
+        }
+
+        // 2. Base conditions
+        jpql.append("WHERE q.status = 'APPROVED' AND q.deleted = false AND q.classSubject.id = :classSubjectId ");
+        jpql.append("AND q.type = :type AND q.difficulty = :difficulty ");
+        jpql.append("AND (q.language = :language OR q.language = 'Bilingual' OR :language = 'Bilingual' OR q.language IS NULL OR q.language = '') ");
+
+        // 3. Chapter/Topic filters
+        if (chapterIds != null && !chapterIds.isEmpty()) {
+            jpql.append("AND q.chapter.id IN :chapterIds ");
+            jpql.append("AND (q.chapter.isActive = true OR q.chapter.isActive IS NULL) ");
+        }
+        if (topicIds != null && !topicIds.isEmpty()) {
+            jpql.append("AND q.topic.id IN :topicIds ");
+            jpql.append("AND (q.chapter.isActive = true OR q.chapter.isActive IS NULL) ");
+        }
+        if (excludedIds != null && !excludedIds.isEmpty()) {
+            jpql.append("AND q.id NOT IN :excludedIds ");
+        }
+
+        // 4. Source Mode filters
+        if ("FAVORITES".equalsIgnoreCase(request.getSourceMode())) {
+            jpql.append("AND qf.user.email = :createdBy ");
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(request.getSourceMode()) && request.getLectureIds() != null && !request.getLectureIds().isEmpty()) {
+            jpql.append("AND lq.lecture.id IN :lectureIds ");
+        }
+
+        // 5. Board/Year/School filters
+        if (hasBoard) {
+            jpql.append("AND qs.sourceType = :boardExamType AND LOWER(qs.organizationName) IN :boards ");
+        }
+        if (hasYear) {
+            jpql.append("AND qs.examYear IN :years ");
+        }
+        if (hasSchool) {
+            jpql.append("AND qs.sourceType = :institutionTestType AND LOWER(qs.organizationName) IN :schools ");
+        }
+
+        // 6. Used/Unused filters
+        if (fetchUsedOnly != null) {
+            if (fetchUsedOnly) {
+                jpql.append("AND EXISTS (SELECT eq.id FROM ExamQuestion eq WHERE eq.question = q) ");
+            } else {
+                jpql.append("AND NOT EXISTS (SELECT eq.id FROM ExamQuestion eq WHERE eq.question = q) ");
             }
         }
 
-        List<UUID> eligibleIds = new ArrayList<>(eligibleIdsSet);
-                
-        if (eligibleIds.size() < needed) {
-            log.warn("Insufficient questions: needed={} available={} type={} difficulty={}",
-                    needed, eligibleIds.size(), type, difficulty);
+        // Build JPA Query
+        jakarta.persistence.TypedQuery<UUID> query = entityManager.createQuery(jpql.toString(), UUID.class);
+
+        // Bind parameters
+        query.setParameter("classSubjectId", classSubjectId);
+        query.setParameter("type", type);
+        query.setParameter("difficulty", difficulty);
+        query.setParameter("language", language);
+
+        if (chapterIds != null && !chapterIds.isEmpty()) {
+            query.setParameter("chapterIds", chapterIds);
         }
-                
+        if (topicIds != null && !topicIds.isEmpty()) {
+            query.setParameter("topicIds", topicIds);
+        }
+        if (excludedIds != null && !excludedIds.isEmpty()) {
+            query.setParameter("excludedIds", excludedIds);
+        }
+
+        if ("FAVORITES".equalsIgnoreCase(request.getSourceMode())) {
+            query.setParameter("createdBy", createdBy);
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(request.getSourceMode()) && request.getLectureIds() != null && !request.getLectureIds().isEmpty()) {
+            query.setParameter("lectureIds", request.getLectureIds());
+        }
+
+        if (hasBoard) {
+            List<String> lowerBoards = request.getBoards().stream()
+                    .map(String::toLowerCase)
+                    .collect(Collectors.toList());
+            query.setParameter("boards", lowerBoards);
+            query.setParameter("boardExamType", com.testshaper.entity.QuestionSource.SourceType.BOARD_EXAM);
+        }
+        if (hasYear) {
+            query.setParameter("years", request.getYears());
+        }
+        if (hasSchool) {
+            List<String> lowerSchools = request.getSchools().stream()
+                    .map(String::toLowerCase)
+                    .collect(Collectors.toList());
+            query.setParameter("schools", lowerSchools);
+            query.setParameter("institutionTestType", com.testshaper.entity.QuestionSource.SourceType.INSTITUTION_TEST);
+        }
+
+        List<UUID> eligibleIds = query.getResultList();
+
         if (eligibleIds.isEmpty()) {
             return new ArrayList<>();
         }
-        
-        // Shuffle the IDs directly
+
+        // Shuffle the eligible IDs and limit them
         Collections.shuffle(eligibleIds, new Random());
-        
-        // Limit IDs to exactly what is needed (or a larger pool to select matching Bloom levels in memory)
         List<UUID> selectedIds = eligibleIds.stream().limit(Math.max(needed * 5, 50)).collect(Collectors.toList());
-        
-        // Now ONLY fetch the required candidates
+
+        // Fetch actual question entities
         List<Question> candidates = questionRepository.findAllById(selectedIds);
         Collections.shuffle(candidates, new Random());
 
         List<Question> selectedQuestions = new ArrayList<>();
-        
-        // 1. First pass: select candidates matching preferred Bloom levels
+
+        // Bloom matching pass
         if (preferredBloomLevels != null && !preferredBloomLevels.isEmpty()) {
             for (Question q : candidates) {
                 if (selectedQuestions.size() >= needed) break;
@@ -702,18 +902,16 @@ public class ExamGenerationServiceImpl {
                 }
             }
         }
-        
-        // 2. Second pass: fill remaining deficit from any remaining candidates
+
+        // General fill pass
         for (Question q : candidates) {
             if (selectedQuestions.size() >= needed) break;
             if (!selectedQuestions.contains(q)) {
                 selectedQuestions.add(q);
             }
         }
-        
-        // Ensure final selection is randomized
+
         Collections.shuffle(selectedQuestions, new Random());
-        
         return selectedQuestions;
     }
 
@@ -747,6 +945,7 @@ public class ExamGenerationServiceImpl {
                     rule.setQuestionType(r.getQuestionType());
                     rule.setCount(r.getQuestionCount());
                     rule.setMarksPerQuestion(r.getMarksPerQuestion());
+                    rule.setQuestionsToAnswer(r.getQuestionsToAnswer());
                     return rule;
                 }).collect(Collectors.toList()));
 
@@ -785,7 +984,10 @@ public class ExamGenerationServiceImpl {
         int totalQ = req.getQuestionTypeRules().stream()
                 .mapToInt(ExamGenerationRequest.QuestionTypeRule::getCount).sum();
         double totalM = req.getQuestionTypeRules().stream()
-                .mapToDouble(r -> r.getCount() * r.getMarksPerQuestion()).sum();
+                .mapToDouble(r -> {
+                    int effectiveCount = r.getQuestionsToAnswer() != null ? r.getQuestionsToAnswer() : r.getCount();
+                    return effectiveCount * r.getMarksPerQuestion();
+                }).sum();
 
         if (totalQ != req.getTotalQuestions()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -821,7 +1023,34 @@ public class ExamGenerationServiceImpl {
         exam.setStatus(Exam.ExamStatus.DRAFT);
         exam.setCreatedBy(createdBy);
         exam.setAiGenerated(false);
+
+        try {
+            Map<String, Object> docSettings = new HashMap<>();
+            docSettings.put("sourceMode", req.getSourceMode());
+            if (req.getLectureIds() != null && !req.getLectureIds().isEmpty()) {
+                docSettings.put("lectureIds", req.getLectureIds());
+            }
+            if (req.getBoards() != null && !req.getBoards().isEmpty()) {
+                docSettings.put("boards", req.getBoards());
+            }
+            if (req.getYears() != null && !req.getYears().isEmpty()) {
+                docSettings.put("years", req.getYears());
+            }
+            if (req.getSchools() != null && !req.getSchools().isEmpty()) {
+                docSettings.put("schools", req.getSchools());
+            }
+            exam.setDocSettingsJson(objectMapper.writeValueAsString(docSettings));
+        } catch (Exception e) {
+            log.error("Failed to serialize docSettingsJson in buildExamEntity", e);
+        }
+
         return exam;
+    }
+
+    public ExamDTO getPublicExam(UUID examId) {
+        Exam exam = examRepository.findById(examId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
+        return toDTO(exam);
     }
 
     public ExamDTO getExam(UUID examId) {
@@ -933,6 +1162,7 @@ public class ExamGenerationServiceImpl {
     private ExamDTO toDTO(Exam exam) {
         ExamDTO dto = new ExamDTO();
         dto.setId(exam.getId());
+        dto.setTenantId(exam.getTenantId());
         dto.setTitle(exam.getTitle());
         dto.setExamType(exam.getExamType());
         dto.setStatus(exam.getStatus());
@@ -977,6 +1207,7 @@ public class ExamGenerationServiceImpl {
             qDto.setId(eq.getId());
             qDto.setOrder(eq.getQuestionOrder());
             qDto.setMarks(eq.getMarks());
+            qDto.setAlternativeToId(eq.getAlternativeToId());
             if (eq.getSection() != null) {
                 qDto.setSectionId(eq.getSection().getId());
             }
@@ -1000,6 +1231,19 @@ public class ExamGenerationServiceImpl {
             qDto.setExplanation(q.getExplanation());
             qDto.setCorrectAnswer(q.getCorrectAnswer());
             qDto.setDynamicData(q.getDynamicData());
+
+            if (q.getSources() != null) {
+                qDto.setSources(q.getSources().stream().map(src -> {
+                    ExamDTO.QuestionSourceDTO sdto = new ExamDTO.QuestionSourceDTO();
+                    sdto.setSourceType(src.getSourceType() != null ? src.getSourceType().name() : null);
+                    sdto.setExamYear(src.getExamYear());
+                    sdto.setOrganizationName(src.getOrganizationName());
+                    sdto.setExamName(src.getExamName());
+                    sdto.setSession(src.getSession());
+                    sdto.setNote(src.getNote());
+                    return sdto;
+                }).collect(Collectors.toList()));
+            }
 
             if (q.getType().equals(Question.QuestionType.MCQ.name())) {
                 java.util.List<ExamDTO.OptionDTO> optionDTOs = null;

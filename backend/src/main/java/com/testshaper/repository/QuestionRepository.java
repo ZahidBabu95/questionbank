@@ -142,4 +142,13 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
         Page<Question> findByTenantIdAndDeletedFalse(String tenantId, Pageable pageable);
 
         Page<Question> findByCreatedByAndDeletedFalse(String createdBy, Pageable pageable);
+
+        List<Question> findByTopicIdAndStatusAndDeletedFalse(UUID topicId, Question.QuestionStatus status);
+        List<Question> findByChapterIdAndStatusAndDeletedFalse(UUID chapterId, Question.QuestionStatus status);
+
+        @Query("SELECT q.classSubject.id, COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false GROUP BY q.classSubject.id")
+        List<Object[]> countApprovedQuestionsGroupedByClassSubjectId();
+
+        @Query("SELECT q.chapter.id, COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false AND q.chapter.id IS NOT NULL GROUP BY q.chapter.id")
+        List<Object[]> countApprovedQuestionsGroupedByChapterId();
 }

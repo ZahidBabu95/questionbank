@@ -126,7 +126,7 @@ const TocReviewModal = ({ chapters, bookId, classSubjectId, onClose, onApplied }
 /* ═══════════════════ Page Reorder Modal ═══════════════════ */
 const ReorderPagesModal = ({ pages, bookId, onClose, onApplied }) => {
     // Clone pages carefully to manipulate visually before saving
-    const [orderedPages, setOrderedPages] = useState([...pages].sort((a,b) => a.pageNumber - b.pageNumber));
+    const [orderedPages, setOrderedPages] = useState([...pages].sort((a,b) => (a.sourcePageNo || a.pageNumber || 0) - (b.sourcePageNo || b.pageNumber || 0)));
     const [applying, setApplying] = useState(false);
     
     // Quick action to reverse order (extremely common when scanning backward)
@@ -136,7 +136,7 @@ const ReorderPagesModal = ({ pages, bookId, onClose, onApplied }) => {
     
     // Manual mapping
     const handleNumChange = (id, newNum) => {
-        setOrderedPages(prev => prev.map(p => p.id === id ? { ...p, _tempPageNum: parseInt(newNum) || p.pageNumber } : p));
+        setOrderedPages(prev => prev.map(p => p.id === id ? { ...p, _tempPageNum: parseInt(newNum) || p.sourcePageNo || p.pageNumber } : p));
     };
 
     const handleSave = async () => {
@@ -313,7 +313,7 @@ const TopicExtractConfigModal = ({ indices, pages, onClose, onStartAll, onStartS
                                                 <div key={page.id} className="group relative flex flex-col items-center bg-white border border-slate-200 rounded-lg overflow-hidden hover:border-teal-400 hover:shadow-md transition-all cursor-pointer" title={`Source Page ${page.sourcePageNo}`}>
                                                     <div className="w-full aspect-[2/3] bg-slate-100 overflow-hidden relative">
                                                         {page.imageUrl && !page.imageUrl.endsWith('.pdf') ? (
-                                                            <img src={page.imageUrl} alt={`Page ${page.sourcePageNo}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                                            <img src={page.imageUrl} alt={`Page ${page.sourcePageNo}`} className="w-full h-full object-cover" />
                                                         ) : (
                                                             <div className="w-full h-full flex items-center justify-center text-slate-300">
                                                                 <Bot size={20} className="opacity-50" />
@@ -934,8 +934,8 @@ const QuestionEngineConfigModal = ({ bookId, classSubjectId, subjectName, bookTy
 const PageThumbnail = React.memo(({ page, isSelected, isCover, pageFlag, isOpenMenu, menuCoords, onToggleMenu, onFlag, onDeletePage, onClick }) => {
     return (
         <div onClick={() => onClick(page)}
-            className={`shrink-0 w-[65px] h-[85px] rounded-lg cursor-pointer transition-all duration-200 ease-out origin-bottom border-2 overflow-hidden relative group 
-            ${isSelected ? 'border-indigo-600 shadow-xl scale-[1.3] z-50 -translate-y-2' : 'border-transparent hover:border-slate-300 hover:scale-[1.3] hover:z-50 hover:-translate-y-2'}`}>
+            className={`shrink-0 w-[65px] h-[85px] rounded-lg cursor-pointer transition-all duration-150 border-2 overflow-hidden relative group 
+            ${isSelected ? 'border-indigo-600 shadow-md' : 'border-transparent hover:border-slate-300 hover:shadow-sm'}`}>
             {page.imageUrl.toLowerCase().endsWith('.pdf') ? (
                 <div className="w-full h-full bg-slate-200 flex items-center justify-center text-slate-400"><Layers className="w-6 h-6" /></div>
             ) : (
@@ -1759,6 +1759,11 @@ const ProofreadingWorkspace = () => {
                         {treeBCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}
                         <span className="hidden sm:inline">B</span>
                     </button>
+                    <Link to={`/knowledge-hub/sync-command-center/${bookId}`}>
+                        <button className="px-2 lg:px-3 py-1.5 bg-white border border-slate-200 text-indigo-600 hover:bg-indigo-50 font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-xs mr-2">
+                            <Layers className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Sync Center</span>
+                        </button>
+                    </Link>
                     <Link to={`/knowledge-hub/digitization/${bookId}`}>
                         <button className="px-2 lg:px-3 py-1.5 bg-indigo-600 border border-indigo-700 text-white font-semibold rounded-lg flex items-center gap-1.5 hover:bg-indigo-700 transition-all shadow-sm text-xs">
                             <ImageIcon className="w-3.5 h-3.5" /> <span className="hidden xl:inline">Add Pages</span>
@@ -2109,7 +2114,7 @@ const ProofreadingWorkspace = () => {
                                             </div>
                                         ) : (
                                             <GoldenEditor
-                                                key={selectedPage?.id || selectedPage?.pageNumber || 'golden'}
+                                                key={selectedPage?.id || selectedPage?.sourcePageNo || selectedPage?.pageNumber || 'golden'}
                                                 value={goldenDraft}
                                                 onChange={setGoldenDraft}
                                                 onSave={handleMarkAsGolden}

@@ -1,5 +1,6 @@
 import Heading from '@tiptap/extension-heading';
 import Paragraph from '@tiptap/extension-paragraph';
+import { Node } from '@tiptap/core';
 
 export const CustomHeading = Heading.extend({
     addAttributes() {
@@ -46,5 +47,23 @@ export const CustomParagraph = Paragraph.extend({
                 }
             }
         }
+    }
+});
+
+export const PageBreak = Node.create({
+    name: 'pageBreak',
+    group: 'block',
+    atom: true,
+    selectable: true,
+    draggable: true,
+
+    parseHTML() {
+        return [
+            { tag: 'div.page-break' }
+        ];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return ['div', { class: 'page-break', 'data-html2canvas-ignore': 'true', ...HTMLAttributes }];
     }
 });

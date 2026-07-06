@@ -34,6 +34,10 @@ public interface QuestionService {
 
     java.util.Map<String, Object> getQuestionAvailability(UUID classSubjectId, String language);
 
+    java.util.Map<String, Object> getQuestionAvailability(com.testshaper.dto.QuestionSearchParams params);
+
+    java.util.Map<UUID, Boolean> getQuestionsAvailabilityBulk(List<UUID> classSubjectIds, String language);
+
     void deleteQuestion(UUID id);
 
     void deleteQuestionsBulk(List<UUID> ids);
@@ -61,4 +65,7 @@ public interface QuestionService {
     void updateOptionsInPlace(UUID questionId, List<QuestionOption> incomingOptions);
 
     List<Question> getMyPendingRevisions(List<UUID> originalQuestionIds, String userEmail);
+
+    List<Question> getQuestionsBatch(List<UUID> ids);
 }
+

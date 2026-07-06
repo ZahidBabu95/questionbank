@@ -1,7 +1,9 @@
 package com.testshaper.service.impl;
 
 import com.testshaper.dto.DashboardStatsDTO;
+import com.testshaper.entity.AcademicClass;
 import com.testshaper.entity.Question;
+import com.testshaper.entity.SourceBookMaster;
 import com.testshaper.entity.User;
 import com.testshaper.repository.ExamRepository;
 import com.testshaper.repository.InstituteRepository;
@@ -40,6 +42,19 @@ public class DashboardServiceImpl implements DashboardService {
         @org.springframework.beans.factory.annotation.Autowired
         @org.springframework.context.annotation.Lazy
         private ExamRepository examRepository;
+
+        @org.springframework.beans.factory.annotation.Autowired
+        @org.springframework.context.annotation.Lazy
+        private com.testshaper.repository.SourceBookMasterRepository sourceBookMasterRepository;
+
+        @org.springframework.beans.factory.annotation.Autowired
+        @org.springframework.context.annotation.Lazy
+        private com.testshaper.repository.AcademicClassRepository academicClassRepository;
+
+        @org.springframework.beans.factory.annotation.Autowired
+        @org.springframework.context.annotation.Lazy
+        private com.testshaper.repository.ClassSubjectRepository classSubjectRepository;
+
 
         private long getApprovedQuestionsCountForUser(User currentUser) {
                 if (currentUser == null) return 0;
@@ -260,6 +275,147 @@ public class DashboardServiceImpl implements DashboardService {
                                         .build();
                 }).collect(Collectors.toList());
 
+                // Class and Book stats calculations
+                List<AcademicClass> allClasses = academicClassRepository.findAll();
+                allClasses.sort(java.util.Comparator.comparing(AcademicClass::getOrder, java.util.Comparator.nullsLast(Integer::compareTo)));
+
+                List<SourceBookMaster> allBooks = sourceBookMasterRepository.findAllWithIndicesAndClassSubject();
+
+                java.util.Map<UUID, Long> classSubjectQuestionCounts = new java.util.HashMap<>();
+                for (Object[] row : questionRepository.countApprovedQuestionsGroupedByClassSubjectId()) {
+                        if (row[0] != null) {
+                                classSubjectQuestionCounts.put((UUID) row[0], ((Number) row[1]).longValue());
+                        }
+                }
+
+                java.util.Map<UUID, Long> chapterQuestionCounts = new java.util.HashMap<>();
+                for (Object[] row : questionRepository.countApprovedQuestionsGroupedByChapterId()) {
+                        if (row[0] != null) {
+                                chapterQuestionCounts.put((UUID) row[0], ((Number) row[1]).longValue());
+                        }
+                }
+
+                java.util.Set<UUID> allowedClassSubjectIds = null;
+                boolean isSuperAdmin = false;
+                if (currentUser != null) {
+                        isSuperAdmin = currentUser.getRoles().stream()
+                                        .anyMatch(r -> r.getName().equals("SUPER_ADMIN") || r.getName().equals("ROLE_SUPER_ADMIN"))
+                                        || "admin".equalsIgnoreCase(currentUser.getEmail());
+                        
+                        if (!isSuperAdmin && currentUser.getInstitute() != null) {
+                                java.util.Set<com.testshaper.entity.ClassSubject> assigned = currentUser.getInstitute().getAssignedSubjects();
+                                if (assigned != null && !assigned.isEmpty()) {
+                                        allowedClassSubjectIds = assigned.stream()
+                                                        .map(com.testshaper.entity.ClassSubject::getId)
+                                                        .collect(Collectors.toSet());
+                                }
+                        }
+                }
+
+                // Pre-calculate books count by ClassSubject ID to avoid O(N^2) inner loops
+                java.util.Map<UUID, Long> booksCountByClassSubjectId = new java.util.HashMap<>();
+                for (SourceBookMaster b : allBooks) {
+                        if (b.getClassSubject() != null) {
+                                UUID csId = b.getClassSubject().getId();
+                                booksCountByClassSubjectId.put(csId, booksCountByClassSubjectId.getOrDefault(csId, 0L) + 1);
+                        }
+                }
+
+                // Pre-group books by AcademicClass ID to avoid O(N^2) class-book loops
+                java.util.Map<UUID, List<SourceBookMaster>> booksByClassId = new java.util.HashMap<>();
+                for (SourceBookMaster book : allBooks) {
+                        if (book.getClassSubject() != null && book.getClassSubject().getAcademicClass() != null) {
+                                UUID classId = book.getClassSubject().getAcademicClass().getId();
+                                booksByClassId.computeIfAbsent(classId, k -> new ArrayList<>()).add(book);
+                        }
+                }
+
+                List<DashboardStatsDTO.ClassStats> classStatsList = new ArrayList<>();
+
+                for (AcademicClass ac : allClasses) {
+                        List<DashboardStatsDTO.BookStats> bookStatsList = new ArrayList<>();
+                        long totalClassQuestions = 0;
+                        long booksWithQuestions = 0;
+                        long booksWithoutQuestions = 0;
+                        long totalBooks = 0;
+
+                        List<SourceBookMaster> classBooks = booksByClassId.getOrDefault(ac.getId(), java.util.Collections.emptyList());
+
+                        for (SourceBookMaster book : classBooks) {
+                                if (allowedClassSubjectIds != null && !allowedClassSubjectIds.contains(book.getClassSubject().getId())) {
+                                        continue;
+                                }
+
+                                totalBooks++;
+
+                                long bookQuestionCount = 0;
+                                boolean hasSpecificChapters = false;
+                                
+                                if (book.getIndices() != null && !book.getIndices().isEmpty()) {
+                                        for (com.testshaper.entity.SourceBookIndex idx : book.getIndices()) {
+                                                if (idx.getMappedChapter() != null) {
+                                                        hasSpecificChapters = true;
+                                                        UUID chapId = idx.getMappedChapter().getId();
+                                                        bookQuestionCount += chapterQuestionCounts.getOrDefault(chapId, 0L);
+                                                }
+                                        }
+                                }
+
+                                if (!hasSpecificChapters || bookQuestionCount == 0) {
+                                        long classSubCount = classSubjectQuestionCounts.getOrDefault(book.getClassSubject().getId(), 0L);
+                                        long booksInSubject = booksCountByClassSubjectId.getOrDefault(book.getClassSubject().getId(), 0L);
+                                        if (booksInSubject <= 1) {
+                                                bookQuestionCount = classSubCount;
+                                        } else {
+                                                bookQuestionCount = classSubCount / booksInSubject;
+                                        }
+                                }
+
+                                totalClassQuestions += bookQuestionCount;
+
+                                if (bookQuestionCount > 0) {
+                                        booksWithQuestions++;
+                                } else {
+                                        booksWithoutQuestions++;
+                                }
+
+                                String subjectName = book.getClassSubject().getSubject() != null ? book.getClassSubject().getSubject().getName() : "Unassigned";
+                                String bookTypeName = book.getBookType() != null ? book.getBookType().name() : "TEXTBOOK";
+
+                                bookStatsList.add(DashboardStatsDTO.BookStats.builder()
+                                                .bookId(book.getId().toString())
+                                                .title(book.getTitle())
+                                                .subjectName(subjectName)
+                                                .bookType(bookTypeName)
+                                                .questionCount(bookQuestionCount)
+                                                .status(bookQuestionCount > 0 ? "ACTIVE" : "NOT_STARTED")
+                                                .build());
+                        }
+
+                        if (totalBooks == 0 && allowedClassSubjectIds != null) {
+                                continue;
+                        }
+
+                        String streamId = (ac.getStream() != null) ? ac.getStream().getId().toString() : "";
+                        String streamName = (ac.getStream() != null) ? ac.getStream().getName() : "General";
+                        String levelId = (ac.getStream() != null && ac.getStream().getLevel() != null) ? ac.getStream().getLevel().getId().toString() : "";
+                        String levelName = (ac.getStream() != null && ac.getStream().getLevel() != null) ? ac.getStream().getLevel().getName() : "General";
+
+                        classStatsList.add(DashboardStatsDTO.ClassStats.builder()
+                                        .classId(ac.getId().toString())
+                                        .className(ac.getName())
+                                        .levelId(levelId)
+                                        .levelName(levelName)
+                                        .streamId(streamId)
+                                        .streamName(streamName)
+                                        .totalBooks(totalBooks)
+                                        .booksWithQuestions(booksWithQuestions)
+                                        .booksWithoutQuestions(booksWithoutQuestions)
+                                        .totalQuestions(totalClassQuestions)
+                                        .books(bookStatsList)
+                                        .build());
+                }
+
                 return DashboardStatsDTO.builder()
                                 .totalUsers(users).userTrend(5.0)
                                 .activeInstitutes(institutes).instituteTrend(2.0)
@@ -271,6 +427,8 @@ public class DashboardServiceImpl implements DashboardService {
                                 .activityAnalytics(activityTrend)
                                 .recentActivities(activities)
                                 .subjectQuestions(subjectQuestions)
+                                .classStats(classStatsList)
                                 .build();
+
         }
 }

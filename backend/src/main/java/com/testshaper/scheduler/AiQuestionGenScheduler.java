@@ -33,7 +33,7 @@ public class AiQuestionGenScheduler {
     public static volatile int currentWorkerSize = 6;
     private final ThreadPoolTaskExecutor workerPool = new ThreadPoolTaskExecutor();
 
-    @PostConstruct
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
     public void init() {
         settingRepository.findByTenantIdIsNullAndKey("AI_WORKER_POOL_SIZE").ifPresent(setting -> {
             try {

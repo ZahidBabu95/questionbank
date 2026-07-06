@@ -92,10 +92,17 @@ const getSourceTags = async (params = {}) => {
     return response.data;
 };
 
-const getQuestionAvailability = async (classSubjectId, language = null) => {
-    const params = { classSubjectId };
+const getQuestionAvailability = async (classSubjectId, language = null, filters = {}) => {
+    const params = { classSubjectId, ...filters };
     if (language && language !== 'ALL') params.language = language;
     const response = await axios.get(`${API_URL}/availability`, { params });
+    return response.data;
+};
+
+const getQuestionAvailabilityBulk = async (classSubjectIds, language = null) => {
+    const body = { classSubjectIds };
+    if (language && language !== 'ALL') body.language = language;
+    const response = await axios.post(`${API_URL}/availability/bulk`, body);
     return response.data;
 };
 
@@ -136,16 +143,69 @@ const updateStatusBulk = async (ids, status) => {
     clearQuestionCache();
 };
 
+const questionDetailCache = new Map();
+
+const seedQuestionCache = (questions) => {
+    if (!questions) return;
+    questions.forEach(q => {
+        if (q) {
+            const id = q.questionId || q.id;
+            if (id) {
+                questionDetailCache.set(id, {
+                    ...q,
+                    id: id,
+                    syncedFromDb: true,
+                    dynamicDataSynced: true
+                });
+            }
+        }
+    });
+};
+
+const getQuestionFromCache = (id) => {
+    if (!id) return null;
+    return questionDetailCache.get(id);
+};
+
 const getQuestionById = async (id) => {
+    if (questionDetailCache.has(id)) {
+        return questionDetailCache.get(id);
+    }
     const response = await axios.get(`${API_URL}/${id}`);
+    if (response.data) {
+        questionDetailCache.set(id, response.data);
+    }
     return response.data;
 };
+
+const getQuestionsBatch = async (ids) => {
+    if (!ids || ids.length === 0) return [];
+    
+    const uncachedIds = ids.filter(id => !questionDetailCache.has(id));
+    if (uncachedIds.length > 0) {
+        try {
+            const response = await axios.post(`${API_URL}/batch`, uncachedIds);
+            const fetchedQuestions = response.data || [];
+            fetchedQuestions.forEach(q => {
+                if (q && q.id) {
+                    questionDetailCache.set(q.id, q);
+                }
+            });
+        } catch (e) {
+            console.error("Failed to batch fetch questions", e);
+        }
+    }
+    
+    return ids.map(id => questionDetailCache.get(id)).filter(Boolean);
+};
+
 
 const getMyPendingRevisions = async (originalQuestionIds) => {
     if (!originalQuestionIds || originalQuestionIds.length === 0) return {};
     const response = await axios.post(`${API_URL}/my-revisions`, originalQuestionIds);
     return response.data;
 };
+
 
 const getOptions = async (id) => {
     const response = await axios.get(`${API_URL}/${id}/options`);
@@ -239,6 +299,9 @@ export default {
     getOverviewStats,
     getSourceTags,
     getQuestionById,
+    getQuestionsBatch,
+    seedQuestionCache,
+    getQuestionFromCache,
     getMyPendingRevisions,
     getOptions,
     updateQuestion,
@@ -263,4 +326,5 @@ export default {
     getMyFavorites,
     getMyFavoriteIds,
     getQuestionAvailability,
+    getQuestionAvailabilityBulk,
 };

@@ -153,9 +153,19 @@ public class ExamPdfService {
 
             for (ExamQuestion eq : sectionQs) {
                 Question q = eq.getQuestion();
-                renderQuestion(doc, q, eq.getMarks(), globalOrder, bodyFont, boldFont, optionFont, answerFont,
+                boolean isAlternative = eq.getAlternativeToId() != null;
+                int displayOrder = isAlternative ? (globalOrder - 1) : globalOrder;
+                
+                if (isAlternative) {
+                    renderAlternativeSeparator(doc, boldFont, baseFont);
+                }
+                
+                renderQuestion(doc, q, eq.getMarks(), displayOrder, isAlternative, bodyFont, boldFont, optionFont, answerFont,
                         smallFont, opts);
-                globalOrder++;
+                
+                if (!isAlternative) {
+                    globalOrder++;
+                }
             }
         }
 
@@ -366,7 +376,7 @@ public class ExamPdfService {
     // ═══════════════════════════════════════════════════════════════════════════
     // QUESTION RENDERER
     // ═══════════════════════════════════════════════════════════════════════════
-    private void renderQuestion(Document doc, Question q, Double marks, int order,
+    private void renderQuestion(Document doc, Question q, Double marks, int order, boolean isAlternative,
             Font bodyFont, Font boldFont, Font optionFont, Font answerFont,
             Font smallFont, PdfDownloadOptions opts) throws DocumentException {
         // Question stem paragraph
@@ -374,10 +384,17 @@ public class ExamPdfService {
         questionPara.setSpacingBefore(6);
         questionPara.setSpacingAfter(3);
 
-        // Number + marks
-        questionPara.add(new Chunk(order + ".  ", boldFont));
-        questionPara.add(new Chunk("[" + formatMarks(marks) + " নম্বর]  ", smallFont));
-        questionPara.add(new Chunk(stripHtml(q.getQuestionText()), bodyFont));
+        if (isAlternative) {
+            questionPara.setIndentationLeft(20);
+            questionPara.add(new Chunk(stripHtml(q.getQuestionText()), bodyFont));
+        } else {
+            // Number + marks
+            questionPara.add(new Chunk(order + ".  ", boldFont));
+            if (marks != null) {
+                questionPara.add(new Chunk("[" + formatMarks(marks) + " নম্বর]  ", smallFont));
+            }
+            questionPara.add(new Chunk(stripHtml(q.getQuestionText()), bodyFont));
+        }
 
         doc.add(questionPara);
 
@@ -622,6 +639,35 @@ public class ExamPdfService {
         canvas.showTextAligned(Element.ALIGN_CENTER, text,
                 PageSize.A4.getWidth() / 2, PageSize.A4.getHeight() / 2, 45);
         canvas.restoreState();
+    }
+
+    private void renderAlternativeSeparator(Document doc, Font boldFont, BaseFont bf) throws DocumentException {
+        doc.add(new Paragraph(" "));
+        PdfPTable separatorTable = new PdfPTable(3);
+        separatorTable.setWidthPercentage(95);
+        separatorTable.setWidths(new float[]{4f, 2f, 4f});
+        separatorTable.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        
+        PdfPCell leftLine = new PdfPCell();
+        leftLine.setBorder(PdfPCell.BOTTOM);
+        leftLine.setBorderColor(new Color(203, 213, 225));
+        leftLine.setPaddingBottom(5);
+        separatorTable.addCell(leftLine);
+        
+        PdfPCell textCell = new PdfPCell(new Phrase("অথবা / OR", new Font(bf, 10, Font.BOLD, MID_GRAY)));
+        textCell.setBorder(PdfPCell.NO_BORDER);
+        textCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        textCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        separatorTable.addCell(textCell);
+        
+        PdfPCell rightLine = new PdfPCell();
+        rightLine.setBorder(PdfPCell.BOTTOM);
+        rightLine.setBorderColor(new Color(203, 213, 225));
+        rightLine.setPaddingBottom(5);
+        separatorTable.addCell(rightLine);
+        
+        doc.add(separatorTable);
+        doc.add(new Paragraph(" "));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

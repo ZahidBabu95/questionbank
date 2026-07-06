@@ -17,7 +17,9 @@ import {
   Image,
   Animated,
   Linking,
-  BackHandler
+  BackHandler,
+  KeyboardAvoidingView,
+  Keyboard
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -125,6 +127,8 @@ const StatCardComponent: React.FC<{ stat: any; isTablet: boolean; index: number 
   );
 };
 
+const KeyboardView = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+
 export const DashboardScreen: React.FC = () => {
   const { t } = useTranslation();
   const { user, logout, updateUser, token } = useAuth();
@@ -146,6 +150,59 @@ export const DashboardScreen: React.FC = () => {
   // Greeting visibility logic (shows on login/refresh then hides)
   const [showGreeting, setShowGreeting] = useState(true);
   const greetingTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Keyboard Visibility and Scroll Handling
+  const [isKeyboardVisible, setKeyboardVisible] = React.useState(false);
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
+  const scrollViewRef = React.useRef<ScrollView>(null);
+  const focusedFieldRef = React.useRef<string | null>(null);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+
+  const handleFocusField = (fieldName: string) => {
+    focusedFieldRef.current = fieldName;
+    if (['instituteNameEn', 'instituteNameBn', 'newPassword', 'confirmPassword'].includes(fieldName)) {
+      scrollToBottom();
+    }
+  };
+
+  const handleBlurField = () => {
+    focusedFieldRef.current = null;
+  };
+
+  React.useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        const height = e.endCoordinates.height;
+        setKeyboardHeight(height);
+        setKeyboardVisible(true);
+        
+        // Scroll to the end after the padding is dynamically updated
+        if (focusedFieldRef.current && ['instituteNameEn', 'instituteNameBn', 'newPassword', 'confirmPassword'].includes(focusedFieldRef.current)) {
+          setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+        setKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   const startGreetingTimer = () => {
     if (greetingTimerRef.current) {
@@ -321,7 +378,9 @@ export const DashboardScreen: React.FC = () => {
   // Forms
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
-    phone: user?.phone || ''
+    phone: user?.phone || '',
+    instituteNameEn: (user as any)?.instituteNameEn || '',
+    instituteNameBn: (user as any)?.instituteNameBn || ''
   });
 
   const [pwdForm, setPwdForm] = useState({
@@ -513,8 +572,17 @@ export const DashboardScreen: React.FC = () => {
     setDownloadStatusText('আপডেট ডাউনলোড শুরু হচ্ছে...');
 
     try {
-      const filename = downloadUrl.split('/').pop() || 'update.apk';
+      // Clean filename from query parameters to ensure a valid local path
+      let filename = downloadUrl.split('/').pop() || 'update.apk';
+      if (filename.includes('?')) {
+        filename = filename.split('?')[0];
+      }
+      if (!filename.toLowerCase().endsWith('.apk')) {
+        filename = 'update.apk';
+      }
+      
       const localApkUri = `${FileSystem.cacheDirectory}${filename}`;
+      let lastUpdate = 0;
 
       // Create download resumable to track progress
       const downloadResumable = FileSystem.createDownloadResumable(
@@ -522,12 +590,29 @@ export const DashboardScreen: React.FC = () => {
         localApkUri,
         {},
         (downloadProgressEvent) => {
-          const progress = downloadProgressEvent.totalBytesWritten / downloadProgressEvent.totalBytesExpectedToWrite;
-          setDownloadProgress(progress);
-          const percent = Math.round(progress * 100);
-          const writtenMb = (downloadProgressEvent.totalBytesWritten / (1024 * 1024)).toFixed(1);
-          const totalMb = (downloadProgressEvent.totalBytesExpectedToWrite / (1024 * 1024)).toFixed(1);
-          setDownloadStatusText(`ডাউনলোড হচ্ছে: ${percent}% (${writtenMb}MB / ${totalMb}MB)`);
+          const expected = downloadProgressEvent.totalBytesExpectedToWrite;
+          const written = downloadProgressEvent.totalBytesWritten;
+          let progress = 0;
+          if (expected && expected > 0) {
+            progress = written / expected;
+          }
+          
+          const now = Date.now();
+          const percent = expected && expected > 0 ? Math.round(progress * 100) : 0;
+          
+          // Throttle state updates to once every 400ms or 100% completion to prevent React Native bridge flooding
+          if (now - lastUpdate > 400 || percent === 100) {
+            lastUpdate = now;
+            setDownloadProgress(progress);
+            
+            const writtenMb = (written / (1024 * 1024)).toFixed(1);
+            if (expected && expected > 0) {
+              const totalMb = (expected / (1024 * 1024)).toFixed(1);
+              setDownloadStatusText(`ডাউনলোড হচ্ছে: ${percent}% (${writtenMb}MB / ${totalMb}MB)`);
+            } else {
+              setDownloadStatusText(`ডাউনলোড হচ্ছে: ${writtenMb}MB (আকার অজানা)`);
+            }
+          }
         }
       );
 
@@ -535,7 +620,11 @@ export const DashboardScreen: React.FC = () => {
       const downloadResult = await downloadResumable.downloadAsync();
       
       if (!downloadResult || !downloadResult.uri) {
-        throw new Error('Download failed: uri is null');
+        throw new Error('ডাউনলোড ব্যর্থ হয়েছে: ফাইলের কোনো ঠিকানা পাওয়া যায়নি।');
+      }
+
+      if (downloadResult.status && downloadResult.status !== 200) {
+        throw new Error(`সার্ভার ত্রুটি (HTTP Status: ${downloadResult.status})। ফাইলটি ডাউনলোড করা যায়নি।`);
       }
 
       setDownloadProgress(1);
@@ -646,7 +735,9 @@ export const DashboardScreen: React.FC = () => {
     if (user) {
       setProfileForm({
         name: user.name || '',
-        phone: user.phone || ''
+        phone: user.phone || '',
+        instituteNameEn: (user as any).instituteNameEn || '',
+        instituteNameBn: (user as any).instituteNameBn || ''
       });
     }
   }, [user]);
@@ -673,7 +764,9 @@ export const DashboardScreen: React.FC = () => {
         setFreshUser(u);
         setProfileForm({
           name: u.name || '',
-          phone: u.phone || ''
+          phone: u.phone || '',
+          instituteNameEn: u.instituteNameEn || '',
+          instituteNameBn: u.instituteNameBn || ''
         });
         
         // Sync context
@@ -683,9 +776,11 @@ export const DashboardScreen: React.FC = () => {
           phone: u.phone,
           roles: u.roles || user.roles,
           instituteName: u.instituteName || user.instituteName,
+          instituteNameEn: u.instituteNameEn || (user as any).instituteNameEn,
+          instituteNameBn: u.instituteNameBn || (user as any).instituteNameBn,
           instituteStatus: u.instituteStatus || user.instituteStatus,
           subscriptionPackage: u.subscriptionPackage || user.subscriptionPackage
-        });
+        } as any);
       }
     } catch (error) {
       console.log('Failed to fetch fresh user details:', error);
@@ -732,7 +827,9 @@ export const DashboardScreen: React.FC = () => {
     try {
       const response = await apiClient.patch('/users/profile', {
         name: profileForm.name,
-        phone: profileForm.phone
+        phone: profileForm.phone,
+        instituteNameEn: profileForm.instituteNameEn,
+        instituteNameBn: profileForm.instituteNameBn
       });
       if (response.data?.success) {
         Alert.alert('Success', 'Profile updated successfully!');
@@ -741,7 +838,9 @@ export const DashboardScreen: React.FC = () => {
         await updateUser({
           ...user,
           name: updated.name,
-          phone: updated.phone
+          phone: updated.phone,
+          instituteNameEn: updated.instituteNameEn,
+          instituteNameBn: updated.instituteNameBn
         } as any);
       }
     } catch (error: any) {
@@ -1264,7 +1363,24 @@ export const DashboardScreen: React.FC = () => {
           </ScrollView>
         ) : activeTab === 'profile' && !isWebViewActive ? (
           // ─── Profile Tab View ───
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollPadding}>
+          <KeyboardView 
+            {...(Platform.OS === 'ios' ? { behavior: 'padding', keyboardVerticalOffset: 80 } : {})}
+            style={{ flex: 1 }}
+          >
+            <ScrollView 
+              ref={scrollViewRef}
+              showsVerticalScrollIndicator={false} 
+              contentContainerStyle={[
+                styles.scrollPadding,
+                isKeyboardVisible && { paddingBottom: keyboardHeight + 80 }
+              ]} 
+              onContentSizeChange={() => {
+                if (isKeyboardVisible && focusedFieldRef.current && ['instituteNameEn', 'instituteNameBn', 'newPassword', 'confirmPassword'].includes(focusedFieldRef.current)) {
+                  scrollViewRef.current?.scrollToEnd({ animated: true });
+                }
+              }}
+              keyboardShouldPersistTaps="handled"
+            >
             
             {/* Banner Cover Profile Header */}
             <View style={styles.profileHeader}>
@@ -1373,8 +1489,39 @@ export const DashboardScreen: React.FC = () => {
                     />
                   </View>
 
+                  {/* Institute Information Section */}
+                  <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
+                    <Text style={[styles.formSectionTitle, { marginBottom: 16 }]}>Institute Information</Text>
+                    
+                    <Text style={styles.inputLabel}>প্রতিষ্ঠানের নাম (ইংরেজি) / Institute Name (English)</Text>
+                    <View style={styles.inputWrapper}>
+                      <Feather name="globe" size={16} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="Enter institute name in English"
+                        value={profileForm.instituteNameEn}
+                        onChangeText={(txt) => setProfileForm(p => ({ ...p, instituteNameEn: txt }))}
+                        onFocus={() => handleFocusField('instituteNameEn')}
+                        onBlur={handleBlurField}
+                      />
+                    </View>
+
+                    <Text style={styles.inputLabel}>প্রতিষ্ঠানের নাম (বাংলা) / Institute Name (Bengali)</Text>
+                    <View style={styles.inputWrapper}>
+                      <MaterialCommunityIcons name="school" size={16} color={theme.colors.textSecondary} style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="প্রতিষ্ঠানের নাম বাংলায় লিখুন"
+                        value={profileForm.instituteNameBn}
+                        onChangeText={(txt) => setProfileForm(p => ({ ...p, instituteNameBn: txt }))}
+                        onFocus={() => handleFocusField('instituteNameBn')}
+                        onBlur={handleBlurField}
+                      />
+                    </View>
+                  </View>
+
                   <TouchableOpacity 
-                    style={[styles.saveBtn, savingProfile && styles.disabledBtn]}
+                    style={[styles.saveBtn, savingProfile && styles.disabledBtn, { marginTop: 24 }]}
                     onPress={handleProfileUpdate}
                     disabled={savingProfile}
                   >
@@ -1419,6 +1566,8 @@ export const DashboardScreen: React.FC = () => {
                       secureTextEntry={!showNewPwd}
                       value={pwdForm.newPassword}
                       onChangeText={(txt) => setPwdForm(p => ({ ...p, newPassword: txt }))}
+                      onFocus={() => handleFocusField('newPassword')}
+                      onBlur={handleBlurField}
                     />
                     <TouchableOpacity onPress={() => setShowNewPwd(!showNewPwd)}>
                       <Feather name={showNewPwd ? "eye-off" : "eye"} size={16} color={theme.colors.textSecondary} />
@@ -1457,6 +1606,8 @@ export const DashboardScreen: React.FC = () => {
                       secureTextEntry={!showConfirmPwd}
                       value={pwdForm.confirmPassword}
                       onChangeText={(txt) => setPwdForm(p => ({ ...p, confirmPassword: txt }))}
+                      onFocus={() => handleFocusField('confirmPassword')}
+                      onBlur={handleBlurField}
                     />
                     <TouchableOpacity onPress={() => setShowConfirmPwd(!showConfirmPwd)}>
                       <Feather name={showConfirmPwd ? "eye-off" : "eye"} size={16} color={theme.colors.textSecondary} />
@@ -1771,6 +1922,7 @@ export const DashboardScreen: React.FC = () => {
             </TouchableOpacity>
             */}
           </ScrollView>
+          </KeyboardView>
         ) : null}
 
         {/* ─── Keep AI Workspace WebView mounted in the background ─── */}
@@ -1972,7 +2124,7 @@ export const DashboardScreen: React.FC = () => {
       </View>
 
       {/* ─── Custom Bottom Navigation Bar ─── */}
-      {!hideMobileLayoutBars && (
+      {!hideMobileLayoutBars && !isKeyboardVisible && (
         <View style={styles.bottomNav}>
           <TouchableOpacity 
             style={[styles.navItem, activeTab === 'home' && !isWebViewActive && styles.navItemActive]}

@@ -47,6 +47,14 @@ public class DataInitializer implements CommandLineRunner {
             log.warn("Failed to alter questions.status column, might already be correct or table doesn't exist yet: {}", e.getMessage());
         }
 
+        try {
+            jdbcTemplate.execute("ALTER TABLE exams MODIFY COLUMN status VARCHAR(50)");
+            log.info("Successfully altered 'exams.status' column to VARCHAR(50) to support ONLINE_EXAM and other values.");
+        } catch (Exception e) {
+            log.warn("Failed to alter exams.status column, might already be correct or table doesn't exist yet: {}", e.getMessage());
+        }
+
+
             // 1. Create Default Institute
             Institute institute = createInstituteIfNotFound("Default Institute", "DEFAULT-001",
                     "admin@questionshaper.com");
@@ -101,11 +109,11 @@ public class DataInitializer implements CommandLineRunner {
             allPermissions.add(userWrite);
 
             // 3. Create Roles
-            Role superAdminRole = createRoleIfNotFound("SUPER_ADMIN", allPermissions, true);
-            Role instituteAdminRole = createRoleIfNotFound("INSTITUTE_ADMIN", Set.of(userRead, userWrite), false);
-            Role teacherRole = createRoleIfNotFound("TEACHER", Set.of(userRead), false);
-            Role studentRole = createRoleIfNotFound("STUDENT", Set.of(userRead), false);
-            Role betaUserRole = createRoleIfNotFound("BETA USER", Set.of(userRead, userWrite), false);
+            Role superAdminRole = createRoleIfNotFound("SUPER_ADMIN", allPermissions, true, false);
+            Role instituteAdminRole = createRoleIfNotFound("INSTITUTE_ADMIN", Set.of(userRead, userWrite), false, false);
+            Role teacherRole = createRoleIfNotFound("TEACHER", Set.of(userRead), false, true);
+            Role studentRole = createRoleIfNotFound("STUDENT", Set.of(userRead), false, true);
+            Role betaUserRole = createRoleIfNotFound("BETA USER", Set.of(userRead, userWrite), false, false);
 
             // 4. Create Users
             createUserIfNotFound("zahid@questionshaper.com", "Zahid", "Z@hid95", superAdminRole, institute);
@@ -171,18 +179,18 @@ public class DataInitializer implements CommandLineRunner {
         });
     }
 
-    private Role createRoleIfNotFound(String name, Set<Permission> permissions, boolean forceUpdate) {
+    private Role createRoleIfNotFound(String name, Set<Permission> permissions, boolean forceUpdate, boolean allowSelfRegistration) {
         return roleRepository.findByName(name).map(role -> {
             if (forceUpdate) {
                 role.setPermissions(permissions);
                 log.info("Aggressively updated permissions for role: {}", name);
-                return roleRepository.save(role);
             }
-            return role;
+            return roleRepository.save(role);
         }).orElseGet(() -> {
             Role role = new Role();
             role.setName(name);
             role.setPermissions(permissions);
+            role.setAllowSelfRegistration(allowSelfRegistration);
             return roleRepository.save(role);
         });
     }

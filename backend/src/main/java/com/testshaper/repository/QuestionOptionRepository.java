@@ -10,4 +10,8 @@ import java.util.UUID;
 @Repository
 public interface QuestionOptionRepository extends JpaRepository<QuestionOption, UUID> {
     List<QuestionOption> findByQuestionIdOrderByOptionLabelAsc(UUID questionId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("delete from QuestionOption o where o.question.id = :questionId")
+    void deleteByQuestionId(UUID questionId);
 }

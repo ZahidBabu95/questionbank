@@ -421,7 +421,7 @@ const SyncLibrary = () => {
                                     transition={{ delay: idx * 0.05, duration: 0.5, type: "spring", stiffness: 100 }}
                                     key={book.id} 
                                     onClick={() => navigate(`/knowledge-hub/sync-command-center/${book.id}`)}
-                                    className="group relative flex flex-col bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_60px_-15px_rgba(79,70,229,0.12)] hover:-translate-y-2 transition-all duration-500 overflow-hidden cursor-pointer"
+                                    className="group relative flex flex-col bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-500 overflow-hidden cursor-pointer"
                                 >
                                     {/* Type & Sync Badges */}
                                     <div className="absolute top-4 left-4 z-20 flex flex-col items-start gap-1.5 pointer-events-none">
@@ -449,11 +449,11 @@ const SyncLibrary = () => {
 
                                     <div className="p-6">
                                         <div className="flex gap-6">
-                                            {/* Book Cover 3D Effect */}
+                                            {/* Book Cover */}
                                             <div className="w-[110px] sm:w-[130px] flex-shrink-0 relative group/cover">
-                                                <div className="aspect-[3/4.2] rounded-xl overflow-hidden shadow-[10px_10px_25px_-10px_rgba(0,0,0,0.3)] group-hover/cover:shadow-[15px_15px_35px_-10px_rgba(79,70,229,0.4)] transition-all duration-500 bg-slate-100 border border-slate-200">
+                                                <div className="aspect-[3/4.2] rounded-xl overflow-hidden shadow-sm bg-slate-100 border border-slate-200 hover:shadow-md transition-all duration-300">
                                                     {book.coverImageUrl ? (
-                                                        <img src={book.coverImageUrl} className="w-full h-full object-cover group-hover/cover:scale-110 transition-transform duration-700" alt={book.title} />
+                                                        <img src={book.coverImageUrl} className="w-full h-full object-cover" alt={book.title} />
                                                     ) : (
                                                         <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
                                                             <Book size={40} strokeWidth={1} />
@@ -461,7 +461,6 @@ const SyncLibrary = () => {
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="absolute top-0 left-0 w-2 h-full bg-black/10 z-10" />
                                             </div>
 
                                             <div className="flex-1 flex flex-col min-w-0">

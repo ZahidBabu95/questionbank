@@ -636,7 +636,13 @@ const AiWorkspace = () => {
                         {/* Logo Header (Web-only) / Mobile Header */}
                         {!isEmbedded ? (
                             <div 
-                                onClick={() => { setSearchParams({}); setMessages([]); }}
+                                onClick={() => {
+                                    if (window.opener || window.history.length <= 1) {
+                                        window.close();
+                                    } else {
+                                        navigate('/dashboard');
+                                    }
+                                }}
                                 className={`flex items-center justify-center py-3 mb-2 border-b cursor-pointer transition-opacity hover:opacity-80 ${isDark ? 'border-[#1e1e2e]' : 'border-slate-100'}`}
                             >
                                 {branding?.logo_url ? (
@@ -816,7 +822,7 @@ const AiWorkspace = () => {
                         {!isEmbedded && (
                             <div className={`mt-2 p-2 rounded-xl border ${t.card}`}>
                                 <div className="relative group">
-                                    <Link to={isDefaultInstitute ? "/profile" : "/ai-workspace?tool_url=/profile"} className={`flex items-center gap-2.5 p-1.5 rounded-lg transition-colors ${t.hover}`}>
+                                    <Link to="/profile" className={`flex items-center gap-2.5 p-1.5 rounded-lg transition-colors ${t.hover}`}>
                                         <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[12px] font-bold shadow-md shrink-0">
                                             {user?.name?.charAt(0) || 'U'}
                                         </div>
@@ -1030,7 +1036,7 @@ const AiWorkspace = () => {
                                     </div>
                                 </div>
                                 <div className={`absolute top-full right-0 mt-2 w-48 rounded-xl shadow-xl border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 ${isDark ? 'bg-[#111118] border-[#2a2a3d]' : 'bg-white border-slate-200'}`}>
-                                    <Link to={isDefaultInstitute ? "/profile" : "/ai-workspace?tool_url=/profile"} className={`block px-4 py-2 text-[13px] font-semibold rounded-t-xl transition-colors ${isDark ? 'hover:bg-[#1a1a28] text-slate-300' : 'hover:bg-slate-50 text-slate-700'}`}>Profile</Link>
+                                    <Link to="/profile" className={`block px-4 py-2 text-[13px] font-semibold rounded-t-xl transition-colors ${isDark ? 'hover:bg-[#1a1a28] text-slate-300' : 'hover:bg-slate-50 text-slate-700'}`}>Profile</Link>
                                     <button onClick={handleLogout} className={`w-full text-left px-4 py-2 text-[13px] font-semibold flex items-center gap-2 rounded-b-xl transition-colors ${isDark ? 'hover:bg-[#1a1a28] text-rose-400' : 'hover:bg-slate-50 text-rose-600'}`}>
                                         <LogOut size={14} /> Sign Out
                                     </button>

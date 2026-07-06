@@ -91,8 +91,18 @@ public class ExamWordService {
 
                 for (ExamQuestion eq : sectionQs) {
                     Question q = eq.getQuestion();
-                    renderQuestion(document, q, eq.getMarks(), globalOrder, fontSize, opts);
-                    globalOrder++;
+                    boolean isAlternative = eq.getAlternativeToId() != null;
+                    int displayOrder = isAlternative ? (globalOrder - 1) : globalOrder;
+
+                    if (isAlternative) {
+                        renderAlternativeSeparator(document, fontSize);
+                    }
+
+                    renderQuestion(document, q, eq.getMarks(), displayOrder, isAlternative, fontSize, opts);
+
+                    if (!isAlternative) {
+                        globalOrder++;
+                    }
                 }
             }
 
@@ -243,26 +253,37 @@ public class ExamWordService {
         r.setFontFamily(BANGLA_FONT);
     }
 
-    private void renderQuestion(XWPFDocument document, Question q, Double marks, int order, int fontSize,
+    private void renderQuestion(XWPFDocument document, Question q, Double marks, int order, boolean isAlternative, int fontSize,
             PdfDownloadOptions opts) {
         XWPFParagraph qPara = document.createParagraph();
         qPara.setSpacingBefore(100);
 
-        XWPFRun numRun = qPara.createRun();
-        numRun.setText(order + ". ");
-        numRun.setBold(true);
-        numRun.setFontSize(fontSize);
+        if (isAlternative) {
+            qPara.setIndentationLeft(400);
 
-        XWPFRun textRun = qPara.createRun();
-        textRun.setText(stripHtml(q.getQuestionText()));
-        textRun.setFontSize(fontSize);
-        textRun.setFontFamily(BANGLA_FONT);
+            XWPFRun textRun = qPara.createRun();
+            textRun.setText(stripHtml(q.getQuestionText()));
+            textRun.setFontSize(fontSize);
+            textRun.setFontFamily(BANGLA_FONT);
+        } else {
+            XWPFRun numRun = qPara.createRun();
+            numRun.setText(order + ". ");
+            numRun.setBold(true);
+            numRun.setFontSize(fontSize);
 
-        XWPFRun marksRun = qPara.createRun();
-        marksRun.setText(" [" + formatMarks(marks) + "]");
-        marksRun.setBold(true);
-        marksRun.setFontSize(fontSize - 1);
-        marksRun.setFontFamily(BANGLA_FONT);
+            XWPFRun textRun = qPara.createRun();
+            textRun.setText(stripHtml(q.getQuestionText()));
+            textRun.setFontSize(fontSize);
+            textRun.setFontFamily(BANGLA_FONT);
+
+            if (marks != null) {
+                XWPFRun marksRun = qPara.createRun();
+                marksRun.setText(" [" + formatMarks(marks) + "]");
+                marksRun.setBold(true);
+                marksRun.setFontSize(fontSize - 1);
+                marksRun.setFontFamily(BANGLA_FONT);
+            }
+        }
 
         if (q.getStimulus() != null && !q.getStimulus().isBlank()) {
             XWPFParagraph stimPara = document.createParagraph();
@@ -416,6 +437,19 @@ public class ExamWordService {
         if ("CQ".equals(type)) return "বিভাগ গ — সৃজনশীল প্রশ্ন";
         if ("TRUE_FALSE".equals(type)) return "বিভাগ ঘ — সত্য/মিথ্যা";
         return "অন্যান্য";
+    }
+
+    private void renderAlternativeSeparator(XWPFDocument document, int fontSize) {
+        XWPFParagraph p = document.createParagraph();
+        p.setAlignment(ParagraphAlignment.CENTER);
+        p.setSpacingBefore(100);
+        p.setSpacingAfter(50);
+        
+        XWPFRun r = p.createRun();
+        r.setText("--- অথবা / OR ---");
+        r.setBold(true);
+        r.setFontSize(fontSize - 1);
+        r.setFontFamily(BANGLA_FONT);
     }
 
     private void addDivider(XWPFDocument document) {

@@ -21,6 +21,11 @@ public class UserSummaryDTO {
     private int failedLoginAttempts;
     private UUID instituteId;
     private String instituteName;
+    private String instituteNameEn;
+    private String instituteNameBn;
     private Set<String> roles; // Only role names, NO permissions
+    private String studentRoll;
+    private UUID classId;
+    private String className;
     private LocalDateTime createdAt;
 }

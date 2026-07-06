@@ -12,6 +12,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -117,6 +118,11 @@ public class ManualExamController {
             @RequestParam(required = false) String difficulty,
             @RequestParam(required = false) String language,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String sourceMode,
+            @RequestParam(required = false) List<UUID> lectureIds,
+            @RequestParam(required = false) List<String> boards,
+            @RequestParam(required = false) List<Integer> years,
+            @RequestParam(required = false) List<String> schools,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt,desc") String sort) {
@@ -129,6 +135,11 @@ public class ManualExamController {
         params.setDifficulty(difficulty);
         params.setLanguage(language);
         params.setKeyword(keyword);
+        params.setSourceMode(sourceMode != null ? sourceMode : "ALL");
+        params.setLectureIds(lectureIds);
+        params.setBoards(boards);
+        params.setYears(years);
+        params.setSchools(schools);
         params.setPage(page);
         params.setSize(size);
         params.setSort(sort);

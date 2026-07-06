@@ -10,4 +10,8 @@ public class UpdateProfileDTO {
     private String name;
 
     private String phone;
+
+    private String instituteNameEn;
+
+    private String instituteNameBn;
 }

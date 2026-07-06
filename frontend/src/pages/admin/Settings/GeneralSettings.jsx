@@ -8,6 +8,7 @@ import settingsService from '../../../services/settingsService';
 import { useBranding } from '../../../context/BrandingContext';
 import axios from '../../../utils/axios';
 import clsx from 'clsx';
+import { useLanguage } from '../../../context/LanguageContext';
 
 
 
@@ -61,6 +62,7 @@ const ModelSelector = ({ isGoogle, value, onChange, placeholder, className }) =>
 };
 
 const GeneralSettings = () => {
+    const { t, currentLang, refreshLanguage } = useLanguage();
     const [activeTab, setActiveTab] = useState('GENERAL');
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -199,12 +201,12 @@ const GeneralSettings = () => {
 
 
     const TABS = [
-        { id: 'GENERAL', label: 'General', icon: Globe, description: 'System name, language, timezone' },
-        { id: 'BRANDING', label: 'Branding', icon: Image, description: 'Colors, logo, footer' },
-        { id: 'COMMUNICATION', label: 'Email & SMS', icon: Mail, description: 'SMTP and notification config' },
-        { id: 'AI', label: 'AI Config', icon: Cpu, description: 'AI provider and model settings' },
-        { id: 'EXAM', label: 'Exam Defaults', icon: FileText, description: 'Default exam parameters' },
-        { id: 'STORAGE', label: 'Storage', icon: Database, description: 'File storage configuration' },
+        { id: 'GENERAL', label: t('set_tab_general') || 'General', icon: Globe, description: t('set_desc_general') || 'System name, language, timezone' },
+        { id: 'BRANDING', label: t('set_tab_branding') || 'Branding', icon: Image, description: t('set_desc_branding') || 'Colors, logo, footer' },
+        { id: 'COMMUNICATION', label: t('set_tab_email_sms') || 'Email & SMS', icon: Mail, description: t('set_desc_communication') || 'SMTP and notification config' },
+        { id: 'AI', label: t('set_tab_ai') || 'AI Config', icon: Cpu, description: t('set_desc_ai') || 'AI provider and model settings' },
+        { id: 'EXAM', label: t('set_tab_exam') || 'Exam Defaults', icon: FileText, description: t('set_desc_exam') || 'Default exam parameters' },
+        { id: 'STORAGE', label: t('set_tab_storage') || 'Storage', icon: Database, description: t('set_desc_storage') || 'File storage configuration' },
     ];
 
     const fetchSettings = useCallback(async () => {
@@ -273,10 +275,10 @@ const GeneralSettings = () => {
         try {
             if (isSuperAdmin || settingsScope === 'global') {
                 await settingsService.updateGlobalSettings(activeTab, settings);
-                setMessage({ type: 'success', text: 'Global branding settings saved successfully.' });
+                setMessage({ type: 'success', text: t('set_msg_saved_global') || 'Global branding settings saved successfully.' });
             } else {
                 await settingsService.updateInstituteSettings(activeTab, settings);
-                setMessage({ type: 'success', text: 'Institute settings saved successfully.' });
+                setMessage({ type: 'success', text: t('set_msg_saved_inst') || 'Institute settings saved successfully.' });
             }
 
             setOriginalSettings({ ...settings });
@@ -288,10 +290,13 @@ const GeneralSettings = () => {
                 branding.refreshBranding();
             }
 
+            if (activeTab === 'GENERAL') {
+                refreshLanguage();
+            }
 
         } catch (error) {
             console.error("Error saving settings:", error);
-            setMessage({ type: 'error', text: 'Failed to save settings. Check your permissions.' });
+            setMessage({ type: 'error', text: t('set_msg_saved_error') || 'Failed to save settings. Check your permissions.' });
         } finally {
             setSaving(false);
         }
@@ -299,7 +304,7 @@ const GeneralSettings = () => {
 
     const handleReset = () => {
         setSettings({ ...originalSettings });
-        setMessage({ type: 'info', text: 'Settings reset to last saved state.' });
+        setMessage({ type: 'info', text: t('set_msg_reset') || 'Settings reset to last saved state.' });
     };
 
     const handleChange = (key, value) => {
@@ -857,7 +862,7 @@ const GeneralSettings = () => {
             return (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                     <Loader2 size={32} className="animate-spin mb-3" />
-                    <p className="text-sm font-medium">Loading settings...</p>
+                    <p className="text-sm font-medium">{t('loading_settings') || 'Loading settings...'}</p>
                 </div>
             );
         }
@@ -892,25 +897,25 @@ const GeneralSettings = () => {
 
                 return (
                     <div className="space-y-5 max-w-2xl">
-                        {renderInput('system_name', 'System Name', 'text', 'QuestionShaper', 'The display name of your platform')}
-                        {renderSelect('default_language', 'Default Language', [
+                        {renderInput('system_name', t('set_system_name') || 'System Name', 'text', 'QuestionShaper', t('set_system_name_desc') || 'The display name of your platform')}
+                        {renderSelect('default_language', t('set_default_language') || 'Default Language', [
                             { value: '', label: 'Select language...' },
                             { value: 'English', label: 'English' },
                             { value: 'Bengali', label: 'Bengali (\u09AC\u09BE\u0982\u09B2\u09BE)' },
                             { value: 'Hindi', label: 'Hindi (\u0939\u093F\u0928\u094D\u0926\u0940)' },
                             { value: 'Arabic', label: 'Arabic (\u0627\u0644\u0639\u0631\u0628\u064A\u0629)' },
-                        ])}
+                        ], t('set_default_language_desc') || 'System default language for all users')}
                         
                         {/* Landing Page Language Selector (Dynamic & Checkbox controls) */}
                         <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4 shadow-sm">
                             <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                <Globe size={16} className="text-primary" /> Landing Page Languages Configuration
+                                <Globe size={16} className="text-primary" /> {t('set_landing_config') || 'Landing Page Languages Configuration'}
                             </h3>
-                            <p className="text-[11px] text-slate-400">Enable languages for your public landing page. Administrators can translate marketing blocks for all enabled languages.</p>
+                            <p className="text-[11px] text-slate-400">{t('set_landing_config_desc') || 'Enable languages for your public landing page. Administrators can translate marketing blocks for all enabled languages.'}</p>
                             
                             {/* Checkboxes */}
                             <div className="space-y-2">
-                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Enabled Languages</label>
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">{t('set_enabled_langs') || 'Enabled Languages'}</label>
                                 <div className="grid grid-cols-2 gap-3">
                                     {AVAILABLE_LANGUAGES.map(lang => {
                                         const isChecked = enabledLangs.includes(lang.code);
@@ -931,7 +936,7 @@ const GeneralSettings = () => {
                             
                             {/* Default Language selector */}
                             <div className="pt-2">
-                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Default Landing Language</label>
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{t('set_default_landing_lang') || 'Default Landing Language'}</label>
                                 <select
                                     className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all cursor-pointer"
                                     value={settings['landing_default_language'] || 'en'}
@@ -944,15 +949,15 @@ const GeneralSettings = () => {
                             </div>
                         </div>
 
-                        {renderSelect('default_timezone', 'Timezone', [
+                        {renderSelect('default_timezone', t('set_timezone') || 'Timezone', [
                             { value: '', label: 'Select timezone...' },
                             { value: 'UTC+6', label: 'UTC+6 (Bangladesh)' },
                             { value: 'UTC+5:30', label: 'UTC+5:30 (India)' },
                             { value: 'UTC+0', label: 'UTC+0 (London)' },
                             { value: 'UTC-5', label: 'UTC-5 (Eastern US)' },
                         ])}
-                        {renderToggle('maintenance_mode', 'Maintenance Mode', 'When enabled, users will see a maintenance page')}
-                        {renderToggle('allow_registration', 'Allow Public Registration', 'Allow new users to self-register on the platform')}
+                        {renderToggle('maintenance_mode', t('set_maintenance_mode') || 'Maintenance Mode', t('set_maintenance_mode_desc') || 'When enabled, users will see a maintenance page')}
+                        {renderToggle('allow_registration', t('set_allow_registration') || 'Allow Public Registration', t('set_allow_registration_desc') || 'Allow new users to self-register on the platform')}
                     </div>
                 );
             }
@@ -1173,10 +1178,10 @@ const GeneralSettings = () => {
                 <div>
                     <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
                         <Settings size={24} className="text-primary" />
-                        General Settings
+                        {t('title_settings') || 'General Settings'}
                     </h1>
 
-                    <p className="text-xs md:text-sm text-slate-500 mt-0.5">Configure your platform settings and preferences.</p>
+                    <p className="text-xs md:text-sm text-slate-500 mt-0.5">{t('set_header_desc') || 'Configure your platform settings and preferences.'}</p>
                 </div>
                 <div className="flex items-center gap-2">
                     {hasChanges && (
@@ -1185,7 +1190,7 @@ const GeneralSettings = () => {
                             className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors active:scale-[0.97]"
                         >
                             <RotateCcw size={14} />
-                            Reset
+                            {t('set_reset_btn') || 'Reset'}
                         </button>
                     )}
                     <button
@@ -1195,7 +1200,7 @@ const GeneralSettings = () => {
                     >
 
                         {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                        Save Changes
+                        {t('set_save_btn') || 'Save Changes'}
                     </button>
                 </div>
             </div>
@@ -1270,7 +1275,7 @@ const GeneralSettings = () => {
 
                         <p className="text-xs text-slate-400 mt-1">{activeTabData?.description}</p>
                         <span className={`inline-block mt-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest rounded-lg ${settingsScope === 'global' ? 'bg-secondary text-white shadow-sm' : 'bg-slate-100 text-slate-500'}`}>
-                            {settingsScope === 'global' ? '\uD83C\uDF0D Global Platform Settings' : '\uD83C\uDFEB Institute Specific Settings'}
+                            {settingsScope === 'global' ? `\uD83C\uDF0D ${t('set_scope_global') || 'Global Settings (Super Admin Only)'}` : `\uD83C\uDFEB ${t('set_scope_institute') || 'Institute Settings Mode'}`}
                         </span>
 
                     </div>

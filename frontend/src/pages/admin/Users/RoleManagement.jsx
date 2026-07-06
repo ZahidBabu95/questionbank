@@ -63,7 +63,7 @@ const RoleManagement = () => {
 
     // Role Edit/Create Modal
     const [showRoleModal, setShowRoleModal] = useState(false);
-    const [roleForm, setRoleForm] = useState({ id: null, name: '', description: '' });
+    const [roleForm, setRoleForm] = useState({ id: null, name: '', description: '', allowSelfRegistration: false });
 
     const fetchData = async () => {
         try {
@@ -175,12 +175,14 @@ const RoleManagement = () => {
                 await userService.updateRole(roleForm.id, { 
                     name: roleForm.name, 
                     description: roleForm.description, 
+                    allowSelfRegistration: roleForm.allowSelfRegistration,
                     permissions: selectedRole?.permissions || [] 
                 });
             } else {
                 await userService.createRole({ 
                     name: roleForm.name.toUpperCase(), 
                     description: roleForm.description, 
+                    allowSelfRegistration: roleForm.allowSelfRegistration,
                     permissions: [] 
                 });
             }
@@ -207,9 +209,19 @@ const RoleManagement = () => {
     const openRoleModal = (role = null, e = null) => {
         if (e) e.stopPropagation();
         if (role) {
-            setRoleForm({ id: role.id, name: role.name, description: role.description || '' });
+            setRoleForm({ 
+                id: role.id, 
+                name: role.name, 
+                description: role.description || '', 
+                allowSelfRegistration: !!role.allowSelfRegistration 
+            });
         } else {
-            setRoleForm({ id: null, name: '', description: '' });
+            setRoleForm({ 
+                id: null, 
+                name: '', 
+                description: '', 
+                allowSelfRegistration: false 
+            });
         }
         setShowRoleModal(true);
     };
@@ -336,9 +348,16 @@ const RoleManagement = () => {
                                     }`}
                                 >
                                     <div>
-                                        <div className={`font-bold text-[14px] ${isSelected ? 'text-white' : 'text-slate-800'}`}>
-                                            {role.name}
-                                            {role.name === 'SUPER_ADMIN' && <span className="text-[10px] ml-2 px-1.5 py-0.5 rounded-full bg-slate-900/20 text-white font-normal relative -top-0.5" title="Has automated overriding access">Automated</span>}
+                                        <div className={`font-bold text-[14px] flex items-center gap-1.5 flex-wrap ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                                            <span>{role.name}</span>
+                                            {role.name === 'SUPER_ADMIN' && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-900/20 text-white font-normal" title="Has automated overriding access">Automated</span>}
+                                            {role.allowSelfRegistration && (
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                                    isSelected ? 'bg-emerald-500/30 text-emerald-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                                }`}>
+                                                    Self-Reg
+                                                </span>
+                                            )}
                                         </div>
                                         <div className={`text-[11px] mt-0.5 max-w-[160px] truncate ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
                                             {role.description || 'Full system access'}
@@ -430,6 +449,25 @@ const RoleManagement = () => {
                                     rows="3"
                                     placeholder="Brief description of this role's purpose..."
                                 />
+                            </div>
+                            <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-100">
+                                <div>
+                                    <label className="text-sm font-bold text-slate-700 block">Available for Registration</label>
+                                    <span className="text-[11px] text-slate-500 font-medium">Allow users to select this role during signup</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setRoleForm({...roleForm, allowSelfRegistration: !roleForm.allowSelfRegistration})}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
+                                        roleForm.allowSelfRegistration ? 'bg-primary' : 'bg-slate-300'
+                                    }`}
+                                >
+                                    <span
+                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                            roleForm.allowSelfRegistration ? 'translate-x-5' : 'translate-x-0'
+                                        }`}
+                                    />
+                                </button>
                             </div>
                             <div className="pt-3 flex gap-3 justify-end border-t border-slate-100">
                                 <button type="button" onClick={() => setShowRoleModal(false)} className="px-5 py-2 text-slate-600 font-semibold hover:bg-slate-100 rounded-lg text-sm">Cancel</button>

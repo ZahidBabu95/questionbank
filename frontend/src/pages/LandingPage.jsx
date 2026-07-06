@@ -763,7 +763,7 @@ const LandingPage = () => {
                                                         </li>
                                                     ))}
                                                 </ul>
-                                                <Link to="/signup" className="mt-8 block w-full py-3 px-4 bg-primary text-white font-bold text-center rounded-xl hover:brightness-110 shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all">
+                                                <Link to={`/signup?packageId=${pkg.id}`} className="mt-8 block w-full py-3 px-4 bg-primary text-white font-bold text-center rounded-xl hover:brightness-110 shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all">
                                                     {translations[currentLang].pricingStart}
                                                 </Link>
                                             </motion.div>
@@ -788,7 +788,7 @@ const LandingPage = () => {
                                                         </li>
                                                     ))}
                                                 </ul>
-                                                <Link to="/signup" className="mt-8 block w-full py-3 px-4 bg-slate-50 text-slate-900 font-bold text-center rounded-xl hover:bg-slate-100 transition-colors border border-slate-200">
+                                                <Link to={`/signup?packageId=${pkg.id}`} className="mt-8 block w-full py-3 px-4 bg-slate-50 text-slate-900 font-bold text-center rounded-xl hover:bg-slate-100 transition-colors border border-slate-200">
                                                     {translations[currentLang].pricingStart}
                                                 </Link>
                                             </motion.div>

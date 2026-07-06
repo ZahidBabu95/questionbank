@@ -239,7 +239,7 @@ const CurriculumMappingList = () => {
                         <div key={book.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col h-[280px] group relative">
                             <div className="flex-1 p-5 flex flex-col items-center justify-center text-center gap-4 cursor-pointer" onClick={() => window.location.href = `/knowledge-hub/mapping/${book.id}`}>
                                 {/* Cover Art */}
-                                <div className="w-20 h-28 rounded-lg border-2 border-slate-100 overflow-hidden bg-slate-50 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300 relative">
+                                <div className="w-20 h-28 rounded-lg border-2 border-slate-100 overflow-hidden bg-slate-50 flex items-center justify-center shadow-sm relative">
                                     {book.coverImageUrl ? (
                                         <img src={book.coverImageUrl} alt="Cover" className="w-full h-full object-cover" />
                                     ) : (

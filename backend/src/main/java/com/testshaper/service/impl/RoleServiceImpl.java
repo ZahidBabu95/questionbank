@@ -29,6 +29,14 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<RoleDTO> getSelfRegistrationRoles() {
+        return roleRepository.findByAllowSelfRegistrationTrue().stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional
     public RoleDTO createRole(RoleDTO roleDTO) {
         if (roleRepository.findByName(roleDTO.getName()).isPresent()) {
@@ -37,6 +45,7 @@ public class RoleServiceImpl implements RoleService {
         Role role = new Role();
         role.setName(roleDTO.getName());
         role.setDescription(roleDTO.getDescription());
+        role.setAllowSelfRegistration(roleDTO.isAllowSelfRegistration());
         // Handle permissions
         if (roleDTO.getPermissions() != null) {
             java.util.Set<com.testshaper.entity.Permission> permissions = new java.util.HashSet<>();
@@ -61,6 +70,7 @@ public class RoleServiceImpl implements RoleService {
 
         role.setName(roleDTO.getName());
         role.setDescription(roleDTO.getDescription());
+        role.setAllowSelfRegistration(roleDTO.isAllowSelfRegistration());
 
         // Update permissions
         if (roleDTO.getPermissions() != null) {
@@ -90,6 +100,7 @@ public class RoleServiceImpl implements RoleService {
         dto.setId(role.getId());
         dto.setName(role.getName());
         dto.setDescription(role.getDescription());
+        dto.setAllowSelfRegistration(role.isAllowSelfRegistration());
         if (role.getPermissions() != null) {
             dto.setPermissions(role.getPermissions().stream()
                     .map(p -> {

@@ -52,12 +52,12 @@ public class QuestionSpecification {
                 }
                 Predicate isGlobal = cb.or(isGlobalNull, isGlobalDefault, isGlobalEmpty, isGlobalInst);
                 
-                if (allowedSubjectIds != null && !allowedSubjectIds.isEmpty()) {
+                if (allowedSubjectIds != null && !allowedSubjectIds.isEmpty() && !StringUtils.hasText(selectedTopicId)) {
                     Predicate subjectInAllowed = root.get("classSubject").get("id").in(allowedSubjectIds);
                     Predicate globalAndAllowed = cb.and(isGlobal, subjectInAllowed);
                     predicates.add(cb.or(tenantMatch, globalAndAllowed));
                 } else {
-                    // If no allowed subjects are specified, it means no subject restrictions (allow ALL global questions)
+                    // If no allowed subjects are specified, or if querying for a specific topic, allow ALL global questions
                     predicates.add(cb.or(tenantMatch, isGlobal));
                 }
             }

@@ -1,8 +1,12 @@
 import { useEffect, useRef } from 'react';
+import { useNexusEditor } from '../context/NexusEditorContext';
 
 export const useCanvasSync = (editor, s) => {
+    const { updateSetting } = useNexusEditor();
     const prevFormatHashRef = useRef(null);
     const syncTimeoutRef = useRef(null);
+    const lastSyncedSettingsRef = useRef(null);
+    const isTiptapDirtyRef = useRef(true);
 
     // Serialize formatting-related settings to create a stable key
     const serializedSettings = JSON.stringify({
@@ -41,7 +45,8 @@ export const useCanvasSync = (editor, s) => {
         customH: s?.customH,
         marginLeft: s?.marginLeft,
         marginRight: s?.marginRight,
-        colGap: s?.colGap
+        colGap: s?.colGap,
+        headerGap: s?.headerGap
     });
 
     // Dynamically apply Question Setup settings to existing question nodes and upgrade legacy headers
@@ -49,34 +54,136 @@ export const useCanvasSync = (editor, s) => {
         if (!editor || !s.sections) return;
         
         const runSync = () => {
-            // --- 1. Combined Structural Traversal ---
+            const isReactStateChange = serializedSettings !== lastSyncedSettingsRef.current;
+            const isTiptapDirty = isTiptapDirtyRef.current;
+            
+            if (!isReactStateChange && !isTiptapDirty) {
+                return;
+            }
+            
+            isTiptapDirtyRef.current = false;
+
+            // --- 1. Pre-Sync Scan & Combined Structural Traversal ---
+            const docSections = new Set();
+            const docConditions = new Set();
+            const docInstructions = new Set();
+            const headingPositions = {};
+            const condPositions = {};
             let needsLegacyUpgrade = false;
             let currentSecId = null;
             const questionOrder = [];
             let headingCount = -1;
 
-            editor.state.doc.descendants((node) => {
+            editor.state.doc.descendants((node, pos) => {
+                const nodeClass = node.attrs ? (node.attrs.class || '') : '';
+                
                 if (node.type.name === 'heading') {
                     headingCount++;
-                    if (!node.attrs['data-section-id']) {
+                    const secId = node.attrs ? node.attrs['data-section-id'] : null;
+                    if (!secId) {
                         needsLegacyUpgrade = true;
                     } else {
-                        currentSecId = node.attrs['data-section-id'];
+                        currentSecId = secId;
+                        if (nodeClass.includes('section-name')) {
+                            docSections.add(secId);
+                            headingPositions[secId] = { pos, nodeSize: node.nodeSize };
+                        }
                     }
                 } else if (node.type.name === 'paragraph') {
-                    const nodeClass = node.attrs.class || '';
-                    if ((nodeClass.includes('section-instructions') || nodeClass.includes('section-conditions')) && !node.attrs['data-section-id']) {
-                        needsLegacyUpgrade = true;
+                    const secId = node.attrs ? node.attrs['data-section-id'] : null;
+                    if (nodeClass.includes('section-conditions')) {
+                        if (!secId) {
+                            needsLegacyUpgrade = true;
+                        } else {
+                            docConditions.add(secId);
+                            condPositions[secId] = { pos, nodeSize: node.nodeSize };
+                        }
+                    } else if (nodeClass.includes('section-instructions')) {
+                        if (!secId) {
+                            needsLegacyUpgrade = true;
+                        } else {
+                            docInstructions.add(secId);
+                        }
                     }
                 } else if (node.type.name === 'questionBlock') {
-                    questionOrder.push(`${node.attrs.questionId || ''}:${node.attrs.sectionId || ''}`);
-                    if (!node.attrs.sectionId || (currentSecId && node.attrs.sectionId !== currentSecId)) {
+                    questionOrder.push(`${(node.attrs && node.attrs.questionId) || ''}:${(node.attrs && node.attrs.sectionId) || ''}`);
+                    if (!node.attrs || !node.attrs.sectionId || (currentSecId && node.attrs.sectionId !== currentSecId)) {
                         needsLegacyUpgrade = true;
                     }
                 }
             });
 
-            // --- 2. Update Question Node Attributes & Section Text ---
+            // If a section in React state is missing completely in Tiptap, insert it at the end
+            const missingSections = s.sections.filter(sec => !docSections.has(sec.id));
+            if (missingSections.length > 0) {
+                let tr = editor.state.tr;
+                missingSections.forEach(sec => {
+                    const headingNode = editor.schema.nodes.heading.create(
+                        { 'data-section-id': sec.id, class: 'section-name', level: 3 },
+                        sec.name ? [editor.schema.text(sec.name)] : []
+                    );
+                    const condNode = editor.schema.nodes.paragraph.create(
+                        { 'data-section-id': sec.id, class: 'section-conditions' },
+                        sec.conditions ? [editor.schema.text(`[${sec.conditions}]`)] : []
+                    );
+                    const instNode = editor.schema.nodes.paragraph.create(
+                        { 'data-section-id': sec.id, class: 'section-instructions' },
+                        sec.instructions ? [editor.schema.text(sec.instructions)] : []
+                    );
+                    
+                    const insertPos = tr.doc.content.size;
+                    tr = tr.insert(insertPos, [headingNode, condNode, instNode]);
+                });
+                editor.view.dispatch(tr);
+                return; // Let the next update tick handle synchronization
+            }
+
+            // If a section exists but is missing its conditions or instructions paragraph, heal them
+            let insertUpdates = [];
+            s.sections.forEach(sec => {
+                if (docSections.has(sec.id)) {
+                    if (!docConditions.has(sec.id)) {
+                        const headingPos = headingPositions[sec.id];
+                        if (headingPos) {
+                            const condNode = editor.schema.nodes.paragraph.create(
+                                { 'data-section-id': sec.id, class: 'section-conditions' },
+                                sec.conditions ? [editor.schema.text(`[${sec.conditions}]`)] : []
+                            );
+                            insertUpdates.push({
+                                pos: headingPos.pos + headingPos.nodeSize,
+                                node: condNode
+                            });
+                        }
+                    }
+                    if (!docInstructions.has(sec.id)) {
+                        const headingPos = headingPositions[sec.id];
+                        const condPos = condPositions[sec.id];
+                        if (headingPos) {
+                            const instNode = editor.schema.nodes.paragraph.create(
+                                { 'data-section-id': sec.id, class: 'section-instructions' },
+                                sec.instructions ? [editor.schema.text(sec.instructions)] : []
+                            );
+                            const targetPos = condPos ? (condPos.pos + condPos.nodeSize) : (headingPos.pos + headingPos.nodeSize);
+                            insertUpdates.push({
+                                pos: targetPos,
+                                node: instNode
+                            });
+                        }
+                    }
+                }
+            });
+
+            if (insertUpdates.length > 0) {
+                insertUpdates.sort((a, b) => b.pos - a.pos);
+                let tr = editor.state.tr;
+                insertUpdates.forEach(up => {
+                    tr = tr.insert(up.pos, up.node);
+                });
+                editor.view.dispatch(tr);
+                return;
+            }
+
+            // --- 3. Update Question Node Attributes & Section Text ---
             // Create a hash of formatting and question order to detect layout or structural changes
             const formatHash = JSON.stringify({
                 sections: s.sections.map(sec => ({
@@ -112,11 +219,12 @@ export const useCanvasSync = (editor, s) => {
                 customH: s.customH,
                 marginLeft: s.marginLeft,
                 marginRight: s.marginRight,
-                colGap: s.colGap
+                colGap: s.colGap,
+                headerGap: s.headerGap
             });
             
-            // If formatting hasn't changed AND no legacy upgrade needed, skip the heavy traversal
-            if (prevFormatHashRef.current === formatHash && !needsLegacyUpgrade) {
+            // If formatting hasn't changed AND no legacy upgrade needed, and it's not a Tiptap update, skip the heavy traversal
+            if (prevFormatHashRef.current === formatHash && !needsLegacyUpgrade && !isTiptapDirty) {
                 return;
             }
             prevFormatHashRef.current = formatHash;
@@ -131,10 +239,13 @@ export const useCanvasSync = (editor, s) => {
             let runningCounter = 0;
             let activeSecIdForCounter = null;
             
+            // To collect updates to sync back to React state when user types in editor
+            const updatedSectionFields = {};
+            
             // Single document traversal
             headingCount = -1;
             editor.state.doc.descendants((node, pos) => {
-                const nodeClass = node.attrs.class || '';
+                const nodeClass = node.attrs ? (node.attrs.class || '') : '';
 
                 // 1. Sync & Self-Heal Active Section ID for Headings
                 if (node.type.name === 'heading') {
@@ -211,7 +322,10 @@ export const useCanvasSync = (editor, s) => {
                                 runningCounter = (Number(targetSec.numberingStart) || 1) - 1;
                             }
                         }
-                        runningCounter++;
+                        const isAlternative = node.attrs.alternativeToId != null && node.attrs.alternativeToId !== '';
+                        if (!isAlternative) {
+                            runningCounter++;
+                        }
                         if (node.attrs.questionNumber !== runningCounter) {
                             changes.questionNumber = runningCounter;
                             needsUpdate = true;
@@ -294,14 +408,47 @@ export const useCanvasSync = (editor, s) => {
                             }
                             processed[nodeTypeKey].add(secId);
                             
-                            if (targetText !== null && node.textContent !== targetText) {
-                                updates.push({ pos, type: 'text', text: targetText, node });
+                             if (targetText !== null && node.textContent !== targetText) {
+                                if (isReactStateChange) {
+                                    // Edit came from settings panel. Sync to Tiptap editor.
+                                    updates.push({ pos, type: 'text', text: targetText, node });
+                                } else {
+                                    // User edited directly in the editor! Sync back to React state.
+                                    if (!updatedSectionFields[secId]) updatedSectionFields[secId] = {};
+                                    if (nodeTypeKey === 'names') {
+                                        updatedSectionFields[secId].name = node.textContent;
+                                    } else if (nodeTypeKey === 'instructions') {
+                                        updatedSectionFields[secId].instructions = node.textContent;
+                                    } else if (nodeTypeKey === 'conditions') {
+                                        let cleanCond = node.textContent;
+                                        if (cleanCond.startsWith('[') && cleanCond.endsWith(']')) {
+                                            cleanCond = cleanCond.slice(1, -1);
+                                        }
+                                        updatedSectionFields[secId].conditions = cleanCond;
+                                    }
+                                }
                             }
                             return false; // skip children
                         }
+                    } else {
+                        // Section was deleted from s.sections. Delete node.
+                        updates.push({ pos, type: 'delete', nodeSize: node.nodeSize });
+                        return false;
                     }
                 }
             });
+
+            // If there are updates to sync back to React state (because user typed in Tiptap)
+            if (Object.keys(updatedSectionFields).length > 0) {
+                const newSections = s.sections.map(sec => {
+                    if (updatedSectionFields[sec.id]) {
+                        return { ...sec, ...updatedSectionFields[sec.id] };
+                    }
+                    return sec;
+                });
+                updateSetting("sections", newSections);
+                return;
+            }
 
             if (updates.length > 0) {
                 // Apply updates in reverse order of position to avoid mapping issues
@@ -324,11 +471,13 @@ export const useCanvasSync = (editor, s) => {
                 });
                 editor.view.dispatch(tr);
             }
+
+            lastSyncedSettingsRef.current = serializedSettings;
         };
 
         const scheduleSync = () => {
             if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-            syncTimeoutRef.current = setTimeout(runSync, 150);
+            syncTimeoutRef.current = setTimeout(runSync, 500);
         };
 
         // Run sync initially
@@ -336,6 +485,7 @@ export const useCanvasSync = (editor, s) => {
 
         // Run sync on editor updates (e.g. content drag-and-drop, question insertions, edits)
         const handleUpdate = () => {
+            isTiptapDirtyRef.current = true;
             scheduleSync();
         };
         editor.on('update', handleUpdate);

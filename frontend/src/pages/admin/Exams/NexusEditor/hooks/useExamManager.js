@@ -10,6 +10,21 @@ import { formatDuration, parseDurationToMinutes } from '../../../../../utils/for
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
+const resolveInstituteName = (examLanguage, apiInstituteName) => {
+    try {
+        const u = JSON.parse(localStorage.getItem('user') || '{}');
+        const lang = (examLanguage || '').toUpperCase();
+        if (lang === 'ENGLISH') {
+            return u.instituteNameEn || apiInstituteName || '';
+        } else if (lang === 'BENGALI' || lang === 'BANGLA') {
+            return u.instituteNameBn || apiInstituteName || '';
+        }
+        return u.instituteNameBn || apiInstituteName || '';
+    } catch (e) {
+        return apiInstituteName || '';
+    }
+};
+
 // Module-level caches to prevent duplicate requests on rapid remounts
 const examPromises = new Map();
 const examCache = new Map();
@@ -252,6 +267,46 @@ export const useExamManager = () => {
                         setEditorMode(res.data.editorMode);
                     }
 
+                    // Fetch Subject specific curriculum schema
+                    let blueprintSections = null;
+                    if (res.data.subjectName) {
+                        try {
+                            const subTag = 'RULE_FOR_' + res.data.subjectName.replace(/\s/g, '');
+                            const altTag = res.data.subjectName;
+                            const kbRes = await deduplicatedGetKnowledge();
+                            let rules = kbRes.data.filter(k => k.tags && (k.tags.includes(subTag) || k.tags.includes(altTag)));
+                            if (rules.length === 0) rules = kbRes.data.filter(k => k.content && k.content.includes(res.data.subjectName));
+                            if (rules.length > 0) {
+                                const matchedRule = rules.find(r => r.tags && r.tags.includes(res.data.className)) || rules[0];
+                                const schemaObj = JSON.parse(matchedRule.content);
+                                if (Array.isArray(schemaObj)) {
+                                    setEditorConfig({ allowed_blocks: ["MCQ", "CQ", "SHORT"], toolbar_features: ["math_formula", "draw_canvas", "table"] });
+                                } else {
+                                    if (schemaObj.editor_config) setEditorConfig(schemaObj.editor_config);
+                                    if (schemaObj.generation_blueprint) {
+                                        setGenerationBlueprint(schemaObj.generation_blueprint);
+                                        if (schemaObj.generation_blueprint.mandatory_sections && Array.isArray(schemaObj.generation_blueprint.mandatory_sections)) {
+                                            blueprintSections = schemaObj.generation_blueprint.mandatory_sections.map((sec, idx) => ({
+                                                id: `sec-bp-${idx}-${Date.now()}`,
+                                                name: sec.name,
+                                                isMCQ: sec.type === 'MCQ',
+                                                instructions: sec.instructions || '',
+                                                conditions: sec.conditions || '',
+                                                questionsToAnswer: sec.questionsToAnswer || null,
+                                                marksPerQuestion: sec.marksPerQuestion || null,
+                                                numberingStyle: 'bn',
+                                                marksConfig: sec.type === 'MCQ' ? 'hide' : 'showBracket',
+                                                optionLayout: 'col1',
+                                                optionStyle: 'bn',
+                                                optionDecoration: 'rightBracket'
+                                            }));
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (schemaErr) { console.error("Failed to load dynamic schema for subject:", schemaErr); }
+                    }
+
                     // Fetch Subject specific default setup from settings if exam has no settings of its own
                     let subjectDefaultSettings = null;
                     const hasNoSettings = !res.data.docSettingsJson ||
@@ -303,37 +358,53 @@ export const useExamManager = () => {
                             else qsByType.OTHER.push(q);
                         });
 
-                         const getQHtml = (q, sec) => {
-                            const optionsJson = q.options ? JSON.stringify(q.options).replace(/'/g, "&#39;") : "[]";
-                            const statementsJson = q.statements ? JSON.stringify(q.statements).replace(/'/g, "&#39;") : "[]";
-                            const qText = q.questionText ? q.questionText.replace(/"/g, "&quot;") : "";
-                            const stimulusText = q.stimulus ? q.stimulus.replace(/"/g, "&quot;") : "";
-                            const explanationText = q.explanation ? q.explanation.replace(/"/g, "&quot;") : "";
-                            const answerText = q.correctAnswer ? q.correctAnswer.replace(/"/g, "&quot;") : "";
-                            const dynamicDataJson = q.dynamicData ? (typeof q.dynamicData === 'object' ? JSON.stringify(q.dynamicData).replace(/'/g, "&#39;") : q.dynamicData.replace(/'/g, "&#39;")) : "";
-                            return `
-                                <div data-type="question-block"
-                                     questionid="${q.originalQuestionId || q.id}"
-                                     data-section-id="${q.sectionId || sec?.id || ''}"
-                                     type="${q.type || 'MCQ'}"
-                                     questiontext="${qText}"
-                                     stimulus="${stimulusText}"
-                                     explanation="${explanationText}"
-                                     answer="${answerText}"
-                                     syncedfromdb="true"
-                                     language="${q.language || 'Bangla'}"
-                                     chaptername="${q.chapterName || q.subjectName || 'General'}"
-                                     marks="${q.marks || 1}"
-                                     numberingstyle="${sec?.numberingStyle || 'bn'}"
-                                     marksconfig="${sec?.marksConfig || 'hide'}"
-                                     optionlayout="${sec?.optionLayout || 'col1'}"
-                                     optionstyle="${sec?.optionStyle || 'bn'}"
-                                     optiondecoration="${sec?.optionDecoration || 'rightBracket'}"
-                                     data-statements='${statementsJson}'
-                                     data-options='${optionsJson}'
-                                     data-dynamic-data='${dynamicDataJson}'>
-                                </div>`;
-                        };
+                        const getQHtml = (q, sec) => {
+                             const optionsJson = q.options ? JSON.stringify(q.options).replace(/'/g, "&#39;") : "[]";
+                             const statementsJson = q.statements ? JSON.stringify(q.statements).replace(/'/g, "&#39;") : "[]";
+                             const qText = q.questionText ? q.questionText.replace(/"/g, "&quot;") : "";
+                             const stimulusText = q.stimulus ? q.stimulus.replace(/"/g, "&quot;") : "";
+                             const explanationText = q.explanation ? q.explanation.replace(/"/g, "&quot;") : "";
+                             const answerText = q.correctAnswer ? q.correctAnswer.replace(/"/g, "&quot;") : "";
+                             
+                             let dynamicDataObj = {};
+                             if (q.dynamicData) {
+                                 try {
+                                     dynamicDataObj = typeof q.dynamicData === 'string' ? JSON.parse(q.dynamicData) : q.dynamicData;
+                                 } catch (e) { console.error("Error parsing dynamicData", e); }
+                             }
+                             if (q.sources && q.sources.length > 0 && (!dynamicDataObj.sources || dynamicDataObj.sources.length === 0)) {
+                                 dynamicDataObj.sources = q.sources.map(src => ({
+                                     organizationName: src.organizationName || src.organization_name,
+                                     examYear: src.examYear || src.exam_year,
+                                     examName: src.examName || src.exam_name,
+                                     sourceType: src.sourceType || src.source_type
+                                 }));
+                             }
+                             const dynamicDataJson = JSON.stringify(dynamicDataObj).replace(/'/g, "&#39;");
+
+                             return `
+                                 <div data-type="question-block"
+                                      questionid="${q.originalQuestionId || q.id}"
+                                      data-section-id="${q.sectionId || sec?.id || ''}"
+                                      type="${q.type || 'MCQ'}"
+                                      questiontext="${qText}"
+                                      stimulus="${stimulusText}"
+                                      explanation="${explanationText}"
+                                      answer="${answerText}"
+                                      syncedfromdb="true"
+                                      language="${q.language || 'Bangla'}"
+                                      chaptername="${q.chapterName || q.subjectName || 'General'}"
+                                      marks="${q.marks || 1}"
+                                      numberingstyle="${sec?.numberingStyle || 'bn'}"
+                                      marksconfig="${sec?.marksConfig || 'hide'}"
+                                      optionlayout="${sec?.optionLayout || 'col1'}"
+                                      optionstyle="${sec?.optionStyle || 'bn'}"
+                                      optiondecoration="${sec?.optionDecoration || 'rightBracket'}"
+                                      data-statements='${statementsJson}'
+                                      data-options='${optionsJson}'
+                                      data-dynamic-data='${dynamicDataJson}'>
+                                 </div>`;
+                         };
 
                         let dynamicSections = [];
                         const sectionNames = { MCQ: 'বহুনির্বাচনী প্রশ্ন', CQ: 'সৃজনশীল প্রশ্ন', SHORT: 'সংক্ষিপ্ত প্রশ্ন', OTHER: 'অন্যান্য প্রশ্ন' };
@@ -445,8 +516,30 @@ export const useExamManager = () => {
                             try {
                                 const parsedSettings = JSON.parse(res.data.docSettingsJson);
                                 if (parsedSettings && typeof parsedSettings === 'object') {
-                                    if (dynamicSections.length > 0) parsedSettings.sections = [...(parsedSettings.sections || []), ...dynamicSections];
-                                    setDocSettings(parsedSettings);
+                                    if (!parsedSettings.pageSize && !parsedSettings.orientation) {
+                                        const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
+                                        const mergedSettings = {
+                                            ...baseSettings,
+                                            ...parsedSettings,
+                                            institute: resolveInstituteName(parsedSettings.language || res.data.language || baseSettings.language || 'BENGALI', parsedSettings.institute || res.data.instituteName || baseSettings.institute),
+                                            subject: res.data.subjectName || parsedSettings.subject || baseSettings.subject,
+                                            className: res.data.className || parsedSettings.className || baseSettings.className,
+                                            exam: res.data.title || parsedSettings.exam || baseSettings.exam,
+                                            time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, parsedSettings.language || res.data.language) : (parsedSettings.time || baseSettings.time),
+                                            totalMarks: res.data.totalMarks || parsedSettings.totalMarks || baseSettings.totalMarks,
+                                            year: parsedSettings.year || new Date().getFullYear().toString(),
+                                            language: parsedSettings.language || res.data.language || baseSettings.language || 'BENGALI',
+                                            sections: parsedSettings.sections && parsedSettings.sections.length > 0 
+                                                ? (dynamicSections.length > 0 ? [...parsedSettings.sections, ...dynamicSections] : parsedSettings.sections)
+                                                : (dynamicSections.length > 0 ? dynamicSections : (blueprintSections || baseSettings.sections))
+                                        };
+                                        setDocSettings(mergedSettings);
+                                    } else {
+                                        if (dynamicSections.length > 0) parsedSettings.sections = [...(parsedSettings.sections || []), ...dynamicSections];
+                                        const examLang = parsedSettings.language || res.data.language || 'BENGALI';
+                                        parsedSettings.institute = resolveInstituteName(examLang, parsedSettings.institute || res.data.instituteName);
+                                        setDocSettings(parsedSettings);
+                                    }
                                 } else {
                                     throw new Error("Parsed settings is null or invalid object");
                                 }
@@ -456,7 +549,7 @@ export const useExamManager = () => {
                                 setDocSettings(prev => ({
                                     ...prev,
                                     ...baseSettings,
-                                    institute: res.data.instituteName || baseSettings.institute || prev.institute,
+                                    institute: resolveInstituteName(res.data.language || baseSettings.language || 'BENGALI', res.data.instituteName || baseSettings.institute || prev.institute),
                                     subject: res.data.subjectName || baseSettings.subject || prev.subject,
                                     className: res.data.className || baseSettings.className || prev.className,
                                     exam: res.data.title || baseSettings.exam || prev.exam,
@@ -464,7 +557,7 @@ export const useExamManager = () => {
                                     totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                     year: new Date().getFullYear().toString(),
                                     language: res.data.language || baseSettings.language || 'BENGALI',
-                                    sections: dynamicSections.length > 0 ? dynamicSections : (baseSettings.sections || prev.sections)
+                                    sections: dynamicSections.length > 0 ? dynamicSections : (blueprintSections || baseSettings.sections || prev.sections)
                                 }));
                             }
                         } else {
@@ -472,7 +565,7 @@ export const useExamManager = () => {
                             setDocSettings(prev => ({
                                 ...prev,
                                 ...baseSettings,
-                                institute: res.data.instituteName || baseSettings.institute || prev.institute,
+                                institute: resolveInstituteName(res.data.language || baseSettings.language || 'BENGALI', res.data.instituteName || baseSettings.institute || prev.institute),
                                 subject: res.data.subjectName || baseSettings.subject || prev.subject,
                                 className: res.data.className || baseSettings.className || prev.className,
                                 exam: res.data.title || baseSettings.exam || prev.exam,
@@ -480,7 +573,7 @@ export const useExamManager = () => {
                                 totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                 year: new Date().getFullYear().toString(),
                                 language: res.data.language || baseSettings.language || 'BENGALI',
-                                sections: dynamicSections.length > 0 ? dynamicSections : (baseSettings.sections || prev.sections)
+                                sections: dynamicSections.length > 0 ? dynamicSections : (blueprintSections || baseSettings.sections || prev.sections)
                             }));
                         }
                     } else {
@@ -517,7 +610,29 @@ export const useExamManager = () => {
                             try {
                                 const parsedSettings = JSON.parse(res.data.docSettingsJson);
                                 if (parsedSettings && typeof parsedSettings === 'object') {
-                                    setDocSettings(parsedSettings);
+                                    if (!parsedSettings.pageSize && !parsedSettings.orientation) {
+                                        const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
+                                        const mergedSettings = {
+                                            ...baseSettings,
+                                            ...parsedSettings,
+                                            institute: resolveInstituteName(parsedSettings.language || res.data.language || baseSettings.language || 'BENGALI', parsedSettings.institute || res.data.instituteName || baseSettings.institute),
+                                            subject: res.data.subjectName || parsedSettings.subject || baseSettings.subject,
+                                            className: res.data.className || parsedSettings.className || baseSettings.className,
+                                            exam: res.data.title || parsedSettings.exam || baseSettings.exam,
+                                            time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, parsedSettings.language || res.data.language) : (parsedSettings.time || baseSettings.time),
+                                            totalMarks: res.data.totalMarks || parsedSettings.totalMarks || baseSettings.totalMarks,
+                                            year: parsedSettings.year || new Date().getFullYear().toString(),
+                                            language: parsedSettings.language || res.data.language || baseSettings.language || 'BENGALI',
+                                            sections: parsedSettings.sections && parsedSettings.sections.length > 0 
+                                                ? (blueprintSections || baseSettings.sections)
+                                                : (blueprintSections || baseSettings.sections)
+                                        };
+                                        setDocSettings(mergedSettings);
+                                    } else {
+                                        const examLang = parsedSettings.language || res.data.language || 'BENGALI';
+                                        parsedSettings.institute = resolveInstituteName(examLang, parsedSettings.institute || res.data.instituteName);
+                                        setDocSettings(parsedSettings);
+                                    }
                                 } else {
                                     throw new Error("Parsed settings is null or invalid object");
                                 }
@@ -527,7 +642,7 @@ export const useExamManager = () => {
                                 setDocSettings(prev => ({
                                     ...prev,
                                     ...baseSettings,
-                                    institute: res.data.instituteName || baseSettings.institute || prev.institute,
+                                    institute: resolveInstituteName(res.data.language || baseSettings.language || 'BENGALI', res.data.instituteName || baseSettings.institute || prev.institute),
                                     subject: res.data.subjectName || baseSettings.subject || prev.subject,
                                     className: res.data.className || baseSettings.className || prev.className,
                                     exam: res.data.title || baseSettings.exam || prev.exam,
@@ -535,7 +650,7 @@ export const useExamManager = () => {
                                     totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                     year: new Date().getFullYear().toString(),
                                     language: res.data.language || baseSettings.language || 'BENGALI',
-                                    sections: baseSettings.sections || prev.sections
+                                    sections: blueprintSections || baseSettings.sections || prev.sections
                                 }));
                             }
                         } else {
@@ -543,7 +658,7 @@ export const useExamManager = () => {
                             setDocSettings(prev => ({
                                 ...prev,
                                 ...baseSettings,
-                                institute: res.data.instituteName || baseSettings.institute || prev.institute,
+                                institute: resolveInstituteName(res.data.language || baseSettings.language || 'BENGALI', res.data.instituteName || baseSettings.institute || prev.institute),
                                 subject: res.data.subjectName || baseSettings.subject || prev.subject,
                                 className: res.data.className || baseSettings.className || prev.className,
                                 exam: res.data.title || baseSettings.exam || prev.exam,
@@ -551,31 +666,12 @@ export const useExamManager = () => {
                                 totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                 year: new Date().getFullYear().toString(),
                                 language: res.data.language || baseSettings.language || 'BENGALI',
-                                sections: baseSettings.sections || prev.sections
+                                sections: blueprintSections || baseSettings.sections || prev.sections
                             }));
                         }
                     }
 
-                    // Fetch Subject specific curriculum schema
-                    if (res.data.subjectName) {
-                        try {
-                            const subTag = 'RULE_FOR_' + res.data.subjectName.replace(/\s/g, '');
-                            const altTag = res.data.subjectName;
-                            const kbRes = await deduplicatedGetKnowledge();
-                            let rules = kbRes.data.filter(k => k.tags && (k.tags.includes(subTag) || k.tags.includes(altTag)));
-                            if (rules.length === 0) rules = kbRes.data.filter(k => k.content && k.content.includes(res.data.subjectName));
-                            if (rules.length > 0) {
-                                const matchedRule = rules.find(r => r.tags && r.tags.includes(res.data.className)) || rules[0];
-                                const schemaObj = JSON.parse(matchedRule.content);
-                                if (Array.isArray(schemaObj)) {
-                                    setEditorConfig({ allowed_blocks: ["MCQ", "CQ", "SHORT"], toolbar_features: ["math_formula", "draw_canvas", "table"] });
-                                } else {
-                                    if (schemaObj.editor_config) setEditorConfig(schemaObj.editor_config);
-                                    if (schemaObj.generation_blueprint) setGenerationBlueprint(schemaObj.generation_blueprint);
-                                }
-                            }
-                        } catch (schemaErr) { console.error("Failed to load dynamic schema for subject:", schemaErr); }
-                    }
+                    // Fetch Subject specific curriculum schema removed as it has been moved to the top of fetchExam
                 }
             } catch (err) { console.error("Failed to load exam:", err); }
         };
@@ -690,7 +786,7 @@ export const useExamManager = () => {
         }
      };
 
-      const handleDownloadPdf = async (silent = false, customFilename = '') => {
+      const handleDownloadPdf = async (silent = false, customFilename = '', selectedSetName = '') => {
           if (!id) {
               alert(uiLang === 'bn' ? "দয়া করে প্রথমে ডকুমেন্টটি সেভ করুন।" : "Please save the document first.");
               return;
@@ -724,6 +820,14 @@ export const useExamManager = () => {
                   throw new Error("Paper canvas element not found");
               }
 
+              // Wait for fonts to load before doing any height measurements
+              try {
+                  await document.fonts.ready;
+              } catch (e) {
+                  console.warn("Failed to wait for fonts to load:", e);
+              }
+              await new Promise(resolve => setTimeout(resolve, 300));
+
               const pageSize = docSettings.pageSize === 'A4' ? 'a4' : docSettings.pageSize === 'Legal' ? 'legal' : 'letter';
               const orientation = docSettings.orientation === 'landscape' || docSettings.orientation === 'Landscape' ? 'l' : 'p';
 
@@ -745,10 +849,10 @@ export const useExamManager = () => {
 
               const borderOffset = docSettings.outerBorder ? (Number(docSettings.outerBorderWidth) || 1) * 3 + 12 : 0;
               const mmToPx = (mm) => mm * 3.7795275591;
-              const paddingTop = mmToPx(docSettings.marginTop || 20) + borderOffset;
-              const paddingBottom = mmToPx(docSettings.marginBottom || 20) + borderOffset;
-              const paddingLeft = mmToPx(docSettings.marginLeft || 25) + borderOffset;
-              const paddingRight = mmToPx(docSettings.marginRight || 20) + borderOffset;
+              const paddingTop = mmToPx(docSettings.marginTop ?? 20) + borderOffset;
+              const paddingBottom = mmToPx(docSettings.marginBottom ?? 20) + borderOffset;
+              const paddingLeft = mmToPx(docSettings.marginLeft ?? 25) + borderOffset;
+              const paddingRight = mmToPx(docSettings.marginRight ?? 20) + borderOffset;
 
               const proseMirror = element.querySelector('.ProseMirror');
               if (!proseMirror) {
@@ -769,19 +873,20 @@ export const useExamManager = () => {
               document.body.appendChild(printContainer);
 
               const proseStyle = window.getComputedStyle(proseMirror);
+              const header = element.querySelector('.nexus-native-header');
 
               const createNewPageElement = (pageNum) => {
+                  const answerClass = (docSettings.includeAnswerSheet && docSettings.ansLayout !== 'compact')
+                      ? `show-answers-${docSettings.ansLayout || 'highlighted'}`
+                      : '';
+
                   const page = document.createElement('div');
-                  page.className = 'print-physical-page';
+                  page.className = `print-physical-page pdf-export-active ${answerClass}`;
                   page.style.width = `${w}px`;
                   page.style.height = `${h}px`;
                   page.style.backgroundColor = '#ffffff';
                   page.style.position = 'relative';
                   page.style.boxSizing = 'border-box';
-                  page.style.paddingTop = `${paddingTop}px`;
-                  page.style.paddingBottom = `${paddingBottom}px`;
-                  page.style.paddingLeft = `${paddingLeft}px`;
-                  page.style.paddingRight = `${paddingRight}px`;
                   page.style.overflow = 'hidden';
                   page.style.display = 'block';
 
@@ -832,15 +937,29 @@ export const useExamManager = () => {
                       page.appendChild(watermarkDiv);
                   }
 
+                  // Inner wrapper to apply padding and avoid html2canvas root padding rendering issues
+                  const innerWrapper = document.createElement('div');
+                  innerWrapper.className = 'print-page-inner-wrapper';
+                  innerWrapper.style.width = '100%';
+                  innerWrapper.style.height = '100%';
+                  innerWrapper.style.boxSizing = 'border-box';
+                  innerWrapper.style.display = 'block'; // Avoid flexbox padding issues in html2canvas
+                  innerWrapper.style.paddingTop = `${paddingTop}px`;
+                  innerWrapper.style.paddingBottom = `${paddingBottom}px`;
+                  innerWrapper.style.paddingLeft = `${paddingLeft}px`;
+                  innerWrapper.style.paddingRight = `${paddingRight}px`;
+                  innerWrapper.style.position = 'relative';
+                  innerWrapper.style.zIndex = '10';
+                  innerWrapper.style.backgroundColor = 'transparent';
+
                   const pageHeader = document.createElement('div');
                   pageHeader.className = 'print-page-header';
                   pageHeader.style.width = '100%';
                   pageHeader.style.display = 'block';
                   pageHeader.style.zIndex = '10';
-                  page.appendChild(pageHeader);
 
                   const pageContent = document.createElement('div');
-                  pageContent.className = 'print-page-content ProseMirror focus:outline-none';
+                  pageContent.className = `print-page-content ProseMirror focus:outline-none pdf-export-active ${answerClass}`;
                   pageContent.style.display = 'block';
                   pageContent.style.height = 'auto';
                   pageContent.style.minHeight = '0px';
@@ -853,20 +972,52 @@ export const useExamManager = () => {
                   pageContent.style.fontSize = proseStyle.fontSize;
                   pageContent.style.lineHeight = proseStyle.lineHeight;
 
+                  if (pageNum === 1) {
+                      pageHeader.style.display = 'block';
+                      innerWrapper.appendChild(pageHeader);
+                  } else {
+                      pageHeader.style.display = 'none';
+                  }
+
                   // Columns styling
-                  const colCount = Math.max(docSettings.columns || 1, ...(docSettings.sections || []).map(sec => sec.columns || 1));
+                  const globalColCount = Number(docSettings.columns) || 1;
+                  const isGlobalColActive = globalColCount > 1;
+                  let colCount = 1;
+                  let colGap = docSettings.colGap || 10;
+                  
+                  if (isGlobalColActive) {
+                      colCount = globalColCount;
+                  } else {
+                      colCount = Math.max(1, ...(docSettings.sections || []).map(sec => Number(sec.columns) || 1));
+                      const sectionWithGap = (docSettings.sections || []).find(sec => (Number(sec.columns) || 1) > 1 && sec.colGap);
+                      if (sectionWithGap) {
+                          colGap = sectionWithGap.colGap;
+                      }
+                  }
+
                   if (colCount > 1) {
                       pageContent.style.columnCount = colCount;
-                      pageContent.style.columnGap = `${mmToPx(docSettings.columns > 1 ? (docSettings.colGap || 10) : ((docSettings.sections || []).find(sec => sec.columns > 1 && sec.colGap)?.colGap || docSettings.colGap || 10))}px`;
+                      pageContent.style.columnGap = `${mmToPx(colGap)}px`;
                       pageContent.style.columnRule = 'none'; // Avoid black vertical rules
                       pageContent.style.columnFill = 'balance';
                   }
 
-                  page.appendChild(pageContent);
+                  innerWrapper.appendChild(pageContent);
+                  page.appendChild(innerWrapper);
                   return page;
               };
 
+              const getFontFallback = (fontName) => {
+                  if (!fontName) return 'serif';
+                  const name = fontName.toLowerCase();
+                  if (name.includes('serif') || name.includes('tiro') || name.includes('times')) {
+                      return 'serif';
+                  }
+                  return 'sans-serif';
+              };
+
               const maxPrintableHeight = h - paddingTop - paddingBottom;
+              const safetyBuffer = 10; // 10px safety buffer to prevent subpixel overflow/clipping at page bottom
 
               const pages = [];
               let currentPage = createNewPageElement(1);
@@ -876,20 +1027,159 @@ export const useExamManager = () => {
               let currentPageContent = currentPage.querySelector('.print-page-content');
               let currentPageHeader = currentPage.querySelector('.print-page-header');
 
-              // 2. Clone and place native header inside the print-page-header of Page 1
-              const header = element.querySelector('.nexus-native-header');
+              // 2. Clone and place native header inside Page 1 (conditional flow vs span)
+              const globalColCount = Number(docSettings.columns) || 1;
+              const isGlobalColActive = globalColCount > 1;
               let headerHeight = 0;
               if (header) {
                   const clonedHeader = header.cloneNode(true);
                   clonedHeader.style.color = '#000000';
-                  currentPageHeader.appendChild(clonedHeader);
-                  
-                  // Measure the rendered header height in offscreen print DOM
-                  headerHeight = currentPageHeader.offsetHeight || header.offsetHeight || 180;
+
+                  if (docSettings.multipleSetsEnabled && selectedSetName) {
+                      const setCodeWrapper = clonedHeader.querySelector('.nexus-header-set-code');
+                      if (setCodeWrapper) {
+                          const canvasBorderColor = docSettings.orientation === 'landscape' ? '#cbd5e1' : '#e2e8f0';
+                          setCodeWrapper.innerHTML = `<div class="nexus-set-code-box" style="display: inline-block; border: 1px solid ${canvasBorderColor}; padding: 2px 8px; font-size: 13px; font-weight: bold; border-radius: 4px; white-space: nowrap;">${docSettings.language === 'ENGLISH' ? 'Set Code' : 'সেট কোড'}: ${selectedSetName}</div>`;
+                      }
+                  }
+                  if (isGlobalColActive) {
+                      clonedHeader.style.setProperty('column-span', 'none', 'important');
+                      clonedHeader.style.setProperty('-webkit-column-span', 'none', 'important');
+                      clonedHeader.style.display = 'block';
+                      currentPageContent.appendChild(clonedHeader);
+                      headerHeight = 0; // Natural flow inside currentPageContent
+                  } else {
+                      clonedHeader.style.setProperty('column-span', 'all', 'important');
+                      clonedHeader.style.setProperty('-webkit-column-span', 'all', 'important');
+                      currentPageHeader.appendChild(clonedHeader);
+                      
+                      // Measure the rendered header height in offscreen print DOM
+                      headerHeight = currentPageHeader.offsetHeight || header.offsetHeight || 180;
+                  }
               }
 
               // 3. Distribute all other child elements dynamically
-              const children = Array.from(proseMirror.children);
+              let children = Array.from(proseMirror.children);
+
+              if (docSettings.multipleSetsEnabled && selectedSetName) {
+                  const mappings = docSettings.setMappings || {};
+                  const setMapping = mappings[selectedSetName];
+
+                  if (setMapping && setMapping.questions) {
+                      const shuffledQIds = setMapping.questions;
+                      const shuffledOptionsMap = setMapping.options || {};
+
+                      // Find all MCQ children and their original positions
+                      const mcqElements = [];
+                      const mcqIndices = [];
+
+                      children.forEach((child, idx) => {
+                          const qBlock = child.getAttribute('data-type') === 'question-block'
+                              ? child
+                              : child.querySelector('div[data-type="question-block"]');
+                          
+                          if (qBlock) {
+                              // Check if it's MCQ (has options-grid)
+                              const optionsGrid = qBlock.querySelector('.options-grid');
+                              if (optionsGrid) {
+                                  mcqElements.push(child); // Store the top-level child wrapper
+                                  mcqIndices.push(idx);
+                              }
+                          }
+                      });
+
+                      if (mcqElements.length > 0) {
+                          // Map questionId -> element wrapper
+                          const elementMap = {};
+                          mcqElements.forEach(el => {
+                              const qBlock = el.getAttribute('data-type') === 'question-block'
+                                  ? el
+                                  : el.querySelector('div[data-type="question-block"]');
+                              if (qBlock) {
+                                  const qId = qBlock.getAttribute('questionid');
+                                  if (qId) elementMap[qId] = el;
+                              }
+                          });
+
+                          // Reconstruct shuffled array of MCQ elements
+                          const shuffledMcqElements = [];
+                          shuffledQIds.forEach(qId => {
+                              if (elementMap[qId]) {
+                                  // Clone the element wrapper to avoid mutating original
+                                  const clonedEl = elementMap[qId].cloneNode(true);
+                                  const qBlock = clonedEl.getAttribute('data-type') === 'question-block'
+                                      ? clonedEl
+                                      : clonedEl.querySelector('div[data-type="question-block"]');
+
+                                  // Shuffling options if options mappings exist for this question
+                                  const optIds = shuffledOptionsMap[qId];
+                                  if (optIds && optIds.length > 0 && qBlock) {
+                                      const grid = qBlock.querySelector('.options-grid');
+                                      if (grid) {
+                                          const optionDivs = Array.from(grid.children);
+                                          const dataOptions = JSON.parse(qBlock.getAttribute('data-options') || '[]');
+
+                                          // Map optionId -> optionDiv
+                                          const optDivMap = {};
+                                          dataOptions.forEach((opt, oIdx) => {
+                                              const optId = opt.id || `opt-${oIdx}`;
+                                              if (optionDivs[oIdx]) {
+                                                  optDivMap[optId] = optionDivs[oIdx];
+                                              }
+                                          });
+
+                                          // Reorder option elements
+                                          const shuffledOptionDivs = [];
+                                          optIds.forEach(optId => {
+                                              if (optDivMap[optId]) {
+                                                  shuffledOptionDivs.push(optDivMap[optId]);
+                                              }
+                                          });
+
+                                          // Clear and append in shuffled order
+                                          grid.innerHTML = '';
+                                          shuffledOptionDivs.forEach((optDiv, newIdx) => {
+                                              grid.appendChild(optDiv);
+
+                                              // Update label text
+                                              const labelSpan = optDiv.querySelector('span');
+                                              if (labelSpan) {
+                                                  const optStyle = qBlock.getAttribute('optionstyle') || 'bn';
+                                                  const dec = qBlock.getAttribute('optiondecoration') || 'rightBracket';
+
+                                                  // Local label helper
+                                                  const getOptionLabel = (idx, style = 'bn') => {
+                                                      if (style === 'en') return String.fromCharCode(97 + idx);
+                                                      if (style === 'roman') return ['i', 'ii', 'iii', 'iv', 'v'][idx] || (idx + 1);
+                                                      if (style === 'num_en') return `${idx + 1}`;
+                                                      if (style === 'num_bn') return ['১', '২', '৩', '৪', '৫'][idx] || (idx + 1);
+                                                      return ['ক', 'খ', 'গ', 'ঘ', 'ঙ'][idx] || String.fromCharCode(97 + idx);
+                                                  };
+
+                                                  const optLabel = getOptionLabel(newIdx, optStyle);
+                                                  const formattedLabel = dec === 'bracket' ? `(${optLabel})` 
+                                                                       : dec === 'dot' ? `${optLabel}.` 
+                                                                       : dec === 'bubble' ? optLabel 
+                                                                       : `${optLabel})`;
+                                                  labelSpan.textContent = formattedLabel;
+                                              }
+                                          });
+                                      }
+                                  }
+
+                                  shuffledMcqElements.push(clonedEl);
+                              }
+                          });
+
+                          // Place shuffled elements back at original indices in children
+                          mcqIndices.forEach((origIdx, listIdx) => {
+                              if (shuffledMcqElements[listIdx]) {
+                                  children[origIdx] = shuffledMcqElements[listIdx];
+                              }
+                          });
+                      }
+                  }
+              }
               for (let i = 0; i < children.length; i++) {
                   const child = children[i];
                   // Skip header portal container (we handled header separately)
@@ -897,15 +1187,77 @@ export const useExamManager = () => {
                       continue;
                   }
 
-                  const clonedChild = child.cloneNode(true);
-                  clonedChild.style.color = '#000000';
-                  currentPageContent.appendChild(clonedChild);
+                  // Handle manual page break node
+                  if (child.classList.contains('page-break')) {
+                      currentPage = createNewPageElement(pages.length + 1);
+                      printContainer.appendChild(currentPage);
+                      pages.push(currentPage);
 
-                  // Measure scroll height vs max height allowed (subtracting header height on first page)
-                  const limit = pages.length === 1 ? (maxPrintableHeight - headerHeight) : maxPrintableHeight;
+                      currentPageContent = currentPage.querySelector('.print-page-content');
+                      continue;
+                  }
+
+                  let nodeToAppend;
+
+                  // Group consecutive section elements (name, conditions, instructions) sharing the same sectionId
+                  if (child.classList.contains('section-name')) {
+                      const sectionId = child.getAttribute('data-section-id');
+                      
+                      const wrapper = document.createElement('div');
+                      wrapper.className = 'section-header-wrapper';
+                      wrapper.setAttribute('data-section-id', sectionId || '');
+                      const sectionSpanVal = isGlobalColActive ? 'none' : 'all';
+                      wrapper.style.setProperty('column-span', sectionSpanVal, 'important');
+                      wrapper.style.setProperty('-webkit-column-span', sectionSpanVal, 'important');
+                      wrapper.style.width = '100%';
+                      wrapper.style.display = 'block';
+                      wrapper.style.breakInside = 'avoid';
+                      wrapper.style.pageBreakInside = 'avoid';
+                      wrapper.style.boxSizing = 'border-box';
+                      wrapper.style.backgroundColor = 'transparent';
+
+                      const sec = (docSettings.sections || []).find(x => x.id === sectionId);
+                      const secFont = sec ? (sec.fontFamily || (docSettings.language === 'ENGLISH' || sec.numberingStyle === 'en' ? (docSettings.enFont || 'Times New Roman') : (docSettings.bnFont || 'Noto Serif Bengali'))) : (docSettings.language === 'ENGLISH' ? (docSettings.enFont || 'Times New Roman') : (docSettings.bnFont || 'Noto Serif Bengali'));
+                      const secFallback = getFontFallback(secFont);
+                      
+                      const nameClone = child.cloneNode(true);
+                      nameClone.style.setProperty('column-span', 'none', 'important');
+                      nameClone.style.setProperty('-webkit-column-span', 'none', 'important');
+                      nameClone.style.color = '#000000';
+                      nameClone.style.fontFamily = `'${secFont}', ${secFallback}`;
+                      wrapper.appendChild(nameClone);
+
+                      while (i + 1 < children.length) {
+                          const nextChild = children[i + 1];
+                          const isCond = nextChild.classList.contains('section-conditions');
+                          const isInst = nextChild.classList.contains('section-instructions');
+                          const nextSecId = nextChild.getAttribute('data-section-id');
+
+                          if ((isCond || isInst) && nextSecId === sectionId) {
+                              const nextClone = nextChild.cloneNode(true);
+                              nextClone.style.setProperty('column-span', 'none', 'important');
+                              nextClone.style.setProperty('-webkit-column-span', 'none', 'important');
+                              nextClone.style.color = '#000000';
+                              nextClone.style.fontFamily = `'${secFont}', ${secFallback}`;
+                              wrapper.appendChild(nextClone);
+                              i++;
+                          } else {
+                               break;
+                          }
+                      }
+                      nodeToAppend = wrapper;
+                  } else {
+                      nodeToAppend = child.cloneNode(true);
+                      nodeToAppend.style.color = '#000000';
+                  }
+
+                  currentPageContent.appendChild(nodeToAppend);
+
+                  // Measure scroll height vs max height allowed (subtracting header height on first page, minus safety buffer)
+                  const limit = (pages.length === 1 ? (maxPrintableHeight - headerHeight) : maxPrintableHeight) - safetyBuffer;
                   if (currentPageContent.scrollHeight > limit) {
                       if (currentPageContent.children.length > 1) {
-                          clonedChild.remove(); // Remove from current page
+                          nodeToAppend.remove(); // Remove from current page
 
                           // Create new page
                           currentPage = createNewPageElement(pages.length + 1);
@@ -913,7 +1265,7 @@ export const useExamManager = () => {
                           pages.push(currentPage);
 
                           currentPageContent = currentPage.querySelector('.print-page-content');
-                          currentPageContent.appendChild(clonedChild);
+                          currentPageContent.appendChild(nodeToAppend);
                       }
                   }
               }
@@ -925,7 +1277,7 @@ export const useExamManager = () => {
                   clonedSheet.style.color = '#000000';
                   currentPageContent.appendChild(clonedSheet);
 
-                  const limit = pages.length === 1 ? (maxPrintableHeight - headerHeight) : maxPrintableHeight;
+                  const limit = (pages.length === 1 ? (maxPrintableHeight - headerHeight) : maxPrintableHeight) - safetyBuffer;
                   if (currentPageContent.scrollHeight > limit) {
                       if (currentPageContent.children.length > 1) {
                           clonedSheet.remove();
@@ -944,7 +1296,78 @@ export const useExamManager = () => {
               const actualPageCount = pages.length;
 
               // Allow browser layout engine to fully paint offscreen elements
-              await new Promise(resolve => setTimeout(resolve, 300));
+              await new Promise(resolve => setTimeout(resolve, 50));
+
+              // Add vertical column rule lines to pages for html2canvas compatibility
+              const isGlobalColumns = (docSettings.columns || 1) > 1;
+              const showColBorder = (docSettings.sections || []).some(sec => sec.columns > 1 && sec.columnBorder) || (docSettings.columns > 1 && docSettings.columnBorder !== false);
+              const colCountLines = Math.max(docSettings.columns || 1, ...(docSettings.sections || []).map(sec => sec.columns || 1));
+              if (colCountLines > 1 && showColBorder) {
+                  const colGap = docSettings.columns > 1 ? (docSettings.colGap || 10) : ((docSettings.sections || []).find(sec => sec.columns > 1 && sec.colGap)?.colGap || docSettings.colGap || 10);
+                  const colGapPx = mmToPx(colGap);
+                  const contentWidth = w - paddingLeft - paddingRight;
+                  const colWidth = (contentWidth - (colCountLines - 1) * colGapPx) / colCountLines;
+
+                  for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
+                      const page = pages[pageIdx];
+                      const isPage1 = pageIdx === 0;
+
+                      if (isGlobalColumns) {
+                          for (let c = 1; c < colCountLines; c++) {
+                              const lineX = paddingLeft + c * colWidth + (c - 0.5) * colGapPx;
+                              const dividerLine = document.createElement('div');
+                              dividerLine.className = 'print-column-divider';
+                              dividerLine.style.position = 'absolute';
+                              dividerLine.style.left = `${lineX}px`;
+                              dividerLine.style.top = `${isPage1 ? (paddingTop + headerHeight) : paddingTop}px`;
+                              dividerLine.style.bottom = `${paddingBottom}px`;
+                              dividerLine.style.width = '0px';
+                              dividerLine.style.borderLeft = '1.5px solid #000000';
+                              dividerLine.style.pointerEvents = 'none';
+                              dividerLine.style.zIndex = '5';
+                              page.appendChild(dividerLine);
+                          }
+                      } else {
+                          // Draw section-specific column lines
+                          (docSettings.sections || []).forEach(sec => {
+                              if (sec.columns > 1 && sec.columnBorder) {
+                                  const qBlocks = Array.from(page.querySelectorAll(`[data-section-id="${sec.id}"][data-type="question-block"]`));
+                                  if (qBlocks.length > 0) {
+                                      let minTop = Infinity;
+                                      let maxBottom = -Infinity;
+
+                                      qBlocks.forEach(block => {
+                                          const blockRect = block.getBoundingClientRect();
+                                          const pageRect = page.getBoundingClientRect();
+                                          const topRel = blockRect.top - pageRect.top;
+                                          const bottomRel = blockRect.bottom - pageRect.top;
+
+                                          if (topRel < minTop) minTop = topRel;
+                                          if (bottomRel > maxBottom) maxBottom = bottomRel;
+                                      });
+
+                                      if (minTop !== Infinity && maxBottom !== -Infinity) {
+                                          for (let c = 1; c < colCountLines; c++) {
+                                              const lineX = paddingLeft + c * colWidth + (c - 0.5) * colGapPx;
+                                              const dividerLine = document.createElement('div');
+                                              dividerLine.className = 'print-column-divider';
+                                              dividerLine.style.position = 'absolute';
+                                              dividerLine.style.left = `${lineX}px`;
+                                              dividerLine.style.top = `${minTop}px`;
+                                              dividerLine.style.height = `${maxBottom - minTop}px`;
+                                              dividerLine.style.width = '0px';
+                                              dividerLine.style.borderLeft = '1.5px solid #000000';
+                                              dividerLine.style.pointerEvents = 'none';
+                                              dividerLine.style.zIndex = '5';
+                                              page.appendChild(dividerLine);
+                                          }
+                                      }
+                                  }
+                              }
+                          });
+                      }
+                  }
+              }
 
               // 6. Initialize jsPDF
               const pdf = new jsPDF({
@@ -957,6 +1380,9 @@ export const useExamManager = () => {
               for (let i = 0; i < actualPageCount; i++) {
                   setDownloadProgress(30 + Math.round((i / actualPageCount) * 55));
                   setDownloadStatus(uiLang === 'bn' ? `পৃষ্ঠা ${i + 1} প্রস্তুত করা হচ্ছে...` : `Preparing page ${i + 1}...`);
+
+                  // Yield control to the browser to prevent UI freezing and lag
+                  await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 50)));
 
                   const canvas = await html2canvas(pages[i], {
                       scale: 2, // 2x high resolution
@@ -995,7 +1421,8 @@ export const useExamManager = () => {
 
                   const pdfBlob = pdf.output('blob');
                   const formData = new FormData();
-                  const saveName = customFilename ? `${customFilename}.pdf` : `${docSettings.exam || 'exam'}-${id}.pdf`;
+                  const suffix = selectedSetName ? `-${selectedSetName}` : '';
+                  const saveName = customFilename ? `${customFilename}${suffix}.pdf` : `${docSettings.exam || 'exam'}${suffix}-${id}.pdf`;
                   formData.append('file', pdfBlob, saveName);
 
                   try {
@@ -1027,7 +1454,8 @@ export const useExamManager = () => {
                       queryString: queryString
                   }));
               } else {
-                  const saveName = customFilename ? `${customFilename}.pdf` : `${docSettings.exam || 'exam'}-${id}.pdf`;
+                  const suffix = selectedSetName ? `-${selectedSetName}` : '';
+                  const saveName = customFilename ? `${customFilename}${suffix}.pdf` : `${docSettings.exam || 'exam'}${suffix}-${id}.pdf`;
                   pdf.save(saveName);
                   
                   setDownloadProgress(100);

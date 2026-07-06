@@ -5,9 +5,11 @@ import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
 import useAcademicHierarchy from '../../../hooks/useAcademicHierarchy';
 import axios from '../../../utils/axios';
+import { useLanguage } from '../../../context/LanguageContext';
 
 const AutoExamGenerator = () => {
     const navigate = useNavigate();
+    const { t } = useLanguage();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
 
@@ -51,6 +53,69 @@ const AutoExamGenerator = () => {
     const [savingTemplate, setSavingTemplate] = useState(false);
     const [loadingTemplates, setLoadingTemplates] = useState(false);
 
+    // Advanced Sourcing and Filtration states
+    const [sourceMode, setSourceMode] = useState('ALL'); // ALL, FAVORITES, LECTURE_SHEETS
+    const [selectedLectureIds, setSelectedLectureIds] = useState([]);
+    const [availableLectures, setAvailableLectures] = useState([]);
+    const [loadingLectures, setLoadingLectures] = useState(false);
+
+    const [usePreviouslyUsed, setUsePreviouslyUsed] = useState(false);
+    const [usedPercent, setUsedPercent] = useState(30);
+
+    const [availableSourceTags, setAvailableSourceTags] = useState({ boards: [], years: [], schools: [] });
+    const [selectedBoards, setSelectedBoards] = useState([]);
+    const [selectedYears, setSelectedYears] = useState([]);
+    const [selectedSchools, setSelectedSchools] = useState([]);
+
+    // Fetch lectures when subject changes and lecture mode is active
+    useEffect(() => {
+        if (subjectId && sourceMode === 'LECTURE_SHEETS') {
+            const fetchLectures = async () => {
+                setLoadingLectures(true);
+                try {
+                    const { data } = await axios.get(`/v1/lectures/list?classSubjectId=${subjectId}&size=100`);
+                    if (data && data.data) {
+                        setAvailableLectures(data.data.content || []);
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch lectures", e);
+                } finally {
+                    setLoadingLectures(false);
+                }
+            };
+            fetchLectures();
+        } else {
+            setAvailableLectures([]);
+            setSelectedLectureIds([]);
+        }
+    }, [subjectId, sourceMode]);
+
+    // Fetch board/year/school source tags when subject changes
+    useEffect(() => {
+        if (subjectId) {
+            const fetchSourceTags = async () => {
+                try {
+                    const { data } = await axios.get(`/v1/questions/source-tags?classSubjectId=${subjectId}`);
+                    if (data) {
+                        setAvailableSourceTags({
+                            boards: data.boards || [],
+                            years: data.years || [],
+                            schools: data.schools || []
+                        });
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch source tags", e);
+                }
+            };
+            fetchSourceTags();
+        } else {
+            setAvailableSourceTags({ boards: [], years: [], schools: [] });
+            setSelectedBoards([]);
+            setSelectedYears([]);
+            setSelectedSchools([]);
+        }
+    }, [subjectId]);
+
     const availableLanguages = React.useMemo(() => {
         const langs = [];
         if (hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) {
@@ -80,13 +145,22 @@ const AutoExamGenerator = () => {
         }
     }, [availableLanguages, examInfo.language]);
 
-    // Fetch availability counters when subject or language changes
+    // Fetch availability counters when subject, language, or sourcing filters change
     useEffect(() => {
         if (subjectId) {
             const fetchAvailability = async () => {
                 setLoadingAvailability(true);
                 try {
-                    const { data } = await axios.get(`/v1/questions/availability?classSubjectId=${subjectId}&language=${examInfo.language}`);
+                    const params = {
+                        classSubjectId: subjectId,
+                        language: examInfo.language,
+                        sourceMode: sourceMode,
+                        lectureIds: sourceMode === 'LECTURE_SHEETS' ? selectedLectureIds : undefined,
+                        boards: selectedBoards.length > 0 ? selectedBoards : undefined,
+                        years: selectedYears.length > 0 ? selectedYears : undefined,
+                        schools: selectedSchools.length > 0 ? selectedSchools : undefined
+                    };
+                    const { data } = await axios.get('/v1/questions/availability', { params });
                     if (data) {
                         setAvailableCounts({
                             chapters: data.chapters || {},
@@ -103,7 +177,10 @@ const AutoExamGenerator = () => {
         } else {
             setAvailableCounts({ chapters: {}, topics: {} });
         }
-    }, [subjectId, examInfo.language]);
+    }, [
+        subjectId, examInfo.language, sourceMode, selectedLectureIds, 
+        selectedBoards, selectedYears, selectedSchools, step
+    ]);
 
     // Fetch blueprint templates on mount
     useEffect(() => {
@@ -319,10 +396,12 @@ const AutoExamGenerator = () => {
 
     // Calculate Targets
     const targetTotals = Object.entries(userStructure).reduce((acc, [type, struct]) => {
+        if (struct.enabled === false) return acc;
         const count = parseInt(struct.count) || 0;
         const marks = parseFloat(struct.marks) || 1;
+        const effectiveQsToAnswer = struct.questionsToAnswer ? (parseInt(struct.questionsToAnswer) || 0) : count;
         acc.qs += count;
-        acc.marks += (count * marks);
+        acc.marks += (effectiveQsToAnswer * marks);
         acc[type] = count;
         return acc;
     }, { qs: 0, marks: 0 });
@@ -395,7 +474,11 @@ const AutoExamGenerator = () => {
                 });
 
                 if (validRules.length > 0) {
-                    const matchedRule = validRules.find(r => (r.tags && r.tags.includes(selectedClassName)) || (r.content && r.content.includes(selectedClassName))) || validRules[0];
+                    const specificSubTag = subTag + '_' + selectedClassName.replace(/\s/g, '');
+                    const specificOrigSubTag = origSubTag + '_' + selectedClassName.replace(/\s/g, '');
+                    const matchedRule = validRules.find(r => r.tags && (r.tags.includes(specificSubTag) || r.tags.includes(specificOrigSubTag)))
+                                     || validRules.find(r => (r.tags && r.tags.includes(selectedClassName)) || (r.content && r.content.includes(selectedClassName)))
+                                     || validRules[0];
                     const schemaObj = JSON.parse(matchedRule.content);
                     let sections = [];
                     let initialStruct = {};
@@ -409,19 +492,24 @@ const AutoExamGenerator = () => {
                         });
                         schemaObj.forEach(r => {
                             let t = r.questionType === 'MULTIPLE_CHOICE' ? 'MCQ' : r.questionType === 'CREATIVE' ? 'CQ' : r.questionType === 'SHORT_ANSWER' ? 'SHORT' : r.questionType;
-                            initialStruct[t] = { count: 0, marks: r.marks || 1 };
+                            initialStruct[t] = { count: 0, marks: r.marks || 1, enabled: true };
                         });
                     } else {
                         sections = schemaObj.generation_blueprint?.mandatory_sections || [];
                         (schemaObj.scraping_rules || []).forEach(r => {
                             let t = r.questionType === 'MULTIPLE_CHOICE' ? 'MCQ' : r.questionType === 'CREATIVE' ? 'CQ' : r.questionType === 'SHORT_ANSWER' ? 'SHORT' : r.questionType;
-                            initialStruct[t] = { count: r.totalQuestions || 0, marks: r.marks || 1 };
+                            initialStruct[t] = { count: r.totalQuestions || 0, marks: r.marks || 1, enabled: true };
                         });
                         sections.forEach(sec => { 
+                            const sectionMarks = sec.marksPerQuestion || initialStruct[sec.type]?.marks || (sec.type === 'MCQ' ? 1 : 10);
+                            const qToAnswer = sec.questionsToAnswer || null;
                             if (!initialStruct[sec.type]) {
-                                initialStruct[sec.type] = { count: sec.question_count || 0, marks: 1 };
-                            } else if (sec.question_count && initialStruct[sec.type].count === 0) {
-                                initialStruct[sec.type].count = sec.question_count;
+                                initialStruct[sec.type] = { count: sec.question_count || 0, marks: sectionMarks, enabled: true, questionsToAnswer: qToAnswer };
+                            } else {
+                                if (sec.question_count) initialStruct[sec.type].count = sec.question_count;
+                                initialStruct[sec.type].marks = sectionMarks;
+                                initialStruct[sec.type].enabled = true;
+                                initialStruct[sec.type].questionsToAnswer = qToAnswer;
                             }
                         });
                     }
@@ -459,7 +547,10 @@ const AutoExamGenerator = () => {
         } catch (e) { console.error(e); } finally { setLoadingBlueprint(false); }
     };
 
-    const activeSections = dynamicSections.filter(sec => (parseInt(userStructure[sec.type]?.count) || 0) > 0);
+    const activeSections = dynamicSections.filter(sec => {
+        const struct = userStructure[sec.type];
+        return struct && struct.enabled !== false && (parseInt(struct.count) || 0) > 0;
+    });
 
     const toggleChapterExpand = async (chapterId) => {
         if (expandedChapters.includes(chapterId)) {
@@ -537,7 +628,11 @@ const AutoExamGenerator = () => {
                         const merged = { ...prev };
                         Object.keys(parsed.userStructure).forEach(k => {
                             if (merged[k]) {
-                                merged[k] = { ...merged[k], ...parsed.userStructure[k] };
+                                merged[k] = { 
+                                    ...merged[k], 
+                                    ...parsed.userStructure[k],
+                                    enabled: parsed.userStructure[k].enabled !== false
+                                };
                             }
                         });
                         return merged;
@@ -601,12 +696,14 @@ const AutoExamGenerator = () => {
         try {
             let qTypes = [];
             Object.entries(userStructure).forEach(([type, struct]) => {
+                if (struct.enabled === false) return;
                 const count = parseInt(struct.count) || 0;
                 if (count > 0) {
                     qTypes.push({
                         questionType: type,
                         count: count,
-                        marksPerQuestion: parseFloat(struct.marks) || 1
+                        marksPerQuestion: parseFloat(struct.marks) || 1,
+                        questionsToAnswer: struct.questionsToAnswer ? parseInt(struct.questionsToAnswer) : null
                     });
                 }
             });
@@ -620,7 +717,16 @@ const AutoExamGenerator = () => {
                 durationMinutes: parseInt(examInfo.duration),
                 language: examInfo.language,
                 instructions: "",
-                instituteName: JSON.parse(localStorage.getItem('user') || '{}').instituteName || "",
+                instituteName: (() => {
+                    const u = JSON.parse(localStorage.getItem('user') || '{}');
+                    const lang = examInfo.language;
+                    if (lang === 'English' && u.instituteNameEn) {
+                        return u.instituteNameEn;
+                    } else if (lang === 'Bangla' && u.instituteNameBn) {
+                        return u.instituteNameBn;
+                    }
+                    return u.instituteName || "";
+                })(),
                 headerText: "",
                 shuffleQuestions: true,
                 shuffleOptions: true,
@@ -633,7 +739,13 @@ const AutoExamGenerator = () => {
                 comprehensionPercent: bloomDistribution.comprehension,
                 applicationPercent: bloomDistribution.application,
                 higherOrderPercent: bloomDistribution.higherOrder,
-                questionTypeRules: qTypes
+                questionTypeRules: qTypes,
+                sourceMode: sourceMode,
+                lectureIds: sourceMode === 'LECTURE_SHEETS' ? selectedLectureIds : undefined,
+                usedPercent: usePreviouslyUsed ? parseInt(usedPercent) : null,
+                boards: selectedBoards.length > 0 ? selectedBoards : undefined,
+                years: selectedYears.length > 0 ? selectedYears.map(y => parseInt(y)) : undefined,
+                schools: selectedSchools.length > 0 ? selectedSchools : undefined
             });
 
             if (res.success) {
@@ -744,6 +856,239 @@ const AutoExamGenerator = () => {
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Sourcing & Filtering Card */}
+                                <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 space-y-6 animate-in fade-in duration-300">
+                                    <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+                                        <Sparkles className="text-violet-500" /> {t('question_source_filtering')}
+                                    </h2>
+
+                                    {/* 1. Question Source Modes */}
+                                    <div>
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 block pl-1">{t('question_source')}</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            {/* All Bank */}
+                                            <button
+                                                type="button"
+                                                onClick={() => setSourceMode('ALL')}
+                                                className={`p-4 rounded-2xl border text-left transition-all ${sourceMode === 'ALL' ? 'border-violet-500 bg-violet-50/30 ring-2 ring-violet-500/10' : 'border-slate-150 hover:border-slate-250 bg-slate-50/30'}`}
+                                            >
+                                                <div className="font-extrabold text-sm text-slate-800">{t('any_question_bank')}</div>
+                                                <div className="text-xs text-slate-450 mt-1">{t('any_question_bank_desc')}</div>
+                                            </button>
+
+                                            {/* My Favorites */}
+                                            <button
+                                                type="button"
+                                                onClick={() => setSourceMode('FAVORITES')}
+                                                className={`p-4 rounded-2xl border text-left transition-all ${sourceMode === 'FAVORITES' ? 'border-violet-500 bg-violet-50/30 ring-2 ring-violet-500/10' : 'border-slate-150 hover:border-slate-250 bg-slate-50/30'}`}
+                                            >
+                                                <div className="font-extrabold text-sm text-slate-800">{t('my_favorites')}</div>
+                                                <div className="text-xs text-slate-450 mt-1">{t('my_favorites_desc')}</div>
+                                            </button>
+
+                                            {/* Lecture Sheets */}
+                                            <button
+                                                type="button"
+                                                disabled={!subjectId}
+                                                onClick={() => setSourceMode('LECTURE_SHEETS')}
+                                                className={`p-4 rounded-2xl border text-left transition-all ${sourceMode === 'LECTURE_SHEETS' ? 'border-violet-500 bg-violet-50/30 ring-2 ring-violet-500/10' : 'border-slate-150 hover:border-slate-250 bg-slate-50/30'} disabled:opacity-40`}
+                                            >
+                                                <div className="font-extrabold text-sm text-slate-800">{t('from_lecture_sheets')}</div>
+                                                <div className="text-xs text-slate-450 mt-1">{t('from_lecture_sheets_desc')}</div>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Lecture Sheet Selector */}
+                                    {sourceMode === 'LECTURE_SHEETS' && (
+                                        <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-slate-50/50 p-5 rounded-2xl border border-slate-150 space-y-3">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block pl-1">{t('select_lecture_sheets')}</label>
+                                            {loadingLectures ? (
+                                                <div className="py-4 flex items-center gap-2 justify-center text-violet-500 text-xs font-bold">
+                                                    <Loader2 size={16} className="animate-spin" />
+                                                    <span>{t('loading_lecture_sheets')}</span>
+                                                </div>
+                                            ) : availableLectures.length === 0 ? (
+                                                <div className="text-center py-4 text-xs font-bold text-slate-400">{t('no_lecture_sheets_found')}</div>
+                                            ) : (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                                    {availableLectures.map(lec => {
+                                                        const isSelected = selectedLectureIds.includes(lec.id);
+                                                        return (
+                                                            <button
+                                                                type="button"
+                                                                key={lec.id}
+                                                                onClick={() => {
+                                                                    setSelectedLectureIds(prev =>
+                                                                        isSelected ? prev.filter(id => id !== lec.id) : [...prev, lec.id]
+                                                                    );
+                                                                }}
+                                                                className={`p-3 rounded-xl border text-left text-xs font-bold flex items-center justify-between transition-all ${isSelected ? 'border-violet-500 bg-white text-violet-700 shadow-sm' : 'border-slate-150 bg-white hover:border-slate-250 text-slate-650'}`}
+                                                            >
+                                                                <span className="truncate">{lec.title}</span>
+                                                                <span className={`w-4 h-4 rounded-full flex items-center justify-center border text-[9px] ${isSelected ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200 bg-slate-50'}`}>
+                                                                    {isSelected && "✓"}
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* 2. Previously Used Questions Toggle & Slider */}
+                                    <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-150 space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <div className="font-extrabold text-sm text-slate-800">{t('prev_used_questions_filter')}</div>
+                                                <div className="text-xs text-slate-450 mt-0.5">{t('prev_used_questions_desc')}</div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setUsePreviouslyUsed(!usePreviouslyUsed)}
+                                                className={`relative inline-flex h-5.5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-205 ease-in-out focus:outline-none ${
+                                                    usePreviouslyUsed ? 'bg-violet-600' : 'bg-slate-350'
+                                                }`}
+                                            >
+                                                <span
+                                                    className={`pointer-events-none inline-block h-4.5 w-4.5 transform rounded-full bg-white shadow ring-0 transition duration-205 ease-in-out ${
+                                                        usePreviouslyUsed ? 'translate-x-4.5' : 'translate-x-0'
+                                                    }`}
+                                                />
+                                            </button>
+                                        </div>
+
+                                        {usePreviouslyUsed && (
+                                            <div className="animate-in fade-in slide-in-from-top-2 duration-300 pl-1 space-y-2">
+                                                <div className="flex justify-between items-center text-xs font-bold">
+                                                    <span className="text-slate-500">{t('prev_used_questions_rate')}</span>
+                                                    <span className="text-violet-600 font-extrabold bg-violet-50 px-2 py-0.5 rounded-lg border border-violet-100">{usedPercent}%</span>
+                                                </div>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="100"
+                                                    step="5"
+                                                    value={usedPercent}
+                                                    onChange={e => setUsedPercent(parseInt(e.target.value))}
+                                                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-violet-600 focus:outline-none"
+                                                />
+                                                <div className="flex justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                                                    <span>{t('prev_used_questions_0')}</span>
+                                                    <span>{t('prev_used_questions_50')}</span>
+                                                    <span>{t('prev_used_questions_100')}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 3. Board / Year / School Source Filters */}
+                                    <div className="space-y-4">
+                                        <div className="font-extrabold text-sm text-slate-800 pl-1">{t('board_year_school_filter_optional')}</div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            {/* Boards */}
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">{t('boards')}</label>
+                                                <div className="max-h-36 overflow-y-auto custom-scrollbar p-3 bg-slate-50/50 border border-slate-200 rounded-xl space-y-1.5">
+                                                    {availableSourceTags.boards.length === 0 ? (
+                                                        <span className="text-[11px] text-slate-400 font-bold italic block py-2 text-center">{t('no_boards')}</span>
+                                                    ) : (
+                                                        availableSourceTags.boards.map(board => {
+                                                            const name = board.name || board;
+                                                            const count = board.count;
+                                                            const isSelected = selectedBoards.includes(name);
+                                                            return (
+                                                                <button
+                                                                    type="button"
+                                                                    key={name}
+                                                                    onClick={() => {
+                                                                        setSelectedBoards(prev =>
+                                                                            isSelected ? prev.filter(b => b !== name) : [...prev, name]
+                                                                        );
+                                                                    }}
+                                                                    className={`w-full p-2 text-left rounded-lg text-xs font-bold border transition-all flex items-center justify-between ${isSelected ? 'border-violet-500 bg-white text-violet-700' : 'border-slate-150 bg-white hover:border-slate-250 text-slate-650'}`}
+                                                                >
+                                                                    <span className="truncate">{name} <span className="text-[10px] text-slate-400 font-medium">({count})</span></span>
+                                                                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border text-[8px] ${isSelected ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200'}`}>
+                                                                        {isSelected && "✓"}
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Years */}
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">{t('exam_years')}</label>
+                                                <div className="max-h-36 overflow-y-auto custom-scrollbar p-3 bg-slate-50/50 border border-slate-200 rounded-xl space-y-1.5">
+                                                    {availableSourceTags.years.length === 0 ? (
+                                                        <span className="text-[11px] text-slate-400 font-bold italic block py-2 text-center">{t('no_years')}</span>
+                                                    ) : (
+                                                        availableSourceTags.years.map(year => {
+                                                            const name = year.name || year;
+                                                            const count = year.count;
+                                                            const isSelected = selectedYears.includes(parseInt(name));
+                                                            return (
+                                                                <button
+                                                                    type="button"
+                                                                    key={name}
+                                                                    onClick={() => {
+                                                                        setSelectedYears(prev =>
+                                                                            isSelected ? prev.filter(y => y !== parseInt(name)) : [...prev, parseInt(name)]
+                                                                        );
+                                                                    }}
+                                                                    className={`w-full p-2 text-left rounded-lg text-xs font-bold border transition-all flex items-center justify-between ${isSelected ? 'border-violet-500 bg-white text-violet-700' : 'border-slate-150 bg-white hover:border-slate-250 text-slate-650'}`}
+                                                                >
+                                                                    <span>{name} <span className="text-[10px] text-slate-400 font-medium">({count})</span></span>
+                                                                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border text-[8px] ${isSelected ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200'}`}>
+                                                                        {isSelected && "✓"}
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Schools */}
+                                            <div>
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">{t('schools')}</label>
+                                                <div className="max-h-36 overflow-y-auto custom-scrollbar p-3 bg-slate-50/50 border border-slate-200 rounded-xl space-y-1.5">
+                                                    {availableSourceTags.schools.length === 0 ? (
+                                                        <span className="text-[11px] text-slate-400 font-bold italic block py-2 text-center">{t('no_schools')}</span>
+                                                    ) : (
+                                                        availableSourceTags.schools.map(school => {
+                                                            const name = school.name || school;
+                                                            const count = school.count;
+                                                            const isSelected = selectedSchools.includes(name);
+                                                            return (
+                                                                <button
+                                                                    type="button"
+                                                                    key={name}
+                                                                    onClick={() => {
+                                                                        setSelectedSchools(prev =>
+                                                                            isSelected ? prev.filter(s => s !== name) : [...prev, name]
+                                                                        );
+                                                                    }}
+                                                                    className={`w-full p-2 text-left rounded-lg text-xs font-bold border transition-all flex items-center justify-between ${isSelected ? 'border-violet-500 bg-white text-violet-700' : 'border-slate-150 bg-white hover:border-slate-250 text-slate-650'}`}
+                                                                >
+                                                                    <span className="truncate">{name} <span className="text-[10px] text-slate-400 font-medium">({count})</span></span>
+                                                                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border text-[8px] ${isSelected ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200'}`}>
+                                                                        {isSelected && "✓"}
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* RIGHT: Blueprint Structure */}
@@ -774,24 +1119,97 @@ const AutoExamGenerator = () => {
                                             </div>
                                         ) : (
                                             <div className="space-y-4">
-                                                {dynamicSections.map(sec => (
-                                                    <div key={sec.type} className="bg-slate-50 rounded-2xl p-4 border border-slate-100 hover:border-violet-200 transition-all hover:shadow-sm">
-                                                        <div className="flex justify-between items-center mb-3">
-                                                            <div className="font-bold text-slate-800">{sec.name}</div>
-                                                            <div className="text-[10px] font-black bg-violet-100 text-violet-700 px-2 py-1 rounded uppercase">{sec.type}</div>
-                                                        </div>
-                                                        <div className="flex gap-3">
-                                                            <div className="flex-1">
-                                                                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Target Qs</label>
-                                                                <input type="number" min="0" value={userStructure[sec.type]?.count ?? ""} onChange={e => setUserStructure({...userStructure, [sec.type]: { ...userStructure[sec.type], count: e.target.value }})} className="w-full bg-white border border-slate-200 rounded-xl p-2 text-center font-black text-slate-700 outline-none focus:border-violet-500" />
+                                                {dynamicSections.map(sec => {
+                                                    const isEnabled = userStructure[sec.type]?.enabled !== false;
+                                                    return (
+                                                        <div 
+                                                            key={sec.type} 
+                                                            className={`bg-slate-50 rounded-2xl p-4 border transition-all ${
+                                                                isEnabled 
+                                                                    ? 'border-slate-100 hover:border-violet-200 hover:shadow-sm' 
+                                                                    : 'border-slate-200 opacity-60 bg-slate-100/30'
+                                                            }`}
+                                                        >
+                                                            <div className="flex justify-between items-center mb-3">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={`font-bold transition-colors ${isEnabled ? 'text-slate-800' : 'text-slate-400 line-through decoration-slate-350'}`}>{sec.name}</div>
+                                                                    <div className="text-[10px] font-black bg-violet-100 text-violet-700 px-2 py-1 rounded uppercase shrink-0">{sec.type}</div>
+                                                                </div>
+                                                                {/* iOS-Style Premium Toggle Switch */}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setUserStructure(prev => ({
+                                                                            ...prev,
+                                                                            [sec.type]: {
+                                                                                ...prev[sec.type],
+                                                                                enabled: !isEnabled
+                                                                            }
+                                                                        }));
+                                                                    }}
+                                                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 ${
+                                                                        isEnabled ? 'bg-violet-600' : 'bg-slate-300'
+                                                                    }`}
+                                                                >
+                                                                    <span
+                                                                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-205 ease-in-out ${
+                                                                            isEnabled ? 'translate-x-4' : 'translate-x-0'
+                                                                        }`}
+                                                                    />
+                                                                </button>
                                                             </div>
-                                                            <div className="flex-1">
-                                                                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Marks/Q</label>
-                                                                <input type="number" min="1" value={userStructure[sec.type]?.marks ?? ""} onChange={e => setUserStructure({...userStructure, [sec.type]: { ...userStructure[sec.type], marks: e.target.value }})} className="w-full bg-white border border-slate-200 rounded-xl p-2 text-center font-black text-slate-700 outline-none focus:border-violet-500" />
+                                                            <div className="flex gap-3">
+                                                                <div className="flex-1">
+                                                                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Target Qs</label>
+                                                                    <input 
+                                                                        type="number" 
+                                                                        min="0" 
+                                                                        disabled={!isEnabled}
+                                                                        value={userStructure[sec.type]?.count ?? ""} 
+                                                                        onChange={e => setUserStructure({...userStructure, [sec.type]: { ...userStructure[sec.type], count: e.target.value }})} 
+                                                                        className={`w-full border rounded-xl p-2 text-center font-black outline-none transition-all ${
+                                                                            isEnabled 
+                                                                                ? 'bg-white border-slate-200 text-slate-700 focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10' 
+                                                                                : 'bg-slate-100/50 border-slate-200 text-slate-400 cursor-not-allowed'
+                                                                        }`}
+                                                                    />
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Marks/Q</label>
+                                                                    <input 
+                                                                        type="number" 
+                                                                        min="1" 
+                                                                        disabled={!isEnabled}
+                                                                        value={userStructure[sec.type]?.marks ?? ""} 
+                                                                        onChange={e => setUserStructure({...userStructure, [sec.type]: { ...userStructure[sec.type], marks: e.target.value }})} 
+                                                                        className={`w-full border rounded-xl p-2 text-center font-black outline-none transition-all ${
+                                                                            isEnabled 
+                                                                                ? 'bg-white border-slate-200 text-slate-700 focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10' 
+                                                                                : 'bg-slate-100/50 border-slate-200 text-slate-400 cursor-not-allowed'
+                                                                        }`}
+                                                                    />
+                                                                </div>
+                                                                {userStructure[sec.type]?.questionsToAnswer !== undefined && (
+                                                                    <div className="flex-1">
+                                                                        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">To Answer</label>
+                                                                        <input 
+                                                                            type="number" 
+                                                                            min="1" 
+                                                                            disabled={!isEnabled}
+                                                                            value={userStructure[sec.type]?.questionsToAnswer ?? ""} 
+                                                                            onChange={e => setUserStructure({...userStructure, [sec.type]: { ...userStructure[sec.type], questionsToAnswer: e.target.value }})} 
+                                                                            className={`w-full border rounded-xl p-2 text-center font-black outline-none transition-all ${
+                                                                                isEnabled 
+                                                                                    ? 'bg-white border-slate-200 text-slate-700 focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10' 
+                                                                                    : 'bg-slate-100/50 border-slate-200 text-slate-400 cursor-not-allowed'
+                                                                            }`}
+                                                                        />
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
 
                                                 <div className="mt-6 pt-6 border-t border-slate-100">
                                                     <div className="bg-slate-800 text-white rounded-2xl p-5 shadow-lg shadow-slate-800/20">

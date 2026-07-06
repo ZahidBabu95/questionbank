@@ -411,11 +411,15 @@ const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
             transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
             visibility: (isMobileApp && !isRightPanelOpen) ? 'hidden' : 'visible'
         }}
-             className={`${!isDraggingRight ? 'transition-all' : ''} border-l border-slate-200 shrink-0 flex flex-col z-30 absolute lg:relative right-0 top-0 h-full shadow-2xl lg:shadow-none rounded-l-2xl lg:rounded-none overflow-hidden print:hidden`}>
+             className={`${!isDraggingRight ? 'transition-all' : ''} border-l border-slate-200 shrink-0 flex flex-col top-0 right-0 h-full overflow-hidden print:hidden ${
+                 isMobileApp 
+                     ? 'absolute z-30 shadow-2xl rounded-l-2xl' 
+                     : 'relative shadow-none'
+             }`}>
             
             {/* Resize Handle */}
             <div onMouseDown={() => setIsDraggingRight(true)}
-                 className={`absolute top-0 left-[-3px] w-[6px] h-full cursor-col-resize z-40 hidden lg:block transition-colors hover:bg-indigo-400 ${isDraggingRight ? 'bg-indigo-500' : 'bg-transparent'}`} />
+                 className={`absolute top-0 left-[-3px] w-[6px] h-full cursor-col-resize z-40 transition-colors hover:bg-indigo-400 ${!isMobileApp ? 'block' : 'hidden'} ${isDraggingRight ? 'bg-indigo-500' : 'bg-transparent'}`} />
 
             <div className="h-full flex flex-col bg-white w-full">
                 <div className="p-3 border-b border-slate-100 bg-slate-50 shrink-0 flex items-center justify-between">
@@ -429,7 +433,7 @@ const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {activeTab !== 'templates' && activeTab !== 'imageProps' && activeTab !== 'image' && (
-                        <SettingsPanel s={docSettings} u={updateSetting} uMulti={updateMultiSettings} activeTab={activeTab} uiLang={uiLang} />
+                        <SettingsPanel s={docSettings} u={updateSetting} uMulti={updateMultiSettings} activeTab={activeTab} uiLang={uiLang} documentQuestions={documentQuestions} />
                     )}
 
                     {activeTab === 'imageProps' && selectedImageConfig && (

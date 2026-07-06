@@ -46,9 +46,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authenticationToken);
 
-            System.out.println("DEBUG AUTH: User '" + username + "' authenticated in filter.");
-            System.out.println("DEBUG AUTH: Authorities: " + userDetails.getAuthorities());
-
             if (userDetails instanceof CustomUserDetails) {
                 TenantContext.setTenantId(((CustomUserDetails) userDetails).getTenantId());
             }

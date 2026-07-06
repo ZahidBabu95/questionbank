@@ -36,7 +36,7 @@ public class AiExtractionScheduler {
     public static volatile int currentWorkerSize = 6;
     private final ThreadPoolTaskExecutor workerPool = new ThreadPoolTaskExecutor();
 
-    @PostConstruct
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
     public void init() {
         // Load worker size from DB if exists
         settingRepository.findByTenantIdIsNullAndKey("AI_WORKER_POOL_SIZE").ifPresent(setting -> {

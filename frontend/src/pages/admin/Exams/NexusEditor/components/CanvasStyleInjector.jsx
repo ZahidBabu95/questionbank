@@ -1,6 +1,44 @@
 import React, { memo } from 'react';
 
+const getFontFallback = (fontName) => {
+    if (!fontName) return 'serif';
+    const name = fontName.toLowerCase();
+    if (name.includes('serif') || name.includes('tiro') || name.includes('times')) {
+        return 'serif';
+    }
+    return 'sans-serif';
+};
+
 const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
+    const bnFallback = getFontFallback(s.bnFont || 'Noto Serif Bengali');
+    const enFallback = getFontFallback(s.enFont || 'Times New Roman');
+    const bodyFallback = s.language === 'ENGLISH' ? enFallback : bnFallback;
+
+    // Calculate column settings according to global vs section columns priority
+    const globalColCount = Number(s.columns) || 1;
+    const isGlobalColActive = globalColCount > 1;
+
+    let totalColumns = 1;
+    let colGap = s.colGap || 10;
+    let hasColumnBorder = false;
+
+    if (isGlobalColActive) {
+        totalColumns = globalColCount;
+        hasColumnBorder = s.columnBorder !== false;
+    } else {
+        const maxSectionCol = Math.max(1, ...(s.sections || []).map(sec => Number(sec.columns) || 1));
+        totalColumns = maxSectionCol;
+        
+        const sectionWithGap = (s.sections || []).find(sec => (Number(sec.columns) || 1) > 1 && sec.colGap);
+        if (sectionWithGap) {
+            colGap = sectionWithGap.colGap;
+        }
+        
+        hasColumnBorder = (s.sections || []).some(sec => (Number(sec.columns) || 1) > 1 && sec.columnBorder);
+    }
+
+    const headerSpanVal = isGlobalColActive ? 'none' : 'all';
+
     return (
         <style dangerouslySetInnerHTML={{ __html: `
             .strict-analytics-mode {
@@ -18,7 +56,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             .ProseMirror *,
             .paper-canvas-container,
             .paper-canvas-container * {
-                font-family: '${s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali')}', sans-serif;
+                font-family: '${s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali')}', ${bodyFallback};
             }
             
             .ProseMirror {
@@ -32,14 +70,23 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 padding: 0 !important;
                 
                 /* Column Support */
-                ${Math.max(s.columns || 1, ...(s.sections || []).map(sec => sec.columns || 1)) > 1 ? `
-                column-count: ${Math.max(s.columns || 1, ...(s.sections || []).map(sec => sec.columns || 1))};
-                column-gap: ${mmToPx(s.columns > 1 ? (s.colGap || 10) : ((s.sections || []).find(sec => sec.columns > 1 && sec.colGap)?.colGap || s.colGap || 10))}px;
-                ${(s.sections || []).some(sec => sec.columns > 1 && sec.columnBorder) || (s.columns > 1 && s.columnBorder !== false) ? 'column-rule: 1.5px solid #000000;' : ''}
+                ${totalColumns > 1 ? `
+                column-count: ${totalColumns};
+                column-gap: ${mmToPx(colGap)}px;
+                ${hasColumnBorder ? 'column-rule: 1.5px solid #000000;' : ''}
                 column-fill: balance !important;
                 ` : ''}
                 
                 counter-reset: question-counter;
+            }
+
+            .ProseMirror::after {
+                content: "";
+                display: block;
+                clear: both;
+                height: 0;
+                column-span: all !important;
+                -webkit-column-span: all !important;
             }
 
             .nexus-native-header-portal-container {
@@ -53,10 +100,8 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 page-break-after: avoid !important;
                 
                 /* Column span and background stacking */
-                ${(s.columns || 1) === 1 ? `
-                column-span: all !important;
-                -webkit-column-span: all !important;
-                ` : ''}
+                column-span: ${headerSpanVal} !important;
+                -webkit-column-span: ${headerSpanVal} !important;
                 position: relative !important;
                 z-index: 10 !important;
                 background-color: #ffffff !important;
@@ -69,10 +114,8 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             }
 
             .nexus-native-header {
-                ${(!s.columns || s.columns === 1) ? `
-                column-span: all !important;
-                -webkit-column-span: all !important;
-                ` : ''}
+                column-span: ${headerSpanVal} !important;
+                -webkit-column-span: ${headerSpanVal} !important;
                 display: block !important;
             }
             .ProseMirror:focus {
@@ -100,6 +143,48 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             
             .show-answers-detailed .nexus-detailed-answer-block {
                 display: block !important;
+            }
+            
+            /* Inline answer/explanation display - controlled by metadata settings */
+            .show-answers-inline .nexus-detailed-answer-block {
+                display: block !important;
+                border-top: none !important;
+                padding-top: 4px !important;
+                margin-top: 4px !important;
+            }
+            .show-answers-inline .nexus-detailed-answer-block .explanation-block {
+                display: none !important;
+            }
+            .show-answers-inline.show-explanation-inline .nexus-detailed-answer-block {
+                display: block !important;
+            }
+            .show-answers-inline.show-explanation-inline .nexus-detailed-answer-block .explanation-block {
+                display: flex !important;
+            }
+            .show-explanation-inline:not(.show-answers-inline) .nexus-detailed-answer-block {
+                display: block !important;
+            }
+            .show-explanation-inline:not(.show-answers-inline) .nexus-detailed-answer-block .nexus-answer-line,
+            .show-explanation-inline:not(.show-answers-inline) .nexus-detailed-answer-block > div:first-child {
+                display: none !important;
+            }
+            
+            /* Source badge visible in print when show-sources is on */
+            .show-sources-inline .nexus-source-badge {
+                display: inline-block !important;
+                font-size: 0.85em !important;
+                font-weight: normal !important;
+                color: #475569 !important;
+                margin-left: 0.4em !important;
+                background: none !important;
+                border: none !important;
+                padding: 0 !important;
+            }
+            @media print {
+                .show-sources-inline .nexus-source-badge {
+                    display: inline-block !important;
+                    color: #000000 !important;
+                }
             }
             
             /* Compact Answer Sheet Marking */
@@ -156,6 +241,9 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 const needsReset = sec.continuousNumbering === false;
                 const resetVal = (Number(sec.numberingStart) || 1) - 1;
 
+                const secFont = sec.fontFamily || (s.language === 'ENGLISH' || sec.numberingStyle === 'en' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'));
+                const secFallback = getFontFallback(secFont);
+
                 return `
                 ${sec.showName === false ? `
                     [data-section-id="${sec.id}"].section-name {
@@ -177,11 +265,8 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                         ${sec.nameFontSize ? `font-size: ${sec.nameFontSize}px !important;` : ''}
                         line-height: 1.25 !important;
                         
-                        /* Stacking to prevent column-rule cut-through */
-                        position: relative !important;
-                        z-index: 10 !important;
                         ${!(sec.nameBg === true || (sec.nameBg !== false && s.sectionStyle === 'কালো ব্যাকগ্রাউন্ড')) 
-                            ? 'background-color: #ffffff !important;' 
+                            ? 'background-color: transparent !important;' 
                             : ''}
                         
                         /* Background */
@@ -225,13 +310,51 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 /* Section Question Blocks (including all child elements) */
                 [data-section-id="${sec.id}"][data-type="question-block"],
                 [data-section-id="${sec.id}"][data-type="question-block"] * {
-                    font-family: '${sec.fontFamily || (s.language === 'ENGLISH' || sec.numberingStyle === 'en' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'))}', sans-serif !important;
+                    font-family: '${secFont}', ${secFallback} !important;
                     font-size: ${ptToPx(sec.fontSize || s.bodyFontSize || 14)}px !important;
                 }
                 
                 [data-section-id="${sec.id}"][data-type="question-block"] {
                     line-height: ${cLineGap} !important;
                     margin-bottom: ${cQuestionGap}px !important;
+                }
+                
+                /* Child text tags inherit line gap perfectly to prevent extra gap in p/span tags inside editor */
+                [data-section-id="${sec.id}"][data-type="question-block"] p,
+                [data-section-id="${sec.id}"][data-type="question-block"] div,
+                [data-section-id="${sec.id}"][data-type="question-block"] span,
+                [data-section-id="${sec.id}"][data-type="question-block"] li {
+                    line-height: inherit !important;
+                }
+
+                /* Synchronize Multiple Completion / Polynomial statements gap with section parameters */
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-statements-container {
+                    margin-top: 0.15em !important;
+                    margin-bottom: 0.15em !important;
+                    padding-left: 1.5em !important;
+                    column-span: all !important;
+                    -webkit-column-span: all !important;
+                }
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-statements-list {
+                    display: flex !important;
+                    flex-direction: column !important;
+                    gap: 0px !important;
+                }
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-statement-item {
+                    margin-bottom: 0px !important;
+                    line-height: ${cLineGap} !important;
+                }
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-statement-item *,
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-statement-text,
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-statement-text * {
+                    line-height: ${cLineGap} !important;
+                }
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-statement-text p,
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-statement-text span,
+                [data-section-id="${sec.id}"][data-type="question-block"] .cq-statement-text div {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    line-height: ${cLineGap} !important;
                 }
                 
                 [data-section-id="${sec.id}"][data-type="question-block"] .cq-question-layout {
@@ -269,7 +392,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 [data-section-id="${sec.id}"].section-conditions *,
                 [data-section-id="${sec.id}"].section-instructions,
                 [data-section-id="${sec.id}"].section-instructions * {
-                    font-family: '${sec.fontFamily || (s.language === 'ENGLISH' || sec.numberingStyle === 'en' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'))}', sans-serif !important;
+                    font-family: '${secFont}', ${secFallback} !important;
                 }
                 ${sec.showConditions === false ? `[data-section-id="${sec.id}"].section-conditions { display: none !important; }` : `
                     [data-section-id="${sec.id}"].section-conditions {
@@ -278,10 +401,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                         text-decoration: ${sec.condUnderline ? 'underline' : 'none'};
                         ${sec.condFontSize ? `font-size: ${sec.condFontSize}px !important;` : ''}
                         
-                        /* Stacking to prevent column-rule cut-through */
-                        position: relative !important;
-                        z-index: 10 !important;
-                        ${!sec.condBg ? 'background-color: #ffffff !important;' : ''}
+                        ${!sec.condBg ? 'background-color: transparent !important;' : ''}
                         
                         ${sec.condBg ? `background-color: #000000 !important; color: #ffffff !important; padding: 6px 10px; border-radius: 4px; display: block;` : ''}
                         ${sec.condDivider ? `border-bottom: 1px solid #000000; padding-bottom: 6px; display: block;` : ''}
@@ -302,10 +422,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                         text-decoration: ${sec.instUnderline ? 'underline' : 'none'};
                         ${sec.instFontSize ? `font-size: ${sec.instFontSize}px !important;` : ''}
                         
-                        /* Stacking to prevent column-rule cut-through */
-                        position: relative !important;
-                        z-index: 10 !important;
-                        ${!sec.instBg ? 'background-color: #ffffff !important;' : ''}
+                        ${!sec.instBg ? 'background-color: transparent !important;' : ''}
                         
                         ${sec.instBg ? `background-color: #000000 !important; color: #ffffff !important; padding: 6px 10px; border-radius: 4px; display: block;` : ''}
                         ${sec.instDivider ? `border-bottom: 1px solid #000000; padding-bottom: 6px; display: block;` : ''}
@@ -321,22 +438,14 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                     }
                 `}
                 
-                /* Ensure Headers, Instructions, and Conditions Span All Columns if global columns not active */
-                ${(s.columns || 1) === 1 ? `
+                /* Ensure Headers, Instructions, and Conditions Span All Columns conditionally */
                 [data-section-id="${sec.id}"].section-name
                 ${sec.showConditions !== false ? `, [data-section-id="${sec.id}"].section-conditions` : ''}
                 ${sec.showInstructions !== false ? `, [data-section-id="${sec.id}"].section-instructions` : ''} {
-                    column-span: all !important;
-                    -webkit-column-span: all !important;
+                    column-span: ${headerSpanVal} !important;
+                    -webkit-column-span: ${headerSpanVal} !important;
                     display: block !important;
                 }
-                ` : `
-                [data-section-id="${sec.id}"].section-name
-                ${sec.showConditions !== false ? `, [data-section-id="${sec.id}"].section-conditions` : ''}
-                ${sec.showInstructions !== false ? `, [data-section-id="${sec.id}"].section-instructions` : ''} {
-                    display: block !important;
-                }
-                `}
                 [data-section-id="${sec.id}"].section-name {
                     line-height: 1.25 !important;
                 }
@@ -372,7 +481,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 ` : ''}
                 
                 /* 1-Column Section Question Blocks Spanning All Columns */
-                ${((s.columns || 1) === 1 && (sec.columns || 1) === 1) ? `
+                ${(!isGlobalColActive && (sec.columns || 1) === 1) ? `
                 [data-section-id="${sec.id}"][data-type="question-block"] {
                     column-span: all !important;
                     -webkit-column-span: all !important;
@@ -407,7 +516,8 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             }
             
             /* Reset paragraph margins inside editor to avoid prose inheritance */
-            .ProseMirror p {
+            .ProseMirror p,
+            [data-type="question-block"] p {
                 margin-top: 0 !important;
                 margin-bottom: 0 !important;
             }
@@ -457,13 +567,69 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             .theme-dark .nexus-question-wrapper {
                 border-color: #334155 !important;
             }
+
+            /* Custom Page Break Node Styling */
+            .page-break {
+                column-span: all !important;
+                -webkit-column-span: all !important;
+                break-before: page !important;
+                page-break-before: always !important;
+                height: 24px;
+                border-top: 2px dashed #6366f1;
+                margin: 20px 0;
+                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                user-select: none;
+            }
+            .page-break::after {
+                content: "Page Break / পৃষ্ঠা বিভাজক";
+                position: absolute;
+                background: #e0e7ff;
+                color: #4f46e5;
+                font-size: 10px;
+                font-weight: bold;
+                padding: 2px 8px;
+                border-radius: 4px;
+                text-transform: uppercase;
+                font-family: sans-serif !important;
+            }
             
             @media print {
-                .paper-canvas-container {
+                body {
                     zoom: ${s.printScale ? s.printScale / 100 : 0.96} !important;
                 }
+                .page-break {
+                    height: 0 !important;
+                    margin: 0 !important;
+                    border: none !important;
+                    break-before: page !important;
+                    page-break-before: always !important;
+                    column-span: all !important;
+                    -webkit-column-span: all !important;
+                }
+                .page-break::after {
+                    display: none !important;
+                }
+                .paper-canvas-container,
+                .paper-content-wrapper,
+                .paper-content-wrapper > div,
                 .ProseMirror {
-                    zoom: 1.0 !important;
+                    position: static !important;
+                    display: block !important;
+                    overflow: visible !important;
+                    zoom: 1 !important;
+                    height: auto !important;
+                    min-height: 0 !important;
+                }
+                .ProseMirror::after {
+                    content: "";
+                    display: block;
+                    clear: both;
+                    height: 0;
+                    column-span: all !important;
+                    -webkit-column-span: all !important;
                 }
                 .paper-canvas-container,
                 .paper-canvas-container * {
@@ -479,6 +645,10 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 .paper-canvas-container.theme-dark,
                 .paper-canvas-container.theme-cream {
                     background-color: #ffffff !important;
+                }
+                [data-type="question-block"] {
+                    padding-top: 4px !important;
+                    padding-bottom: 4px !important;
                 }
             }
 

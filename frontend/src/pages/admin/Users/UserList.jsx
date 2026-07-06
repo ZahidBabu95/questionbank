@@ -4,7 +4,7 @@ import {
     RefreshCw, LogIn, Download, Users, UserCheck, UserX, AlertTriangle,
     Key, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, Check, CheckSquare,
     Square, Eye, BookOpen, GraduationCap, Calendar, Mail, Phone,
-    Activity, Loader2, Upload, BarChart2
+    Activity, Loader2, Upload, BarChart2, Copy
 } from 'lucide-react';
 import userService from '../../../services/userService';
 import UserForm from './UserForm';
@@ -29,24 +29,43 @@ const RoleBadge = ({ role }) => {
 };
 
 // ─── Stats Card ──────────────────────────────────────────────────────────────
-const StatCard = ({ icon, label, value, color, sub }) => (
-    <div className={`bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow`}>
-        <div className="flex items-start justify-between">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${color}`}>
-                {icon}
+const StatCard = ({ icon, label, value, color, sub, isCompact }) => {
+    if (isCompact) {
+        return (
+            <div className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-sm hover:shadow transition-all duration-200 flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
+                    {React.cloneElement(icon, { size: 16 })}
+                </div>
+                <div className="min-w-0">
+                    <p className="text-[10px] font-bold text-slate-400 truncate uppercase tracking-wider">{label}</p>
+                    <p className="text-base font-black text-slate-800 mt-0.5">{value ?? '0'}</p>
+                </div>
+                {sub && <span className="ml-auto text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md shrink-0">{sub}</span>}
             </div>
-            {sub && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{sub}</span>}
+        );
+    }
+
+    return (
+        <div className={`bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow`}>
+            <div className="flex items-start justify-between">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${color}`}>
+                    {icon}
+                </div>
+                {sub && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{sub}</span>}
+            </div>
+            <div className="mt-3">
+                <p className="text-2xl font-black text-slate-800">{value ?? '—'}</p>
+                <p className="text-xs font-medium text-slate-400 mt-0.5">{label}</p>
+            </div>
         </div>
-        <div className="mt-3">
-            <p className="text-2xl font-black text-slate-800">{value ?? '—'}</p>
-            <p className="text-xs font-medium text-slate-400 mt-0.5">{label}</p>
-        </div>
-    </div>
-);
+    );
+};
 
 // ─── User Detail Panel ────────────────────────────────────────────────────────
-const UserDetailPanel = ({ user, onClose, onEdit, onStatusToggle, onResetPassword, onImpersonate }) => {
+const UserDetailPanel = ({ user, onClose, onEdit, onStatusToggle, onResetPassword, onImpersonate, onUnlockUser }) => {
     if (!user) return null;
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const isSuperAdmin = currentUser.roles?.includes('SUPER_ADMIN');
     const initials = (user.name || '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     const joinedDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
 
@@ -61,8 +80,8 @@ const UserDetailPanel = ({ user, onClose, onEdit, onStatusToggle, onResetPasswor
                     <button onClick={onClose} className="absolute top-4 right-4 w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all">
                         <X size={14} />
                     </button>
-                    <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-2xl bg-white/20 border-2 border-white/30 flex items-center justify-center text-2xl font-black text-white shadow-lg">
+                    <div className="flex items-center gap-4 mt-2">
+                        <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-xl font-black border border-white/25">
                             {initials}
                         </div>
                         <div>
@@ -107,6 +126,12 @@ const UserDetailPanel = ({ user, onClose, onEdit, onStatusToggle, onResetPasswor
 
                 {/* Action buttons */}
                 <div className="p-4 border-t border-slate-100 space-y-2 bg-slate-50/50">
+                    {user.accountLocked && (
+                        <button onClick={() => onUnlockUser(user)}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded-xl font-bold text-xs transition-all mb-1">
+                            <Unlock size={12} /> Unlock Account
+                        </button>
+                    )}
                     <button onClick={() => onEdit(user)}
                         className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-sm">
                         <Edit2 size={14} /> Edit Profile
@@ -127,10 +152,12 @@ const UserDetailPanel = ({ user, onClose, onEdit, onStatusToggle, onResetPasswor
                             <Key size={12} /> Reset Password
                         </button>
                     </div>
-                    <button onClick={() => onImpersonate(user)}
-                        className="w-full flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold text-xs transition-all">
-                        <LogIn size={12} /> Login as this User
-                    </button>
+                    {isSuperAdmin && (
+                        <button onClick={() => onImpersonate(user)}
+                            className="w-full flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl font-bold text-xs transition-all">
+                            <LogIn size={12} /> Login as this User
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
@@ -161,6 +188,8 @@ const Toast = ({ msg, type, onClose }) => {
 const UserList = () => {
     const navigate  = useNavigate();
     const location  = useLocation();
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const isSuperAdmin = currentUser.roles?.includes('SUPER_ADMIN');
 
     const [users,        setUsers]        = useState([]);
     const [stats,        setStats]        = useState(null);
@@ -181,6 +210,7 @@ const UserList = () => {
     const [bulkLoading,  setBulkLoading]  = useState(false);
     const [toast,        setToast]        = useState(null);
     const [exportLoading,setExportLoading]= useState(false);
+    const [resetPasswordInfo, setResetPasswordInfo] = useState(null);
     const pageSize = 12;
 
     const showToast = (msg, type = 'success') => setToast({ msg, type });
@@ -268,11 +298,23 @@ const UserList = () => {
     };
 
     const handleResetPassword = async (user) => {
-        if (!window.confirm(`Reset password for ${user.name}?\nNew password will be: Default@123`)) return;
+        if (!window.confirm(`Reset password for ${user.name}? This will generate a random temporary password.`)) return;
         try {
-            await userService.resetPassword(user.id);
-            showToast(`Password reset for ${user.name}. New password: Default@123`, 'warning');
+            const res = await userService.resetPassword(user.id);
+            const newPassword = res.data || 'QS@XXXXX';
+            setResetPasswordInfo({ name: user.name, email: user.email, password: newPassword });
+            showToast(`Password reset for ${user.name} successfully`, 'success');
         } catch (e) { showToast('Reset failed', 'error'); }
+    };
+
+    const handleUnlockUser = async (user) => {
+        if (!window.confirm(`Unlock account for ${user.name}?`)) return;
+        try {
+            await userService.unlockUser(user.id);
+            fetchUsers(); fetchStats();
+            showToast('Account unlocked successfully', 'success');
+            if (detailUser?.id === user.id) setDetailUser(prev => ({ ...prev, accountLocked: false }));
+        } catch (e) { showToast('Unlock failed', 'error'); }
     };
 
     const handleImpersonate = async (user) => {
@@ -348,21 +390,15 @@ const UserList = () => {
             </div>
 
             {/* ── Stats Cards ── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
-                <StatCard icon={<Users size={20} className="text-indigo-600" />}     label="মোট Users"    value={stats?.total}    color="bg-indigo-50"  sub={stats?.newLast30Days ? `+${stats.newLast30Days} this month` : null} />
-                <StatCard icon={<UserCheck size={20} className="text-emerald-600" />} label="Active"       value={stats?.active}   color="bg-emerald-50" />
-                <StatCard icon={<UserX size={20} className="text-amber-600" />}       label="Inactive"     value={stats?.inactive} color="bg-amber-50"   />
-                <StatCard icon={<Lock size={20} className="text-rose-600" />}          label="Locked"       value={stats?.locked}   color="bg-rose-50"    />
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
+                <StatCard isCompact icon={<Users className="text-indigo-600" />}     label="মোট Users"    value={stats?.total}    color="bg-indigo-50"  sub={stats?.newLast30Days ? `+${stats.newLast30Days}` : null} />
+                <StatCard isCompact icon={<UserCheck className="text-emerald-600" />} label="Active"       value={stats?.active}   color="bg-emerald-50" />
+                <StatCard isCompact icon={<UserX className="text-amber-600" />}       label="Inactive"     value={stats?.inactive} color="bg-amber-50"   />
+                <StatCard isCompact icon={<Lock className="text-rose-600" />}          label="Locked"       value={stats?.locked}   color="bg-rose-50"    />
+                <StatCard isCompact icon={<GraduationCap className="text-sky-600" />}    label="শিক্ষার্থী" value={stats?.students} color="bg-sky-50"    />
+                <StatCard isCompact icon={<BookOpen className="text-violet-600" />}       label="শিক্ষক"    value={stats?.teachers} color="bg-violet-50" />
+                <StatCard isCompact icon={<Shield className="text-orange-600" />}          label="Admins"     value={stats?.admins}   color="bg-orange-50" />
             </div>
-
-            {/* Role breakdown cards */}
-            {stats && (
-                <div className="grid grid-cols-3 gap-3">
-                    <StatCard icon={<GraduationCap size={18} className="text-sky-600" />}    label="শিক্ষার্থী" value={stats.students} color="bg-sky-50"    />
-                    <StatCard icon={<BookOpen size={18} className="text-violet-600" />}       label="শিক্ষক"    value={stats.teachers} color="bg-violet-50" />
-                    <StatCard icon={<Shield size={18} className="text-orange-600" />}          label="Admins"     value={stats.admins}   color="bg-orange-50" />
-                </div>
-            )}
 
             {/* Removed Pending Tabs */}
 
@@ -515,7 +551,14 @@ const UserList = () => {
                                                 </button>
                                             )}
                                             <button onClick={() => navigate(`/users/profile/${user.id}`)} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="View Profile"><Eye size={14} /></button>
-                                            <button onClick={() => handleImpersonate(user)} className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-all" title="Login as"><LogIn size={14} /></button>
+                                            {isSuperAdmin && (
+                                                <button onClick={() => handleImpersonate(user)} className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-all" title="Login as"><LogIn size={14} /></button>
+                                            )}
+                                            {user.accountLocked && (
+                                                <button onClick={() => handleUnlockUser(user)} className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-all" title="Unlock Account">
+                                                    <Unlock size={14} />
+                                                </button>
+                                            )}
                                             <button onClick={() => handleStatusToggle(user)} className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all" title={user.active ? 'Deactivate' : 'Activate'}>
                                                 {user.active ? <Lock size={14} /> : <Unlock size={14} />}
                                             </button>
@@ -686,7 +729,69 @@ const UserList = () => {
                     onStatusToggle={(u) => { handleStatusToggle(u); }}
                     onResetPassword={(u) => { handleResetPassword(u); setDetailUser(null); }}
                     onImpersonate={(u) => { handleImpersonate(u); }}
+                    onUnlockUser={(u) => { handleUnlockUser(u); }}
                 />
+            )}
+
+            {/* ── Password Reset Success Modal ── */}
+            {resetPasswordInfo && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setResetPasswordInfo(null)} />
+                    <div className="relative bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+                                <Key size={20} />
+                            </div>
+                            <div>
+                                <h3 className="font-black text-slate-800 text-base">Password Reset Successfully</h3>
+                                <p className="text-slate-400 text-xs">New credentials generated for the user</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 my-5">
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">User Email</p>
+                                    <p className="text-sm font-bold text-slate-700 mt-0.5">{resetPasswordInfo.email}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">New Temporary Password</p>
+                                    <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2 mt-1">
+                                        <code className="text-indigo-600 font-bold text-sm font-mono">{resetPasswordInfo.password}</code>
+                                        <button 
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(resetPasswordInfo.password);
+                                                showToast('Password copied!', 'success');
+                                            }}
+                                            className="text-xs text-indigo-600 hover:text-indigo-700 font-bold ml-2 flex items-center gap-1"
+                                        >
+                                            <Copy size={12} /> Copy
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                            <button
+                                onClick={() => {
+                                    const text = `*Login Credentials*\nEmail: ${resetPasswordInfo.email}\nPassword: ${resetPasswordInfo.password}\nLogin at: ${window.location.origin}/login`;
+                                    navigator.clipboard.writeText(text);
+                                    showToast('Credentials copied!', 'success');
+                                }}
+                                className="px-4 py-2 bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-100 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5"
+                            >
+                                <Copy size={13} /> Copy Credentials
+                            </button>
+                            <button
+                                onClick={() => setResetPasswordInfo(null)}
+                                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-indigo-200"
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

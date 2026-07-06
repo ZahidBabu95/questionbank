@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     User, Mail, Phone, Lock, Eye, EyeOff, Save, Key, Shield, AlertTriangle, 
@@ -10,8 +11,12 @@ import userService from '../../../services/userService';
 import instituteService from '../../../services/instituteService';
 import billingService from '../../../services/billingService';
 import academicService from '../../../services/academicService';
+import { useLanguage } from '../../../context/LanguageContext';
 
 const MyProfile = () => {
+    const navigate = useNavigate();
+    const { t, currentLang } = useLanguage();
+    const isBn = currentLang === 'bn';
     // Current user and workspace state
     const [user, setUser] = useState(null);
     const [institute, setInstitute] = useState(null);
@@ -19,6 +24,7 @@ const MyProfile = () => {
     const [billingPackages, setBillingPackages] = useState([]);
     const [hierarchy, setHierarchy] = useState(null);
     const [assignedSubjectIds, setAssignedSubjectIds] = useState([]);
+    const [stats, setStats] = useState(null);
 
     // UI and loading states
     const [activeTab, setActiveTab] = useState('personal'); // personal, security, subscription, academic
@@ -77,7 +83,9 @@ const MyProfile = () => {
                     setUser(userData);
                     setProfileForm({
                         name: userData.name || '',
-                        phone: userData.phone || ''
+                        phone: userData.phone || '',
+                        instituteNameEn: userData.instituteNameEn || '',
+                        instituteNameBn: userData.instituteNameBn || ''
                     });
 
                     // 2. Fetch login history
@@ -93,6 +101,15 @@ const MyProfile = () => {
                             fetchBillingPackages();
                             fetchAcademicHierarchy();
                             fetchAssignedSubjects(userData.instituteId);
+                            // Fetch user stats for active/remaining slots calculations
+                            try {
+                                const statsRes = await userService.getUserStats();
+                                if (statsRes.success) {
+                                    setStats(statsRes.data);
+                                }
+                            } catch (e) {
+                                console.error("Failed to load user stats for limits card", e);
+                            }
                         }
                     }
                 }
@@ -167,7 +184,9 @@ const MyProfile = () => {
         try {
             const res = await axios.patch('/v1/users/profile', {
                 name: profileForm.name,
-                phone: profileForm.phone
+                phone: profileForm.phone,
+                instituteNameEn: profileForm.instituteNameEn,
+                instituteNameBn: profileForm.instituteNameBn
             });
             if (res.data.success) {
                 showMsg('Profile updated successfully!', 'success');
@@ -178,7 +197,9 @@ const MyProfile = () => {
                 localStorage.setItem('user', JSON.stringify({ 
                     ...storedUser, 
                     name: updatedUser.name, 
-                    phone: updatedUser.phone 
+                    phone: updatedUser.phone,
+                    instituteNameEn: updatedUser.instituteNameEn,
+                    instituteNameBn: updatedUser.instituteNameBn
                 }));
                 window.dispatchEvent(new Event('storage'));
             }
@@ -543,10 +564,10 @@ const MyProfile = () => {
                 {/* Glass Tabs Container */}
                 <div className="px-6 py-2 bg-slate-900/50 flex flex-wrap gap-2 text-sm">
                     {[
-                        { id: 'personal', label: 'প্রফাইল তথ্য', icon: User },
-                        { id: 'security', label: 'নিরাপত্তা ও সেশন', icon: Shield },
-                        { id: 'subscription', label: 'সাবস্ক্রিপশন ও লিমিট', icon: Zap },
-                        { id: 'academic', label: 'অ্যাকাডেমিক বিষয় অ্যাক্সেস', icon: BookOpen }
+                        { id: 'personal', label: t('profile_tab_info'), icon: User },
+                        { id: 'security', label: t('profile_tab_security'), icon: Shield },
+                        { id: 'subscription', label: t('profile_tab_subscription'), icon: Zap },
+                        { id: 'academic', label: t('profile_tab_academic'), icon: BookOpen }
                     ].map(tab => {
                         const Icon = tab.icon;
                         const active = activeTab === tab.id;
@@ -595,13 +616,13 @@ const MyProfile = () => {
                                 <div className="p-8">
                                     <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
                                         <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><User size={18} /></span>
-                                        ব্যক্তিগত তথ্য (Personal Information)
+                                        {t('profile_personal_info')}
                                     </h2>
 
                                     <form onSubmit={handleProfileSubmit} className="space-y-6">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">Email Address</label>
+                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">{t('profile_email')}</label>
                                                 <div className="relative">
                                                     <Mail className="absolute left-4 top-3.5 text-slate-400" size={18} />
                                                     <input 
@@ -612,29 +633,12 @@ const MyProfile = () => {
                                                     />
                                                 </div>
                                                 <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1.5 ml-1">
-                                                    <Info size={12} /> Email address cannot be changed
+                                                    <Info size={12} /> {t('profile_email_warning')}
                                                 </p>
                                             </div>
-
+                                            
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">Institute / Workspace</label>
-                                                <div className="relative">
-                                                    <Globe className="absolute left-4 top-3.5 text-slate-400" size={18} />
-                                                    <input 
-                                                        type="text" 
-                                                        disabled 
-                                                        value={user.instituteName || 'Global Access'} 
-                                                        className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-slate-500 font-medium cursor-not-allowed text-sm"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="h-px bg-slate-100"></div>
-
-                                        <div className="space-y-5">
-                                            <div>
-                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">Full Name *</label>
+                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">{t('profile_name')} *</label>
                                                 <div className="relative group">
                                                     <User className="absolute left-4 top-3.5 text-slate-400 group-focus-within:text-indigo-500 transition duration-200" size={18} />
                                                     <input 
@@ -642,21 +646,49 @@ const MyProfile = () => {
                                                         required 
                                                         value={profileForm.name} 
                                                         onChange={(e) => setProfileForm(p => ({ ...p, name: e.target.value }))}
-                                                        placeholder="Enter your name" 
+                                                        placeholder={t('profile_name_placeholder')} 
                                                         className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none rounded-2xl text-slate-800 text-sm font-semibold transition duration-200"
                                                     />
                                                 </div>
                                             </div>
 
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">Phone Number</label>
+                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">{t('profile_phone')}</label>
                                                 <div className="relative group">
                                                     <Phone className="absolute left-4 top-3.5 text-slate-400 group-focus-within:text-indigo-500 transition duration-200" size={18} />
                                                     <input 
                                                         type="text" 
                                                         value={profileForm.phone} 
                                                         onChange={(e) => setProfileForm(p => ({ ...p, phone: e.target.value }))}
-                                                        placeholder="e.g. +880 1XXX XXXXXX" 
+                                                        placeholder={t('profile_phone_placeholder')} 
+                                                        className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none rounded-2xl text-slate-800 text-sm font-semibold transition duration-200"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">{isBn ? 'প্রতিষ্ঠানের নাম (ইংরেজি)' : 'Institute Name (English)'}</label>
+                                                <div className="relative group">
+                                                    <Globe className="absolute left-4 top-3.5 text-slate-400 group-focus-within:text-indigo-500 transition duration-200" size={18} />
+                                                    <input 
+                                                        type="text" 
+                                                        value={profileForm.instituteNameEn} 
+                                                        onChange={(e) => setProfileForm(p => ({ ...p, instituteNameEn: e.target.value }))}
+                                                        placeholder={isBn ? 'প্রতিষ্ঠানের নাম ইংরেজিতে লিখুন' : 'Enter your institute name in English'} 
+                                                        className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none rounded-2xl text-slate-800 text-sm font-semibold transition duration-200"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">{isBn ? 'প্রতিষ্ঠানের নাম (বাংলা)' : 'Institute Name (Bengali)'}</label>
+                                                <div className="relative group">
+                                                    <Globe className="absolute left-4 top-3.5 text-slate-400 group-focus-within:text-indigo-500 transition duration-200" size={18} />
+                                                    <input 
+                                                        type="text" 
+                                                        value={profileForm.instituteNameBn} 
+                                                        onChange={(e) => setProfileForm(p => ({ ...p, instituteNameBn: e.target.value }))}
+                                                        placeholder={isBn ? 'প্রতিষ্ঠানের নাম বাংলায় লিখুন' : 'Enter your institute name in Bengali'} 
                                                         className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none rounded-2xl text-slate-800 text-sm font-semibold transition duration-200"
                                                     />
                                                 </div>
@@ -672,7 +704,7 @@ const MyProfile = () => {
                                                 {savingProfile ? (
                                                     <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
                                                 ) : <Save size={18} />}
-                                                <span>Save Profile</span>
+                                                <span>{savingProfile ? t('profile_btn_saving') : t('profile_btn_save')}</span>
                                             </button>
                                         </div>
                                     </form>
@@ -687,12 +719,12 @@ const MyProfile = () => {
                                     <div>
                                         <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
                                             <span className="p-2 bg-rose-50 text-rose-600 rounded-xl"><Key size={18} /></span>
-                                            পাসওয়ার্ড পরিবর্তন (Change Password)
+                                            {t('profile_change_password')}
                                         </h2>
 
                                         <form onSubmit={handlePasswordSubmit} className="space-y-5">
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">Current Password</label>
+                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">{t('profile_old_password')}</label>
                                                 <div className="relative">
                                                     <Lock className="absolute left-4 top-3.5 text-slate-400" size={18} />
                                                     <input 
@@ -700,7 +732,7 @@ const MyProfile = () => {
                                                         required 
                                                         value={pwdForm.oldPassword}
                                                         onChange={(e) => setPwdForm(p => ({ ...p, oldPassword: e.target.value }))}
-                                                        placeholder="••••••••" 
+                                                        placeholder={t('profile_old_password_placeholder')} 
                                                         className="w-full pl-12 pr-12 py-3 bg-white border border-slate-200 focus:border-indigo-500 outline-none rounded-2xl text-slate-800 text-sm font-semibold transition duration-200"
                                                     />
                                                     <button 
@@ -715,7 +747,7 @@ const MyProfile = () => {
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                                 <div>
-                                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">New Password</label>
+                                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">{t('profile_new_password')}</label>
                                                     <div className="relative">
                                                         <Key className="absolute left-4 top-3.5 text-slate-400" size={18} />
                                                         <input 
@@ -724,7 +756,7 @@ const MyProfile = () => {
                                                             minLength={6}
                                                             value={pwdForm.newPassword}
                                                             onChange={(e) => setPwdForm(p => ({ ...p, newPassword: e.target.value }))}
-                                                            placeholder="••••••••" 
+                                                            placeholder={t('profile_new_password_placeholder')} 
                                                             className="w-full pl-12 pr-12 py-3 bg-white border border-slate-200 focus:border-indigo-500 outline-none rounded-2xl text-slate-800 text-sm font-semibold transition duration-200"
                                                         />
                                                         <button 
@@ -738,7 +770,7 @@ const MyProfile = () => {
                                                 </div>
 
                                                 <div>
-                                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">Confirm New Password</label>
+                                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2.5">{t('profile_confirm_password')}</label>
                                                     <div className="relative">
                                                         <Shield className="absolute left-4 top-3.5 text-slate-400" size={18} />
                                                         <input 
@@ -746,7 +778,7 @@ const MyProfile = () => {
                                                             required 
                                                             value={pwdForm.confirmPassword}
                                                             onChange={(e) => setPwdForm(p => ({ ...p, confirmPassword: e.target.value }))}
-                                                            placeholder="••••••••" 
+                                                            placeholder={t('profile_confirm_password_placeholder')} 
                                                             className={`w-full pl-12 pr-12 py-3 bg-white border rounded-2xl focus:outline-none text-sm font-semibold transition duration-200 ${
                                                                 pwdForm.confirmPassword && pwdForm.newPassword !== pwdForm.confirmPassword
                                                                     ? 'border-rose-300 focus:ring-4 focus:ring-rose-500/5 focus:border-rose-500 bg-rose-50/10'
@@ -773,7 +805,7 @@ const MyProfile = () => {
                                                     {changingPassword ? (
                                                         <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
                                                     ) : <Lock size={18} />}
-                                                    <span>Change Password</span>
+                                                    <span>{changingPassword ? t('profile_btn_updating_password') : t('profile_btn_update_password')}</span>
                                                 </button>
                                             </div>
                                         </form>
@@ -786,13 +818,13 @@ const MyProfile = () => {
                                         <div className="flex justify-between items-center mb-6">
                                             <h2 className="text-xl font-black text-slate-800 flex items-center gap-3">
                                                 <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Activity size={18} /></span>
-                                                সাম্প্রতিক লগইন সেশন (Recent Login Sessions)
+                                                {t('profile_recent_sessions')}
                                             </h2>
                                             <button 
                                                 onClick={() => fetchLoginHistory(user.id)}
                                                 disabled={historyLoading}
                                                 className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition duration-150 disabled:opacity-50"
-                                                title="Refresh Session Log"
+                                                title={isBn ? 'সেশন লগ রিফ্রেশ করুন' : 'Refresh Session Log'}
                                             >
                                                 <RefreshCw size={18} className={historyLoading ? 'animate-spin' : ''} />
                                             </button>
@@ -802,10 +834,10 @@ const MyProfile = () => {
                                             <table className="w-full border-collapse text-left text-sm text-slate-500">
                                                 <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100">
                                                     <tr>
-                                                        <th className="px-6 py-4">ডিভাইস / ব্রাউজার</th>
-                                                        <th className="px-6 py-4">IP ঠিকানা</th>
-                                                        <th className="px-6 py-4">লগইন সময়</th>
-                                                        <th className="px-6 py-4">স্ট্যাটাস</th>
+                                                        <th className="px-6 py-4">{isBn ? 'ডিভাইস / ব্রাউজার' : 'Device / Browser'}</th>
+                                                        <th className="px-6 py-4">{t('profile_ip')}</th>
+                                                        <th className="px-6 py-4">{t('profile_time')}</th>
+                                                        <th className="px-6 py-4">{isBn ? 'স্ট্যাটাস' : 'Status'}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-50 bg-white">
@@ -834,7 +866,7 @@ const MyProfile = () => {
                                                                             : 'bg-rose-500/10 text-rose-600'
                                                                     }`}>
                                                                         <span className={`w-1.5 h-1.5 rounded-full ${session.success ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                                                                        {session.success ? 'Success' : 'Failed'}
+                                                                        {session.success ? (isBn ? 'সফল' : 'Success') : (isBn ? 'ব্যর্থ' : 'Failed')}
                                                                     </span>
                                                                 </td>
                                                             </tr>
@@ -842,7 +874,7 @@ const MyProfile = () => {
                                                     ) : (
                                                         <tr>
                                                             <td colSpan="4" className="px-6 py-10 text-center text-slate-400 font-medium">
-                                                                কোনো লগইন রেকর্ড পাওয়া যায়নি
+                                                                {isBn ? 'কোনো লগইন রেকর্ড পাওয়া যায়নি' : 'No login records found'}
                                                             </td>
                                                         </tr>
                                                     )}
@@ -862,7 +894,7 @@ const MyProfile = () => {
                                         <div>
                                             <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
                                                 <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><HardDrive size={18} /></span>
-                                                রিসোর্স ব্যবহার সীমা (Resource Usage Limits)
+                                                {t('profile_limits_header')}
                                             </h2>
 
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -871,12 +903,12 @@ const MyProfile = () => {
                                                 <div className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 border border-indigo-100/50 rounded-2xl p-5 shadow-sm">
                                                     <div className="flex justify-between items-start mb-4">
                                                         <span className="p-2 bg-purple-500/10 text-purple-600 rounded-xl"><Zap size={20} /></span>
-                                                        <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">AI Token quota</span>
+                                                        <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">{t('profile_tokens')} Quota</span>
                                                     </div>
                                                     <span className="block text-2xl font-black text-slate-800">
                                                         {formatLimit(institute.aiUsedCurrentMonth)} / {formatLimit(institute.aiLimitPerMonth)}
                                                     </span>
-                                                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-1">Used this month</span>
+                                                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-1">{isBn ? 'এই মাসে ব্যবহৃত' : 'Used this month'}</span>
                                                     
                                                     {/* Progress bar */}
                                                     <div className="mt-4 w-full bg-slate-200/60 rounded-full h-2">
@@ -886,7 +918,7 @@ const MyProfile = () => {
                                                         />
                                                     </div>
                                                     <span className="block text-right text-[10px] text-slate-500 font-bold mt-2">
-                                                        {getPercentage(institute.aiUsedCurrentMonth, institute.aiLimitPerMonth)}% capacity
+                                                        {getPercentage(institute.aiUsedCurrentMonth, institute.aiLimitPerMonth)}% {isBn ? 'ক্ষমতা' : 'capacity'}
                                                     </span>
                                                 </div>
 
@@ -894,12 +926,12 @@ const MyProfile = () => {
                                                 <div className="bg-gradient-to-br from-indigo-50/50 to-violet-50/50 border border-indigo-100/50 rounded-2xl p-5 shadow-sm">
                                                     <div className="flex justify-between items-start mb-4">
                                                         <span className="p-2 bg-indigo-500/10 text-indigo-600 rounded-xl"><Cpu size={20} /></span>
-                                                        <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Questions Created</span>
+                                                        <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">{t('profile_questions')} Created</span>
                                                     </div>
                                                     <span className="block text-2xl font-black text-slate-800">
                                                         {formatLimit(institute.questionsUsedCurrentMonth)} / {formatLimit(institute.maxQuestions)}
                                                     </span>
-                                                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-1">Created this month</span>
+                                                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-1">{isBn ? 'এই মাসে তৈরিকৃত' : 'Created this month'}</span>
 
                                                     {/* Progress bar */}
                                                     <div className="mt-4 w-full bg-slate-200/60 rounded-full h-2">
@@ -909,7 +941,7 @@ const MyProfile = () => {
                                                         />
                                                     </div>
                                                     <span className="block text-right text-[10px] text-slate-500 font-bold mt-2">
-                                                        {getPercentage(institute.questionsUsedCurrentMonth, institute.maxQuestions)}% capacity
+                                                        {getPercentage(institute.questionsUsedCurrentMonth, institute.maxQuestions)}% {isBn ? 'ক্ষমতা' : 'capacity'}
                                                     </span>
                                                 </div>
 
@@ -917,12 +949,12 @@ const MyProfile = () => {
                                                 <div className="bg-gradient-to-br from-indigo-50/50 to-emerald-50/50 border border-indigo-100/50 rounded-2xl p-5 shadow-sm">
                                                     <div className="flex justify-between items-start mb-4">
                                                         <span className="p-2 bg-emerald-500/10 text-emerald-600 rounded-xl"><Database size={20} /></span>
-                                                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Storage Used</span>
+                                                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">{t('profile_storage')} Used</span>
                                                     </div>
                                                     <span className="block text-2xl font-black text-slate-800">
                                                         {formatStorage(institute.storageUsedMb)} / {formatStorage(institute.storageLimitMb)}
                                                     </span>
-                                                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-1">R2 bucket volume</span>
+                                                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-1">{isBn ? 'আর২ বাকেট ভলিউম' : 'R2 bucket volume'}</span>
 
                                                     {/* Progress bar */}
                                                     <div className="mt-4 w-full bg-slate-200/60 rounded-full h-2">
@@ -932,7 +964,7 @@ const MyProfile = () => {
                                                         />
                                                     </div>
                                                     <span className="block text-right text-[10px] text-slate-500 font-bold mt-2">
-                                                        {getPercentage(institute.storageUsedMb, institute.storageLimitMb)}% capacity
+                                                        {getPercentage(institute.storageUsedMb, institute.storageLimitMb)}% {isBn ? 'ক্ষমতা' : 'capacity'}
                                                     </span>
                                                 </div>
 
@@ -941,7 +973,7 @@ const MyProfile = () => {
                                     ) : (
                                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-2">
                                             <Info size={16} className="text-slate-400" />
-                                            <span className="text-sm text-slate-500">এই অ্যাকাউন্টের সাথে কোনো ইনস্টিটিউট যুক্ত নেই।</span>
+                                            <span className="text-sm text-slate-500">{isBn ? 'এই অ্যাকাউন্টের সাথে কোনো ইনস্টিটিউট যুক্ত নেই।' : 'No institute associated with this account.'}</span>
                                         </div>
                                     )}
 
@@ -951,10 +983,10 @@ const MyProfile = () => {
                                     <div>
                                         <h2 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-3">
                                             <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Layout size={18} /></span>
-                                            সাবস্ক্রিপশন প্ল্যান পরিবর্তন (Upgrade Subscription Package)
+                                            {isBn ? 'সাবস্ক্রিপশন প্ল্যান পরিবর্তন' : 'Upgrade Subscription Package'}
                                         </h2>
                                         <p className="text-xs text-slate-400 mb-6 ml-11">
-                                            আপনার ইনস্টিটিউটের জন্য সাবস্ক্রিপশন প্ল্যান পরিবর্তন বা আপগ্রেড করুন
+                                            {isBn ? 'আপনার ইনস্টিটিউটের জন্য সাবস্ক্রিপশন প্ল্যান পরিবর্তন বা আপগ্রেড করুন' : 'Change or upgrade the subscription package for your institute'}
                                         </p>
 
                                         {isAdmin ? (
@@ -974,7 +1006,7 @@ const MyProfile = () => {
                                                             >
                                                                 {isCurrent && (
                                                                     <div className="absolute right-0 top-0 bg-indigo-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-wider">
-                                                                        Active Plan
+                                                                        {isBn ? 'সক্রিয় প্ল্যান' : 'Active Plan'}
                                                                     </div>
                                                                 )}
                                                                 <div>
@@ -992,23 +1024,23 @@ const MyProfile = () => {
                                                                     <ul className="space-y-2 border-t border-slate-50 pt-4 mb-6">
                                                                         <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
                                                                             <Check size={14} className="text-emerald-500" />
-                                                                            <span>Teachers: {pkg.maxTeachers || 'Unlimited'}</span>
+                                                                            <span>{isBn ? 'শিক্ষক:' : 'Teachers:'} {pkg.maxTeachers || (isBn ? 'আনলিমিটেড' : 'Unlimited')}</span>
                                                                         </li>
                                                                         <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
                                                                             <Check size={14} className="text-emerald-500" />
-                                                                            <span>Students: {pkg.maxStudents || 'Unlimited'}</span>
+                                                                            <span>{isBn ? 'শিক্ষার্থী:' : 'Students:'} {pkg.maxStudents || (isBn ? 'আনলিমিটেড' : 'Unlimited')}</span>
                                                                         </li>
                                                                         <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
                                                                             <Check size={14} className="text-emerald-500" />
-                                                                            <span>Questions: {pkg.maxQuestions || 'Unlimited'}</span>
+                                                                            <span>{isBn ? 'প্রশ্ন:' : 'Questions:'} {pkg.maxQuestions || (isBn ? 'আনলিমিটেড' : 'Unlimited')}</span>
                                                                         </li>
                                                                         <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
                                                                             <Check size={14} className="text-emerald-500" />
-                                                                            <span>Storage: {formatStorage(pkg.storageLimitMb)}</span>
+                                                                            <span>{isBn ? 'স্টোরেজ:' : 'Storage:'} {formatStorage(pkg.storageLimitMb)}</span>
                                                                         </li>
                                                                         <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
                                                                             <Check size={14} className="text-emerald-500" />
-                                                                            <span>AI Tokens: {formatLimit(pkg.aiLimitPerMonth)} / mo</span>
+                                                                            <span>{isBn ? 'এআই টোকেন:' : 'AI Tokens:'} {formatLimit(pkg.aiLimitPerMonth)} {isBn ? '/ মাস' : '/ mo'}</span>
                                                                         </li>
                                                                     </ul>
                                                                 </div>
@@ -1026,7 +1058,7 @@ const MyProfile = () => {
                                                                     {updatingSubscription && selectedPackageId === pkg.id ? (
                                                                         <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
                                                                     ) : isCurrent ? <CheckCircle size={14} /> : null}
-                                                                    <span>{isCurrent ? 'Current Plan' : 'Upgrade Plan'}</span>
+                                                                    <span>{isCurrent ? (isBn ? 'বর্তমান প্ল্যান' : 'Current Plan') : (isBn ? 'প্ল্যান আপগ্রেড করুন' : 'Upgrade Plan')}</span>
                                                                 </button>
                                                             </div>
                                                         );
@@ -1037,8 +1069,8 @@ const MyProfile = () => {
                                             <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100/50 flex items-start gap-3">
                                                 <AlertTriangle size={18} className="text-amber-500 mt-0.5" />
                                                 <div>
-                                                    <span className="block text-sm font-bold text-amber-700">অ্যাডমিন প্রিভিলেজ প্রয়োজন</span>
-                                                    <span className="block text-xs text-amber-600 mt-0.5">আপনার ইনস্টিটিউটের প্ল্যান আপগ্রেড করতে অনুগ্রহ করে ওয়ার্কস্পেস অ্যাডমিনের সাথে যোগাযোগ করুন।</span>
+                                                    <span className="block text-sm font-bold text-amber-700">{isBn ? 'অ্যাডমিন প্রিভিলেজ প্রয়োজন' : 'Admin Privilege Required'}</span>
+                                                    <span className="block text-xs text-amber-600 mt-0.5">{isBn ? 'আপনার ইনস্টিটিউটের প্ল্যান আপগ্রেড করতে অনুগ্রহ করে ওয়ার্কস্পেস অ্যাডমিনের সাথে যোগাযোগ করুন।' : 'Please contact workspace admin to upgrade your institute package.'}</span>
                                                 </div>
                                             </div>
                                         )}
@@ -1080,10 +1112,10 @@ const MyProfile = () => {
                                                 <div>
                                                     <h2 className="text-xl font-black text-slate-800 flex items-center gap-3">
                                                         <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><BookOpen size={18} /></span>
-                                                        অ্যাকাডেমিক বিষয় অ্যাক্সেস (Academic Subject Access)
+                                                        {t('profile_academic_access')}
                                                     </h2>
                                                     <p className="text-xs text-slate-400 mt-1 ml-11">
-                                                        এই ওয়ার্কস্পেসের সক্রিয় এবং ক্রয়যোগ্য অ্যাকাডেমিক বিষয়সমূহ
+                                                        {isBn ? 'এই ওয়ার্কস্পেসের সক্রিয় এবং ক্রয়যোগ্য অ্যাকাডেমিক বিষয়সমূহ' : 'Active and purchasable academic subjects for this workspace'}
                                                     </p>
                                                 </div>
                                                 {isAdmin && (
@@ -1093,7 +1125,7 @@ const MyProfile = () => {
                                                         className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 transition duration-150 disabled:opacity-50"
                                                     >
                                                         <RefreshCw size={14} className={savingSubjects ? "animate-spin" : ""} />
-                                                        রিফ্রেশ করুন
+                                                        {isBn ? 'রিফ্রেশ করুন' : 'Refresh'}
                                                     </button>
                                                 )}
                                             </div>
@@ -1101,7 +1133,7 @@ const MyProfile = () => {
                                             {!hierarchy ? (
                                                 <div className="flex items-center justify-center py-12 gap-3 text-slate-400 font-bold text-sm">
                                                     <RefreshCw size={18} className="animate-spin text-indigo-500" />
-                                                    <span>লোড হচ্ছে অ্যাকাডেমিক বিষয়সমূহ...</span>
+                                                    <span>{isBn ? 'লোড হচ্ছে অ্যাকাডেমিক বিষয়সমূহ...' : 'Loading academic subjects...'}</span>
                                                 </div>
                                             ) : (
                                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1111,13 +1143,13 @@ const MyProfile = () => {
                                                         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                                                             <h3 className="text-sm font-black text-slate-700 flex items-center gap-2">
                                                                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30 animate-pulse"></span>
-                                                                বর্তমান অ্যাক্টিভ বিষয় ({activeSubjectsList.length})
+                                                                {isBn ? 'বর্তমান অ্যাক্টিভ বিষয়' : 'Current Active Subjects'} ({activeSubjectsList.length})
                                                             </h3>
                                                         </div>
                                                         
                                                         {activeSubjectsList.length === 0 ? (
                                                             <div className="p-8 border-2 border-dashed border-slate-100 rounded-2xl text-center text-slate-400 text-xs font-semibold">
-                                                                কোনো বিষয় সক্রিয় করা নেই।
+                                                                {isBn ? 'কোনো বিষয় সক্রিয় করা নেই।' : 'No subjects activated.'}
                                                             </div>
                                                         ) : (
                                                             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
@@ -1138,7 +1170,7 @@ const MyProfile = () => {
                                                                             </div>
                                                                         </div>
                                                                         <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                                                                            Active
+                                                                            {isBn ? 'সক্রিয়' : 'Active'}
                                                                         </span>
                                                                     </div>
                                                                 ))}
@@ -1151,13 +1183,13 @@ const MyProfile = () => {
                                                         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                                                             <h3 className="text-sm font-black text-slate-700 flex items-center gap-2">
                                                                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/30"></span>
-                                                                অ্যাভেইলঅ্যাবল বিষয় ({availableSubjectsList.length})
+                                                                {isBn ? 'সহজলভ্য বিষয়' : 'Available Subjects'} ({availableSubjectsList.length})
                                                             </h3>
                                                         </div>
                                                         
                                                         {availableSubjectsList.length === 0 ? (
                                                             <div className="p-8 border-2 border-dashed border-slate-100 rounded-2xl text-center text-slate-400 text-xs font-semibold">
-                                                                ক্রয় করার জন্য কোনো অতিরিক্ত বিষয় উপলব্ধ নেই।
+                                                                {isBn ? 'ক্রয় করার জন্য কোনো অতিরিক্ত বিষয় উপলব্ধ নেই।' : 'No additional subjects available for purchase.'}
                                                             </div>
                                                         ) : (
                                                             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
@@ -1184,7 +1216,7 @@ const MyProfile = () => {
                                                                                 ৳{price}
                                                                             </span>
                                                                             <span className="text-[10px] font-black text-slate-400 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 px-2.5 py-1 rounded-xl transition uppercase tracking-wider">
-                                                                                Activate
+                                                                                {isBn ? 'সক্রিয় করুন' : 'Activate'}
                                                                             </span>
                                                                         </div>
                                                                     </motion.div>
@@ -1211,26 +1243,26 @@ const MyProfile = () => {
                     <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 rounded-3xl p-6 text-white shadow-xl border border-slate-800 relative overflow-hidden">
                         <div className="absolute -right-12 -top-12 w-44 h-44 bg-indigo-500/5 rounded-full blur-[40px]" />
                         
-                        <h3 className="text-md font-black uppercase tracking-wider text-slate-500 mb-5">Workspace Status</h3>
+                        <h3 className="text-md font-black uppercase tracking-wider text-slate-500 mb-5">{t('profile_workspace_status')}</h3>
 
                         <div className="space-y-5">
                             <div>
-                                <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Account ID</span>
+                                <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">{t('profile_account_id')}</span>
                                 <span className="block text-xs font-mono font-bold text-slate-300 mt-1 break-all select-all">{user.id}</span>
                             </div>
 
                             <div>
-                                <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Account Status</span>
+                                <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">{t('profile_account_status')}</span>
                                 <span className="text-emerald-400 font-extrabold flex items-center gap-2 mt-1.5 text-xs">
                                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                                    Active (সক্রিয়)
+                                    {t('profile_active')}
                                 </span>
                             </div>
 
                             <div>
-                                <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Member Since</span>
+                                <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">{t('profile_member_since')}</span>
                                 <span className="block text-xs text-slate-300 font-bold mt-1.5">
-                                    {new Date(user.createdAt).toLocaleDateString('en-GB', { 
+                                    {new Date(user.createdAt).toLocaleDateString(isBn ? 'bn-BD' : 'en-GB', { 
                                         day: 'numeric', 
                                         month: 'long', 
                                         year: 'numeric' 
@@ -1241,34 +1273,64 @@ const MyProfile = () => {
                             {institute && (
                                 <div className="border-t border-slate-800 pt-5 space-y-4">
                                     <div>
-                                        <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Plan Expiry Date</span>
+                                        <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">{isBn ? 'প্যাকেজের মেয়াদ সমাপ্তি' : 'Plan Expiry Date'}</span>
                                         <span className="block text-xs font-bold text-slate-300 mt-1.5">
                                             {institute.planEndDate ? (
-                                                new Date(institute.planEndDate).toLocaleDateString('en-GB', { 
+                                                new Date(institute.planEndDate).toLocaleDateString(isBn ? 'bn-BD' : 'en-GB', { 
                                                     day: 'numeric', 
                                                     month: 'long', 
                                                     year: 'numeric' 
                                                 })
-                                            ) : 'No expiration (আজীবন সচল)'}
+                                            ) : (isBn ? 'আজীবন সচল' : 'No expiration')}
                                         </span>
                                     </div>
 
                                     <div>
-                                        <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Workspace Limit Card</span>
+                                        <span className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">{isBn ? 'ওয়ার্কস্পেস ব্যবহারের সীমা' : 'Workspace Limits'}</span>
                                         <div className="grid grid-cols-2 gap-3 mt-2.5">
                                             <div className="bg-slate-800/40 border border-slate-800 p-2.5 rounded-xl">
-                                                <span className="block text-[9px] text-slate-500 font-bold uppercase tracking-wider">Teachers</span>
+                                                <span className="block text-[9px] text-slate-500 font-bold uppercase tracking-wider">{isBn ? 'শিক্ষক' : 'Teachers'}</span>
                                                 <span className="block text-sm font-black text-white mt-0.5">
-                                                    {institute.maxTeachers || 5}
+                                                    {stats && institute.maxTeachers != null ? (institute.maxTeachers - stats.teachers) : (institute.maxTeachers || (isBn ? 'আনলিমিটেড' : 'Unlimited'))}
                                                 </span>
+                                                {stats && institute.maxTeachers != null && (
+                                                    <span className="block text-[8px] font-bold text-slate-500 mt-1 uppercase tracking-wider">
+                                                        {isBn ? `ব্যবহৃত: ${stats.teachers}/${institute.maxTeachers}` : `Used: ${stats.teachers}/${institute.maxTeachers}`}
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="bg-slate-800/40 border border-slate-800 p-2.5 rounded-xl">
-                                                <span className="block text-[9px] text-slate-500 font-bold uppercase tracking-wider">Students</span>
+                                                <span className="block text-[9px] text-slate-500 font-bold uppercase tracking-wider">{isBn ? 'শিক্ষার্থী' : 'Students'}</span>
                                                 <span className="block text-sm font-black text-white mt-0.5">
-                                                    {institute.maxStudents || 50}
+                                                    {stats && institute.maxStudents != null ? (institute.maxStudents - stats.students) : (institute.maxStudents || (isBn ? 'আনলিমিটেড' : 'Unlimited'))}
                                                 </span>
+                                                {stats && institute.maxStudents != null && (
+                                                    <span className="block text-[8px] font-bold text-slate-500 mt-1 uppercase tracking-wider">
+                                                        {isBn ? `ব্যবহৃত: ${stats.students}/${institute.maxStudents}` : `Used: ${stats.students}/${institute.maxStudents}`}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
+
+                                        {/* Option A Shortcut Buttons */}
+                                        {isAdmin && (
+                                            <div className="grid grid-cols-2 gap-2 mt-3 pt-2 border-t border-slate-800/60">
+                                                <button
+                                                    onClick={() => navigate('/users/teachers')}
+                                                    className="py-2 px-3 bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-500/30 text-indigo-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition duration-150 text-center flex items-center justify-center gap-1.5"
+                                                >
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                                                    {isBn ? 'শিক্ষক যোগ / ম্যানেজ' : 'Manage Teachers'}
+                                                </button>
+                                                <button
+                                                    onClick={() => navigate('/users/students')}
+                                                    className="py-2 px-3 bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-500/30 text-emerald-300 rounded-xl text-[10px] font-black uppercase tracking-wider transition duration-150 text-center flex items-center justify-center gap-1.5"
+                                                >
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                                    {isBn ? 'শিক্ষার্থী যোগ / ম্যানেজ' : 'Manage Students'}
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -1318,27 +1380,27 @@ const MyProfile = () => {
                                             <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto mb-3 border border-indigo-500/20">
                                                 <BookOpen size={22} />
                                             </div>
-                                            <h3 className="text-lg font-black text-white">বিষয় সক্রিয়করণ নিশ্চিত করুন</h3>
+                                            <h3 className="text-lg font-black text-white">{isBn ? 'বিষয় সক্রিয়করণ নিশ্চিত করুন' : 'Confirm Subject Activation'}</h3>
                                             <p className="text-xs text-slate-400 mt-1">
-                                                আপনার ওয়ার্কস্পেসে নতুন একটি বিষয় যোগ করতে পেমেন্ট করুন
+                                                {isBn ? 'আপনার ওয়ার্কস্পেসে নতুন একটি বিষয় যোগ করতে পেমেন্ট করুন' : 'Make a payment to add a new subject to your workspace'}
                                             </p>
                                         </div>
 
                                         <div className="py-6 space-y-4">
                                             <div className="bg-slate-950/50 border border-slate-800/80 rounded-2xl p-4 space-y-3">
                                                 <div className="flex justify-between items-center text-xs">
-                                                    <span className="font-bold text-slate-500">विषয়ের নাম:</span>
+                                                    <span className="font-bold text-slate-500">{isBn ? 'বিষয়ের নাম:' : 'Subject Name:'}</span>
                                                     <span className="font-black text-slate-200">{subjectToActivate.classSubject.name}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center text-xs">
-                                                    <span className="font-bold text-slate-500">শ্রেণী:</span>
+                                                    <span className="font-bold text-slate-500">{isBn ? 'শ্রেণী:' : 'Class:'}</span>
                                                     <span className="font-bold text-slate-300">
                                                         {hierarchy.classes?.find(c => c.id === subjectToActivate.classSubject._classId)?.name || 'Class'}
                                                     </span>
                                                 </div>
                                                 <div className="h-px bg-slate-800/60 my-2"></div>
                                                 <div className="flex justify-between items-center">
-                                                    <span className="text-xs font-bold text-slate-500">মোট মূল্য:</span>
+                                                    <span className="text-xs font-bold text-slate-500">{isBn ? 'মোট মূল্য:' : 'Total Price:'}</span>
                                                     <span className="text-lg font-black text-indigo-400">৳{activePrice}</span>
                                                 </div>
                                             </div>
@@ -1349,13 +1411,13 @@ const MyProfile = () => {
                                                 onClick={() => setShowPaymentModal(false)}
                                                 className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl font-bold text-xs transition active:scale-95"
                                             >
-                                                বাতিল করুন
+                                                {isBn ? 'বাতিল করুন' : 'Cancel'}
                                             </button>
                                             <button 
                                                 onClick={() => setPaymentStep('method')}
                                                 className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-indigo-600/20 active:scale-95 transition"
                                             >
-                                                পে করুন
+                                                {isBn ? 'পে করুন' : 'Pay'}
                                             </button>
                                         </div>
                                     </div>
@@ -1364,9 +1426,9 @@ const MyProfile = () => {
                                 {paymentStep === 'method' && (
                                     <div className="p-6">
                                         <div className="text-center pb-4 border-b border-slate-800">
-                                            <h3 className="text-lg font-black text-white">পেমেন্ট গেটওয়ে নির্বাচন করুন</h3>
+                                            <h3 className="text-lg font-black text-white">{isBn ? 'পেমেন্ট গেটওয়ে নির্বাচন করুন' : 'Select Payment Gateway'}</h3>
                                             <p className="text-xs text-slate-400 mt-1">
-                                                পেমেন্ট সম্পন্ন করার জন্য গেটওয়ে নির্বাচন করুন
+                                                {isBn ? 'পেমেন্ট সম্পন্ন করার জন্য গেটওয়ে নির্বাচন করুন' : 'Select gateway to complete your payment'}
                                             </p>
                                         </div>
 
@@ -1383,7 +1445,7 @@ const MyProfile = () => {
                                                 <div className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-sm">
                                                     <span className="text-[#E2136E] font-black text-xs">bKash</span>
                                                 </div>
-                                                <span className="text-[10px] font-black tracking-wide">বিকাশ</span>
+                                                <span className="text-[10px] font-black tracking-wide">{isBn ? 'বিকাশ' : 'bKash'}</span>
                                             </button>
 
                                             {/* Nagad */}
@@ -1398,7 +1460,7 @@ const MyProfile = () => {
                                                 <div className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-sm">
                                                     <span className="text-[#F7941D] font-black text-xs">Nagad</span>
                                                 </div>
-                                                <span className="text-[10px] font-black tracking-wide">নগদ</span>
+                                                <span className="text-[10px] font-black tracking-wide">{isBn ? 'নগদ' : 'Nagad'}</span>
                                             </button>
 
                                             {/* Rocket */}
@@ -1413,7 +1475,7 @@ const MyProfile = () => {
                                                 <div className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-sm">
                                                     <span className="text-[#8C3494] font-black text-xs">Rocket</span>
                                                 </div>
-                                                <span className="text-[10px] font-black tracking-wide">রকেট</span>
+                                                <span className="text-[10px] font-black tracking-wide">{isBn ? 'রকেট' : 'Rocket'}</span>
                                             </button>
 
                                             {/* Card */}
@@ -1430,7 +1492,7 @@ const MyProfile = () => {
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
                                                     </svg>
                                                 </div>
-                                                <span className="text-[10px] font-black tracking-wide">কার্ড</span>
+                                                <span className="text-[10px] font-black tracking-wide">{isBn ? 'কার্ড' : 'Card'}</span>
                                             </button>
                                         </div>
 
@@ -1438,7 +1500,7 @@ const MyProfile = () => {
                                         <div className="mb-6 space-y-3">
                                             {selectedPaymentMethod !== 'card' ? (
                                                 <div>
-                                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">মোবাইল নম্বর লিখুন</label>
+                                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">{isBn ? 'মোবাইল নম্বর লিখুন' : 'Enter Mobile Number'}</label>
                                                     <input 
                                                         type="text" 
                                                         placeholder="01XXXXXXXXX" 
@@ -1449,7 +1511,7 @@ const MyProfile = () => {
                                             ) : (
                                                 <div className="space-y-3">
                                                     <div>
-                                                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">কার্ড নম্বর</label>
+                                                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">{isBn ? 'কার্ড নম্বর' : 'Card Number'}</label>
                                                         <input 
                                                             type="text" 
                                                             placeholder="XXXX XXXX XXXX XXXX" 
@@ -1459,7 +1521,7 @@ const MyProfile = () => {
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-3">
                                                         <div>
-                                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">মেয়াদ</label>
+                                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">{isBn ? 'মেয়াদ' : 'Expiry'}</label>
                                                             <input 
                                                                 type="text" 
                                                                 placeholder="MM/YY" 
@@ -1486,13 +1548,13 @@ const MyProfile = () => {
                                                 onClick={() => setPaymentStep('confirm')}
                                                 className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl font-bold text-xs transition active:scale-95"
                                             >
-                                                ফিরে যান
+                                                {isBn ? 'ফিরে যান' : 'Go Back'}
                                             </button>
                                             <button 
                                                 onClick={() => handleActivateSubject(subjectToActivate.classSubject.id)}
                                                 className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-indigo-600/20 active:scale-95 transition"
                                             >
-                                                পেমেন্ট সম্পন্ন করুন
+                                                {isBn ? 'পেমেন্ট সম্পন্ন করুন' : 'Complete Payment'}
                                             </button>
                                         </div>
                                     </div>
@@ -1502,9 +1564,9 @@ const MyProfile = () => {
                                     <div className="p-8 text-center space-y-4">
                                         <div className="w-12 h-12 rounded-full border-2 border-slate-800 border-t-indigo-500 animate-spin mx-auto"></div>
                                         <div>
-                                            <h3 className="text-lg font-black text-white">পেমেন্ট প্রসেসিং হচ্ছে...</h3>
+                                            <h3 className="text-lg font-black text-white">{isBn ? 'পেমেন্ট প্রসেসিং হচ্ছে...' : 'Payment processing...'}</h3>
                                             <p className="text-xs text-slate-400 mt-1">
-                                                অনুগ্রহ করে অপেক্ষা করুন, সংযোগ বিচ্ছিন্ন করবেন না
+                                                {isBn ? 'অনুগ্রহ করে অপেক্ষা করুন, সংযোগ বিচ্ছিন্ন করবেন না' : 'Please wait, do not disconnect'}
                                             </p>
                                         </div>
                                     </div>
@@ -1515,22 +1577,22 @@ const MyProfile = () => {
                                         <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
                                             <CheckCircle size={28} />
                                         </div>
-                                        <h3 className="text-lg font-black text-white">পেমেন্ট সফল হয়েছে!</h3>
+                                        <h3 className="text-lg font-black text-white">{isBn ? 'পেমেন্ট সফল হয়েছে!' : 'Payment Successful!'}</h3>
                                         <p className="text-xs text-slate-400 mt-1">
-                                            বিষয়টি আপনার অ্যাকাউন্টে সফলভাবে সক্রিয় করা হয়েছে
+                                            {isBn ? 'বিষয়টি আপনার অ্যাকাউন্টে সফলভাবে সক্রিয় করা হয়েছে' : 'The subject has been successfully activated on your account'}
                                         </p>
 
                                         <div className="my-5 bg-slate-950/40 border border-slate-800 rounded-2xl p-4 text-left space-y-2 text-xs">
                                             <div className="flex justify-between">
-                                                <span className="font-bold text-slate-500">বিষয়:</span>
+                                                <span className="font-bold text-slate-500">{isBn ? 'বিষয়:' : 'Subject:'}</span>
                                                 <span className="font-bold text-slate-300">{subjectToActivate.classSubject.name}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="font-bold text-slate-500">পেমেন্ট গেটওয়ে:</span>
+                                                <span className="font-bold text-slate-500">{isBn ? 'পেমেন্ট গেটওয়ে:' : 'Payment Gateway:'}</span>
                                                 <span className="font-bold text-slate-300 uppercase">{selectedPaymentMethod}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="font-bold text-slate-500">মোট মূল্য:</span>
+                                                <span className="font-bold text-slate-500">{isBn ? 'মোট মূল্য:' : 'Total Price:'}</span>
                                                 <span className="font-black text-emerald-400">৳{activePrice}</span>
                                             </div>
                                             <div className="flex justify-between">
@@ -1543,7 +1605,7 @@ const MyProfile = () => {
                                             onClick={() => setShowPaymentModal(false)}
                                             className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-indigo-600/20 active:scale-95 transition"
                                         >
-                                            বন্ধ করুন
+                                            {isBn ? 'বন্ধ করুন' : 'Close'}
                                         </button>
                                     </div>
                                 )}

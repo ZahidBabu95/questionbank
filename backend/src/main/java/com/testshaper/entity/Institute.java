@@ -13,6 +13,12 @@ public class Institute extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
+    @Column(name = "name_en")
+    private String nameEn;
+
+    @Column(name = "name_bn")
+    private String nameBn;
+
     @Column(name = "short_name")
     private String shortName;
 

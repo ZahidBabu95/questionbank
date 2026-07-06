@@ -238,7 +238,7 @@ const QuestionList = () => {
     const [selectedSubjectId, setSelectedSubjectId] = useState(''); // classSubjectId
     const [selectedChapterId, setSelectedChapterId] = useState('');
     const [selectedTopicId, setSelectedTopicId] = useState('');
-    const [hasSelectedOnce, setHasSelectedOnce] = useState(!!selectedSubjectId || !!showAllOverride || viewMode === 'FAVORITES');
+    const [hasSelectedOnce, setHasSelectedOnce] = useState(!!selectedSubjectId || !!showAllOverride || viewMode === 'FAVORITES' || viewMode === 'REVISED');
     const [isScrolled, setIsScrolled] = useState(false);
     
     // Source Tag filters
@@ -329,6 +329,7 @@ const QuestionList = () => {
     }, [getHierarchyParams, selectedBoards, selectedYears, selectedSchools]);
 
     const fetchOverviewStats = async () => {
+        if (reviewItem || searchParams.get('view')) return;
         try {
             const params = getFullParams();
             const data = await questionService.getOverviewStats(params);
@@ -339,6 +340,7 @@ const QuestionList = () => {
     };
 
     const fetchSourceTags = async () => {
+        if (reviewItem || searchParams.get('view')) return;
         try {
             // Source tags are aggregated based purely on the hierarchy parameters
             // to allow users to see all available tags for the selected subject
@@ -356,6 +358,7 @@ const QuestionList = () => {
     }, [getHierarchyParams]);
 
     useEffect(() => {
+        if (reviewItem || searchParams.get('view')) return;
         if (selectedSubjectId) {
             questionService.getQuestionAvailability(selectedSubjectId, filterLanguage)
                 .then(data => {
@@ -368,7 +371,7 @@ const QuestionList = () => {
         } else {
             setAvailability({ chapters: {}, topics: {} });
         }
-    }, [selectedSubjectId, filterLanguage]);
+    }, [selectedSubjectId, filterLanguage, reviewItem]);
 
     const getChapterQuestionCount = React.useCallback((chapId) => {
         if (!availability?.chapters || !availability.chapters[chapId]) return 0;
@@ -400,7 +403,7 @@ const QuestionList = () => {
 
 
     useEffect(() => {
-        if (selectedSubjectId || showAllOverride || viewMode === 'FAVORITES') {
+        if (selectedSubjectId || showAllOverride || viewMode === 'FAVORITES' || viewMode === 'REVISED') {
             setHasSelectedOnce(true);
         }
     }, [selectedSubjectId, showAllOverride, viewMode]);
@@ -608,63 +611,103 @@ const QuestionList = () => {
     // Level → Streams
     useEffect(() => {
         if (selectedLevelId) {
-            academicService.getStreamsByLevel(selectedLevelId).then(data => {
-                const safeData = Array.isArray(data) ? data : [];
-                setStreams(safeData);
-                if (safeData.length === 1) {
-                    setSelectedStreamId(safeData[0].id);
-                } else if (selectedStreamId && !safeData.find(s => s.id === selectedStreamId)) {
+            if (fullHierarchy && Array.isArray(fullHierarchy.streams)) {
+                const filteredStreams = fullHierarchy.streams.filter(s => String(s._levelId) === String(selectedLevelId));
+                setStreams(filteredStreams);
+                if (filteredStreams.length === 1) {
+                    setSelectedStreamId(filteredStreams[0].id);
+                } else if (selectedStreamId && !filteredStreams.find(s => String(s.id) === String(selectedStreamId))) {
                     setSelectedStreamId('');
                 }
-            }).catch(error => {
-                console.error(error);
-                setStreams([]);
-            });
+            } else {
+                academicService.getStreamsByLevel(selectedLevelId).then(data => {
+                    const safeData = Array.isArray(data) ? data : [];
+                    setStreams(safeData);
+                    if (safeData.length === 1) {
+                        setSelectedStreamId(safeData[0].id);
+                    } else if (selectedStreamId && !safeData.find(s => s.id === selectedStreamId)) {
+                        setSelectedStreamId('');
+                    }
+                }).catch(error => {
+                    console.error(error);
+                    setStreams([]);
+                });
+            }
         } else {
             setStreams([]);
             setSelectedStreamId('');
         }
-    }, [selectedLevelId]);
+    }, [selectedLevelId, fullHierarchy]);
 
     // Stream → Classes
     useEffect(() => {
         if (selectedStreamId) {
-            academicService.getClassesByStream(selectedStreamId).then(data => {
-                const safeData = Array.isArray(data) ? data : [];
-                setClasses(safeData);
-                if (safeData.length === 1) {
-                    setSelectedClassId(safeData[0].id);
-                } else if (selectedClassId && !safeData.find(c => c.id === selectedClassId)) {
+            if (fullHierarchy && Array.isArray(fullHierarchy.classes)) {
+                const filteredClasses = fullHierarchy.classes.filter(c => String(c._streamId) === String(selectedStreamId));
+                setClasses(filteredClasses);
+                if (filteredClasses.length === 1) {
+                    setSelectedClassId(filteredClasses[0].id);
+                } else if (selectedClassId && !filteredClasses.find(c => String(c.id) === String(selectedClassId))) {
                     setSelectedClassId('');
                 }
-            }).catch(error => {
-                console.error(error);
-                setClasses([]);
-            });
+            } else {
+                academicService.getClassesByStream(selectedStreamId).then(data => {
+                    const safeData = Array.isArray(data) ? data : [];
+                    setClasses(safeData);
+                    if (safeData.length === 1) {
+                        setSelectedClassId(safeData[0].id);
+                    } else if (selectedClassId && !safeData.find(c => c.id === selectedClassId)) {
+                        setSelectedClassId('');
+                    }
+                }).catch(error => {
+                    console.error(error);
+                    setClasses([]);
+                });
+            }
         } else {
             setClasses([]);
             setSelectedClassId('');
         }
-    }, [selectedStreamId]);
+    }, [selectedStreamId, fullHierarchy]);
 
     // Class → Subjects
     useEffect(() => {
         if (selectedClassId) {
-            academicService.getSubjectsByClass(selectedClassId).then(data => {
-                const safeData = Array.isArray(data) ? data : [];
-                setSubjects(safeData);
-                if (selectedSubjectId && !safeData.find(s => s.classSubjectId === selectedSubjectId)) {
+            if (fullHierarchy && Array.isArray(fullHierarchy.classSubjects)) {
+                const filteredCS = fullHierarchy.classSubjects.filter(cs => String(cs._classId) === String(selectedClassId));
+                const mappedSubjects = filteredCS.map(cs => {
+                    const globalSub = Array.isArray(fullHierarchy.subjects)
+                        ? fullHierarchy.subjects.find(s => String(s.id) === String(cs._subjectId))
+                        : null;
+                    return {
+                        classSubjectId: cs.id,
+                        subjectId: cs._subjectId,
+                        subjectName: cs.name,
+                        isEnglishVersion: globalSub ? (globalSub.isEnglishVersion || globalSub.englishVersion) : false,
+                        order: cs.order
+                    };
+                });
+                setSubjects(mappedSubjects);
+                if (selectedSubjectId && !mappedSubjects.find(s => String(s.classSubjectId) === String(selectedSubjectId))) {
                     setSelectedSubjectId('');
                 }
-            }).catch(error => {
-                console.error(error);
-                setSubjects([]);
-            });
+            } else {
+                academicService.getSubjectsByClass(selectedClassId).then(data => {
+                    const safeData = Array.isArray(data) ? data : [];
+                    setSubjects(safeData);
+                    if (selectedSubjectId && !safeData.find(s => s.classSubjectId === selectedSubjectId)) {
+                        setSelectedSubjectId('');
+                    }
+                }).catch(error => {
+                    console.error(error);
+                    setSubjects([]);
+                });
+            }
         } else {
             setSubjects([]);
             setSelectedSubjectId('');
         }
-    }, [selectedClassId]);
+    }, [selectedClassId, fullHierarchy]);
     
     // Filter subjects based on language selection
     const filteredSubjects = useMemo(() => {
@@ -736,8 +779,9 @@ const QuestionList = () => {
     }, [selectedChapterId]);
 
     const fetchQuestions = async () => {
+        if (reviewItem || searchParams.get('view')) return;
         const isAcademicSelected = !!selectedSubjectId;
-        const canFetch = isAcademicSelected || showAllOverride || viewMode === 'FAVORITES';
+        const canFetch = isAcademicSelected || showAllOverride || viewMode === 'FAVORITES' || viewMode === 'REVISED';
 
         if (!canFetch) {
             setQuestions([]);
@@ -802,7 +846,7 @@ const QuestionList = () => {
             fetchQuestions();
             if (currentPage === 1) fetchOverviewStats();
         }
-    }, [viewMode, currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools, filterUnanswered, showAllOverride]);
+    }, [viewMode, currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, searchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools, filterUnanswered, showAllOverride, reviewItem]);
 
     // Intersection Observer for Infinite Scrolling
     useEffect(() => {
@@ -1363,8 +1407,8 @@ const QuestionList = () => {
         )}
 
         {/* Gorgeous Full-Screen Glassmorphic Subject Selector Modal */}
-        {!hasSelectedOnce && !(selectedSubjectId || showAllOverride || viewMode === 'FAVORITES') && (
-            <div className="absolute inset-0 z-50 bg-slate-950/60 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-500">
+        {!hasSelectedOnce && !(selectedSubjectId || showAllOverride || viewMode === 'FAVORITES' || viewMode === 'REVISED') && !reviewItem && !searchParams.get('view') && (
+            <div className="absolute inset-0 z-[35] bg-slate-950/60 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-500">
                 {/* Stunning Gradient Ambient Glow Blobs */}
                 <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-gradient-to-tr from-pink-500/20 to-purple-600/20 rounded-full blur-[120px] pointer-events-none animate-pulse" />
                 <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-gradient-to-tr from-indigo-600/20 to-blue-500/20 rounded-full blur-[120px] pointer-events-none animate-pulse" />
@@ -2297,7 +2341,7 @@ const QuestionList = () => {
                                 <span className="text-slate-500 text-sm font-bold tracking-wide">Loading Questions...</span>
                             </div>
                         </div>
-                    ) : !(selectedSubjectId || showAllOverride || viewMode === 'FAVORITES') ? (
+                    ) : !(selectedSubjectId || showAllOverride || viewMode === 'FAVORITES' || viewMode === 'REVISED') ? (
                         <div className="py-20 flex flex-col items-center justify-center gap-4 bg-white rounded-[32px] border border-slate-200/60 shadow-sm mt-4 text-center">
                             <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
                                 <Layers size={32} className="stroke-[1.5]" />

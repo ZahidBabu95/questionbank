@@ -2,6 +2,7 @@ package com.testshaper.service.impl;
 
 import com.testshaper.entity.Question;
 import com.testshaper.entity.QuestionOption;
+import com.testshaper.entity.QuestionSource;
 import com.testshaper.repository.QuestionOptionRepository;
 import com.testshaper.repository.QuestionRepository;
 import com.testshaper.service.QuestionService;
@@ -36,6 +37,7 @@ public class QuestionServiceImpl implements QuestionService {
     private final com.testshaper.repository.QuestionSourceRepository sourceRepository;
     private final com.testshaper.repository.ExamQuestionRepository examQuestionRepository;
     private final com.testshaper.repository.LectureQuestionRepository lectureQuestionRepository;
+    private final com.testshaper.repository.AppNotificationRepository notificationRepository;
 
     @Override
     @Transactional
@@ -335,6 +337,11 @@ public class QuestionServiceImpl implements QuestionService {
             globalTenantId = "0c430840-39f2-4645-b2e4-53d62c8e4b49"; // Default Institute UUID fallback
         }
         
+        String subjectIdFilter = filters.get("subjectId");
+        if (subjectIdFilter == null || subjectIdFilter.isEmpty()) {
+            subjectIdFilter = filters.get("classSubjectId");
+        }
+
         org.springframework.data.jpa.domain.Specification<Question> spec = 
             com.testshaper.specification.QuestionSpecification.filterQuestions(
                 tenantId,
@@ -345,7 +352,7 @@ public class QuestionServiceImpl implements QuestionService {
                 filters.get("levelId"),
                 filters.get("streamId"),
                 filters.get("classId"),
-                filters.get("subjectId"),
+                subjectIdFilter,
                 filters.get("chapterId"),
                 filters.get("topicId"),
                 filters.get("className"),
@@ -613,7 +620,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public void deleteQuestion(UUID id) {
         // Options cascade delete? Or manual?
         // For now, let's assume manual since we didn't set cascade in entity (kept
@@ -623,8 +630,18 @@ public class QuestionServiceImpl implements QuestionService {
         sourceRepository.deleteByQuestionId(id);
         examQuestionRepository.deleteByQuestionId(id);
         lectureQuestionRepository.deleteByQuestionId(id);
-        List<QuestionOption> options = optionRepository.findByQuestionIdOrderByOptionLabelAsc(id);
-        optionRepository.deleteAll(options);
+        notificationRepository.deleteByRelatedEntityId(id.toString());
+        java.util.Optional<Question> qOpt = questionRepository.findById(id);
+        if (qOpt.isPresent()) {
+            Question q = qOpt.get();
+            java.util.List<QuestionOption> oldOptions = new java.util.ArrayList<>(q.getOptions());
+            q.getOptions().clear();
+            for (QuestionOption opt : oldOptions) {
+                optionRepository.delete(opt);
+            }
+            optionRepository.flush();
+            questionRepository.saveAndFlush(q);
+        }
         try {
             questionRepository.deleteById(id);
             questionRepository.flush();
@@ -638,7 +655,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public void deleteQuestionsBulk(List<UUID> ids) {
         for (UUID id : ids) {
             deleteQuestion(id);
@@ -647,7 +664,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public Question approveQuestion(UUID id, String approverId) {
         Question question = getQuestion(id);
         question.setStatus(Question.QuestionStatus.APPROVED);
@@ -663,14 +680,14 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public Question rejectQuestion(UUID id) {
         return rejectQuestion(id, null, null);
     }
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public Question rejectQuestion(UUID id, String rejectionReason, String rejectedBy) {
         Question question = getQuestion(id);
         question.setStatus(Question.QuestionStatus.REJECTED);
@@ -684,7 +701,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public Question updateQuestion(UUID id, Question questionDetails, List<QuestionOption> options) {
         Question question = getQuestion(id);
 
@@ -763,7 +780,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public void approveQuestionsBulk(List<UUID> ids, String approverId) {
         for (UUID id : ids) {
             approveQuestion(id, approverId);
@@ -772,7 +789,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public void rejectQuestionsBulk(List<UUID> ids) {
         for (UUID id : ids) {
             rejectQuestion(id);
@@ -781,7 +798,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public void updateStatusBulk(List<UUID> ids, Question.QuestionStatus status, String approverId) {
         for (UUID id : ids) {
             if (status == Question.QuestionStatus.APPROVED) {
@@ -800,7 +817,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public Question submitRevision(UUID originalQuestionId, Question revisionDraft, List<QuestionOption> options, String userEmail, String versionComment) {
         Question original = getQuestion(originalQuestionId);
         
@@ -819,6 +836,31 @@ public class QuestionServiceImpl implements QuestionService {
         revisionDraft.setParentQuestionId(originalQuestionId);
         revisionDraft.setVersionComment(versionComment);
         revisionDraft.setCreatedBy(userEmail);
+        
+        // Ensure child sources are copied correctly for the revision draft
+        if (revisionDraft.getSources() != null && !revisionDraft.getSources().isEmpty()) {
+            for (QuestionSource src : revisionDraft.getSources()) {
+                src.setQuestion(revisionDraft);
+                src.setId(null); // Force insert of new copies for the draft
+            }
+        } else {
+            // Copy sources from original if not provided or empty
+            if (original.getSources() != null && !original.getSources().isEmpty()) {
+                java.util.List<QuestionSource> copiedSources = new java.util.ArrayList<>();
+                for (QuestionSource src : original.getSources()) {
+                    QuestionSource cl = new QuestionSource();
+                    cl.setSourceType(src.getSourceType());
+                    cl.setExamYear(src.getExamYear());
+                    cl.setOrganizationName(src.getOrganizationName());
+                    cl.setExamName(src.getExamName());
+                    cl.setSession(src.getSession());
+                    cl.setNote(src.getNote());
+                    cl.setQuestion(revisionDraft);
+                    copiedSources.add(cl);
+                }
+                revisionDraft.setSources(copiedSources);
+            }
+        }
         
         // Keep draft's status if already set, otherwise default to REVISED
         if (revisionDraft.getStatus() == null || revisionDraft.getStatus() == Question.QuestionStatus.PENDING) {
@@ -878,7 +920,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public Question approveRevision(UUID revisionId, String approverId) {
         Question revision = getQuestion(revisionId);
         if (revision.getParentQuestionId() == null) {
@@ -919,10 +961,15 @@ public class QuestionServiceImpl implements QuestionService {
         }
         original.setStatus(Question.QuestionStatus.APPROVED); // Ensure original stays APPROVED after merge
 
-        // 2. Erase old options, copy new ones
-        if (Question.QuestionType.MCQ.name().equals(revision.getType())) {
-            List<QuestionOption> oldOptions = optionRepository.findByQuestionIdOrderByOptionLabelAsc(original.getId());
-            optionRepository.deleteAll(oldOptions);
+        // 2. Erase old options, copy new ones using orphan removal to avoid detached update attempts
+        if ("MCQ".equals(original.getType()) || "MCQ".equals(revision.getType())) {
+            java.util.List<QuestionOption> oldOptions = new java.util.ArrayList<>(original.getOptions());
+            original.getOptions().clear();
+            for (QuestionOption opt : oldOptions) {
+                optionRepository.delete(opt);
+            }
+            optionRepository.flush();
+            questionRepository.saveAndFlush(original);
 
             List<QuestionOption> newOptions = optionRepository.findByQuestionIdOrderByOptionLabelAsc(revision.getId());
             List<QuestionOption> savedOptions = new java.util.ArrayList<>();
@@ -936,7 +983,27 @@ public class QuestionServiceImpl implements QuestionService {
                 cl.setQuestion(original);
                 savedOptions.add(optionRepository.save(cl));
             }
-            original.setOptions(savedOptions);
+            original.getOptions().addAll(savedOptions);
+        }
+
+        // 2.5. Update sources on approval using direct repository delete to avoid orphan removal null-column issue
+        if (revision.getSources() != null) {
+            sourceRepository.deleteByQuestionId(original.getId());
+            original.getSources().clear();
+            questionRepository.saveAndFlush(original);
+            
+            for (QuestionSource src : revision.getSources()) {
+                QuestionSource cl = new QuestionSource();
+                cl.setSourceType(src.getSourceType());
+                cl.setExamYear(src.getExamYear());
+                cl.setOrganizationName(src.getOrganizationName());
+                cl.setExamName(src.getExamName());
+                cl.setSession(src.getSession());
+                cl.setNote(src.getNote());
+                cl.setQuestion(original);
+                sourceRepository.save(cl);
+                original.getSources().add(cl);
+            }
         }
 
         questionRepository.save(original);
@@ -965,7 +1032,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags"}, allEntries = true)
+    @org.springframework.cache.annotation.CacheEvict(value = {"questionStats", "sourceTags", "questionsAvailability"}, allEntries = true)
     public void updateOptionsInPlace(UUID questionId, List<QuestionOption> incomingOptions) {
         Question q = questionRepository.findById(questionId)
             .orElseThrow(() -> new RuntimeException("Question not found"));
@@ -1004,29 +1071,92 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     public java.util.Map<String, Object> getQuestionAvailability(UUID classSubjectId, String language) {
-        String jpql = "SELECT q.chapter.id, q.topic.id, q.type, q.difficulty, COUNT(q.id) " +
-                      "FROM Question q " +
-                      "WHERE q.classSubject.id = :csId AND q.deleted = false AND q.status = :status ";
-        
-        if (org.springframework.util.StringUtils.hasText(language) && !"ALL".equalsIgnoreCase(language)) {
-            jpql += "AND q.language = :lang ";
+        com.testshaper.dto.QuestionSearchParams params = new com.testshaper.dto.QuestionSearchParams();
+        params.setClassSubjectId(classSubjectId);
+        params.setLanguage(language);
+        return getQuestionAvailability(params);
+    }
+
+    @Override
+    public java.util.Map<String, Object> getQuestionAvailability(com.testshaper.dto.QuestionSearchParams params) {
+        StringBuilder jpql = new StringBuilder(
+                "SELECT q.chapter.id, q.topic.id, q.type, q.difficulty, COUNT(DISTINCT q.id) " +
+                "FROM Question q ");
+
+        // Joins
+        if ("FAVORITES".equalsIgnoreCase(params.getSourceMode())) {
+            jpql.append("JOIN QuestionFavorite qf ON qf.question = q ");
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(params.getSourceMode()) && params.getLectureIds() != null && !params.getLectureIds().isEmpty()) {
+            jpql.append("JOIN LectureQuestion lq ON lq.question = q ");
         }
-        
-        jpql += "GROUP BY q.chapter.id, q.topic.id, q.type, q.difficulty";
-        
-        var query = entityManager.createQuery(jpql, Object[].class)
-                .setParameter("csId", classSubjectId)
+
+        boolean hasBoard = params.getBoards() != null && !params.getBoards().isEmpty();
+        boolean hasYear = params.getYears() != null && !params.getYears().isEmpty();
+        boolean hasSchool = params.getSchools() != null && !params.getSchools().isEmpty();
+
+        if (hasBoard || hasYear || hasSchool) {
+            jpql.append("JOIN q.sources qs ");
+        }
+
+        // Base conditions
+        jpql.append("WHERE q.classSubject.id = :csId AND q.deleted = false AND q.status = :status ");
+
+        if (org.springframework.util.StringUtils.hasText(params.getLanguage()) && !"ALL".equalsIgnoreCase(params.getLanguage())) {
+            jpql.append("AND (q.language = :lang OR q.language = 'Bilingual' OR :lang = 'Bilingual' OR q.language IS NULL OR q.language = '') ");
+        }
+
+        // Sourcing filters
+        if ("FAVORITES".equalsIgnoreCase(params.getSourceMode())) {
+            String currentUser = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            jpql.append("AND qf.user.email = :currentUser ");
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(params.getSourceMode()) && params.getLectureIds() != null && !params.getLectureIds().isEmpty()) {
+            jpql.append("AND lq.lecture.id IN :lectureIds ");
+        }
+
+        if (hasBoard) {
+            jpql.append("AND qs.sourceType = :boardExamType AND LOWER(qs.organizationName) IN :boards ");
+        }
+        if (hasYear) {
+            jpql.append("AND qs.examYear IN :years ");
+        }
+        if (hasSchool) {
+            jpql.append("AND qs.sourceType = :institutionTestType AND LOWER(qs.organizationName) IN :schools ");
+        }
+
+        jpql.append("GROUP BY q.chapter.id, q.topic.id, q.type, q.difficulty");
+
+        var query = entityManager.createQuery(jpql.toString(), Object[].class)
+                .setParameter("csId", params.getClassSubjectId())
                 .setParameter("status", Question.QuestionStatus.APPROVED);
-                
-        if (org.springframework.util.StringUtils.hasText(language) && !"ALL".equalsIgnoreCase(language)) {
-            query.setParameter("lang", language);
+
+        if (org.springframework.util.StringUtils.hasText(params.getLanguage()) && !"ALL".equalsIgnoreCase(params.getLanguage())) {
+            query.setParameter("lang", params.getLanguage());
         }
-        
+
+        if ("FAVORITES".equalsIgnoreCase(params.getSourceMode())) {
+            String currentUser = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            query.setParameter("currentUser", currentUser);
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(params.getSourceMode()) && params.getLectureIds() != null && !params.getLectureIds().isEmpty()) {
+            query.setParameter("lectureIds", params.getLectureIds());
+        }
+
+        if (hasBoard) {
+            query.setParameter("boards", params.getBoards().stream().map(String::toLowerCase).collect(java.util.stream.Collectors.toList()));
+            query.setParameter("boardExamType", com.testshaper.entity.QuestionSource.SourceType.BOARD_EXAM);
+        }
+        if (hasYear) {
+            query.setParameter("years", params.getYears());
+        }
+        if (hasSchool) {
+            query.setParameter("schools", params.getSchools().stream().map(String::toLowerCase).collect(java.util.stream.Collectors.toList()));
+            query.setParameter("institutionTestType", com.testshaper.entity.QuestionSource.SourceType.INSTITUTION_TEST);
+        }
+
         java.util.List<Object[]> rows = query.getResultList();
-        
+
         java.util.Map<String, java.util.Map<String, java.util.Map<String, Integer>>> chapterCounts = new java.util.HashMap<>();
         java.util.Map<String, java.util.Map<String, java.util.Map<String, Integer>>> topicCounts = new java.util.HashMap<>();
-        
+
         for (Object[] row : rows) {
             UUID chapUuid = (UUID) row[0];
             UUID topUuid = (UUID) row[1];
@@ -1034,18 +1164,18 @@ public class QuestionServiceImpl implements QuestionService {
             Question.DifficultyLevel diff = (Question.DifficultyLevel) row[3];
             Long countVal = (Long) row[4];
             int count = countVal != null ? countVal.intValue() : 0;
-            
+
             String chapId = chapUuid != null ? chapUuid.toString() : null;
             String topId = topUuid != null ? topUuid.toString() : null;
             String diffStr = diff != null ? diff.name() : "MEDIUM";
-            
+
             // Map Chapter counts
             if (chapId != null) {
                 chapterCounts.computeIfAbsent(chapId, k -> new java.util.HashMap<>())
                              .computeIfAbsent(type, k -> new java.util.HashMap<>())
                              .merge(diffStr, count, Integer::sum);
             }
-            
+
             // Map Topic counts
             if (topId != null) {
                 topicCounts.computeIfAbsent(topId, k -> new java.util.HashMap<>())
@@ -1053,10 +1183,62 @@ public class QuestionServiceImpl implements QuestionService {
                            .merge(diffStr, count, Integer::sum);
             }
         }
-        
+
         java.util.Map<String, Object> result = new java.util.HashMap<>();
         result.put("chapters", chapterCounts);
         result.put("topics", topicCounts);
         return result;
     }
+
+    @Override
+    @org.springframework.cache.annotation.Cacheable(value = "questionsAvailability", key = "{#classSubjectIds, #language}")
+    public java.util.Map<UUID, Boolean> getQuestionsAvailabilityBulk(java.util.List<UUID> classSubjectIds, String language) {
+        java.util.Map<UUID, Boolean> result = new java.util.HashMap<>();
+        if (classSubjectIds == null || classSubjectIds.isEmpty()) {
+            return result;
+        }
+        
+        for (UUID id : classSubjectIds) {
+            result.put(id, false);
+        }
+        
+        String jpql = "SELECT q.classSubject.id, COUNT(q.id) " +
+                      "FROM Question q " +
+                      "WHERE q.classSubject.id IN :csIds AND q.deleted = false AND q.status = :status ";
+                      
+        if (org.springframework.util.StringUtils.hasText(language) && !"ALL".equalsIgnoreCase(language)) {
+            jpql += "AND q.language = :lang ";
+        }
+        
+        jpql += "GROUP BY q.classSubject.id";
+        
+        var query = entityManager.createQuery(jpql, Object[].class)
+                .setParameter("csIds", classSubjectIds)
+                .setParameter("status", Question.QuestionStatus.APPROVED);
+                
+        if (org.springframework.util.StringUtils.hasText(language) && !"ALL".equalsIgnoreCase(language)) {
+            query.setParameter("lang", language);
+        }
+        
+        java.util.List<Object[]> rows = query.getResultList();
+        for (Object[] row : rows) {
+            UUID csId = (UUID) row[0];
+            Long count = (Long) row[1];
+            if (csId != null && count != null && count > 0) {
+                result.put(csId, true);
+            }
+        }
+        
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Question> getQuestionsBatch(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return questionRepository.findAllById(ids);
+    }
 }
+

@@ -4,7 +4,8 @@ import com.testshaper.entity.SecuritySetting;
 import com.testshaper.repository.SecuritySettingRepository;
 import com.testshaper.service.SecuritySettingService;
 import com.testshaper.util.EncryptionUtil;
-import jakarta.annotation.PostConstruct;
+import org.springframework.context.event.EventListener;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,7 +43,7 @@ public class SecuritySettingServiceImpl implements SecuritySettingService {
             Map.entry("JWT_ACCESS_TOKEN_EXPIRY_MINUTES", "60"),
             Map.entry("JWT_REFRESH_TOKEN_EXPIRY_DAYS", "30"));
 
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     public void init() {
         refreshCache();
     }

@@ -37,6 +37,18 @@ const lectureService = {
         const res = await axios.post('/v1/lectures/ai-generate', payload);
         return res.data;
     },
+    aiGenerateRag: async (payload) => {
+        const res = await axios.post('/v1/lectures/ai-generate-rag', payload);
+        return res.data;
+    },
+    getChapterMetadata: async (chapterId) => {
+        const res = await axios.get(`/v1/lectures/chapter-metadata/${chapterId}`);
+        return res.data;
+    },
+    createExamFromLecture: async (lectureId) => {
+        const res = await axios.post(`/v1/lectures/${lectureId}/create-exam`);
+        return res.data;
+    },
     uploadAttachment: async (formData) => {
         const res = await axios.post('/v1/lectures/attachments/upload', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }

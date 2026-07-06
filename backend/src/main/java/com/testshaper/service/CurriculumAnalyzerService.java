@@ -32,7 +32,7 @@ public class CurriculumAnalyzerService {
     private static volatile int currentWorkerSize = 4;
     private final ThreadPoolTaskExecutor workerPool = new ThreadPoolTaskExecutor();
 
-    @jakarta.annotation.PostConstruct
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
     public void init() {
         log.info("Checking for stuck curriculum processing jobs from previous server run...");
         List<CurriculumDocument> stuckDocs = documentRepository.findByProcessingStatus(CurriculumDocument.ProcessingStatus.PROCESSING);

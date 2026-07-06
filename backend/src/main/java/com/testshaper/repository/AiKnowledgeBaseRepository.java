@@ -18,4 +18,8 @@ public interface AiKnowledgeBaseRepository extends JpaRepository<AiKnowledgeBase
         "AND k.tags LIKE %:subjectTag%"
     )
     List<AiKnowledgeBase> findActiveCurriculumRules(@org.springframework.data.repository.query.Param("subjectTag") String subjectTag);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("DELETE FROM AiKnowledgeBase k WHERE k.id = :id")
+    void deleteByIdDirectly(@org.springframework.data.repository.query.Param("id") java.util.UUID id);
 }

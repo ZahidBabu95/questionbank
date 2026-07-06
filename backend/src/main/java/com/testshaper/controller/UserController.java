@@ -122,12 +122,20 @@ public class UserController {
                 return ResponseEntity.ok(Map.of("success", true, "message", "User deactivated successfully"));
         }
 
+        // ── PATCH /{id}/unlock  ───────────────────────────────────────────────
+        @PatchMapping("/{id}/unlock")
+        @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+        public ResponseEntity<Map<String, Object>> unlockUser(@PathVariable UUID id) {
+                userService.unlockUser(id);
+                return ResponseEntity.ok(Map.of("success", true, "message", "User unlocked successfully"));
+        }
+
         // ── PATCH /{id}/reset-password  ───────────────────────────────────────
         @PatchMapping("/{id}/reset-password")
         @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
         public ResponseEntity<Map<String, Object>> resetPassword(@PathVariable UUID id) {
-                userService.resetPassword(id);
-                return ResponseEntity.ok(Map.of("success", true, "message", "Password reset successfully"));
+                String newPassword = userService.resetPassword(id);
+                return ResponseEntity.ok(Map.of("success", true, "message", "Password reset successfully", "data", newPassword));
         }
 
         // ── POST /{id}/profile-image  ─────────────────────────────────────────

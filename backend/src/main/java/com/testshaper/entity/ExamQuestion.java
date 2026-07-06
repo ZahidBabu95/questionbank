@@ -48,6 +48,9 @@ public class ExamQuestion {
     @Column(name = "override_question_text", columnDefinition = "TEXT")
     private String overrideQuestionText;
 
+    @Column(name = "alternative_to_id", columnDefinition = "CHAR(36)")
+    private UUID alternativeToId;
+
     @Column(name = "override_options_json", columnDefinition = "TEXT")
     private String overrideOptionsJson;
 

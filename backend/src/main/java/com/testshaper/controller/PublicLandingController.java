@@ -15,6 +15,11 @@ import com.testshaper.repository.InstituteRepository;
 import java.util.Map;
 import java.util.List;
 
+import com.testshaper.service.AcademicService;
+import com.testshaper.dto.ExamDTO;
+import com.testshaper.service.impl.ExamGenerationServiceImpl;
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/v1/public")
 @RequiredArgsConstructor
@@ -25,6 +30,24 @@ public class PublicLandingController {
     private final InstituteRepository instituteRepository;
     private final DynamicStorageService dynamicStorageService;
     private final com.testshaper.service.BillingPackageService packageService;
+    private final ExamGenerationServiceImpl examGenerationService;
+    private final AcademicService academicService;
+
+    @GetMapping("/classes")
+    public ResponseEntity<List<com.testshaper.entity.AcademicClass>> getPublicClasses() {
+        return ResponseEntity.ok(academicService.getAllClasses());
+    }
+
+    @GetMapping("/hierarchy")
+    public ResponseEntity<?> getPublicHierarchy() {
+        return ResponseEntity.ok(academicService.getFullHierarchy(true));
+    }
+
+    @GetMapping("/exams/{examId}")
+    public ResponseEntity<Map<String, Object>> getPublicExam(@PathVariable UUID examId) {
+        ExamDTO exam = examGenerationService.getPublicExam(examId);
+        return ResponseEntity.ok(Map.of("success", true, "data", exam));
+    }
 
     @GetMapping("/landing")
     public ResponseEntity<List<CmsSectionDTO>> getLandingData() {

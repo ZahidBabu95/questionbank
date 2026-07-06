@@ -67,7 +67,19 @@ public class UserAdvancedController {
     @GetMapping("/analytics/monthly-registrations")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
     public ResponseEntity<Map<String, Object>> getMonthlyRegistrations() {
-        List<Map<String, Object>> result = getMonthlyData();
+        String currentEmail = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+        com.testshaper.entity.User currentUser = userRepository.findByEmail(currentEmail).orElse(null);
+        
+        UUID instId = null;
+        if (currentUser != null) {
+            boolean isSuperAdmin = currentUser.getRoles().stream()
+                    .anyMatch(r -> r.getName().equals("SUPER_ADMIN"));
+            if (!isSuperAdmin && currentUser.getInstitute() != null) {
+                instId = currentUser.getInstitute().getId();
+            }
+        }
+
+        List<Map<String, Object>> result = getMonthlyData(instId);
         return ResponseEntity.ok(Map.of("success", true, "data", result));
     }
 
@@ -75,6 +87,24 @@ public class UserAdvancedController {
     @GetMapping("/analytics/role-breakdown")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
     public ResponseEntity<Map<String, Object>> getRoleBreakdown() {
+        String currentEmail = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+        com.testshaper.entity.User currentUser = userRepository.findByEmail(currentEmail).orElse(null);
+
+        if (currentUser != null) {
+            boolean isSuperAdmin = currentUser.getRoles().stream()
+                    .anyMatch(r -> r.getName().equals("SUPER_ADMIN"));
+            if (!isSuperAdmin && currentUser.getInstitute() != null) {
+                UUID instId = currentUser.getInstitute().getId();
+                List<Map<String, Object>> data = List.of(
+                    Map.of("role", "STUDENT",          "count", userRepository.countByInstituteIdAndRoleName(instId, "STUDENT")),
+                    Map.of("role", "TEACHER",           "count", userRepository.countByInstituteIdAndRoleName(instId, "TEACHER")),
+                    Map.of("role", "INSTITUTE_ADMIN",   "count", userRepository.countByInstituteIdAndRoleName(instId, "INSTITUTE_ADMIN")),
+                    Map.of("role", "SUPER_ADMIN",       "count", 0L)
+                );
+                return ResponseEntity.ok(Map.of("success", true, "data", data));
+            }
+        }
+
         List<Map<String, Object>> data = List.of(
             Map.of("role", "STUDENT",          "count", userRepository.countByRoleName("STUDENT")),
             Map.of("role", "TEACHER",           "count", userRepository.countByRoleName("TEACHER")),
@@ -111,13 +141,18 @@ public class UserAdvancedController {
     }
 
     // ── Helper: get monthly user registration data ─────────────────────────────
-    private List<Map<String, Object>> getMonthlyData() {
+    private List<Map<String, Object>> getMonthlyData(UUID instituteId) {
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
         for (int i = 11; i >= 0; i--) {
             LocalDateTime start = now.minusMonths(i).withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
             LocalDateTime end   = start.plusMonths(1);
-            long count = userRepository.countNewUsersBetween(start, end);
+            long count;
+            if (instituteId != null) {
+                count = userRepository.countNewUsersByInstituteBetween(instituteId, start, end);
+            } else {
+                count = userRepository.countNewUsersBetween(start, end);
+            }
             String label = start.getYear() + "-" + String.format("%02d", start.getMonthValue());
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("month", label);

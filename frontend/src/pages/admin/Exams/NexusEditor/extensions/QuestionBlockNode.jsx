@@ -1,8 +1,8 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
 import React from 'react';
-import { RefreshCw, Trash2, Edit3, RotateCcw } from 'lucide-react';
 import questionService from '../../../../../services/questionService';
+import { useNexusEditor } from '../context/NexusEditorContext';
 
 const parseMarkdownImages = (text, contextId = 'unknown') => {
     if (!text) return text;
@@ -101,6 +101,11 @@ const cleanPlaceholderText = (html) => {
 
         const walk = (node) => {
             if (node.nodeType === 3) { // TEXT_NODE
+                if (node.parentNode && typeof node.parentNode.closest === 'function') {
+                    if (node.parentNode.closest('.cq-marks')) {
+                        return;
+                    }
+                }
                 let txt = node.nodeValue;
                 txt = txt
                     .replace(/generated\s+question/gi, '')
@@ -205,7 +210,101 @@ const cleanHtml = (html) => {
 };
 
 
-    const QuestionComponent = ({ node, editor, deleteNode, updateAttributes, getPos, selected }) => {
+const syncedQuestionIds = new Set();
+
+    const QuestionComponent = React.memo(({ node, editor, deleteNode, updateAttributes, getPos, selected }) => {
+        const [rerenderCount, setRerenderCount] = React.useState(0);
+        const hasSyncedRef = React.useRef(false);
+        const prevQuestionIdRef = React.useRef(node.attrs.questionId);
+
+        if (prevQuestionIdRef.current !== node.attrs.questionId) {
+            prevQuestionIdRef.current = node.attrs.questionId;
+            hasSyncedRef.current = false;
+        }
+
+        React.useEffect(() => {
+            const handleRerender = () => {
+                setRerenderCount(prev => prev + 1);
+            };
+            window.addEventListener('nexus-editor-rerender', handleRerender);
+            return () => {
+                window.removeEventListener('nexus-editor-rerender', handleRerender);
+            };
+        }, []);
+
+        const cachedQ = questionService.getQuestionFromCache(node.attrs.questionId) || {};
+
+        const type = node.attrs.type || cachedQ.type || 'MCQ';
+        const questionText = node.attrs.questionText || cachedQ.questionText || '';
+        const options = (node.attrs.options && node.attrs.options.length > 0) ? node.attrs.options : (cachedQ.options || []);
+        const stimulus = node.attrs.stimulus || cachedQ.stimulus || '';
+        const explanation = node.attrs.explanation || cachedQ.explanation || '';
+        const answer = node.attrs.answer || cachedQ.correctAnswer || cachedQ.answer || '';
+        const statements = (node.attrs.statements && node.attrs.statements.length > 0) ? node.attrs.statements : (cachedQ.statements || []);
+        const marks = node.attrs.marks || cachedQ.marks || 1;
+        const difficulty = node.attrs.difficulty || cachedQ.difficulty || 'MEDIUM';
+        const mcqType = node.attrs.mcqType || cachedQ.mcqType || 'SINGLE_CHOICE';
+        const dynamicData = node.attrs.dynamicData || cachedQ.dynamicData;
+
+        let docSettings = editor?.docSettings;
+        let documentQuestions = editor?.documentQuestions;
+
+        try {
+            const context = useNexusEditor();
+            if (!docSettings) docSettings = context.docSettings;
+            if (!documentQuestions) documentQuestions = context.documentQuestions;
+        } catch (e) {
+            // Ignore context error if editor properties are available
+        }
+
+        const activeSet = docSettings?.activeSet;
+        const count = docSettings?.setCount || 4;
+        const lang = docSettings?.setLanguage || 'BN';
+        const setNames = lang === 'EN' 
+            ? (count === 2 ? ['A', 'B'] : ['A', 'B', 'C', 'D'])
+            : (count === 2 ? ['ক', 'খ'] : ['ক', 'খ', 'গ', 'ঘ']);
+        const masterSet = setNames[0] || 'ক';
+        const isShuffledSet = docSettings?.multipleSetsEnabled && activeSet && activeSet !== masterSet;
+
+        const mappings = docSettings?.setMappings || {};
+        const setMapping = activeSet ? mappings[activeSet] : null;
+
+        let displayQuestionNumber = node.attrs.questionNumber;
+        const isMCQ = type === 'MCQ';
+        if (isMCQ) {
+            const mcqs = (documentQuestions || []).filter(q => (q.attrs?.type || questionService.getQuestionFromCache(q.attrs?.questionId)?.type || 'MCQ') === 'MCQ');
+            const originalIndex = mcqs.findIndex(q => q.attrs?.questionId === node.attrs.questionId);
+            
+            if (isShuffledSet) {
+                if (setMapping && setMapping.questions) {
+                    const shuffledIndex = setMapping.questions.indexOf(node.attrs.questionId);
+                    if (shuffledIndex !== -1) {
+                        const targetOriginalMCQ = mcqs[shuffledIndex];
+                        displayQuestionNumber = targetOriginalMCQ?.attrs?.questionNumber || (shuffledIndex + 1);
+                    }
+                }
+            } else if (originalIndex !== -1) {
+                displayQuestionNumber = node.attrs.questionNumber || (originalIndex + 1);
+            }
+        }
+
+        let displayOptions = options || [];
+        if (isShuffledSet && setMapping && setMapping.options) {
+            const qId = node.attrs.questionId;
+            const shuffledOptionIds = setMapping.options[qId];
+            if (shuffledOptionIds && shuffledOptionIds.length > 0) {
+                const optionsMap = {};
+                (options || []).forEach((opt, oIdx) => {
+                    const optId = opt.id || `opt-${oIdx}`;
+                    optionsMap[optId] = opt;
+                });
+                const mappedOpts = shuffledOptionIds.map(optId => optionsMap[optId]).filter(Boolean);
+                if (mappedOpts.length > 0) {
+                    displayOptions = mappedOpts;
+                }
+            }
+        }
+
         // Strict mode lock removed as per user request to make it fully usable
         const isStrict = editor?.view?.dom?.classList?.contains('strict-analytics-mode') || false;
         
@@ -231,6 +330,16 @@ const cleanHtml = (html) => {
         React.useEffect(() => {
             const attrs = node.attrs;
             if (!attrs.questionId) return;
+            if (syncedQuestionIds.has(attrs.questionId)) return;
+
+            // If the question details are already in cache, we don't need to fetch them from DB
+            // and we don't need to dispatch transaction updates, because the renderer will fall back
+            // to the cached question details (cachedQ) synchronously.
+            const cached = questionService.getQuestionFromCache(attrs.questionId);
+            if (cached) {
+                syncedQuestionIds.add(attrs.questionId);
+                return;
+            }
 
             const isMCQ = attrs.type === 'MCQ';
             
@@ -239,7 +348,9 @@ const cleanHtml = (html) => {
             const needsBasicSync = !attrs.syncedFromDb;
             const needsDynamicSync = !attrs.dynamicDataSynced && !attrs.dynamicData;
             
-            if (needsBasicSync || needsDynamicSync) {
+            if ((needsBasicSync || needsDynamicSync) && !hasSyncedRef.current) {
+                hasSyncedRef.current = true;
+                syncedQuestionIds.add(attrs.questionId);
                 questionService.getQuestionById(attrs.questionId).then(q => {
                     if (q) {
                         const updateObj = {
@@ -258,9 +369,24 @@ const cleanHtml = (html) => {
                             updateObj.language = q.language;
                         }
                         
-                        // Sync dynamicData if missing
-                        if (!attrs.dynamicData && q.dynamicData) {
-                            updateObj.dynamicData = q.dynamicData;
+                        // Sync dynamicData and sources
+                        let dynamicDataObj = {};
+                        if (q.dynamicData) {
+                            try {
+                                dynamicDataObj = typeof q.dynamicData === 'string' ? JSON.parse(q.dynamicData) : q.dynamicData;
+                            } catch (e) { console.error("Error parsing dynamicData", e); }
+                        }
+                        if (q.sources && q.sources.length > 0 && (!dynamicDataObj.sources || dynamicDataObj.sources.length === 0)) {
+                            dynamicDataObj.sources = q.sources.map(src => ({
+                                organizationName: src.organizationName || src.organization_name,
+                                examYear: src.examYear || src.exam_year,
+                                examName: src.examName || src.exam_name,
+                                sourceType: src.sourceType || src.source_type
+                            }));
+                        }
+                        const dynamicDataJson = JSON.stringify(dynamicDataObj);
+                        if (dynamicDataJson !== '{}') {
+                            updateObj.dynamicData = dynamicDataJson;
                         }
                         
                         // Sync stimulus if missing
@@ -445,7 +571,24 @@ const cleanHtml = (html) => {
                         const originalNum = match[0];
                         const targetStyle = (node.attrs.language === 'English' || node.attrs.numberingStyle === 'en') ? 'en' : 'bn';
                         const formattedNum = formatMarksDigits(originalNum, targetStyle);
-                        span.textContent = formattedNum;
+                        if (node.attrs.marksConfig === 'showBracket') {
+                            span.textContent = `(${formattedNum})`;
+                        } else {
+                            span.textContent = formattedNum;
+                        }
+                    }
+                });
+
+                // Add class based on marksConfig to any .cq-questions container
+                const cqQuestionsList = doc.querySelectorAll('.cq-questions');
+                cqQuestionsList.forEach(container => {
+                    container.classList.remove('cq-marks-hide', 'cq-marks-bracket', 'cq-marks-right');
+                    if (node.attrs.marksConfig === 'hide') {
+                        container.classList.add('cq-marks-hide');
+                    } else if (node.attrs.marksConfig === 'showBracket') {
+                        container.classList.add('cq-marks-bracket');
+                    } else if (node.attrs.marksConfig === 'showRight') {
+                        container.classList.add('cq-marks-right');
                     }
                 });
 
@@ -454,7 +597,7 @@ const cleanHtml = (html) => {
                 console.error("Failed to parse and clean questionText HTML", e);
                 return cleanHtml(parseMarkdownImages(cleanPlaceholderText(html), 'questionText'));
             }
-        }, [node.attrs.questionText, node.attrs.stimulus, node.attrs.language, node.attrs.numberingStyle]);
+        }, [node.attrs.questionText, node.attrs.stimulus, node.attrs.language, node.attrs.numberingStyle, node.attrs.marksConfig]);
 
         const computedLayout = React.useMemo(() => {
             let layout = node.attrs.optionLayout || 'col1';
@@ -493,8 +636,8 @@ const cleanHtml = (html) => {
                 'A5': { w: 559, h: 794 },
                 'Custom': { w: (node.attrs.customW || 210) * 3.7795275591, h: (node.attrs.customH || 297) * 3.7795275591 }
             };
-            const pageSizeKey = node.attrs.pageSize || 'A4';
-            const orient = node.attrs.orientation || 'portrait';
+            const pageSizeKey = node.attrs.pageSize || docSettings?.pageSize || 'A4';
+            const orient = node.attrs.orientation || docSettings?.orientation || 'portrait';
             let { w: pageW } = dimensions[pageSizeKey] || dimensions['A4'];
             
             if (orient === 'landscape') {
@@ -503,12 +646,12 @@ const cleanHtml = (html) => {
             }
             
             const mmToPx = (mm) => (mm || 0) * 3.7795275591;
-            const mL = mmToPx(node.attrs.marginLeft !== undefined ? node.attrs.marginLeft : 10);
-            const mR = mmToPx(node.attrs.marginRight !== undefined ? node.attrs.marginRight : 10);
-            const cGap = mmToPx(node.attrs.colGap !== undefined ? node.attrs.colGap : 10);
+            const mL = mmToPx(node.attrs.marginLeft !== undefined ? node.attrs.marginLeft : (docSettings?.marginLeft !== undefined ? docSettings.marginLeft : 10));
+            const mR = mmToPx(node.attrs.marginRight !== undefined ? node.attrs.marginRight : (docSettings?.marginRight !== undefined ? docSettings.marginRight : 10));
+            const cGap = mmToPx(node.attrs.colGap !== undefined ? node.attrs.colGap : (docSettings?.colGap !== undefined ? docSettings.colGap : 10));
             
             const contentWidth = Math.max(200, pageW - mL - mR);
-            let pageCols = node.attrs.pageCols || 1;
+            let pageCols = Number(docSettings?.columns) || 1;
             const colWidth = pageCols > 1 ? Math.max(100, (contentWidth - (pageCols - 1) * cGap) / pageCols) : contentWidth;
             
             const scale = (fSize || 14.66) / 14.66;
@@ -537,30 +680,112 @@ const cleanHtml = (html) => {
             fSize
         ]);
 
-        let dynamicDataParsed = null;
-        let hideSubParts = false;
-        if (node.attrs.dynamicData) {
+        const dynamicDataParsed = React.useMemo(() => {
+            if (!node.attrs.dynamicData) return null;
             try {
-                dynamicDataParsed = typeof node.attrs.dynamicData === 'string' 
+                return typeof node.attrs.dynamicData === 'string' 
                     ? JSON.parse(node.attrs.dynamicData) 
                     : node.attrs.dynamicData;
-                const isDescriptiveCQ = node.attrs.type === 'CQ_DESCRIPTIVE';
-                hideSubParts = dynamicDataParsed && (dynamicDataParsed.hideSubPartsTable === true || dynamicDataParsed.hide_sub_parts === true || isDescriptiveCQ);
             } catch (e) {
                 console.error("Failed to parse dynamicData in QuestionComponent:", e);
+                return null;
             }
-        }
+        }, [node.attrs.dynamicData]);
 
-        const questionFields = [];
-        const answerFields = [];
-        const explanationFields = [];
+        const hideSubParts = React.useMemo(() => {
+            if (!dynamicDataParsed) return false;
+            const isDescriptiveCQ = node.attrs.type === 'CQ_DESCRIPTIVE';
+            return dynamicDataParsed.hideSubPartsTable === true || dynamicDataParsed.hide_sub_parts === true || isDescriptiveCQ;
+        }, [dynamicDataParsed, node.attrs.type]);
 
-        const hasSubPartsAnswers = dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.some(part => part.answer);
-        const hasSubPartsExplanations = dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.some(part => part.explanation);
+        const sourceBadgeText = React.useMemo(() => {
+            const sources = dynamicDataParsed?.sources || [];
+            
+            const abbreviateSource = (org, exam, year, isBangla = true) => {
+                let shortOrg = org || '';
+                
+                const boardReplacements = {
+                    'ঢাকা বোর্ড': 'ঢা. বো.',
+                    'রাজশাহী বোর্ড': 'রা. বো.',
+                    'কুমিল্লা বোর্ড': 'কু. বো.',
+                    'যশোর বোর্ড': 'য. বো.',
+                    'চট্টগ্রাম বোর্ড': 'চ. বো.',
+                    'বরিশাল বোর্ড': 'ব. বো.',
+                    'সিলেট বোর্ড': 'সি. বো.',
+                    'দিনাজপুর বোর্ড': 'দি. বো.',
+                    'ময়মনসিংহ বোর্ড': 'ম. বো.',
+                    'মাদরাসা বোর্ড': 'মা. বো.',
+                    'কারিগরি বোর্ড': 'কা. বো.'
+                };
+                
+                for (const [full, short] of Object.entries(boardReplacements)) {
+                    if (shortOrg.includes(full)) {
+                        shortOrg = shortOrg.replace(full, short);
+                        break;
+                    }
+                }
+                
+                let shortYear = '';
+                if (year) {
+                    let yStr = String(year).slice(-2);
+                    if (isBangla) {
+                        const enToBn = { '0': '০', '1': '১', '2': '২', '3': '৩', '4': '৪', '5': '৫', '6': '৬', '7': '৭', '8': '৮', '9': '৯' };
+                        yStr = yStr.replace(/[0-9]/g, m => enToBn[m]);
+                    }
+                    shortYear = `'${yStr}`;
+                }
+                
+                return `${shortOrg}${shortYear ? ` ${shortYear}` : ''}`;
+            };
 
-        if (dynamicDataParsed) {
+            const isBangla = docSettings?.setLanguage !== 'EN';
+
+            if (sources.length > 0) {
+                const limit = 2;
+                const visibleSources = sources.slice(0, limit);
+                const formatted = visibleSources.map((src) => {
+                    return abbreviateSource(src.organizationName || '', src.examName || '', src.examYear, isBangla);
+                }).join(', ');
+                
+                if (sources.length > limit) {
+                    const remainingCount = sources.length - limit;
+                    const remainingText = isBangla 
+                        ? ` + ${remainingCount}টি` 
+                        : ` + ${remainingCount}`;
+                    return `${formatted}${remainingText}`;
+                }
+                return formatted;
+            }
+            
+            const srcRef = dynamicDataParsed?.sourceReference || dynamicDataParsed?.source || node.attrs.sourceReference || node.attrs.source || '';
+            if (srcRef && !srcRef.toUpperCase().includes('CHUNK_') && srcRef !== 'Textbook Content') {
+                if (srcRef.length > 30) {
+                    return srcRef.slice(0, 30) + '...';
+                }
+                return srcRef;
+            }
+            
+            return '';
+        }, [dynamicDataParsed, docSettings]);
+
+        const hasSubPartsAnswers = React.useMemo(() => {
+            return dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.some(part => part.answer);
+        }, [dynamicDataParsed]);
+
+        const hasSubPartsExplanations = React.useMemo(() => {
+            return dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.some(part => part.explanation);
+        }, [dynamicDataParsed]);
+
+        const { questionFields, answerFields, explanationFields } = React.useMemo(() => {
+            const qFields = [];
+            const aFields = [];
+            const eFields = [];
+            
+            if (!dynamicDataParsed) {
+                return { questionFields: qFields, answerFields: aFields, explanationFields: eFields };
+            }
+            
             const entries = Object.entries(dynamicDataParsed);
-
             const metadataKeys = [
                 'questiontype', 'question_type', 'type',
                 'sources', 'source',
@@ -577,19 +802,39 @@ const cleanHtml = (html) => {
                 if (metadataKeys.includes(lowerKey)) return;
                 if (lowerKey === 'sub_parts' && hideSubParts) return;
 
+                // Pre-process values (clean and parse markdown images only once!)
+                let processedValue = value;
+                if (typeof value === 'string') {
+                    processedValue = cleanHtml(parseMarkdownImages(value, key));
+                } else if (Array.isArray(value)) {
+                    processedValue = value.map((item, idx) => {
+                        if (typeof item === 'object' && item !== null) {
+                            const obj = {};
+                            Object.entries(item).forEach(([k, v]) => {
+                                obj[k] = cleanHtml(parseMarkdownImages(v || '-', k));
+                            });
+                            return obj;
+                        } else {
+                            return cleanHtml(parseMarkdownImages(item || '', `${key}-${idx}`));
+                        }
+                    });
+                }
+
                 if (lowerKey.includes('explanation') || lowerKey.includes('rationale')) {
                     if (!hasSubPartsExplanations) {
-                        explanationFields.push([key, value]);
+                        eFields.push([key, processedValue]);
                     }
                 } else if (lowerKey.includes('answer') || lowerKey.includes('solution') || lowerKey.includes('correct')) {
                     if (!hasSubPartsAnswers) {
-                        answerFields.push([key, value]);
+                        aFields.push([key, processedValue]);
                     }
                 } else {
-                    questionFields.push([key, value]);
+                    qFields.push([key, processedValue]);
                 }
             });
-        }
+            
+            return { questionFields: qFields, answerFields: aFields, explanationFields: eFields };
+        }, [dynamicDataParsed, hideSubParts, hasSubPartsAnswers, hasSubPartsExplanations]);
 
         const renderDynamicValue = (key, value, isAnswerBlock = false) => {
             if (!value || (Array.isArray(value) && value.length === 0)) return null;
@@ -609,14 +854,14 @@ const cleanHtml = (html) => {
                     <div key={key} className="mb-2 last:mb-0 w-full">
                         {!isStrict && !hideLabel && (
                             <div className={`text-[10px] font-bold uppercase tracking-wider select-none mb-0.5 ${
-                                isAnswerBlock ? 'text-emerald-600' : 'text-slate-400'
+                                isAnswerBlock ? 'text-slate-500' : 'text-slate-400'
                             }`}>
                                 {key.replace(/_/g, ' ')}
                             </div>
                         )}
-                        <div className={isAnswerBlock ? 'text-emerald-800 font-medium' : 'text-slate-900'}
+                        <div className={isAnswerBlock ? 'text-slate-900 font-medium' : 'text-slate-900'}
                              style={{ lineHeight: safeLineGap }}
-                             dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(value, key)) }}
+                             dangerouslySetInnerHTML={{ __html: value }}
                         />
                     </div>
                 );
@@ -625,34 +870,32 @@ const cleanHtml = (html) => {
                     <div key={key} className="mb-3 last:mb-0 w-full">
                         {!isStrict && !hideLabel && (
                             <div className={`text-[10px] font-bold uppercase tracking-wider select-none mb-1 ${
-                                isAnswerBlock ? 'text-emerald-600' : 'text-slate-400'
+                                isAnswerBlock ? 'text-slate-500' : 'text-slate-400'
                             }`}>
                                 {key.replace(/_/g, ' ')}
                             </div>
                         )}
                         <div className="space-y-1.5 w-full">
                             {value.map((item, idx) => (
-                                <div key={idx} className={`p-2 rounded-lg border ${
-                                    isAnswerBlock ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50/50 border-slate-200'
-                                }`}>
-                                    {typeof item === 'object' ? (
+                                <div key={idx} className={isAnswerBlock ? 'py-1 w-full' : 'p-2 rounded-lg border bg-slate-50/50 border-slate-200'}>
+                                    {typeof item === 'object' && item !== null ? (
                                         <div className="flex flex-wrap gap-3">
                                             {Object.entries(item).map(([k, v]) => (
                                                 <div key={k} className="flex-1 min-w-[120px]">
                                                     <span className={`text-[9px] font-bold block mb-0.5 uppercase ${
-                                                        isAnswerBlock ? 'text-emerald-600' : 'text-slate-400'
+                                                        isAnswerBlock ? 'text-slate-500' : 'text-slate-400'
                                                     }`}>
                                                         {k.replace(/_/g, ' ')}
                                                     </span>
-                                                    <div className={isAnswerBlock ? 'text-emerald-800' : 'text-slate-800'}
-                                                         dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(v || '-', k)) }}
+                                                    <div className={isAnswerBlock ? 'text-slate-900' : 'text-slate-800'}
+                                                         dangerouslySetInnerHTML={{ __html: v }}
                                                     />
                                                 </div>
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className={isAnswerBlock ? 'text-emerald-800' : 'text-slate-800'}
-                                             dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(item, `${key}-${idx}`)) }}
+                                        <div className={isAnswerBlock ? 'text-slate-900' : 'text-slate-800'}
+                                             dangerouslySetInnerHTML={{ __html: item }}
                                         />
                                     )}
                                 </div>
@@ -667,9 +910,14 @@ const cleanHtml = (html) => {
         return (
             <NodeViewWrapper 
                 data-type="question-block" 
+                questionid={node.attrs.questionId}
+                type={node.attrs.type}
                 data-section-id={node.attrs.sectionId}
                 data-numberingstyle={node.attrs.numberingStyle || 'bn'}
                 data-first-in-section={node.attrs.firstInSection ? 'true' : undefined}
+                data-options={JSON.stringify(node.attrs.options || [])}
+                optionstyle={node.attrs.optionStyle || 'bn'}
+                optiondecoration={node.attrs.optionDecoration || 'rightBracket'}
                 className={`relative group mb-0 transition-all duration-200 rounded-xl ${isStrict ? 'cursor-pointer hover:bg-slate-50' : 'cursor-text'} print:bg-transparent print:scale-100 print:shadow-none print:ring-0 ${node.attrs.language === 'English' ? 'lang-en' : 'lang-bn'}`}
                 style={{ 
                     fontSize: fSize ? `${fSize}px` : 'inherit',
@@ -683,19 +931,38 @@ const cleanHtml = (html) => {
                 onClick={handleClick}
             >
                 {/* Programmatic Question Number for html2canvas and layout consistency */}
-                <span 
-                    className="absolute left-0 top-[2px] font-bold text-slate-900 select-none print:text-black"
-                    style={{
-                        width: '2.2em',
-                        textAlign: 'right',
-                        paddingRight: '0.4em',
-                        whiteSpace: 'nowrap',
-                        fontSize: '1em',
-                        fontFamily: 'inherit'
-                    }}
-                >
-                    {getFormattedNumber(node.attrs.questionNumber, node.attrs.numberingStyle, node.attrs.language)}
-                </span>
+                {!node.attrs.alternativeToId && (
+                    <span 
+                        className="absolute left-0 top-[2px] font-bold text-slate-900 select-none print:text-black"
+                        style={{
+                            width: '2.2em',
+                            textAlign: 'right',
+                            paddingRight: '0.4em',
+                            whiteSpace: 'nowrap',
+                            fontSize: '1em',
+                            fontFamily: 'inherit'
+                        }}
+                    >
+                        {getFormattedNumber(displayQuestionNumber, node.attrs.numberingStyle, node.attrs.language)}
+                    </span>
+                )}
+
+                {node.attrs.alternativeToId && (
+                    <div 
+                        className="w-full flex items-center justify-center my-2 select-none print:my-1"
+                        style={{
+                            marginLeft: '-2.6em',
+                            width: 'calc(100% + 2.6em)',
+                            fontFamily: 'inherit',
+                        }}
+                    >
+                        <div className="flex-grow border-t border-dashed border-slate-300 print:border-black"></div>
+                        <span className="mx-3 text-xs font-bold text-slate-500 bg-white px-2 print:text-black print:text-[11px]">
+                            অথবা / OR
+                        </span>
+                        <div className="flex-grow border-t border-dashed border-slate-300 print:border-black"></div>
+                    </div>
+                )}
 
                 <div className="relative transition-all">
                     {/* Action buttons moved to sidebar */}
@@ -715,17 +982,25 @@ const cleanHtml = (html) => {
                                  style={{ textAlign: node.attrs.textAlign || 'left' }}
                                  dangerouslySetInnerHTML={{ __html: renderedQuestionText }} 
                             />
-                            {node.attrs.marksConfig !== 'hide' && node.attrs.marks && (
-                                <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 mt-0.5 select-none"
-                                      style={{ fontSize: fSize ? `${fSize * 0.9}px` : '0.9em' }}>
-                                    {node.attrs.marksConfig === 'showBracket' 
-                                        ? `(${formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)})` 
-                                        : formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)}
-                                </span>
-                            )}
+                            <div className="flex items-start gap-2 shrink-0 select-none">
+                                {sourceBadgeText && (
+                                    <span className="nexus-source-badge text-slate-500 font-normal select-none"
+                                          style={{ fontSize: fSize ? `${fSize * 0.85}px` : '0.85em', fontFamily: 'inherit' }}>
+                                        [{sourceBadgeText}]
+                                    </span>
+                                )}
+                                {node.attrs.marksConfig !== 'hide' && node.attrs.marks && node.attrs.type !== 'CQ' && node.attrs.type !== 'CQ_DESCRIPTIVE' && (
+                                    <span className="font-medium text-slate-800 whitespace-nowrap ml-1 mt-0.5 select-none"
+                                          style={{ fontSize: fSize ? `${fSize * 0.9}px` : '0.9em' }}>
+                                        {node.attrs.marksConfig === 'showBracket' 
+                                            ? `(${formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)})` 
+                                            : formatMarksDigits(node.attrs.marks, node.attrs.numberingStyle)}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     ) : (
-                        node.attrs.marksConfig !== 'hide' && node.attrs.marks && (
+                        node.attrs.marksConfig !== 'hide' && node.attrs.marks && node.attrs.type !== 'CQ' && node.attrs.type !== 'CQ_DESCRIPTIVE' && (
                             <div className="flex justify-end w-full">
                                 <span className="font-medium text-slate-800 whitespace-nowrap shrink-0 ml-4 mt-0.5 select-none"
                                       style={{ fontSize: fSize ? `${fSize * 0.9}px` : '0.9em' }}>
@@ -744,7 +1019,7 @@ const cleanHtml = (html) => {
                     )}
 
                     {dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.length > 0 && !hideSubParts && (
-                        <div className="w-full mt-2 pl-4 flex flex-col gap-2 cq-subparts-list">
+                        <div className={`w-full mt-2 pl-4 flex flex-col gap-2 cq-subparts-list cq-marks-${node.attrs.marksConfig === 'showRight' ? 'right' : node.attrs.marksConfig === 'showBracket' ? 'bracket' : 'hide'}`}>
                             {dynamicDataParsed.sub_parts.map((part, pIdx) => {
                                 const partLabel = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
                                 const labelText = `(${partLabel})`;
@@ -773,17 +1048,17 @@ const cleanHtml = (html) => {
                     )}
                     
                     {node.attrs.statements && Array.isArray(node.attrs.statements) && node.attrs.statements.length > 0 && (
-                        <div className="w-full mt-[0.2em] mb-[0.2em] pl-[1.5em]">
-                            <div className="flex flex-col gap-y-1">
+                        <div className="w-full mt-[0.2em] mb-[0.2em] pl-[1.5em] cq-statements-container">
+                            <div className="flex flex-col cq-statements-list">
                                 {node.attrs.statements.map((stmt, idx) => {
                                     const roman = ['i', 'ii', 'iii', 'iv', 'v'][idx] || (idx + 1);
                                     const safeStmt = typeof stmt === 'string' ? stmt : '';
                                     // Strip existing prefix like 'i.', 'ii)', '1.', etc.
                                     const cleanStmt = safeStmt.replace(/^(?:i{1,3}|iv|v|vi{0,3}|ix|x|[0-9]+|[১-৯]+)[\.\)]\s*/i, '').trim();
                                     return (
-                                        <div key={idx} className="flex gap-2 items-start text-slate-800" style={{ fontSize: fSize ? `${fSize * 0.95}px` : '0.95em' }}>
+                                        <div key={idx} className="flex gap-2 items-start text-slate-800 cq-statement-item" style={{ fontSize: fSize ? `${fSize * 0.95}px` : '0.95em' }}>
                                             <span className="font-medium mt-[1px]">{roman}.</span>
-                                            <div dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(cleanStmt, `stmt-${idx}`)) }} />
+                                            <div className="cq-statement-text" dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(cleanStmt, `stmt-${idx}`)) }} />
                                         </div>
                                     );
                                 })}
@@ -793,7 +1068,7 @@ const cleanHtml = (html) => {
                 </div>
                 
                 {/* MCQ Options Rendering */}
-                {node.attrs.options && Array.isArray(node.attrs.options) && node.attrs.options.length > 0 && (
+                {displayOptions && displayOptions.length > 0 && (
                     <div className={`options-grid grid ${computedLayout === 'col4' ? 'grid-cols-4 gap-x-3' : computedLayout === 'col2' ? 'grid-cols-2 gap-x-6' : 'grid-cols-1 gap-x-6'}`}
                          style={{ 
                              rowGap: (node.attrs.optionGap && node.attrs.optionGap < 0) ? '0px' : (node.attrs.optionGap ? `${node.attrs.optionGap}px` : '8px'),
@@ -801,7 +1076,7 @@ const cleanHtml = (html) => {
                              letterSpacing: computedLayout === 'col4' ? '-0.015em' : 'normal'
                          }}
                     >
-                        {node.attrs.options.map((opt, idx) => {
+                        {displayOptions.map((opt, idx) => {
                             const optStyle = node.attrs.optionStyle || 'bn';
                             const optLabel = optStyle === 'en' 
                                 ? String.fromCharCode(97 + idx) 
@@ -840,15 +1115,15 @@ const cleanHtml = (html) => {
                     </div>
                 )}
 
-                {/* Inline Detailed Answer Block */}
-                <div className="nexus-detailed-answer-block mt-2 break-inside-avoid w-full hidden"
-                     style={{ fontSize: node.attrs.fontSize ? `${node.attrs.fontSize}pt` : 'inherit', fontFamily: 'inherit' }}>
+                {/* Inline Detailed Answer Block - controlled by .show-answers-inline / .show-explanation-inline class on parent */}
+                <div className="nexus-detailed-answer-block mt-2 break-inside-avoid w-full"
+                     style={{ fontSize: node.attrs.fontSize ? `${node.attrs.fontSize}pt` : 'inherit', fontFamily: 'inherit', display: 'none' }}>
                     
                     {/* Standard Answer */}
                     {(!dynamicDataParsed || (answerFields.length === 0 && (!dynamicDataParsed.sub_parts || dynamicDataParsed.sub_parts.length === 0))) && (
                         <div className="flex items-start gap-1 font-bold text-slate-800 nexus-answer-line">
                             <span className="shrink-0 answer-label-text">উত্তর:</span>
-                            <div className="nexus-answer-content text-indigo-700" dangerouslySetInnerHTML={{ __html: (() => {
+                            <div className="nexus-answer-content text-slate-900" dangerouslySetInnerHTML={{ __html: (() => {
                                 if (node.attrs.type === 'CQ' || !node.attrs.options || node.attrs.options.length === 0) {
                                     return node.attrs.answer || 'N/A';
                                 }
@@ -875,30 +1150,30 @@ const cleanHtml = (html) => {
 
                     {/* Dynamic Answer Fields */}
                     {dynamicDataParsed && answerFields.length > 0 && (
-                        <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg space-y-2 mt-1">
+                        <div className="space-y-1.5 mt-1">
                             {answerFields.map(([key, value]) => renderDynamicValue(key, value, true))}
                         </div>
                     )}
 
                     {/* Sub Parts Answers and Explanations (CQ_DESCRIPTIVE) */}
                     {dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.length > 0 && (hasSubPartsAnswers || hasSubPartsExplanations) && (
-                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg space-y-3 mt-1 text-slate-800">
+                        <div className="space-y-3 mt-2 text-slate-800 w-full pl-4">
                             {dynamicDataParsed.sub_parts.map((part, pIdx) => {
                                 const label = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
                                 return (
-                                    <div key={pIdx} className="flex flex-col gap-1 border-b border-emerald-100 last:border-0 pb-2 last:pb-0">
+                                    <div key={pIdx} className="flex flex-col gap-1 border-b border-slate-100 last:border-0 pb-2 last:pb-0">
                                         {part.answer && (
                                             <div className="flex items-start gap-1.5 text-sm">
-                                                <span className="shrink-0 text-emerald-800 font-bold">({label}) উত্তর:</span>
-                                                <div className="text-indigo-700 font-medium" dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(part.answer, `subpart-ans-${pIdx}`)) }} />
+                                                <span className="shrink-0 text-slate-900 font-bold">({label}) উত্তর:</span>
+                                                <div className="text-slate-900 font-medium" dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(part.answer, `subpart-ans-${pIdx}`)) }} />
                                             </div>
                                         )}
                                         {part.explanation && (
                                             <div className="flex items-start gap-1.5 mt-0.5 text-xs pl-4">
-                                                <span className="font-bold shrink-0 text-emerald-700">
+                                                <span className="font-bold shrink-0 text-slate-800">
                                                     {!part.answer ? `(${label}) ব্যাখ্যা:` : 'ব্যাখ্যা:'}
                                                 </span>
-                                                <div className="text-slate-700 font-normal" dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(part.explanation, `subpart-exp-${pIdx}`)) }} />
+                                                <div className="text-slate-900 font-normal" dangerouslySetInnerHTML={{ __html: cleanHtml(parseMarkdownImages(part.explanation, `subpart-exp-${pIdx}`)) }} />
                                             </div>
                                         )}
                                     </div>
@@ -909,41 +1184,42 @@ const cleanHtml = (html) => {
 
                     {/* Standard Explanation */}
                     {(!dynamicDataParsed || (explanationFields.length === 0 && (!dynamicDataParsed.sub_parts || dynamicDataParsed.sub_parts.length === 0))) && node.attrs.explanation && (
-                        <div className="explanation-block text-slate-800 mt-1 flex items-start gap-1 p-2 bg-slate-50 border border-slate-200 rounded">
-                            <span className="font-bold shrink-0 text-emerald-700">ব্যাখ্যা:</span>
+                        <div className="explanation-block text-slate-800 mt-2 flex items-start gap-1">
+                            <span className="font-bold shrink-0 text-slate-800">ব্যাখ্যা:</span>
                             <div dangerouslySetInnerHTML={{ __html: node.attrs.explanation }} />
                         </div>
                     )}
 
                     {/* Dynamic Explanation Fields */}
                     {dynamicDataParsed && explanationFields.length > 0 && (
-                        <div className="p-2 bg-blue-50/50 border border-blue-200 rounded-lg space-y-2 mt-1">
+                        <div className="space-y-2 mt-2 w-full pl-4">
                             {explanationFields.map(([key, value]) => renderDynamicValue(key, value, false))}
                         </div>
                     )}
                 </div>
 
-                {/* Revise Button for Revise Mode (formerly Free Edit) */}
-                {!isStrict && (
-                    <div className="absolute top-2 right-2 print:hidden flex gap-2 z-50">
-                        <button
-                            onPointerDown={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                window.dispatchEvent(new CustomEvent('nexusReviseRequested', { 
-                                    detail: { pos: getPos(), nodeSize: node.nodeSize, attrs: node.attrs } 
-                                }));
-                            }}
-                            className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-2 py-1.5 rounded-md flex items-center gap-1.5 text-[11px] font-bold shadow-sm transition-colors border border-indigo-200"
-                            title="Revise this question inline"
-                        >
-                            <Edit3 size={14}/> Revise
-                        </button>
-                    </div>
-                )}
         </NodeViewWrapper>
     );
-};
+}, (prevProps, nextProps) => {
+    return (
+        prevProps.selected === nextProps.selected &&
+        prevProps.node.attrs.questionId === nextProps.node.attrs.questionId &&
+        prevProps.node.attrs.questionText === nextProps.node.attrs.questionText &&
+        prevProps.node.attrs.marks === nextProps.node.attrs.marks &&
+        prevProps.node.attrs.marksConfig === nextProps.node.attrs.marksConfig &&
+        prevProps.node.attrs.language === nextProps.node.attrs.language &&
+        prevProps.node.attrs.numberingStyle === nextProps.node.attrs.numberingStyle &&
+        prevProps.node.attrs.dynamicData === nextProps.node.attrs.dynamicData &&
+        prevProps.node.attrs.questionNumber === nextProps.node.attrs.questionNumber &&
+        prevProps.node.attrs.smartFit === nextProps.node.attrs.smartFit &&
+        prevProps.node.attrs.optionLayout === nextProps.node.attrs.optionLayout &&
+        prevProps.node.attrs.optionStyle === nextProps.node.attrs.optionStyle &&
+        prevProps.node.attrs.optionDecoration === nextProps.node.attrs.optionDecoration &&
+        prevProps.node.attrs.questionGap === nextProps.node.attrs.questionGap &&
+        prevProps.node.attrs.textAlign === nextProps.node.attrs.textAlign &&
+        JSON.stringify(prevProps.node.attrs.options || []) === JSON.stringify(nextProps.node.attrs.options || [])
+    );
+});
 
 export const QuestionBlockNode = Node.create({
     name: 'questionBlock',
@@ -956,6 +1232,7 @@ export const QuestionBlockNode = Node.create({
             sectionId: { default: null },
             subjectId: { default: null },
             chapterId: { default: null },
+            alternativeToId: { default: null },
             type: { default: 'MCQ' },
             questionText: { default: '' },
             stimulus: { default: '' },
@@ -1014,6 +1291,7 @@ export const QuestionBlockNode = Node.create({
                 return {
                     questionId: dom.getAttribute('questionid') || null,
                     sectionId: dom.getAttribute('data-section-id') || null,
+                    alternativeToId: dom.getAttribute('data-alternative-to-id') || null,
                     subjectId: dom.getAttribute('subjectid') || null,
                     chapterId: dom.getAttribute('chapterid') || null,
                     type: dom.getAttribute('type') || 'MCQ',
@@ -1070,6 +1348,7 @@ export const QuestionBlockNode = Node.create({
             'data-statements': JSON.stringify(statements || []),
             'questionid': HTMLAttributes.questionId || null,
             'data-section-id': HTMLAttributes.sectionId || null,
+            'data-alternative-to-id': HTMLAttributes.alternativeToId || null,
             'subjectid': HTMLAttributes.subjectId || null,
             'chapterid': HTMLAttributes.chapterId || null,
             'stimulus': HTMLAttributes.stimulus || '',

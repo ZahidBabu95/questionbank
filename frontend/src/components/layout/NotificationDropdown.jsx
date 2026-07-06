@@ -190,7 +190,7 @@ const NotificationDropdown = () => {
                                             handleMarkAsRead(notif.id, notif.read);
                                             setIsOpen(false);
                                             if (notif.relatedEntityId) {
-                                                navigate(`/questions?view=${notif.relatedEntityId}`);
+                                                navigate(`/questions/revised?view=${notif.relatedEntityId}`);
                                             }
                                         }}
                                         className={`flex gap-3 p-4 border-b border-slate-50 last:border-0 cursor-pointer transition-colors ${

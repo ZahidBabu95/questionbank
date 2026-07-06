@@ -1,8 +1,8 @@
 import React from 'react';
-import { Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, AlignRight, Sigma, Image as ImageIcon, Table as TableIcon } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, AlignRight, Sigma, Image as ImageIcon, Table as TableIcon, FileMinus } from 'lucide-react';
 
 const CanvasToolbar = ({ editor, editorMode, hasMath, hasTable, hasImage }) => {
-    if (editorMode !== 'DISCONNECTED_FREE_EDIT' || !editor) {
+    if (editorMode !== 'FREE_EDIT' || !editor) {
         return null;
     }
 
@@ -24,6 +24,9 @@ const CanvasToolbar = ({ editor, editorMode, hasMath, hasTable, hasImage }) => {
                 {hasMath && <button onClick={() => editor.chain().focus().insertContent('<span data-type="math"></span>').run()} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-all" title="Insert Math Formula"><Sigma size={16} /></button>}
                 {hasTable && <button onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-all" title="Insert Table"><TableIcon size={16} /></button>}
                 {hasImage && <button onClick={() => { const url = window.prompt("Enter image URL:"); if (url) editor.chain().focus().setImage({ src: url }).run(); }} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-all" title="Upload Image"><ImageIcon size={16} /></button>}
+                
+                <div className="w-[1px] h-6 bg-slate-200 mx-1"></div>
+                <button onClick={() => editor.chain().focus().insertContent('<div class="page-break"></div>').run()} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-all" title="Insert Page Break"><FileMinus size={16} /></button>
             </div>
         </div>
     );

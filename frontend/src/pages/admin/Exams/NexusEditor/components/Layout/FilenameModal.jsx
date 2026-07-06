@@ -7,6 +7,7 @@ const FilenameModal = () => {
     const { showFilenameModal, setShowFilenameModal, docSettings, uiLang } = useNexusEditor();
     const { handleDownloadPdf } = useExamManager();
     const [fileName, setFileName] = useState('');
+    const [selectedSet, setSelectedSet] = useState('');
     const [animationClass, setAnimationClass] = useState('opacity-0 scale-95');
     const inputRef = useRef(null);
 
@@ -15,6 +16,13 @@ const FilenameModal = () => {
             // Prefill with docSettings.exam title
             setFileName(docSettings.exam || (uiLang === 'bn' ? 'পরীক্ষার প্রশ্নপত্র' : 'Exam Paper'));
             
+            const count = docSettings.setCount || 4;
+            const lang = docSettings.setLanguage || 'BN';
+            const setNames = lang === 'EN' 
+                ? (count === 2 ? ['A', 'B'] : ['A', 'B', 'C', 'D'])
+                : (count === 2 ? ['ক', 'খ'] : ['ক', 'খ', 'গ', 'ঘ']);
+            setSelectedSet(setNames[0] || '');
+
             // Auto focus on input box
             setTimeout(() => {
                 inputRef.current?.focus();
@@ -28,15 +36,16 @@ const FilenameModal = () => {
         } else {
             setAnimationClass('opacity-0 scale-95');
         }
-    }, [showFilenameModal, docSettings.exam, uiLang]);
+    }, [showFilenameModal, docSettings.exam, docSettings.multipleSetsEnabled, docSettings.setCount, docSettings.setLanguage, uiLang]);
 
     if (!showFilenameModal) return null;
 
     const handleConfirm = () => {
         const cleanName = fileName.trim() || (uiLang === 'bn' ? 'প্রশ্নপত্র' : 'Exam_Paper');
         setShowFilenameModal(false);
-        // Start PDF generation with custom filename!
-        handleDownloadPdf(false, cleanName);
+        // Start PDF generation with custom filename and the active set!
+        const downloadSet = docSettings.multipleSetsEnabled ? (docSettings.activeSet || 'ক') : '';
+        handleDownloadPdf(false, cleanName, downloadSet);
     };
 
     const handleKeyDown = (e) => {

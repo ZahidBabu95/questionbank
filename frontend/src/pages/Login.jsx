@@ -1,19 +1,25 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import axios from '../utils/axios';
 import { Mail, Lock, ArrowRight, CheckCircle, Layout, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useBranding } from '../context/BrandingContext';
+import { useLanguage } from '../context/LanguageContext';
 
 
 const Login = () => {
+    const { currentLang, t, changeLanguage } = useLanguage();
     const [username, setUsername] = useState('admin');
     const [password, setPassword] = useState('password');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
     const branding = useBranding();
+
+    // Get redirect URL from query params (e.g. ?redirect=%2Fexams%2Fshare%2F...)
+    const redirectUrl = new URLSearchParams(location.search).get('redirect') || '/dashboard';
 
     React.useEffect(() => {
         if (localStorage.getItem('token')) {
@@ -38,19 +44,19 @@ const Login = () => {
                 }
                 const user = response.data.user;
                 if (user && user.roles && user.roles.includes('SUPER_ADMIN')) {
-                    navigate('/dashboard');
+                    navigate(redirectUrl);
                 } else if (user && user.instituteStatus !== 'ACTIVE') {
                     navigate('/ai-workspace');
                 } else {
-                    navigate('/dashboard');
+                    navigate(redirectUrl);
                 }
 
             } else {
 
-                setError(response.data.message || 'Login failed');
+                setError(response.data.message || t('login_failed'));
             }
         } catch (err) {
-            setError(err.response?.data?.message || 'Check your credentials and try again.');
+            setError(err.response?.data?.message || t('login_error_credentials'));
         } finally {
             setIsLoading(false);
         }
@@ -116,11 +122,20 @@ const Login = () => {
                         transition={{ duration: 0.8, delay: 0.2 }}
                     >
                         <h2 className="text-5xl font-bold mb-8 leading-tight tracking-tight">
-                            Transform how you <br />
-                            <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">manage education.</span>
+                            {currentLang === 'bn' ? (
+                                <>
+                                    শিক্ষা ব্যবস্থাপনায় আনুন <br />
+                                    <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">নতুন পরিবর্তন।</span>
+                                </>
+                            ) : (
+                                <>
+                                    Transform how you <br />
+                                    <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">manage education.</span>
+                                </>
+                            )}
                         </h2>
                         <p className="text-slate-400 text-xl leading-relaxed mb-12">
-                            Join thousands of educators leveraging AI to create better assessments in less time.
+                            {t('login_join_educators')}
                         </p>
                     </motion.div>
 
@@ -135,8 +150,8 @@ const Login = () => {
                                 <CheckCircle size={20} />
                             </div>
                             <div>
-                                <h4 className="font-semibold text-white">Automated Papers</h4>
-                                <p className="text-sm text-slate-400">Generate exam questions in seconds</p>
+                                <h4 className="font-semibold text-white">{t('login_check_automated')}</h4>
+                                <p className="text-sm text-slate-400">{t('login_desc_automated')}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-4 px-6 py-4 bg-white/5 rounded-2xl border border-white/5 backdrop-blur-md hover:bg-white/10 transition-colors duration-300">
@@ -144,8 +159,8 @@ const Login = () => {
                                 <CheckCircle size={20} />
                             </div>
                             <div>
-                                <h4 className="font-semibold text-white">Smart Analytics</h4>
-                                <p className="text-sm text-slate-400">Track student and batch performance</p>
+                                <h4 className="font-semibold text-white">{t('login_check_analytics')}</h4>
+                                <p className="text-sm text-slate-400">{t('login_desc_analytics')}</p>
                             </div>
                         </div>
                     </motion.div>
@@ -160,14 +175,38 @@ const Login = () => {
                     <p>{branding?.footer_text || `© ${new Date().getFullYear()} QuestionShaper Inc.`}</p>
 
                     <div className="flex gap-6">
-                        <a href="#" className="hover:text-white transition-colors">Privacy</a>
-                        <a href="#" className="hover:text-white transition-colors">Terms</a>
+                        <a href="#" className="hover:text-white transition-colors">{t('login_privacy')}</a>
+                        <a href="#" className="hover:text-white transition-colors">{t('login_terms')}</a>
                     </div>
                 </motion.div>
             </div>
 
             {/* Right Side - Login Form */}
-            <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-16 bg-white">
+            <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-8 lg:p-16 bg-white relative">
+                {/* Language Switcher in top right corner */}
+                <div className="absolute top-6 right-8 flex items-center gap-2">
+                    <button 
+                        onClick={() => changeLanguage('en')}
+                        className={`text-[10px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all uppercase tracking-wider ${
+                            currentLang === 'en' 
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm' 
+                            : 'bg-slate-50 text-slate-650 border-slate-200 hover:bg-slate-100'
+                        }`}
+                    >
+                        EN
+                    </button>
+                    <button 
+                        onClick={() => changeLanguage('bn')}
+                        className={`text-[10px] font-extrabold px-2.5 py-1.5 rounded-xl border transition-all uppercase tracking-wider ${
+                            currentLang === 'bn' 
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm' 
+                            : 'bg-slate-50 text-slate-650 border-slate-200 hover:bg-slate-100'
+                        }`}
+                    >
+                        BN
+                    </button>
+                </div>
+
                 <motion.div
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -175,8 +214,8 @@ const Login = () => {
                     className="w-full max-w-[420px] space-y-10"
                 >
                     <div className="text-center lg:text-left">
-                        <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Welcome back</h2>
-                        <p className="mt-2 text-slate-500">Sign in to your account to continue.</p>
+                        <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{t('login_welcome')}</h2>
+                        <p className="mt-2 text-slate-500">{t('login_subtitle')}</p>
                     </div>
 
                     {error && (
@@ -203,17 +242,17 @@ const Login = () => {
                                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                             </svg>
-                            Continue with Google
+                            {t('login_with_google')}
                         </button>
 
                         <div className="relative flex items-center justify-center">
                             <div className="border-t border-slate-100 w-full absolute"></div>
-                            <span className="bg-white px-4 text-xs font-bold text-slate-400 uppercase tracking-widest relative z-10">or sign in with email</span>
+                            <span className="bg-white px-4 text-xs font-bold text-slate-400 uppercase tracking-widest relative z-10">{t('login_or_email')}</span>
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <div className="space-y-1.5">
-                                <label className="block text-sm font-semibold text-slate-700 ml-1">Email or Username</label>
+                                <label className="block text-sm font-semibold text-slate-700 ml-1">{t('login_email_username')}</label>
                                 <div className="relative group">
                                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-500 transition-colors">
                                         <Mail size={20} />
@@ -231,8 +270,8 @@ const Login = () => {
 
                             <div className="space-y-1.5">
                                 <div className="flex justify-between items-center ml-1">
-                                    <label className="block text-sm font-semibold text-slate-700">Password</label>
-                                    <a href="#" className="text-sm font-semibold text-primary hover:text-blue-700 tab-index-[-1]">Forgot password?</a>
+                                    <label className="block text-sm font-semibold text-slate-700">{t('login_password')}</label>
+                                    <a href="#" className="text-sm font-semibold text-primary hover:text-blue-700 tab-index-[-1]">{t('login_forgot_password')}</a>
                                 </div>
                                 <div className="relative group">
                                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-500 transition-colors">
@@ -265,7 +304,7 @@ const Login = () => {
                                     <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                 ) : (
                                     <>
-                                        Sign In <ArrowRight size={20} className="ml-2" />
+                                        {t('login_sign_in_btn')} <ArrowRight size={20} className="ml-2" />
                                     </>
                                 )}
                             </button>
@@ -274,9 +313,9 @@ const Login = () => {
 
                     <div className="text-center pt-2">
                         <p className="text-slate-500 font-medium">
-                            Don't have an account?{' '}
+                            {t('login_no_account')}{' '}
                             <Link to="/signup" className="font-bold text-primary hover:text-blue-700 transition-colors hover:underline">
-                                Create free account
+                                {t('login_create_free')}
                             </Link>
                         </p>
                     </div>

@@ -18,6 +18,7 @@ const IdleSessionTimeout = () => {
     const idleTimerRef = useRef(null);
     const countdownIntervalRef = useRef(null);
     const warningOpenRef = useRef(false);
+    const lastWriteRef = useRef(0);
 
     // Synchronize warning state with ref to read inside event handlers
     useEffect(() => {
@@ -25,9 +26,9 @@ const IdleSessionTimeout = () => {
     }, [isWarningOpen]);
 
     // Throttled activity tracker to reset idle timer
-    const resetIdleTimer = () => {
-        // If warning modal is already open, do not reset idle timer on activity
-        if (warningOpenRef.current) return;
+    const resetIdleTimer = (isFromStorageEvent = false) => {
+        // If warning modal is already open and it's NOT a storage event, do not reset idle timer on activity
+        if (warningOpenRef.current && !isFromStorageEvent) return;
 
         if (idleTimerRef.current) {
             clearTimeout(idleTimerRef.current);
@@ -36,6 +37,16 @@ const IdleSessionTimeout = () => {
         idleTimerRef.current = setTimeout(() => {
             triggerWarning();
         }, IDLE_LIMIT);
+
+        // If this reset came from a storage event of another tab, do not write back to storage (prevent loop)
+        if (!isFromStorageEvent) {
+            const now = Date.now();
+            // Throttle localStorage writes to once every 10 seconds to protect performance
+            if (now - lastWriteRef.current > 10000) {
+                localStorage.setItem('lastActivity', now.toString());
+                lastWriteRef.current = now;
+            }
+        }
     };
 
     // Open warning countdown modal
@@ -95,6 +106,23 @@ const IdleSessionTimeout = () => {
             resetIdleTimer();
         };
 
+        const onStorageChange = (e) => {
+            if (e.key === 'lastActivity') {
+                // Another tab reported activity!
+                // Reset our idle timer, marking it as from storage event to prevent write-back
+                resetIdleTimer(true);
+                
+                // If warning modal is open, close it because session was kept active in another tab
+                setIsWarningOpen(false);
+                if (countdownIntervalRef.current) {
+                    clearInterval(countdownIntervalRef.current);
+                }
+            } else if (e.key === 'token' && !e.newValue) {
+                // Token was removed (logout triggered in another tab)
+                handleLogout();
+            }
+        };
+
         // Initialize timer
         resetIdleTimer();
 
@@ -103,6 +131,8 @@ const IdleSessionTimeout = () => {
             window.addEventListener(event, onActivity);
         });
 
+        window.addEventListener('storage', onStorageChange);
+
         // Cleanup
         return () => {
             if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
@@ -110,6 +140,7 @@ const IdleSessionTimeout = () => {
             events.forEach(event => {
                 window.removeEventListener(event, onActivity);
             });
+            window.removeEventListener('storage', onStorageChange);
         };
     }, []);
 

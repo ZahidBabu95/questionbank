@@ -18,6 +18,8 @@ public class UserDTO {
     private int contributionPoints;
     private UUID instituteId;
     private String instituteName;
+    private String instituteNameEn;
+    private String instituteNameBn;
     private String instituteMedium;
     private String instituteStatus;
     private String subscriptionPackage;
@@ -36,6 +38,10 @@ public class UserDTO {
     private java.time.LocalDate planStartDate;
     private java.time.LocalDate planEndDate;
     private java.time.LocalDate expiryDate;
+
+    private String studentRoll;
+    private UUID classId;
+    private String className;
 
     private Set<String> roles;
     private Set<String> permissions;

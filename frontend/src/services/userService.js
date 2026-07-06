@@ -38,6 +38,11 @@ const userService = {
         return response.data;
     },
 
+    unlockUser: async (id) => {
+        const response = await axios.patch(`${API_URL}/${id}/unlock`);
+        return response.data;
+    },
+
     resetPassword: async (id) => {
         const response = await axios.patch(`${API_URL}/${id}/reset-password`);
         return response.data;

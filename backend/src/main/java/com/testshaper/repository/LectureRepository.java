@@ -10,7 +10,11 @@ import java.util.UUID;
 
 @Repository
 public interface LectureRepository extends JpaRepository<Lecture, UUID> {
-    Page<Lecture> findByTenantIdAndTitleContainingIgnoreCase(String tenantId, String title, Pageable pageable);
+    Page<Lecture> findByTenantIdAndTitleContainingIgnoreCaseAndDeletedFalse(String tenantId, String title, Pageable pageable);
 
-    Page<Lecture> findByTenantId(String tenantId, Pageable pageable);
+    Page<Lecture> findByTenantIdAndDeletedFalse(String tenantId, Pageable pageable);
+
+    Page<Lecture> findByTenantIdAndClassSubjectIdAndDeletedFalse(String tenantId, UUID classSubjectId, Pageable pageable);
+
+    Page<Lecture> findByTenantIdAndClassSubjectIdAndTitleContainingIgnoreCaseAndDeletedFalse(String tenantId, UUID classSubjectId, String title, Pageable pageable);
 }

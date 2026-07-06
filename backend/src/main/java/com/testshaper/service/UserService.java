@@ -30,7 +30,9 @@ public interface UserService {
 
     void deactivateUser(UUID id);
 
-    void resetPassword(UUID id);
+    void unlockUser(UUID id);
+
+    String resetPassword(UUID id);
 
     void changePassword(UUID id, String oldPassword, String newPassword);
 

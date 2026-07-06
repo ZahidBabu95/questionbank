@@ -41,7 +41,7 @@ export const Num = ({value,onChange,min=0,max=999,step=1,disabled=false,classNam
       if (localVal !== value) {
         onChange(localVal);
       }
-    }, 400);
+    }, 150);
     return () => clearTimeout(timer);
   }, [localVal, value, onChange]);
 
@@ -82,7 +82,7 @@ export const Inp = ({value,onChange,placeholder="",disabled=false}) => {
       if (localVal !== value) {
         onChange(localVal);
       }
-    }, 400);
+    }, 150);
     return () => clearTimeout(timer);
   }, [localVal, value, onChange]);
 
@@ -114,7 +114,7 @@ export const Txt = ({value,onChange,placeholder="",disabled=false,className=""})
       if (localVal !== value) {
         onChange(localVal);
       }
-    }, 400);
+    }, 150);
     return () => clearTimeout(timer);
   }, [localVal, value, onChange]);
 
@@ -137,9 +137,11 @@ export const Txt = ({value,onChange,placeholder="",disabled=false,className=""})
 
 export const Slide = ({value,onChange,min,max,step=1}) => {
   const [localVal, setLocalVal] = useState(value);
+  const [inputVal, setInputVal] = useState(value.toString());
   
   useEffect(() => {
     setLocalVal(value);
+    setInputVal(value.toString());
   }, [value]);
 
   useEffect(() => {
@@ -149,12 +151,60 @@ export const Slide = ({value,onChange,min,max,step=1}) => {
     return () => clearTimeout(t);
   }, [localVal]);
 
+  const handleSliderChange = (e) => {
+    const val = +e.target.value;
+    setLocalVal(val);
+    setInputVal(val.toString());
+  };
+
+  const handleInputChange = (e) => {
+    setInputVal(e.target.value);
+    const parsed = parseFloat(e.target.value);
+    if (!isNaN(parsed)) {
+      const clamped = Math.max(min, Math.min(max, parsed));
+      setLocalVal(clamped);
+    }
+  };
+
+  const handleInputBlur = () => {
+    let parsed = parseFloat(inputVal);
+    if (isNaN(parsed)) {
+      parsed = value;
+    }
+    const clamped = Math.max(min, Math.min(max, parsed));
+    const precision = step.toString().includes('.') ? step.toString().split('.')[1].length : 0;
+    const rounded = parseFloat(clamped.toFixed(precision));
+    setLocalVal(rounded);
+    setInputVal(rounded.toString());
+  };
+
   return (
-    <div style={{display:"flex",alignItems:"center",gap:8}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
       <input type="range" min={min} max={max} step={step} value={localVal} 
-        onChange={e=>setLocalVal(+e.target.value)} 
+        onChange={handleSliderChange} 
         style={{flex:1}} className="accent-indigo-500" />
-      <span style={{fontSize:12,minWidth:28,textAlign:"right",color:"#64748b",fontWeight:600}}>{localVal}</span>
+      <input 
+        type="number" 
+        min={min} 
+        max={max} 
+        step={step} 
+        value={inputVal} 
+        onChange={handleInputChange}
+        onBlur={handleInputBlur}
+        style={{
+          width: '56px',
+          fontSize: '11px',
+          padding: '3px 4px',
+          border: '1px solid #cbd5e1',
+          borderRadius: '6px',
+          textAlign: 'center',
+          fontWeight: 600,
+          color: '#334155',
+          outline: 'none',
+          background: '#f8fafc',
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)'
+        }}
+      />
     </div>
   );
 };
@@ -187,7 +237,7 @@ export const FieldDisplay = ({ isEdit, value, onChange, placeholder="", disabled
       if (localVal !== value) {
         onChange(localVal);
       }
-    }, 400);
+    }, 150);
     return () => clearTimeout(timer);
   }, [localVal, value, onChange]);
 
@@ -215,7 +265,7 @@ export const NumDisplay = ({ isEdit, value, onChange, min=0, max=999, disabled=f
       if (localVal !== value) {
         onChange(localVal);
       }
-    }, 400);
+    }, 150);
     return () => clearTimeout(timer);
   }, [localVal, value, onChange]);
 

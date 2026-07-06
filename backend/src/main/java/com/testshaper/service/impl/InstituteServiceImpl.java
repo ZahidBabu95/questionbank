@@ -75,10 +75,20 @@ public class InstituteServiceImpl implements InstituteService {
         Institute institute = user.getInstitute();
         if (institute == null) {
             institute = new Institute();
-            institute.setName(user.getName() + "'s Workspace (" + UUID.randomUUID().toString().substring(0, 4).toUpperCase() + ")");
             institute.setCode("REQ-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase());
             institute.setType(Institute.InstituteType.PERSONAL);
             institute.setContactEmail(user.getEmail());
+        }
+
+        if (user.getUserInstituteNameEn() != null && !user.getUserInstituteNameEn().isEmpty()) {
+            institute.setName(user.getUserInstituteNameEn());
+            institute.setNameEn(user.getUserInstituteNameEn());
+        } else if (institute.getName() == null) {
+            institute.setName(user.getName() + "'s Workspace (" + UUID.randomUUID().toString().substring(0, 4).toUpperCase() + ")");
+        }
+
+        if (user.getUserInstituteNameBn() != null && !user.getUserInstituteNameBn().isEmpty()) {
+            institute.setNameBn(user.getUserInstituteNameBn());
         }
 
         if (request.getMedium() != null && !request.getMedium().isEmpty()) {
@@ -142,6 +152,8 @@ public class InstituteServiceImpl implements InstituteService {
         Institute institute = getInstitute(id);
 
         institute.setName(updatedInfo.getName());
+        institute.setNameEn(updatedInfo.getNameEn());
+        institute.setNameBn(updatedInfo.getNameBn());
         institute.setShortName(updatedInfo.getShortName());
         institute.setAddress(updatedInfo.getAddress());
         institute.setCity(updatedInfo.getCity());

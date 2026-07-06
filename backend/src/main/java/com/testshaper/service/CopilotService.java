@@ -109,7 +109,16 @@ public class CopilotService {
         // 2. Resolve document IDs and Query Namespaces
         if (docId != null && !docId.isBlank()) {
             Map<String, Object> filters = new HashMap<>();
-            filters.put("docId", docId);
+            try {
+                java.util.UUID uuid = java.util.UUID.fromString(docId);
+                if (curriculumDocumentRepository.existsById(uuid)) {
+                    filters.put("docId", docId);
+                } else {
+                    filters.put("bookId", docId);
+                }
+            } catch (Exception e) {
+                filters.put("docId", docId);
+            }
             if (!inactiveChapterIds.isEmpty()) {
                 filters.put("_inactiveChapterIds", inactiveChapterIds);
             }

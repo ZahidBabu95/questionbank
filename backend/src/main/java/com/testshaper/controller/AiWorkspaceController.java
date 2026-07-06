@@ -123,6 +123,9 @@ public class AiWorkspaceController {
     @GetMapping("/sessions/{sessionId}/messages")
     public ResponseEntity<?> getSessionMessages(@PathVariable UUID sessionId) {
         try {
+            if (!sessionRepo.existsById(sessionId)) {
+                return ResponseEntity.status(404).body(ApiResponse.error("Session not found", 404));
+            }
             List<AiChatMessage> messages = messageRepo.findBySessionIdOrderByCreatedAtAsc(sessionId);
             return ResponseEntity.ok(ApiResponse.success(messages, "Messages retrieved"));
         } catch (Exception e) {

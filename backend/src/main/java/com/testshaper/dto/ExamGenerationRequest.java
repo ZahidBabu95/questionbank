@@ -85,6 +85,14 @@ public class ExamGenerationRequest {
     private String instituteName;
     private String headerText;
 
+    // Sourcing and filtration settings
+    private String sourceMode = "ALL"; // ALL, FAVORITES, LECTURE_SHEETS
+    private List<UUID> lectureIds;
+    private Integer usedPercent;
+    private List<String> boards;
+    private List<Integer> years;
+    private List<String> schools;
+
     // --- Nested DTO ---
     @Data
     public static class QuestionTypeRule {
@@ -102,5 +110,7 @@ public class ExamGenerationRequest {
 
         private String sectionName; // e.g. "ক-বিভাগ (গদ্য)"
         private String categoryName; // e.g. "গদ্য"
+
+        private Integer questionsToAnswer;
     }
 }

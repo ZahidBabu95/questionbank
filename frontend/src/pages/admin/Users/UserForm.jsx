@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import userService from '../../../services/userService';
 import instituteService from '../../../services/instituteService';
-import { User, Mail, Phone, Lock, Shield, Building, X, Save, AlertCircle, Eye, EyeOff, Copy, Check } from 'lucide-react';
+import { User, Mail, Phone, Lock, Shield, Building, X, Save, AlertCircle, Eye, EyeOff, Copy, Check, Zap } from 'lucide-react';
 
 const UserForm = ({ user, onClose, onSuccess }) => {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const isSuperAdmin = currentUser.roles?.includes('SUPER_ADMIN');
     const isEdit = !!user;
     const [formData, setFormData] = useState({
         name: user?.name || '',
@@ -11,7 +13,7 @@ const UserForm = ({ user, onClose, onSuccess }) => {
         phone: user?.phone || '',
         roles: user?.roles || ['STUDENT'],
         password: '', // Only for create
-        instituteId: user?.instituteId || ''
+        instituteId: user?.instituteId || currentUser?.instituteId || ''
     });
     const [roles, setRoles] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -26,6 +28,18 @@ const UserForm = ({ user, onClose, onSuccess }) => {
         navigator.clipboard.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const generateRandomPassword = () => {
+        const length = 10;
+        const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+        let password = "";
+        for (let i = 0; i < length; i++) {
+            const randomIndex = Math.floor(Math.random() * charset.length);
+            password += charset[randomIndex];
+        }
+        setFormData(prev => ({ ...prev, password }));
+        setShowPassword(true);
     };
 
     useEffect(() => {
@@ -141,6 +155,7 @@ const UserForm = ({ user, onClose, onSuccess }) => {
                                     type="email"
                                     required
                                     placeholder="e.g. john@example.com"
+                                    autoComplete="off"
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none"
                                     value={formData.email}
                                     onChange={e => setFormData({ ...formData, email: e.target.value })}
@@ -177,15 +192,19 @@ const UserForm = ({ user, onClose, onSuccess }) => {
                                     style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundPosition: 'right 1rem center', backgroundRepeat: 'no-repeat' }}
                                 >
                                     {roles.length > 0 ? (
-                                        roles.map(role => (
+                                        roles.filter(r => isSuperAdmin || r.name === 'TEACHER' || r.name === 'STUDENT').map(role => (
                                             <option key={role.id || role.name} value={role.name}>
                                                 {role.description || role.name.replace(/_/g, ' ')}
                                             </option>
                                         ))
                                     ) : (
                                         <>
-                                            <option value="SUPER_ADMIN">Super Admin</option>
-                                            <option value="INSTITUTE_ADMIN">Institute Admin</option>
+                                            {isSuperAdmin && (
+                                                <>
+                                                    <option value="SUPER_ADMIN">Super Admin</option>
+                                                    <option value="INSTITUTE_ADMIN">Institute Admin</option>
+                                                </>
+                                            )}
                                             <option value="TEACHER">Teacher</option>
                                             <option value="STUDENT">Student</option>
                                         </>
@@ -194,39 +213,51 @@ const UserForm = ({ user, onClose, onSuccess }) => {
                             </div>
 
                             {/* Institute */}
-                            <div>
-                                <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
-                                    <Building size={15} className="text-indigo-500" /> Assign Institute
-                                    <span className="text-slate-400 font-normal text-xs ml-auto">(Optional)</span>
-                                </label>
-                                <select
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none appearance-none"
-                                    value={formData.instituteId || ''}
-                                    onChange={e => setFormData({ ...formData, instituteId: e.target.value })}
-                                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundPosition: 'right 1rem center', backgroundRepeat: 'no-repeat' }}
-                                >
-                                    <option value="">
-                                        {formData.roles[0] === 'SUPER_ADMIN' ? 'Global / System Level' : 'Personal Workspace (Auto Create)'}
-                                    </option>
-                                    {institutes.map(inst => (
-                                        <option key={inst.id} value={inst.id}>
-                                            {inst.name} {inst.code ? `(${inst.code})` : ''}
+                            {isSuperAdmin && (
+                                <div>
+                                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+                                        <Building size={15} className="text-indigo-500" /> Assign Institute
+                                        <span className="text-slate-400 font-normal text-xs ml-auto">(Optional)</span>
+                                    </label>
+                                    <select
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none appearance-none"
+                                        value={formData.instituteId || ''}
+                                        onChange={e => setFormData({ ...formData, instituteId: e.target.value })}
+                                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundPosition: 'right 1rem center', backgroundRepeat: 'no-repeat' }}
+                                    >
+                                        <option value="">
+                                            {formData.roles[0] === 'SUPER_ADMIN' ? 'Global / System Level' : 'Personal Workspace (Auto Create)'}
                                         </option>
-                                    ))}
-                                </select>
-                            </div>
+                                        {institutes.map(inst => (
+                                            <option key={inst.id} value={inst.id}>
+                                                {inst.name} {inst.code ? `(${inst.code})` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
 
                             {/* Password */}
                             {!isEdit && (
                                 <div>
-                                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
-                                        <Lock size={15} className="text-indigo-500" /> Temporary Password
+                                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5 w-full justify-between">
+                                        <span className="flex items-center gap-2">
+                                            <Lock size={15} className="text-indigo-500" /> Temporary Password
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={generateRandomPassword}
+                                            className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 transition-all"
+                                        >
+                                            <Zap size={12} /> Auto Generate
+                                        </button>
                                     </label>
                                     <div className="relative">
                                         <input
                                             type={showPassword ? "text" : "password"}
                                             required
                                             placeholder="Min 6 characters"
+                                            autoComplete="new-password"
                                             className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none"
                                             value={formData.password}
                                             onChange={e => setFormData({ ...formData, password: e.target.value })}

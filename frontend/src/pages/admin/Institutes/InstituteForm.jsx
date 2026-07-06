@@ -12,6 +12,8 @@ const InstituteForm = () => {
 
     const [formData, setFormData] = useState({
         name: '',
+        nameEn: '',
+        nameBn: '',
         shortName: '',
         code: '',
         type: 'SCHOOL',
@@ -194,9 +196,17 @@ const InstituteForm = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Basic Info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Institute Name *</label>
+                    <div className="col-span-1 md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Institute Name (Default) *</label>
                         <input name="name" value={formData.name} onChange={handleChange} required className="w-full p-2 border border-slate-300 rounded-lg" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Institute Name (English) *</label>
+                        <input name="nameEn" value={formData.nameEn || ''} onChange={handleChange} required className="w-full p-2 border border-slate-300 rounded-lg" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Institute Name (Bengali) *</label>
+                        <input name="nameBn" value={formData.nameBn || ''} onChange={handleChange} required className="w-full p-2 border border-slate-300 rounded-lg" />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Short Name</label>

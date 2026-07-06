@@ -41,5 +41,6 @@ public class BillingPackageRequest {
     private String displayName;
     private String highlightBadge;
     private Integer sortOrder = 0;
+    @NotBlank(message = "Associated role is required")
     private String associatedRole;
 }

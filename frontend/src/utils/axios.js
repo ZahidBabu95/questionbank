@@ -4,6 +4,22 @@ const instance = axios.create({
     baseURL: '/api', // Proxy in Vite handles this locally; in prod, it's relative to root
     headers: {
         'Content-Type': 'application/json'
+    },
+    paramsSerializer: {
+        serialize: (params) => {
+            const parts = [];
+            for (const [key, value] of Object.entries(params)) {
+                if (value === null || value === undefined) continue;
+                if (Array.isArray(value)) {
+                    for (const val of value) {
+                        parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(val)}`);
+                    }
+                } else {
+                    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+                }
+            }
+            return parts.join('&');
+        }
     }
 });
 

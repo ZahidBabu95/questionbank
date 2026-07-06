@@ -21,4 +21,7 @@ public class Role extends BaseEntity {
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "role_permissions", joinColumns = @JoinColumn(name = "role_id"), inverseJoinColumns = @JoinColumn(name = "permission_id"))
     private Set<Permission> permissions = new HashSet<>();
+
+    @Column(name = "allow_self_registration", nullable = false)
+    private boolean allowSelfRegistration = false;
 }

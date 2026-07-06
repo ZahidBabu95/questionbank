@@ -73,11 +73,13 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
     useEffect(() => {
         const loadInitialData = async () => {
             try {
-                const classData = await academicService.getAllClasses();
+                // Fetch Classes and Question data in parallel!
+                const [classData, questionData] = await Promise.all([
+                    academicService.getAllClasses(),
+                    questionService.getQuestionById(id)
+                ]);
+                
                 setClasses(classData);
-
-                // Fetch Question
-                const questionData = await questionService.getQuestionById(id);
                 setQuestionType(questionData.type);
                 setOriginalQuestion(questionData);
 
@@ -109,28 +111,59 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                     })));
                 }
 
+                // Prepare parallel loading for options and cascade dropdown data!
+                const classId = questionData.classSubject?.academicClass?.id;
+                const classSubjectId = questionData.classSubject?.id;
+                const chapterId = questionData.chapter?.id;
+
+                const promises = [];
+                let fetchOptionsIndex = -1;
+                let fetchSubjectsIndex = -1;
+                let fetchChaptersIndex = -1;
+                let fetchTopicsIndex = -1;
+
                 if (questionData.type === 'MCQ') {
-                    // Normalize options
-                    try {
-                        const fetchedOptions = await questionService.getOptions(id);
-                        const opts = (fetchedOptions && fetchedOptions.length > 0)
-                            ? fetchedOptions
-                            : [
-                                { optionLabel: 'A', optionText: '', isCorrect: false },
-                                { optionLabel: 'B', optionText: '', isCorrect: false },
-                                { optionLabel: 'C', optionText: '', isCorrect: false },
-                                { optionLabel: 'D', optionText: '', isCorrect: false }
-                            ];
-                        setOptions(opts.map(o => ({ 
-                            ...o, 
-                            optionText: convertMarkdownImagesToHtml(o.optionText || ''),
-                            isCorrect: o.correct || o.isCorrect 
-                        })));
-                    } catch (optErr) {
-                        console.error('Failed to load MCQ options', optErr);
-                    }
+                    fetchOptionsIndex = promises.push(questionService.getOptions(id)) - 1;
                 }
-                
+                if (classId) {
+                    fetchSubjectsIndex = promises.push(academicService.getSubjectsByClass(classId)) - 1;
+                }
+                if (classSubjectId) {
+                    fetchChaptersIndex = promises.push(academicService.getChaptersByClassSubject(classSubjectId)) - 1;
+                }
+                if (chapterId) {
+                    fetchTopicsIndex = promises.push(academicService.getTopicsByChapter(chapterId)) - 1;
+                }
+
+                const results = await Promise.all(promises);
+
+                if (fetchOptionsIndex !== -1) {
+                    const fetchedOptions = results[fetchOptionsIndex];
+                    const opts = (fetchedOptions && fetchedOptions.length > 0)
+                        ? fetchedOptions
+                        : [
+                            { optionLabel: 'A', optionText: '', isCorrect: false },
+                            { optionLabel: 'B', optionText: '', isCorrect: false },
+                            { optionLabel: 'C', optionText: '', isCorrect: false },
+                            { optionLabel: 'D', optionText: '', isCorrect: false }
+                        ];
+                    setOptions(opts.map(o => ({ 
+                        ...o, 
+                        optionText: convertMarkdownImagesToHtml(o.optionText || ''),
+                        isCorrect: o.correct || o.isCorrect 
+                    })));
+                }
+
+                if (fetchSubjectsIndex !== -1) {
+                    setSubjects(results[fetchSubjectsIndex]);
+                }
+                if (fetchChaptersIndex !== -1) {
+                    setChapters(results[fetchChaptersIndex]);
+                }
+                if (fetchTopicsIndex !== -1) {
+                    setTopics(results[fetchTopicsIndex]);
+                }
+
                 // Parse out CQ parts if it's a CQ
                 if (questionData.type === 'CQ') {
                     const hasCqQuestions = questionData.questionText && questionData.questionText.includes('cq-questions');
@@ -193,20 +226,6 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                             { label: 'ঘ', text: '', answer: '', explanation: '', marks: 4 }
                         ]);
                     }
-                }
-
-                // Load cascade dropdowns if necessary
-                if (questionData.classSubject?.academicClass?.id) {
-                    const subjData = await academicService.getSubjectsByClass(questionData.classSubject.academicClass.id);
-                    setSubjects(subjData);
-                }
-                if (questionData.classSubject?.id) {
-                    const chapData = await academicService.getChaptersByClassSubject(questionData.classSubject.id);
-                    setChapters(chapData);
-                }
-                if (questionData.chapter?.id) {
-                    const topData = await academicService.getTopicsByChapter(questionData.chapter.id);
-                    setTopics(topData);
                 }
 
             } catch (err) {
@@ -526,6 +545,7 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
             })) : null;
 
             let revisionRes = null;
+            let updatedRes = null;
             if (isRevision) {
                 revisionRes = await questionService.submitRevision(id, {
                     question: questionPayload,
@@ -533,14 +553,14 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                 });
                 setMessage({ type: 'success', text: 'Revision submitted for review successfully! Returning...' });
             } else {
-                await questionService.updateQuestion(id, questionPayload, optionsPayload);
+                updatedRes = await questionService.updateQuestion(id, questionPayload, optionsPayload);
                 setMessage({ type: 'success', text: 'Question updated successfully! Returning to list...' });
             }
 
             clearSavedData(); // Clear auto-save data on successful submit
 
             if (isInline && onSaveComplete) {
-                onSaveComplete(isRevision ? revisionRes?.data : undefined);
+                onSaveComplete(isRevision ? revisionRes?.data : updatedRes);
             } else {
                 setTimeout(() => {
                     if (window.history.length <= 2) {

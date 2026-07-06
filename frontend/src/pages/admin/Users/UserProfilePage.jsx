@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, User, Mail, Phone, Building, Calendar, Shield, Activity,
     Clock, LogIn, CheckCircle, XCircle, Globe, Loader2, Edit2, Key,
-    Lock, Unlock, Trash2, AlertTriangle, RefreshCw, Download
+    Lock, Unlock, Trash2, AlertTriangle, RefreshCw, Download, Copy
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line
@@ -85,6 +85,7 @@ const UserProfilePage = () => {
     const [loginPage,     setLoginPage]     = useState(0);
     const [activityTotal, setActivityTotal] = useState(0);
     const [loginTotal,    setLoginTotal]    = useState(0);
+    const [resetPasswordInfo, setResetPasswordInfo] = useState(null);
 
     const showToast = (msg, type = 'success') => {
         setToast({ msg, type });
@@ -147,11 +148,22 @@ const UserProfilePage = () => {
     };
 
     const handleResetPassword = async () => {
-        if (!window.confirm('Reset password to Default@123?')) return;
+        if (!window.confirm(`Reset password for ${user?.name || 'this user'}? This will generate a random temporary password.`)) return;
         try {
-            await userService.resetPassword(id);
-            showToast('Password reset — New password: Default@123', 'warning');
+            const res = await userService.resetPassword(id);
+            const newPassword = res.data || 'QS@XXXXX';
+            setResetPasswordInfo({ name: user.name, email: user.email, password: newPassword });
+            showToast(`Password reset successfully`, 'success');
         } catch (e) { showToast('Failed', 'error'); }
+    };
+
+    const handleUnlockUser = async () => {
+        if (!window.confirm(`Unlock account for ${user?.name || 'this user'}?`)) return;
+        try {
+            await userService.unlockUser(id);
+            setUser(prev => ({ ...prev, accountLocked: false }));
+            showToast('Account unlocked successfully', 'success');
+        } catch (e) { showToast('Unlock failed', 'error'); }
     };
 
     if (loading) return (
@@ -223,6 +235,12 @@ const UserProfilePage = () => {
                             </div>
                         </div>
                         <div className="flex gap-2 mb-2 flex-wrap">
+                            {user.accountLocked && (
+                                <button onClick={handleUnlockUser}
+                                    className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded-xl font-bold text-xs transition-all">
+                                    <Unlock size={12} /> Unlock Account
+                                </button>
+                            )}
                             <button onClick={() => setShowEditModal(true)}
                                 className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all shadow-sm">
                                 <Edit2 size={13} /> Edit
@@ -277,10 +295,19 @@ const UserProfilePage = () => {
 
                     <Section title="Security Info" icon={<Shield size={16} />}>
                         <InfoRow icon={<CheckCircle size={14}/>} label="Account Status" value={user.active ? 'Active ✅' : 'Inactive ❌'} />
-                        <InfoRow icon={<Lock size={14}/>}        label="Account Lock"   value={user.accountLocked ? '🔒 Locked' : 'Not Locked'} />
+                        <InfoRow icon={<Lock size={14}/>}        label="Account Lock"   value={
+                            user.accountLocked ? (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-rose-600 font-bold">🔒 Locked</span>
+                                    <button onClick={handleUnlockUser} className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 border border-emerald-200 rounded hover:bg-emerald-100 transition-all font-bold">
+                                        Unlock
+                                    </button>
+                                </div>
+                            ) : 'Not Locked'
+                        } />
                         <InfoRow icon={<AlertTriangle size={14}/>} label="Failed Login Attempts" value={`${user.failedLoginAttempts ?? 0} attempts`} />
                         <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-500">
-                            💡 পাসওয়ার্ড রিসেট করলে নতুন পাসওয়ার্ড হবে: <span className="font-bold text-indigo-600 font-mono">Default@123</span>
+                            💡 পাসওয়ার্ড রিসেট করলে সিস্টেম একটি কাস্টম র্যান্ডম টেম্পোরারি পাসওয়ার্ড তৈরি করবে এবং ব্যবহারকারীকে ইমেইলে পাঠিয়ে দেবে।
                         </div>
                     </Section>
                 </div>
@@ -398,6 +425,67 @@ const UserProfilePage = () => {
             {showEditModal && (
                 <UserForm user={user} onClose={() => setShowEditModal(false)}
                     onSuccess={() => { setShowEditModal(false); fetchUser(); }} />
+            )}
+
+            {/* ── Password Reset Success Modal ── */}
+            {resetPasswordInfo && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setResetPasswordInfo(null)} />
+                    <div className="relative bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+                                <Key size={20} />
+                            </div>
+                            <div>
+                                <h3 className="font-black text-slate-800 text-base">Password Reset Successfully</h3>
+                                <p className="text-slate-400 text-xs">New credentials generated for the user</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 my-5">
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">User Email</p>
+                                    <p className="text-sm font-bold text-slate-700 mt-0.5">{resetPasswordInfo.email}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">New Temporary Password</p>
+                                    <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2 mt-1">
+                                        <code className="text-indigo-600 font-bold text-sm font-mono">{resetPasswordInfo.password}</code>
+                                        <button 
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(resetPasswordInfo.password);
+                                                showToast('Password copied!', 'success');
+                                            }}
+                                            className="text-xs text-indigo-600 hover:text-indigo-700 font-bold ml-2 flex items-center gap-1"
+                                        >
+                                            <Copy size={12} /> Copy
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                            <button
+                                onClick={() => {
+                                    const text = `*Login Credentials*\nEmail: ${resetPasswordInfo.email}\nPassword: ${resetPasswordInfo.password}\nLogin at: ${window.location.origin}/login`;
+                                    navigator.clipboard.writeText(text);
+                                    showToast('Credentials copied!', 'success');
+                                }}
+                                className="px-4 py-2 bg-indigo-50 border border-indigo-200 text-indigo-600 hover:bg-indigo-100 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5"
+                            >
+                                <Copy size={13} /> Copy Credentials
+                            </button>
+                            <button
+                                onClick={() => setResetPasswordInfo(null)}
+                                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-indigo-200"
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

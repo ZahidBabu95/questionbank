@@ -36,6 +36,9 @@ public class ExamGenerationRule {
     @Column(name = "marks_per_question", nullable = false)
     private Double marksPerQuestion;
 
+    @Column(name = "questions_to_answer")
+    private Integer questionsToAnswer;
+
     // Optional: Difficulty distribution override per type
     @Column(name = "easy_count")
     private Integer easyCount;

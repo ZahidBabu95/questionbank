@@ -59,10 +59,10 @@ public class QuestionFeedbackLearningServiceImpl implements QuestionFeedbackLear
                 // Remove oldest to maintain cap
                 AiKnowledgeBase oldest = existing.get(0);
                 try {
-                    knowledgeRepository.delete(oldest);
+                    knowledgeRepository.deleteByIdDirectly(oldest.getId());
                     log.debug("Removed oldest GOOD_EXAMPLE for {} to maintain cap", subjectTag);
-                } catch (org.springframework.orm.ObjectOptimisticLockingFailureException e) {
-                    log.debug("Optimistic lock: Another thread already deleted the oldest GOOD_EXAMPLE");
+                } catch (Exception e) {
+                    log.debug("Failed to delete oldest GOOD_EXAMPLE directly: {}", e.getMessage());
                 }
             }
 
@@ -105,9 +105,9 @@ public class QuestionFeedbackLearningServiceImpl implements QuestionFeedbackLear
             if (existing.size() >= MAX_BAD_EXAMPLES_PER_SUBJECT) {
                 AiKnowledgeBase oldest = existing.get(0);
                 try {
-                    knowledgeRepository.delete(oldest);
-                } catch (org.springframework.orm.ObjectOptimisticLockingFailureException e) {
-                    log.debug("Optimistic lock: Another thread already deleted the oldest BAD_EXAMPLE");
+                    knowledgeRepository.deleteByIdDirectly(oldest.getId());
+                } catch (Exception e) {
+                    log.debug("Failed to delete oldest BAD_EXAMPLE directly: {}", e.getMessage());
                 }
             }
 

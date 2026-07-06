@@ -92,7 +92,12 @@ export const useAcademicFilters = () => {
                     chapterId: selectedChapterId || '',
                     topicId: selectedTopicId || '',
                     className: (!selectedLevelId && docSettings?.className && !disableAutoFilter) ? docSettings.className : '',
-                    subjectName: (!selectedLevelId && docSettings?.subject && !disableAutoFilter) ? docSettings.subject : ''
+                    subjectName: (!selectedLevelId && docSettings?.subject && !disableAutoFilter) ? docSettings.subject : '',
+                    sourceMode: docSettings?.sourceMode || undefined,
+                    lectureIds: docSettings?.sourceMode === 'LECTURE_SHEETS' ? docSettings.lectureIds : undefined,
+                    boards: docSettings?.boards || undefined,
+                    years: docSettings?.years || undefined,
+                    schools: docSettings?.schools || undefined
                 });
                 if (res?.content) {
                     setBankQuestions(res.content);
@@ -112,7 +117,8 @@ export const useAcademicFilters = () => {
         searchQuery, docSettings?.className, docSettings?.subject, 
         leftPanelTab, selectedLanguage, selectedLevelId, selectedStreamId, 
         selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, 
-        disableAutoFilter
+        disableAutoFilter, docSettings?.sourceMode, docSettings?.lectureIds,
+        docSettings?.boards, docSettings?.years, docSettings?.schools
     ]);
 
     return {

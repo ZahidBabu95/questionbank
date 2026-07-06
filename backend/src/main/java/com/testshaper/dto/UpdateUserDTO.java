@@ -24,4 +24,8 @@ public class UpdateUserDTO {
     private UUID instituteId;
 
     private Set<String> roles;
+
+    private UUID classId;
+
+    private String studentRoll;
 }

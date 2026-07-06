@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Save, Search, Loader2, Eye, Trash2, Filter, FileText, CheckCircle2, Archive, RefreshCw, AlertTriangle, ShieldAlert, Download } from 'lucide-react';
+import { Save, Search, Loader2, Eye, Trash2, Filter, FileText, CheckCircle2, Archive, RefreshCw, AlertTriangle, ShieldAlert, Download, Share2, Copy, Check, BarChart3 } from 'lucide-react';
 import examService from '../../../services/examService';
 import axiosInstance from '../../../utils/axios';
 import { downloadExamPdf } from '../../../services/pdfService';
@@ -30,6 +30,16 @@ const SavedExams = () => {
     const [actionId, setActionId] = useState(null);
     const [downloadingId, setDownloadingId] = useState(null);
     const [fabOpen, setFabOpen] = useState(false);
+
+    // For sharing
+    const [shareModalOpen, setShareModalOpen] = useState(false);
+    const [shareExamId, setShareExamId] = useState(null);
+    const [shareExamTitle, setShareExamTitle] = useState('');
+    const [copiedId, setCopiedId] = useState(null);
+
+    // For sharing draft check
+    const [draftWarningOpen, setDraftWarningOpen] = useState(false);
+    const [updatingStatusId, setUpdatingStatusId] = useState(null);
 
     // Debounce search
     useEffect(() => {
@@ -75,6 +85,63 @@ const SavedExams = () => {
         fetchExams();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, debouncedSearch, size, examType, status, activeTab]);
+
+    const openShareModal = (exam) => {
+        setShareExamId(exam.id);
+        setShareExamTitle(exam.title);
+        if (exam.status === 'DRAFT') {
+            setDraftWarningOpen(true);
+        } else {
+            setShareModalOpen(true);
+        }
+    };
+
+    const handleUpdateStatus = async (examId, newStatus) => {
+        setUpdatingStatusId(examId);
+        try {
+            const res = await axiosInstance.put(`/v1/exams/generate/${examId}`, {
+                status: newStatus
+            });
+            if (res.data && res.data.success) {
+                await fetchExams();
+                setDraftWarningOpen(false);
+                
+                // Open share modal since it is now published/online
+                setShareExamId(examId);
+                const updatedExam = exams.find(e => e.id === examId) || res.data.data;
+                if (updatedExam) {
+                    setShareExamTitle(updatedExam.title);
+                }
+                setShareModalOpen(true);
+            } else {
+                alert('স্ট্যাটাস পরিবর্তন করতে ব্যর্থ হয়েছে।');
+            }
+        } catch (err) {
+            console.error('Error updating status:', err);
+            alert('স্ট্যাটাস পরিবর্তন করতে সমস্যা হয়েছে।');
+        } finally {
+            setUpdatingStatusId(null);
+        }
+    };
+
+    const handleStatusCellChange = async (examId, newStatus) => {
+        setActionId(examId);
+        try {
+            const res = await axiosInstance.put(`/v1/exams/generate/${examId}`, {
+                status: newStatus
+            });
+            if (res.data && res.data.success) {
+                await fetchExams();
+            } else {
+                alert('স্ট্যাটাস পরিবর্তন করতে ব্যর্থ হয়েছে।');
+            }
+        } catch (err) {
+            console.error('Error changing status:', err);
+            alert('স্ট্যাটাস পরিবর্তন করতে সমস্যা হয়েছে।');
+        } finally {
+            setActionId(null);
+        }
+    };
 
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this saved exam?")) return;
@@ -134,6 +201,8 @@ const SavedExams = () => {
         switch (examStatus) {
             case 'PUBLISHED':
                 return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 tracking-wide"><CheckCircle2 size={12}/> PUBLISHED</span>;
+            case 'ONLINE_EXAM':
+                return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 tracking-wide"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-0.5"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> ONLINE EXAM</span>;
             case 'ARCHIVED':
                 return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 tracking-wide"><Archive size={12}/> ARCHIVED</span>;
             default:
@@ -247,6 +316,7 @@ const SavedExams = () => {
                                 <option value="">All Status</option>
                                 <option value="DRAFT">Draft</option>
                                 <option value="PUBLISHED">Published</option>
+                                <option value="ONLINE_EXAM">Online Exam</option>
                                 <option value="ARCHIVED">Archived</option>
                             </select>
 
@@ -336,7 +406,22 @@ const SavedExams = () => {
                                     filteredExams.map((exam) => (
                                         <tr key={exam.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors group">
                                             <td className="px-6 py-4">
-                                                {getStatusBadge(exam.status)}
+                                                <select
+                                                    value={exam.status}
+                                                    disabled={actionId === exam.id}
+                                                    onChange={(e) => handleStatusCellChange(exam.id, e.target.value)}
+                                                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold border cursor-pointer outline-none transition-all ${
+                                                        exam.status === 'PUBLISHED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 focus:ring-2 focus:ring-emerald-500/20' :
+                                                        exam.status === 'ONLINE_EXAM' ? 'bg-indigo-50 text-indigo-700 border-indigo-200 focus:ring-2 focus:ring-indigo-500/20' :
+                                                        exam.status === 'ARCHIVED' ? 'bg-slate-100 text-slate-700 border-slate-200 focus:ring-2 focus:ring-slate-500/20' :
+                                                        'bg-amber-50 text-amber-700 border-amber-200 focus:ring-2 focus:ring-amber-500/20'
+                                                    }`}
+                                                >
+                                                    <option value="DRAFT">DRAFT</option>
+                                                    <option value="PUBLISHED">PUBLISHED</option>
+                                                    <option value="ONLINE_EXAM">ONLINE EXAM</option>
+                                                    <option value="ARCHIVED">ARCHIVED</option>
+                                                </select>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="font-bold text-slate-800 text-sm mb-1.5">{exam.title}</div>
@@ -367,10 +452,26 @@ const SavedExams = () => {
                                                             <Link
                                                                 to={`/exams/generate/nexus-editor/${exam.id}`}
                                                                 className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-sm"
-                                                                title="Edit in Nexus Editor"
+                                                                title="Edit in Editor"
                                                             >
                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                                                             </Link>
+                                                            <button
+                                                                onClick={() => openShareModal(exam)}
+                                                                className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 flex items-center justify-center transition-all shadow-sm"
+                                                                title="Share Exam"
+                                                            >
+                                                                <Share2 size={15} />
+                                                            </button>
+                                                            {(exam.status === 'ONLINE_EXAM' || exam.status === 'PUBLISHED') && (
+                                                                <Link
+                                                                    to={`/exams/analytics/${exam.id}`}
+                                                                    className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-purple-600 hover:border-purple-200 hover:bg-purple-50 flex items-center justify-center transition-all shadow-sm"
+                                                                    title="View Analytics"
+                                                                >
+                                                                    <BarChart3 size={15} />
+                                                                </Link>
+                                                            )}
                                                             <button
                                                                 onClick={() => handleDirectDownloadPdf(exam)}
                                                                 disabled={downloadingId === exam.id}
@@ -445,6 +546,7 @@ const SavedExams = () => {
                                         <div className="flex items-center gap-3">
                                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                                                 exam.status === 'PUBLISHED' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                                exam.status === 'ONLINE_EXAM' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' :
                                                 exam.status === 'ARCHIVED' ? 'bg-slate-50 text-slate-600 border border-slate-100' :
                                                 'bg-amber-50 text-amber-600 border border-amber-100'
                                             }`}>
@@ -457,7 +559,22 @@ const SavedExams = () => {
                                                 </p>
                                             </div>
                                         </div>
-                                        {getStatusBadge(exam.status)}
+                                        <select
+                                            value={exam.status}
+                                            disabled={actionId === exam.id}
+                                            onChange={(e) => handleStatusCellChange(exam.id, e.target.value)}
+                                            className={`px-2 py-0.5 rounded-md text-[9px] font-bold border cursor-pointer outline-none transition-all ${
+                                                exam.status === 'PUBLISHED' ? 'bg-emerald-50 text-emerald-700 border-emerald-205 focus:ring-1 focus:ring-emerald-500/20' :
+                                                exam.status === 'ONLINE_EXAM' ? 'bg-indigo-50 text-indigo-700 border-indigo-205 focus:ring-1 focus:ring-indigo-500/20' :
+                                                exam.status === 'ARCHIVED' ? 'bg-slate-100 text-slate-700 border-slate-205 focus:ring-1 focus:ring-slate-500/20' :
+                                                'bg-amber-50 text-amber-700 border-amber-205 focus:ring-1 focus:ring-amber-500/20'
+                                            }`}
+                                        >
+                                            <option value="DRAFT">DRAFT</option>
+                                            <option value="PUBLISHED">PUBLISHED</option>
+                                            <option value="ONLINE_EXAM">ONLINE EXAM</option>
+                                            <option value="ARCHIVED">ARCHIVED</option>
+                                        </select>
                                     </div>
 
                                     {/* Folder Metadata Grid */}
@@ -492,10 +609,26 @@ const SavedExams = () => {
                                                     <Link
                                                         to={`/exams/generate/nexus-editor/${exam.id}`}
                                                         className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-sm"
-                                                        title="Edit in Nexus Editor"
+                                                        title="Edit in Editor"
                                                     >
                                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                                                     </Link>
+                                                    <button
+                                                        onClick={() => openShareModal(exam)}
+                                                        className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 flex items-center justify-center transition-all shadow-sm"
+                                                        title="Share Exam"
+                                                    >
+                                                        <Share2 size={16} />
+                                                    </button>
+                                                    {(exam.status === 'ONLINE_EXAM' || exam.status === 'PUBLISHED') && (
+                                                        <Link
+                                                            to={`/exams/analytics/${exam.id}`}
+                                                            className="w-9 h-9 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-purple-600 hover:border-purple-200 hover:bg-purple-50 flex items-center justify-center transition-all shadow-sm"
+                                                            title="View Analytics"
+                                                        >
+                                                            <BarChart3 size={16} />
+                                                        </Link>
+                                                    )}
                                                     <button
                                                         onClick={() => handleDirectDownloadPdf(exam)}
                                                         disabled={downloadingId === exam.id}
@@ -631,6 +764,174 @@ const SavedExams = () => {
                     </div>
                 </button>
             </div>
+
+            {/* Share Modal */}
+            {shareModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl border border-slate-150 shadow-2xl w-full max-w-lg overflow-hidden p-6 space-y-6 relative font-outfit text-slate-800">
+                        {/* Header */}
+                        <div className="flex justify-between items-start">
+                            <div className="space-y-1">
+                                <h3 className="text-lg font-black text-slate-900">প্রশ্নপত্র শেয়ার করুন (Share Exam)</h3>
+                                <p className="text-xs text-slate-500 font-medium">নিচের লিংকটির মাধ্যমে যেকোনো ব্যক্তি প্রশ্নপত্রটি সরাসরি দেখতে পারবেন।</p>
+                            </div>
+                            <button 
+                                onClick={() => setShareModalOpen(false)}
+                                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors border border-slate-100"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+
+                        {/* Exam info summary */}
+                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 shrink-0">
+                                <FileText size={20} />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-slate-800 text-sm line-clamp-1">{shareExamTitle}</h4>
+                                <p className="text-[10px] text-slate-400 font-medium mt-0.5">ID: {shareExamId}</p>
+                            </div>
+                        </div>
+
+                        {/* Share link input */}
+                        <div className="space-y-2">
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-400">শেয়ারিং লিংক (Shareable Link)</label>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="text" 
+                                    readOnly 
+                                    value={`${window.location.origin}/exams/share/${shareExamId}`}
+                                    className="bg-slate-50 border border-slate-200 text-xs font-medium rounded-xl p-3 flex-1 outline-none text-slate-650"
+                                />
+                                <button
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(`${window.location.origin}/exams/share/${shareExamId}`);
+                                        setCopiedId(shareExamId);
+                                        setTimeout(() => setCopiedId(null), 2000);
+                                    }}
+                                    className="px-4 py-3 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors flex items-center gap-1.5 shadow-md shadow-slate-200"
+                                >
+                                    {copiedId === shareExamId ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                                    {copiedId === shareExamId ? 'কপি হয়েছে' : 'কপি করুন'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Social sharing links */}
+                        <div className="space-y-2 pt-2">
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-400">অন্যান্য মাধ্যমে শেয়ার করুন</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                {/* Whatsapp */}
+                                <a
+                                    href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`পরীক্ষার প্রশ্নপত্র: ${shareExamTitle}\nদেখতে এখানে ক্লিক করুন: ${window.location.origin}/exams/share/${shareExamId}`)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-center gap-2 p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-750 rounded-xl text-xs font-bold transition-all shadow-sm"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-0.5"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                                    হোয়াটসঅ্যাপ (WhatsApp)
+                                </a>
+
+                                {/* Email */}
+                                <a
+                                    href={`mailto:?subject=${encodeURIComponent(`পরীক্ষার প্রশ্নপত্র: ${shareExamTitle}`)}&body=${encodeURIComponent(`হ্যালো,\n\nএখানে পরীক্ষার প্রশ্নপত্রটির লিংক শেয়ার করা হলো:\n${window.location.origin}/exams/share/${shareExamId}\n\nধন্যবাদ!`)}`}
+                                    className="flex items-center justify-center gap-2 p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-750 rounded-xl text-xs font-bold transition-all shadow-sm"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-0.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                    ইমেইল (Email)
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Draft Warning Modal */}
+            {draftWarningOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl border border-slate-150 shadow-2xl w-full max-w-md overflow-hidden p-6 space-y-5 relative font-outfit text-slate-800 animate-in fade-in zoom-in duration-200">
+                        {/* Header */}
+                        <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 text-amber-500 flex items-center justify-center shrink-0 shadow-sm">
+                                <AlertTriangle size={24} className="animate-pulse" />
+                            </div>
+                            <div className="space-y-1">
+                                <h3 className="text-lg font-black text-slate-900">পরীক্ষাটি ড্রাফট মোডে আছে</h3>
+                                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                                    যে পরীক্ষাগুলোর স্ট্যাটাস <strong>DRAFT</strong> থাকে, সেগুলোর শেয়ার লিংক জেনারেট করা যায় না। শেয়ার লিংক ব্যবহার করতে হলে প্রথমে পরীক্ষার স্ট্যাটাস আপডেট করুন।
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Exam title preview */}
+                        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 shrink-0">
+                                <FileText size={16} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-slate-800 text-xs truncate">{shareExamTitle}</h4>
+                                <p className="text-[10px] text-slate-400 font-medium mt-0.5">বর্তমান স্ট্যাটাস: DRAFT</p>
+                            </div>
+                        </div>
+
+                        {/* Options */}
+                        <div className="space-y-2.5">
+                            <button
+                                onClick={() => handleUpdateStatus(shareExamId, 'PUBLISHED')}
+                                disabled={updatingStatusId !== null}
+                                className="w-full flex items-center justify-between p-3.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 hover:border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold transition-all shadow-sm group active:scale-[0.99]"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center group-hover:scale-105 transition-transform font-black">
+                                        ✓
+                                    </span>
+                                    <span className="text-left">
+                                        <span className="block font-black">পাবলিশ করুন (PUBLISHED)</span>
+                                        <span className="block text-[10px] text-emerald-600 font-medium mt-0.5">সবাই প্রশ্নপত্রটি দেখতে ও ডাউনলোড করতে পারবে</span>
+                                    </span>
+                                </div>
+                                {updatingStatusId === shareExamId ? (
+                                    <Loader2 size={16} className="animate-spin text-emerald-600" />
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500 group-hover:translate-x-0.5 transition-transform"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                )}
+                            </button>
+
+                            <button
+                                onClick={() => handleUpdateStatus(shareExamId, 'ONLINE_EXAM')}
+                                disabled={updatingStatusId !== null}
+                                className="w-full flex items-center justify-between p-3.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-800 rounded-2xl text-xs font-bold transition-all shadow-sm group active:scale-[0.99]"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-lg bg-indigo-500 text-white flex items-center justify-center group-hover:scale-105 transition-transform font-black">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                                    </span>
+                                    <span className="text-left">
+                                        <span className="block font-black">অনলাইন পরীক্ষা (ONLINE EXAM)</span>
+                                        <span className="block text-[10px] text-indigo-600 font-medium mt-0.5">অনলাইনে সরাসরি পরীক্ষা দেওয়ার জন্য প্রস্তুত করুন</span>
+                                    </span>
+                                </div>
+                                {updatingStatusId === shareExamId ? (
+                                    <Loader2 size={16} className="animate-spin text-indigo-600" />
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-500 group-hover:translate-x-0.5 transition-transform"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Footer Close */}
+                        <div className="pt-2 border-t border-slate-100 flex justify-end gap-2">
+                            <button
+                                onClick={() => setDraftWarningOpen(false)}
+                                className="px-4 py-2 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition-all"
+                            >
+                                বন্ধ করুন (Close)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

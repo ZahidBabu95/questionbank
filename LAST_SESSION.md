@@ -1,62 +1,46 @@
-# Last Session Summary (May 31, 2026)
+# QuestionShaper — Last Session Notes (July 4-5, 2026)
+> ⚡ সেশন শেষে কনটেক্সট ট্র্যাকিং এর জন্য এই ফাইলটি আপডেট করা হয়।
 
-## What We Accomplished
-
-Today, we successfully optimized the Question Bank module, introducing a super-compact mobile-responsive interface, resolving layout overlaps, and implementing clean data rendering.
-
----
-
-### 1. 🎨 Shaking Box Fix & Premium Glassmorphic Subject Selector Modal
-- **The Issue**: When users attempted to select a class or subject, the loading of chapters/topics caused visual layout shifting (box shaking/jumping).
-- **The Fix**: Replaced the inline selector with a premium, smooth **glassmorphic Subject Selector Modal** overlay. Featuring custom radial gradients, backdrop blurs (`backdrop-blur-xl`), and animated transitions, it ensures a premium first impression while completely eliminating layout shaking.
+## 📅 চলমান সেশন: 2026-07-04 / 05
+**অবস্থান:** লেকচার এডিটর ডিজাইন ট্যাব, প্রিন্ট মেজারমেন্ট ও হেডার-ফুটার বিন্যাস সম্পূর্ণ সম্পন্ন।
 
 ---
 
-### 2. 📲 Standard Web-App Exit & Native Back Integration
-- **The Challenge**: When the Question Bank opened in full-screen embedded mobile WebView, there was no way to go back to the previous screen.
-- **The Fix**: 
-  - Placed an elegant, animated floating close button (`X`) at the top right of the Subject Selector modal and the main page.
-  - Implemented smart navigation fallback (`navigate(-1)` and `window.ReactNativeWebView.postMessage`) to ensure native mobile WebView back integration works flawlessly alongside regular browser tabs.
+## 🛠️ প্রগ্রেস রিপোর্ট (Progress Report)
+
+### ✅ এই সেশনে সম্পন্ন হয়েছে
+
+| Status | Component | বিবরণ |
+|--------|-----------|-------|
+| ✅ | **Theme Colors & Logo Resizer** | সব কভার টেমপ্লেটের জন্য অ্যাকসেন্ট কালার সক্রিয় করা হয়েছে এবং লোগো স্লাইডারের সীমা বাড়িয়ে ৩০px থেকে ২৫০px করা হয়েছে। |
+| ✅ | **AI Title & Metadata Removal** | কভার পেজের এআই-জেনারেটেড বড় লাল শিরোনাম ও মেটাডেটা বক্স থেকে সংস্করণ/টপিক রিমুভ করা হয়েছে। টপিকগুলো টেমপ্লেট অনুযায়ী ক্লিন বুলেটে রূপান্তর করা হয়েছে। |
+| ✅ | **Cover Custom Footers & Fonts** | ডাবল-ব্লক কাস্টম পাবলিশার ও শিক্ষাবর্ষ ফুটর অন/অফ এবং প্রতিষ্ঠানের নাম, শিরোনাম, মেটাডেটা ও ফুটারের ফন্ট সাইজ অ্যাডজাস্টার স্লাইডার যোগ করা হয়েছে। |
+| ✅ | **Cover Background layout** | আংশিক ও টপিক কার্ডের নিচে (Under Topics) ছবি প্রদর্শন সিঙ্ক করা হয়েছে। টপিকের নিচের অতিরিক্ত ফ্লেক্স গ্যাপ রিমুভ করে ২px থিম কালারড বর্ডার, ওড় গোল কর্নার এবং অস্বচ্ছতা (Opacity) স্লাইডার যোগ করা হয়েছে। |
+| ✅ | **Cover Page Print Precision** | পিডিএফ এক্সপোর্টে লোগো রেন্ডারিং, ব্যাকগ্রাউন্ড বর্ডার এবং প্রিন্ট ইঞ্জিনে `-webkit-print-color-adjust: exact` প্রয়োগ করে পিক্সেল-পারফেক্ট ছবির গুণমান নিশ্চিত করা হয়েছে। |
+| ✅ | **Dedicated Cover Export** | লেকচার শীটের বাকি অংশ বাদ দিয়ে শুধু কভার পেজটি ২.২ গুণ হাই-রেজোলিউশন ও প্রিসিশন স্কেলিংয়ে পিডিএফ ডাউনলোডের জন্য "Cover PDF Only" বাটন টুলবারে যুক্ত করা হয়েছে। |
+| ✅ | **Toolbar Updates & Backup** | "Print / Save PDF" বোতাম পরিবর্তন করে "Print" এবং "Save Draft" বোতাম পরিবর্তন করে "Save" করা হয়েছে। লেকচার প্রথমবার সেভের পর লোকাল স্টোরেজ কনফিগ ডাটাবেজ আইডিতে মাইগ্রেট করার সুবিধা যুক্ত হয়েছে। |
+| ✅ | **Header & Footer Edit Mode Hide** | এডিটরে কাজ করার সময় পৃষ্ঠা ব্রেকের অপ্রয়োজনীয় ডিস্ট্রাকশন এড়াতে স্ক্রিন থেকে মধ্যবর্তী পেজগুলোর হেডার-ফুটার ও পৃষ্ঠা নম্বর সম্পূর্ণ হাইড করা হয়েছে (display: none); তবে প্রিভিউ নিশ্চিত করতে শুধুমাত্র শেষ পৃষ্ঠার (Last Page) নিচে-ওপরে এগুলো দৃশ্যমান থাকবে। |
+| ✅ | **Master Header/Footer Toggle** | **Header & Meta** ট্যাবে একটি গ্লোবাল মাস্টার টগল **"হেডার ও ফুটার সক্রিয় করুন"** যোগ করা হয়েছে। এটি চালু করলেই কেবল অন্য সাব-অপশনগুলো ওপেন হবে এবং স্ক্রিন প্রিভিউ ও পিডিএফ এক্সপোর্টে কাজ করবে। |
+| ✅ | **Page Number Language Selector** | পৃষ্ঠা নম্বর সক্রিয় থাকলে **বাংলা (১, ২, ৩)** অথবা **ইংরেজি (1, 2, 3)** সিলেক্ট করার কন্ট্রোল যুক্ত করা হয়েছে, যা ব্রাউজার প্রিন্টিংয়ের নেটিভ কাউন্টার (`counter(page, bengali)`) এবং পিডিএফ জেনারেশনে শতভাগ সিঙ্কড থাকবে। |
+| ✅ | **Synchronized Page Print Layout** | ব্রাউজার প্রিন্টে ওভারল্যাপ বা এলোমেলো পজিশন এড়াতে fixed পজিশন বাদ দিয়ে `100vh` ও `page-break-after: always` সহ **পেইজ-বাই-পেইজ সিঙ্ক্রোনাইজড ব্যাকগ্রাউন্ড লেআউট** এক্টিভ করা হয়েছে। কভার পেজের মার্জিন এরিয়া সলিড কালার দিয়ে কভার করে ১ম পাতায় ফুটার সম্পূর্ণরূপে বন্ধ করা হয়েছে। |
+| ✅ | **Vite Production Build** | সকল লাইব্রেরি ও ডিপেন্ডেন্সি সিঙ্ক করে সফলভাবে প্রোডাকশন বিল্ড সম্পন্ন করা হয়েছে (`built in 56.30s` - কোন বিল্ড এরর বা ওয়ার্নিং নেই)। |
 
 ---
 
-### 3. 🔩 Mobile & Responsive Collapsible Sidebar Drawer Filter Merger
-- **The Merger**: Eliminated bulky top filter dropdowns on mobile. Integrated both Academic filters (Level, Stream, Class, Subject, Chapter, Topic) and Board/Year/School filters inside a single unified collapsible Sidebar Drawer.
-- **Bracketed Class in Headers**: The header dynamically displays the selected subject alongside its class in brackets (e.g., `পদার্থবিজ্ঞান (৯ম শ্রেণি)` / `Physics (Class 9)`) with total element stats, keeping the UI minimal and informative.
+## 🎯 পরবর্তী সেশনের পরিকল্পনা ও কাজ (Next Session Backlog)
+
+1. **Phase 5 — AI CQ মূল্যায়ন:**
+   * গুগল জেমিনি ভিশন API ব্যবহার করে সৃজনশীল বা লিখিত পরীক্ষার খাতার ছবি সরাসরি আপলোড করে স্বয়ংক্রিয় এআই মূল্যায়ন ও নম্বর প্রদান।
+   
+2. **ওপেনসিভি (OpenCV) পাইথন ইন্টিগ্রেশন:**
+   * ওএমআর পরীক্ষার ফলাফলের জন্য OpenCV ইন্টিগ্রেশন এবং বাবল ডিটেকশন উন্নতকরণ।
 
 ---
 
-### 4. 🙈 Complete CHUNK Reference ID Exclusion
-- **Clean UI Enforcements**: Programmed case-insensitive filtering (`!source.toUpperCase().includes('CHUNK_')`) in [QuestionListItem.jsx](file:///c:/questionshaper/frontend/src/pages/admin/QuestionBank/components/QuestionListItem.jsx) and [QuestionList.jsx](file:///c:/questionshaper/frontend/src/pages/admin/QuestionBank/QuestionList.jsx) to securely block internal compiler tags (e.g., `CHUNK_23FA8289-...`) from rendering anywhere on mobile or web viewports.
+## 🔧 টেকনিক্যাল নোটস
 
----
-
-### 5. ⚡ Ultra-Compact Spacing for Mobile WebView Legibility
-To maximize readability and content exposure on small screens, we did a deep sweep of padding, margins, gaps, and font configurations:
-* **Tightened Question Spacing**: Reduced question vertical gaps from `gap-1.5 sm:gap-3` to **`gap-1 sm:gap-1.5`** and adjusted outer margins to **`px-1`** on mobile to fully utilize screen width.
-* **Micro Badges**: Scaled down circular index badges, marks, difficulty, and status badges to **`py-px px-1 text-[8.5px] sm:text-[9.5px]`** with clear border decorations.
-* **MCQ Options and Bubbles**: Reduced option container padding to **`px-2 py-0.5`** with smaller gaps. Rescaled circular option letter bubbles (ক, খ, গ, ঘ) to **`w-4 h-4 text-[8.5px]`**.
-* **Compacted Stimulus & Answer Blocks**: Shrunk vertical margins and paddings of the Stimulus, Correct Answer, Explanation, and Action Button grids.
-* **Sleek Sticky Top Bar**: Compacted top navigation tabs, reduced search input text to `text-[11px]`, and shortened placeholders.
-
----
-
-### 🚀 Successful Production Frontend Build Verification
-Verified all code changes by running a full production bundle command using Vite:
-```text
-vite v5.4.21 building for production...
-transforming...
-✓ 5675 modules transformed.
-rendering chunks...
-computing gzip size...
-✓ built in 51.08s
-```
-The compilation completed **100% successfully with 0 errors or warnings**!
-
----
-
-## 📂 Modified & Updated Files
-* 📝 **[QuestionListItem.jsx](file:///c:/questionshaper/frontend/src/pages/admin/QuestionBank/components/QuestionListItem.jsx)** (Compacted question body, MCQ option grids, status badges, and chunks filters)
-* 📝 **[QuestionList.jsx](file:///c:/questionshaper/frontend/src/pages/admin/QuestionBank/QuestionList.jsx)** (Sticky top bar spacing, drawer updates, list gaps, and subject modal overlays)
-* 📝 **[task.md](file:///C:/Users/zahid/.gemini/antigravity-ide/brain/a934e4aa-214d-44ce-905a-0dd1433db77e/task.md)** (Updated task lists)
-* 🚶‍♂️ **[walkthrough.md](file:///C:/Users/zahid/.gemini/antigravity-ide/brain/a934e4aa-214d-44ce-905a-0dd1433db77e/walkthrough.md)** (Updated implementation details)
+- ফ্রন্টএন্ড বিল্ড টুল: Vite v5.4.21
+- কভার পেজ ও মেটাডেটা কন্ট্রোল: `LectureRightProperties.jsx` (Header & Meta tab)
+- ক্যানভাস ও প্রিন্ট সেটিংস: `LecturePaperCanvas.jsx` ও `LectureEditor.jsx`
+- পৃষ্ঠা নম্বর ডাইনামিক কাউন্টার স্টাইল: `counter(page, bengali)`
+- পিডিএফ এক্সপোর্ট রেজোলিউশন স্কেল: ২.২x

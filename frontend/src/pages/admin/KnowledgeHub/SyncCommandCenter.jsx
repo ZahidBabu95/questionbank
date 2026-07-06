@@ -722,7 +722,7 @@ const SyncCommandCenter = () => {
             ]);
             setSyncIntegrity(integrityRes.data);
             setIndices(indicesRes.data);
-            const sortedPages = pagesRes.data.sort((a,b) => a.pageNumber - b.pageNumber);
+            const sortedPages = pagesRes.data.sort((a,b) => (a.sourcePageNo || a.pageNumber || 0) - (b.sourcePageNo || b.pageNumber || 0));
             setPages(sortedPages);
         } catch (error) {
             console.error('Silent fetch failed', error);
@@ -742,7 +742,7 @@ const SyncCommandCenter = () => {
             setBook(bookRes.data);
             setSyncIntegrity(integrityRes.data);
             setIndices(indicesRes.data);
-            const sortedPages = pagesRes.data.sort((a,b) => a.pageNumber - b.pageNumber);
+            const sortedPages = pagesRes.data.sort((a,b) => (a.sourcePageNo || a.pageNumber || 0) - (b.sourcePageNo || b.pageNumber || 0));
             setPages(sortedPages);
         } catch (error) {
             console.error('Failed to load command center details', error);
@@ -1204,7 +1204,7 @@ const SyncCommandCenter = () => {
                                             
                                             <div className="w-full aspect-[2/3] bg-slate-100 overflow-hidden relative">
                                                 {page.imageUrl && !page.imageUrl.endsWith('.pdf') ? (
-                                                    <img src={page.imageUrl} alt={`Page ${page.sourcePageNo}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                                    <img src={page.imageUrl} alt={`Page ${page.sourcePageNo}`} className="w-full h-full object-cover" />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-slate-300 bg-white">
                                                         <FileText size={24} className="opacity-20" />
