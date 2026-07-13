@@ -130,6 +130,19 @@ const AutoExamGenerator = () => {
         return langs;
     }, [hasFullLangAccess, user?.instituteMedium]);
 
+    const totalSavedQuestions = React.useMemo(() => {
+        if (!availableCounts.chapters) return 0;
+        let sum = 0;
+        Object.values(availableCounts.chapters).forEach(typeMap => {
+            Object.values(typeMap).forEach(diffMap => {
+                Object.values(diffMap).forEach(count => {
+                    sum += (parseInt(count) || 0);
+                });
+            });
+        });
+        return sum;
+    }, [availableCounts]);
+
     const getAvailableCount = (id, type, isChapter = true) => {
         const pool = isChapter ? availableCounts.chapters : availableCounts.topics;
         const typePool = pool[id]?.[type] || {};
@@ -900,6 +913,41 @@ const AutoExamGenerator = () => {
                                         </div>
                                     </div>
 
+                                    {/* My Saved Questions Info */}
+                                    {sourceMode === 'FAVORITES' && (
+                                        <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-violet-50/40 p-5 rounded-2xl border border-violet-100 flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center text-violet-600">
+                                                    <ListChecks size={20} />
+                                                </div>
+                                                <div>
+                                                    <div className="font-extrabold text-sm text-slate-800">
+                                                        {subjectId ? "সংরক্ষিত প্রশ্নাবলি সক্রিয়" : "বিষয় নির্বাচন করুন"}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 mt-0.5">
+                                                        {subjectId 
+                                                            ? "এই পরীক্ষায় শুধুমাত্র আপনার বুকমার্ক বা সংরক্ষিত করা প্রশ্নগুলো ব্যবহার করা হবে।" 
+                                                            : "সংরক্ষিত মোট প্রশ্ন সংখ্যা দেখতে প্রথমে একটি বিষয় নির্বাচন করুন।"}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {subjectId && (
+                                                <div className="text-right">
+                                                    <div className="text-2xl font-black text-violet-750">
+                                                        {loadingAvailability ? (
+                                                            <Loader2 size={20} className="animate-spin inline" />
+                                                        ) : (
+                                                            `${totalSavedQuestions}টি`
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                                                        মোট সংরক্ষিত প্রশ্ন
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     {/* Lecture Sheet Selector */}
                                     {sourceMode === 'LECTURE_SHEETS' && (
                                         <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-slate-50/50 p-5 rounded-2xl border border-slate-150 space-y-3">
@@ -985,109 +1033,111 @@ const AutoExamGenerator = () => {
                                     </div>
 
                                     {/* 3. Board / Year / School Source Filters */}
-                                    <div className="space-y-4">
-                                        <div className="font-extrabold text-sm text-slate-800 pl-1">{t('board_year_school_filter_optional')}</div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                            {/* Boards */}
-                                            <div>
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">{t('boards')}</label>
-                                                <div className="max-h-36 overflow-y-auto custom-scrollbar p-3 bg-slate-50/50 border border-slate-200 rounded-xl space-y-1.5">
-                                                    {availableSourceTags.boards.length === 0 ? (
-                                                        <span className="text-[11px] text-slate-400 font-bold italic block py-2 text-center">{t('no_boards')}</span>
-                                                    ) : (
-                                                        availableSourceTags.boards.map(board => {
-                                                            const name = board.name || board;
-                                                            const count = board.count;
-                                                            const isSelected = selectedBoards.includes(name);
-                                                            return (
-                                                                <button
-                                                                    type="button"
-                                                                    key={name}
-                                                                    onClick={() => {
-                                                                        setSelectedBoards(prev =>
-                                                                            isSelected ? prev.filter(b => b !== name) : [...prev, name]
-                                                                        );
-                                                                    }}
-                                                                    className={`w-full p-2 text-left rounded-lg text-xs font-bold border transition-all flex items-center justify-between ${isSelected ? 'border-violet-500 bg-white text-violet-700' : 'border-slate-150 bg-white hover:border-slate-250 text-slate-650'}`}
-                                                                >
-                                                                    <span className="truncate">{name} <span className="text-[10px] text-slate-400 font-medium">({count})</span></span>
-                                                                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border text-[8px] ${isSelected ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200'}`}>
-                                                                        {isSelected && "✓"}
-                                                                    </span>
-                                                                </button>
-                                                            );
-                                                        })
-                                                    )}
+                                    {sourceMode !== 'FAVORITES' && (
+                                        <div className="space-y-4 animate-in fade-in duration-300">
+                                            <div className="font-extrabold text-sm text-slate-800 pl-1">{t('board_year_school_filter_optional')}</div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                                {/* Boards */}
+                                                <div>
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">{t('boards')}</label>
+                                                    <div className="max-h-36 overflow-y-auto custom-scrollbar p-3 bg-slate-50/50 border border-slate-200 rounded-xl space-y-1.5">
+                                                        {availableSourceTags.boards.length === 0 ? (
+                                                            <span className="text-[11px] text-slate-400 font-bold italic block py-2 text-center">{t('no_boards')}</span>
+                                                        ) : (
+                                                            availableSourceTags.boards.map(board => {
+                                                                const name = board.name || board;
+                                                                const count = board.count;
+                                                                const isSelected = selectedBoards.includes(name);
+                                                                return (
+                                                                    <button
+                                                                        type="button"
+                                                                        key={name}
+                                                                        onClick={() => {
+                                                                            setSelectedBoards(prev =>
+                                                                                isSelected ? prev.filter(b => b !== name) : [...prev, name]
+                                                                            );
+                                                                        }}
+                                                                        className={`w-full p-2 text-left rounded-lg text-xs font-bold border transition-all flex items-center justify-between ${isSelected ? 'border-violet-500 bg-white text-violet-700' : 'border-slate-150 bg-white hover:border-slate-250 text-slate-650'}`}
+                                                                    >
+                                                                        <span className="truncate">{name} <span className="text-[10px] text-slate-400 font-medium">({count})</span></span>
+                                                                        <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border text-[8px] ${isSelected ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200'}`}>
+                                                                            {isSelected && "✓"}
+                                                                        </span>
+                                                                    </button>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
 
-                                            {/* Years */}
-                                            <div>
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">{t('exam_years')}</label>
-                                                <div className="max-h-36 overflow-y-auto custom-scrollbar p-3 bg-slate-50/50 border border-slate-200 rounded-xl space-y-1.5">
-                                                    {availableSourceTags.years.length === 0 ? (
-                                                        <span className="text-[11px] text-slate-400 font-bold italic block py-2 text-center">{t('no_years')}</span>
-                                                    ) : (
-                                                        availableSourceTags.years.map(year => {
-                                                            const name = year.name || year;
-                                                            const count = year.count;
-                                                            const isSelected = selectedYears.includes(parseInt(name));
-                                                            return (
-                                                                <button
-                                                                    type="button"
-                                                                    key={name}
-                                                                    onClick={() => {
-                                                                        setSelectedYears(prev =>
-                                                                            isSelected ? prev.filter(y => y !== parseInt(name)) : [...prev, parseInt(name)]
-                                                                        );
-                                                                    }}
-                                                                    className={`w-full p-2 text-left rounded-lg text-xs font-bold border transition-all flex items-center justify-between ${isSelected ? 'border-violet-500 bg-white text-violet-700' : 'border-slate-150 bg-white hover:border-slate-250 text-slate-650'}`}
-                                                                >
-                                                                    <span>{name} <span className="text-[10px] text-slate-400 font-medium">({count})</span></span>
-                                                                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border text-[8px] ${isSelected ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200'}`}>
-                                                                        {isSelected && "✓"}
-                                                                    </span>
-                                                                </button>
-                                                            );
-                                                        })
-                                                    )}
+                                                {/* Years */}
+                                                <div>
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">{t('exam_years')}</label>
+                                                    <div className="max-h-36 overflow-y-auto custom-scrollbar p-3 bg-slate-50/50 border border-slate-200 rounded-xl space-y-1.5">
+                                                        {availableSourceTags.years.length === 0 ? (
+                                                            <span className="text-[11px] text-slate-400 font-bold italic block py-2 text-center">{t('no_years')}</span>
+                                                        ) : (
+                                                            availableSourceTags.years.map(year => {
+                                                                const name = year.name || year;
+                                                                const count = year.count;
+                                                                const isSelected = selectedYears.includes(parseInt(name));
+                                                                return (
+                                                                    <button
+                                                                        type="button"
+                                                                        key={name}
+                                                                        onClick={() => {
+                                                                            setSelectedYears(prev =>
+                                                                                isSelected ? prev.filter(y => y !== parseInt(name)) : [...prev, parseInt(name)]
+                                                                            );
+                                                                        }}
+                                                                        className={`w-full p-2 text-left rounded-lg text-xs font-bold border transition-all flex items-center justify-between ${isSelected ? 'border-violet-500 bg-white text-violet-700' : 'border-slate-150 bg-white hover:border-slate-250 text-slate-650'}`}
+                                                                    >
+                                                                        <span>{name} <span className="text-[10px] text-slate-400 font-medium">({count})</span></span>
+                                                                        <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border text-[8px] ${isSelected ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200'}`}>
+                                                                            {isSelected && "✓"}
+                                                                        </span>
+                                                                    </button>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
 
-                                            {/* Schools */}
-                                            <div>
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">{t('schools')}</label>
-                                                <div className="max-h-36 overflow-y-auto custom-scrollbar p-3 bg-slate-50/50 border border-slate-200 rounded-xl space-y-1.5">
-                                                    {availableSourceTags.schools.length === 0 ? (
-                                                        <span className="text-[11px] text-slate-400 font-bold italic block py-2 text-center">{t('no_schools')}</span>
-                                                    ) : (
-                                                        availableSourceTags.schools.map(school => {
-                                                            const name = school.name || school;
-                                                            const count = school.count;
-                                                            const isSelected = selectedSchools.includes(name);
-                                                            return (
-                                                                <button
-                                                                    type="button"
-                                                                    key={name}
-                                                                    onClick={() => {
-                                                                        setSelectedSchools(prev =>
-                                                                            isSelected ? prev.filter(s => s !== name) : [...prev, name]
-                                                                        );
-                                                                    }}
-                                                                    className={`w-full p-2 text-left rounded-lg text-xs font-bold border transition-all flex items-center justify-between ${isSelected ? 'border-violet-500 bg-white text-violet-700' : 'border-slate-150 bg-white hover:border-slate-250 text-slate-650'}`}
-                                                                >
-                                                                    <span className="truncate">{name} <span className="text-[10px] text-slate-400 font-medium">({count})</span></span>
-                                                                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border text-[8px] ${isSelected ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200'}`}>
-                                                                        {isSelected && "✓"}
-                                                                    </span>
-                                                                </button>
-                                                            );
-                                                        })
-                                                    )}
+                                                {/* Schools */}
+                                                <div>
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">{t('schools')}</label>
+                                                    <div className="max-h-36 overflow-y-auto custom-scrollbar p-3 bg-slate-50/50 border border-slate-200 rounded-xl space-y-1.5">
+                                                        {availableSourceTags.schools.length === 0 ? (
+                                                            <span className="text-[11px] text-slate-400 font-bold italic block py-2 text-center">{t('no_schools')}</span>
+                                                        ) : (
+                                                            availableSourceTags.schools.map(school => {
+                                                                const name = school.name || school;
+                                                                const count = school.count;
+                                                                const isSelected = selectedSchools.includes(name);
+                                                                return (
+                                                                    <button
+                                                                        type="button"
+                                                                        key={name}
+                                                                        onClick={() => {
+                                                                            setSelectedSchools(prev =>
+                                                                                isSelected ? prev.filter(s => s !== name) : [...prev, name]
+                                                                            );
+                                                                        }}
+                                                                        className={`w-full p-2 text-left rounded-lg text-xs font-bold border transition-all flex items-center justify-between ${isSelected ? 'border-violet-500 bg-white text-violet-700' : 'border-slate-150 bg-white hover:border-slate-250 text-slate-650'}`}
+                                                                    >
+                                                                        <span className="truncate">{name} <span className="text-[10px] text-slate-400 font-medium">({count})</span></span>
+                                                                        <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border text-[8px] ${isSelected ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-200'}`}>
+                                                                            {isSelected && "✓"}
+                                                                        </span>
+                                                                    </button>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
 
