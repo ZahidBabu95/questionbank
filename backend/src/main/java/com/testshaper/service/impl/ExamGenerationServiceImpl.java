@@ -722,14 +722,58 @@ public class ExamGenerationServiceImpl {
             int targetUsed = (int) Math.round(needed * request.getUsedPercent() / 100.0);
             int targetUnused = needed - targetUsed;
 
-            List<Question> usedList = queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
-                    language, chapterIds, topicIds, excludedIds, targetUsed, request, createdBy, true);
+            List<Question> usedList = new ArrayList<>();
+            if (request.getExamAllocations() != null && !request.getExamAllocations().isEmpty() && targetUsed > 0) {
+                List<ExamGenerationRequest.ExamAllocationRequest> activeAllocations = request.getExamAllocations().stream()
+                        .filter(a -> a.getPercent() != null && a.getPercent() > 0)
+                        .collect(Collectors.toList());
+
+                if (!activeAllocations.isEmpty()) {
+                    int allocatedCount = 0;
+                    Set<UUID> localExclusions = new HashSet<>(excludedIds);
+
+                    for (int i = 0; i < activeAllocations.size(); i++) {
+                        ExamGenerationRequest.ExamAllocationRequest alloc = activeAllocations.get(i);
+                        int countForThisExam;
+                        if (i == activeAllocations.size() - 1) {
+                            countForThisExam = targetUsed - allocatedCount;
+                        } else {
+                            countForThisExam = (int) Math.round(targetUsed * alloc.getPercent() / 100.0);
+                        }
+
+                        if (countForThisExam > 0) {
+                            List<Question> listForThisExam = queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
+                                    language, chapterIds, topicIds, localExclusions, countForThisExam, request, createdBy, true, alloc.getExamId());
+                            usedList.addAll(listForThisExam);
+                            listForThisExam.forEach(q -> localExclusions.add(q.getId()));
+                            allocatedCount += listForThisExam.size();
+                        }
+                    }
+
+                    // Fallback to any used questions if deficit remains
+                    if (usedList.size() < targetUsed) {
+                        int deficit = targetUsed - usedList.size();
+                        Set<UUID> finalUsedExclusions = new HashSet<>(excludedIds);
+                        usedList.forEach(q -> finalUsedExclusions.add(q.getId()));
+
+                        List<Question> generalUsedList = queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
+                                language, chapterIds, topicIds, finalUsedExclusions, deficit, request, createdBy, true, null);
+                        usedList.addAll(generalUsedList);
+                    }
+                } else {
+                    usedList = queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
+                            language, chapterIds, topicIds, excludedIds, targetUsed, request, createdBy, true, null);
+                }
+            } else {
+                usedList = queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
+                        language, chapterIds, topicIds, excludedIds, targetUsed, request, createdBy, true, null);
+            }
 
             Set<UUID> updatedExclusions = new HashSet<>(excludedIds);
             usedList.forEach(q -> updatedExclusions.add(q.getId()));
 
             List<Question> unusedList = queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
-                    language, chapterIds, topicIds, updatedExclusions, targetUnused, request, createdBy, false);
+                    language, chapterIds, topicIds, updatedExclusions, targetUnused, request, createdBy, false, null);
 
             List<Question> combined = new ArrayList<>();
             combined.addAll(usedList);
@@ -742,14 +786,14 @@ public class ExamGenerationServiceImpl {
                 combined.forEach(q -> finalExclusions.add(q.getId()));
 
                 List<Question> fallbackList = queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
-                        language, chapterIds, topicIds, finalExclusions, deficit, request, createdBy, null);
+                        language, chapterIds, topicIds, finalExclusions, deficit, request, createdBy, null, null);
                 combined.addAll(fallbackList);
             }
             return combined;
         } else {
             // General query
             return queryPool(tenantId, classSubjectId, type, difficulty, preferredBloomLevels,
-                    language, chapterIds, topicIds, excludedIds, needed, request, createdBy, null);
+                    language, chapterIds, topicIds, excludedIds, needed, request, createdBy, null, null);
         }
     }
 
@@ -766,7 +810,8 @@ public class ExamGenerationServiceImpl {
             int needed,
             ExamGenerationRequest request,
             String createdBy,
-            Boolean fetchUsedOnly) {
+            Boolean fetchUsedOnly,
+            UUID filterExamId) {
 
         if (needed <= 0) return new ArrayList<>();
 
@@ -826,9 +871,17 @@ public class ExamGenerationServiceImpl {
         // 6. Used/Unused filters
         if (fetchUsedOnly != null) {
             if (fetchUsedOnly) {
-                jpql.append("AND EXISTS (SELECT eq.id FROM ExamQuestion eq WHERE eq.question = q) ");
+                if (filterExamId != null) {
+                    jpql.append("AND EXISTS (SELECT eq.id FROM ExamQuestion eq WHERE eq.question = q AND eq.exam.id = :filterExamId) ");
+                } else {
+                    jpql.append("AND EXISTS (SELECT eq.id FROM ExamQuestion eq WHERE eq.question = q) ");
+                }
             } else {
-                jpql.append("AND NOT EXISTS (SELECT eq.id FROM ExamQuestion eq WHERE eq.question = q) ");
+                if (filterExamId != null) {
+                    jpql.append("AND NOT EXISTS (SELECT eq.id FROM ExamQuestion eq WHERE eq.question = q AND eq.exam.id = :filterExamId) ");
+                } else {
+                    jpql.append("AND NOT EXISTS (SELECT eq.id FROM ExamQuestion eq WHERE eq.question = q) ");
+                }
             }
         }
 
@@ -873,6 +926,10 @@ public class ExamGenerationServiceImpl {
                     .collect(Collectors.toList());
             query.setParameter("schools", lowerSchools);
             query.setParameter("institutionTestType", com.testshaper.entity.QuestionSource.SourceType.INSTITUTION_TEST);
+        }
+
+        if (fetchUsedOnly != null && filterExamId != null) {
+            query.setParameter("filterExamId", filterExamId);
         }
 
         List<UUID> eligibleIds = query.getResultList();
@@ -1077,10 +1134,10 @@ public class ExamGenerationServiceImpl {
         return toDTO(exam);
     }
 
-    public Page<ExamSummaryDTO> listExams(String title, Exam.ExamType examType, Exam.ExamStatus status, Pageable pageable, String username, boolean isSuperAdmin) {
+    public Page<ExamSummaryDTO> listExams(String title, Exam.ExamType examType, Exam.ExamStatus status, UUID classSubjectId, Pageable pageable, String username, boolean isSuperAdmin) {
         String tenantId = TenantContext.getTenantId();
         String createdBy = isSuperAdmin ? null : username;
-        return examRepository.findByTenantAndOptionalCreator(tenantId, title, createdBy, examType, status, pageable).map(this::toSummaryDTO);
+        return examRepository.findByTenantAndOptionalCreator(tenantId, title, createdBy, examType, status, classSubjectId, pageable).map(this::toSummaryDTO);
     }
 
     private ExamSummaryDTO toSummaryDTO(Exam exam) {

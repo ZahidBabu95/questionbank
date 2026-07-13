@@ -374,6 +374,71 @@ public class QuestionServiceImpl implements QuestionService {
         cq.select(root.get("id"));
         
         jakarta.persistence.criteria.Predicate predicate = spec.toPredicate(root, cq, cb);
+        
+        String sourceMode = filters.get("sourceMode");
+        if ("FAVORITES".equalsIgnoreCase(sourceMode)) {
+            jakarta.persistence.criteria.Root<com.testshaper.entity.QuestionFavorite> qfRoot = cq.from(com.testshaper.entity.QuestionFavorite.class);
+            jakarta.persistence.criteria.Predicate qfJoin = cb.equal(qfRoot.get("question"), root);
+            String currentUser = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            jakarta.persistence.criteria.Predicate qfUser = cb.equal(qfRoot.get("user").get("email"), currentUser);
+            
+            predicate = cb.and(predicate, qfJoin, qfUser);
+        } else if ("LECTURE_SHEETS".equalsIgnoreCase(sourceMode)) {
+            String lectureIdsStr = filters.get("lectureIds");
+            if (org.springframework.util.StringUtils.hasText(lectureIdsStr)) {
+                List<UUID> lectureIds = java.util.Arrays.stream(lectureIdsStr.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .map(UUID::fromString)
+                        .collect(java.util.stream.Collectors.toList());
+                if (!lectureIds.isEmpty()) {
+                    jakarta.persistence.criteria.Root<com.testshaper.entity.LectureQuestion> lqRoot = cq.from(com.testshaper.entity.LectureQuestion.class);
+                    jakarta.persistence.criteria.Predicate lqJoin = cb.equal(lqRoot.get("question"), root);
+                    jakarta.persistence.criteria.Predicate lqLecture = lqRoot.get("lecture").get("id").in(lectureIds);
+                    
+                    predicate = cb.and(predicate, lqJoin, lqLecture);
+                } else {
+                    predicate = cb.and(predicate, cb.or());
+                }
+            } else {
+                predicate = cb.and(predicate, cb.or());
+            }
+        }
+
+        String unusedOnlyStr = filters.get("unusedOnly");
+        if ("true".equalsIgnoreCase(unusedOnlyStr)) {
+            jakarta.persistence.criteria.Subquery<Long> sub = cq.subquery(Long.class);
+            jakarta.persistence.criteria.Root<com.testshaper.entity.ExamQuestion> subRoot = sub.from(com.testshaper.entity.ExamQuestion.class);
+            sub.select(cb.count(subRoot));
+            sub.where(cb.equal(subRoot.get("question"), root));
+            predicate = cb.and(predicate, cb.equal(sub, 0L));
+        } else {
+            String examIdsStr = filters.get("examIds");
+            if (org.springframework.util.StringUtils.hasText(examIdsStr)) {
+                List<UUID> examIds = java.util.Arrays.stream(examIdsStr.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .map(UUID::fromString)
+                        .collect(java.util.stream.Collectors.toList());
+                if (!examIds.isEmpty()) {
+                    jakarta.persistence.criteria.Root<com.testshaper.entity.ExamQuestion> eqRoot = cq.from(com.testshaper.entity.ExamQuestion.class);
+                    jakarta.persistence.criteria.Predicate eqJoin = cb.equal(eqRoot.get("question"), root);
+                    jakarta.persistence.criteria.Predicate eqExam = eqRoot.get("exam").get("id").in(examIds);
+                    
+                    predicate = cb.and(predicate, eqJoin, eqExam);
+                } else {
+                    predicate = cb.and(predicate, cb.or());
+                }
+            } else {
+                String usedOnlyStr = filters.get("usedOnly");
+                if ("true".equalsIgnoreCase(usedOnlyStr)) {
+                    jakarta.persistence.criteria.Root<com.testshaper.entity.ExamQuestion> eqRoot = cq.from(com.testshaper.entity.ExamQuestion.class);
+                    jakarta.persistence.criteria.Predicate eqJoin = cb.equal(eqRoot.get("question"), root);
+                    predicate = cb.and(predicate, eqJoin);
+                }
+            }
+        }
+        
         if (predicate != null) {
             cq.where(predicate);
         }

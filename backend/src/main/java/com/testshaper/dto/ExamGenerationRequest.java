@@ -89,9 +89,16 @@ public class ExamGenerationRequest {
     private String sourceMode = "ALL"; // ALL, FAVORITES, LECTURE_SHEETS
     private List<UUID> lectureIds;
     private Integer usedPercent;
+    private List<ExamAllocationRequest> examAllocations;
     private List<String> boards;
     private List<Integer> years;
     private List<String> schools;
+
+    @Data
+    public static class ExamAllocationRequest {
+        private UUID examId;
+        private Integer percent;
+    }
 
     // --- Nested DTO ---
     @Data

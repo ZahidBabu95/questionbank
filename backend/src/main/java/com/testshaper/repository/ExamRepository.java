@@ -17,12 +17,14 @@ public interface ExamRepository extends JpaRepository<Exam, UUID> {
                         "AND (:title IS NULL OR LOWER(e.title) LIKE LOWER(CONCAT('%', :title, '%'))) " +
                         "AND (:createdBy IS NULL OR e.createdBy = :createdBy) " +
                         "AND (:examType IS NULL OR e.examType = :examType) " +
-                        "AND (:status IS NULL OR e.status = :status)")
+                        "AND (:status IS NULL OR e.status = :status) " +
+                        "AND (:classSubjectId IS NULL OR e.classSubject.id = :classSubjectId)")
         Page<Exam> findByTenantAndOptionalCreator(@Param("tenantId") String tenantId,
                         @Param("title") String title,
                         @Param("createdBy") String createdBy,
                         @Param("examType") Exam.ExamType examType,
                         @Param("status") Exam.ExamStatus status,
+                        @Param("classSubjectId") java.util.UUID classSubjectId,
                         Pageable pageable);
 
         long countByTenantId(String tenantId);

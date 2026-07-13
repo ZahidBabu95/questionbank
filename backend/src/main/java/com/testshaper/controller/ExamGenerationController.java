@@ -117,12 +117,13 @@ public class ExamGenerationController {
             @RequestParam(required = false) String title,
             @RequestParam(required = false) com.testshaper.entity.Exam.ExamType examType,
             @RequestParam(required = false) com.testshaper.entity.Exam.ExamStatus status,
+            @RequestParam(required = false) UUID classSubjectId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             Authentication auth) {
         boolean isSuperAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<ExamSummaryDTO> exams = examGenerationService.listExams(title, examType, status, pageable, auth.getName(), isSuperAdmin);
+        Page<ExamSummaryDTO> exams = examGenerationService.listExams(title, examType, status, classSubjectId, pageable, auth.getName(), isSuperAdmin);
         return ResponseEntity.ok(Map.of("success", true, "data", exams));
     }
 
