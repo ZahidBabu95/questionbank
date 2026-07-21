@@ -22,6 +22,174 @@ import CanvasStyleInjector from './CanvasStyleInjector';
 import { useCanvasSync } from '../hooks/useCanvasSync';
 import { usePageCountObserver } from '../hooks/usePageCountObserver';
 import { formatDurationString } from '../../../../../utils/formatUtils';
+
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+
+const formatMathPowers = (html) => {
+    if (!html) return '';
+    return html.replace(/(<[^>]+>)|(([a-zA-Z0-9\)\}])\^\{?(-?[a-zA-Z0-9.]+)\}?)|(([a-zA-Z0-9\)\}])_\{?(-?[a-zA-Z0-9.]+)\}?)/g, (match, tag, powMatch, powBase, powExp, subMatch, subBase, subVal) => {
+        if (tag) return tag;
+        if (powMatch) return `${powBase}<sup>${powExp}</sup>`;
+        if (subMatch) return `${subBase}<sub>${subVal}</sub>`;
+        return match;
+    });
+};
+
+const processTabularHTML = (html) => {
+    if (!html) return '';
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        const isTabularText = (text) => {
+            return /\t| {3,}|(?:\s*&nbsp;\s*){2,}/i.test(text) || text.includes('\u00A0\u00A0');
+        };
+        
+        const processBlock = (blockNode) => {
+            const children = Array.from(blockNode.childNodes);
+            if (children.length === 0) return;
+            
+            const lines = [];
+            let currentLine = [];
+            
+            children.forEach(child => {
+                if (child.tagName === 'BR') {
+                    lines.push(currentLine);
+                    currentLine = [];
+                } else {
+                    currentLine.push(child);
+                }
+            });
+            if (currentLine.length > 0 || children[children.length - 1]?.tagName === 'BR') {
+                lines.push(currentLine);
+            }
+            
+            const lineIsTabular = lines.map(lineNodes => {
+                return lineNodes.some(node => {
+                    const text = node.nodeType === 3 ? node.nodeValue : (node.textContent || '');
+                    return isTabularText(text);
+                });
+            });
+            
+            const groups = [];
+            let currentGroup = { isTable: false, lines: [] };
+            
+            for (let i = 0; i < lines.length; i++) {
+                const isTab = lineIsTabular[i];
+                if (isTab) {
+                    if (currentGroup.isTable) {
+                        currentGroup.lines.push(lines[i]);
+                    } else {
+                        if (currentGroup.lines.length > 0) {
+                            groups.push(currentGroup);
+                        }
+                        currentGroup = { isTable: true, lines: [lines[i]] };
+                    }
+                } else {
+                    const nextLineIsTabular = i + 1 < lines.length && lineIsTabular[i + 1];
+                    if (currentGroup.isTable && nextLineIsTabular) {
+                        currentGroup.lines.push(lines[i]);
+                    } else {
+                        if (currentGroup.lines.length > 0) {
+                            groups.push(currentGroup);
+                        }
+                        currentGroup = { isTable: false, lines: [lines[i]] };
+                    }
+                }
+            }
+            if (currentGroup.lines.length > 0) {
+                groups.push(currentGroup);
+            }
+            
+            while (blockNode.firstChild) {
+                blockNode.removeChild(blockNode.firstChild);
+            }
+            
+            groups.forEach((group, gIdx) => {
+                if (group.isTable) {
+                    const tableDiv = doc.createElement('div');
+                    tableDiv.className = 'nexus-tabular-grid';
+                    tableDiv.setAttribute('style', "font-family: Consolas, Monaco, 'Courier New', monospace !important; white-space: pre !important; font-size: 12.5px !important; line-height: 1.5 !important; background-color: #fafafa; border: 1px solid #d1d5db; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 10px 0; letter-spacing: 0.03em; color: #111827; display: block; width: 100%; box-sizing: border-box;");
+                    
+                    group.lines.forEach((lineNodes, lIdx) => {
+                        lineNodes.forEach(node => {
+                            if (node.nodeType === 3) {
+                                node.nodeValue = node.nodeValue.replace(/\u00A0/g, ' ');
+                            }
+                            tableDiv.appendChild(node);
+                        });
+                        if (lIdx < group.lines.length - 1) {
+                            tableDiv.appendChild(doc.createElement('br'));
+                        }
+                    });
+                    blockNode.appendChild(tableDiv);
+                } else {
+                    group.lines.forEach((lineNodes, lIdx) => {
+                        lineNodes.forEach(node => {
+                            blockNode.appendChild(node);
+                        });
+                        if (lIdx < group.lines.length - 1 || gIdx < groups.length - 1) {
+                            blockNode.appendChild(doc.createElement('br'));
+                        }
+                    });
+                }
+            });
+        };
+        
+        const blocks = Array.from(doc.body.querySelectorAll('p, div, td, th, li'));
+        if (blocks.length === 0) {
+            processBlock(doc.body);
+        } else {
+            blocks.forEach(block => processBlock(block));
+        }
+        
+        return doc.body.innerHTML;
+    } catch (e) {
+        console.error("Error in processTabularHTML:", e);
+        return html;
+    }
+};
+
+const renderLatexMath = (html) => {
+    if (!html) return '';
+    const mathBlocks = [];
+    let count = 0;
+    
+    // Replace inline latex $...$ with placeholders
+    let processed = html.replace(/\$(.*?)\$/g, (match, formula) => {
+        try {
+            const cleanFormula = formula
+                .replace(/<[^>]+>/g, '') // Strip HTML tags inside formula
+                .replace(/&nbsp;/g, ' ')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&');
+                
+            const rendered = katex.renderToString(cleanFormula, {
+                throwOnError: false,
+                displayMode: false
+            });
+            const placeholder = `___MATH_BLOCK_${count}___`;
+            mathBlocks.push({ placeholder, html: rendered });
+            count++;
+            return placeholder;
+        } catch (e) {
+            console.error("KaTeX error:", e);
+            return match;
+        }
+    });
+    
+    // Process regular math powers/subscripts on the rest of the text
+    processed = formatMathPowers(processed);
+    
+    // Restore KaTeX rendered blocks
+    mathBlocks.forEach(block => {
+        processed = processed.replace(block.placeholder, block.html);
+    });
+    
+    return processTabularHTML(processed);
+};
 const getDisplayQuestionText = (q) => {
     if (!q) return '';
     let text = q.questionText || '';
@@ -145,12 +313,18 @@ const PaperCanvasV2 = React.memo(({
     pendingInsertQuestion, onQuestionInserted,
     pendingSwapQuestion, onQuestionSwapped,
     setDocumentQuestions, documentQuestions = [],
-    canvasTheme = 'white', uiLang = 'bn', setEditor
+    canvasTheme = 'white', uiLang = 'bn', setEditor, setIsEditorLoaded
 }) => {
     const s = docSettings || {};
     const lastEditorContentRef = useRef(rawContent);
     const editorUpdateTimeoutRef = useRef(null);
     const extractTimeoutRef = useRef(null);
+    const documentQuestionsRef = useRef(documentQuestions);
+    
+    useEffect(() => {
+        documentQuestionsRef.current = documentQuestions;
+    }, [documentQuestions]);
+
     const [headerPortalContainer, setHeaderPortalContainer] = useState(null);
 
     const editor = useEditor({
@@ -246,18 +420,27 @@ const PaperCanvasV2 = React.memo(({
     useEffect(() => {
         if (editor && setEditor) {
             setEditor(editor);
+            if (rawContent && setIsEditorLoaded) {
+                setIsEditorLoaded(true);
+            }
         }
         return () => {
             if (setEditor) {
                 setEditor(null);
             }
         };
-    }, [editor, setEditor]);
+    }, [editor, setEditor, rawContent, setIsEditorLoaded]);
 
     // Handle Mode Switching visually
     useEffect(() => {
-        if (editor) {
-            editor.view.dom.classList.toggle('strict-analytics-mode', editorMode === 'STRICT_LINKED');
+        if (editor && !editor.isDestroyed) {
+            try {
+                if (editor.view && editor.view.dom) {
+                    editor.view.dom.classList.toggle('strict-analytics-mode', editorMode === 'STRICT_LINKED');
+                }
+            } catch (e) {
+                // Ignore safe warning if view is not fully mounted on DOM yet
+            }
         }
     }, [editor, editorMode]);
 
@@ -274,7 +457,27 @@ const PaperCanvasV2 = React.memo(({
                         qs.push({ pos, nodeSize: node.nodeSize, attrs: node.attrs });
                     }
                 });
-                if (setDocumentQuestions) setDocumentQuestions(qs);
+                
+                const areEqual = (listA, listB) => {
+                    if (!listA || !listB) return false;
+                    if (listA.length !== listB.length) return false;
+                    for (let i = 0; i < listA.length; i++) {
+                        const a = listA[i];
+                        const b = listB[i];
+                        if (a.pos !== b.pos) return false;
+                        if (a.nodeSize !== b.nodeSize) return false;
+                        if (a.attrs?.questionId !== b.attrs?.questionId) return false;
+                        if (a.attrs?.type !== b.attrs?.type) return false;
+                        if (a.attrs?.questionNumber !== b.attrs?.questionNumber) return false;
+                        if (a.attrs?.alternativeToId !== b.attrs?.alternativeToId) return false;
+                        if (a.attrs?.firstInSection !== b.attrs?.firstInSection) return false;
+                    }
+                    return true;
+                };
+
+                if (!areEqual(documentQuestionsRef.current, qs)) {
+                    if (setDocumentQuestions) setDocumentQuestions(qs);
+                }
             }, 800);
         };
         
@@ -319,12 +522,15 @@ const PaperCanvasV2 = React.memo(({
             const timer = setTimeout(() => {
                 if (editor && !editor.isDestroyed) {
                     editor.commands.setContent(rawContent);
+                    if (setIsEditorLoaded) {
+                        setIsEditorLoaded(true);
+                    }
                 }
             }, 0);
             lastEditorContentRef.current = rawContent;
             return () => clearTimeout(timer);
         }
-    }, [rawContent, editor]);
+    }, [rawContent, editor, setIsEditorLoaded]);
 
     // Handle programmatic insertion of questions from parent (Add to Canvas button)
     useEffect(() => {
@@ -375,7 +581,7 @@ const PaperCanvasV2 = React.memo(({
             editor.documentQuestions = documentQuestions;
             window.dispatchEvent(new CustomEvent('nexus-editor-rerender'));
         }
-    }, [editor, s.activeSet, s.multipleSetsEnabled, s.setMappings, documentQuestions]);
+    }, [editor, s.activeSet, s.multipleSetsEnabled, s.setMappings, s.showStudentAnswerSheet, documentQuestions]);
 
     if (!editor) {
         return <div className="animate-pulse h-[800px] bg-slate-100 rounded-lg w-full"></div>;
@@ -650,7 +856,7 @@ const PaperCanvasV2 = React.memo(({
             >
             <div 
                 ref={containerRef}
-                className={`paper-canvas-container relative origin-top-left print:block print:m-0 print:p-0 theme-${canvasTheme}`}
+                className={`paper-canvas-container shrink-0 relative origin-top print:block print:m-0 print:p-0 theme-${canvasTheme}`}
                 data-outer-border={s.outerBorder ? "true" : "false"}
                 style={{ 
                     transform: `scale(${zoom / 100})`, 
@@ -843,6 +1049,119 @@ const PaperCanvasV2 = React.memo(({
                     <EditorContent editor={editor} />
                 </div>
 
+                {/* STUDENT OMR BUBBLE SHEET */}
+                {s.showStudentAnswerSheet && (() => {
+                    const mcqs = (documentQuestions || []).filter(q => (q.attrs?.type || 'MCQ') === 'MCQ');
+                    if (mcqs.length === 0) return null;
+
+                    const numCols = 5;
+                    const totalMcq = mcqs.length;
+                    const numRows = Math.ceil(totalMcq / numCols);
+
+                    return (
+                        <div className="nexus-student-omr-sheet mt-2 pt-2 border-t-2 border-slate-800 break-inside-avoid w-full select-none" style={{ fontFamily: s.fontFamily || 'Kalpurush', boxSizing: 'border-box', columnSpan: 'all', WebkitColumnSpan: 'all' }}>
+                            <div className="text-center font-bold mb-1 select-none text-slate-800" style={{ fontSize: '10pt' }}>
+                                {s.language === 'ENGLISH' ? 'OMR Answer Sheet' : 'উত্তরপত্র (বহুনির্বাচনি)'}
+                            </div>
+                            
+                            <div className="w-full bg-white rounded-lg border border-slate-300 overflow-hidden shadow-[0_2px_4px_rgba(0,0,0,0.03)] mb-1">
+                                <table className="w-full text-left" style={{ tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: 0 }}>
+                                    <thead>
+                                        <tr className="bg-slate-100/80">
+                                            {Array.from({ length: numCols }).map((_, colIdx) => (
+                                                <React.Fragment key={colIdx}>
+                                                    <th className="py-1 px-1 font-bold text-slate-700 text-center select-none border-b border-r border-slate-300" style={{ width: '4%', fontSize: '8.5pt' }}>
+                                                        {s.language === 'ENGLISH' ? 'Q.' : 'প্রশ্ন'}
+                                                    </th>
+                                                    <th className={`py-1 px-1.5 font-bold text-slate-700 text-center select-none border-b border-slate-300 ${colIdx < numCols - 1 ? 'border-r' : ''}`} style={{ width: '16%', fontSize: '8.5pt' }}>
+                                                        {s.language === 'ENGLISH' ? 'Ans.' : 'উত্তর'}
+                                                    </th>
+                                                </React.Fragment>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {Array.from({ length: numRows }).map((_, rowIdx) => (
+                                            <tr key={rowIdx} className="hover:bg-slate-50/40 transition-colors odd:bg-slate-50/10">
+                                                {Array.from({ length: numCols }).map((_, colIdx) => {
+                                                    const qIndex = colIdx * numRows + rowIdx;
+                                                    
+                                                    if (qIndex < totalMcq) {
+                                                        const mq = mcqs[qIndex];
+                                                        const qNum = mq.attrs?.questionNumber || (qIndex + 1);
+                                                        const displayNum = mq.attrs?.numberingStyle === 'en' || s.language === 'ENGLISH' 
+                                                            ? qNum 
+                                                            : convertDigits(qNum, 'BANGLA');
+
+                                                        const mqOptions = mq.attrs?.options || [];
+                                                        const optionCount = mqOptions.length > 0 ? mqOptions.length : 4;
+                                                        const optStyle = mq.attrs?.optionStyle || (s.language === 'ENGLISH' ? 'en' : 'bn');
+                                                        
+                                                        return (
+                                                            <React.Fragment key={colIdx}>
+                                                                <td className={`py-1 px-1 font-bold text-slate-800 text-center select-none border-r border-slate-300 bg-slate-50/20 ${rowIdx < numRows - 1 ? 'border-b border-slate-200' : ''}`} style={{ width: '4%', fontSize: '8.5pt' }}>
+                                                                    {displayNum}
+                                                                </td>
+                                                                <td className={`py-1 px-1.5 text-center ${colIdx < numCols - 1 ? 'border-r border-slate-300' : ''} ${rowIdx < numRows - 1 ? 'border-b border-slate-200' : ''}`} style={{ width: '16%' }}>
+                                                                    <div className="flex gap-0.5 justify-center items-center">
+                                                                        {Array.from({ length: optionCount }).map((_, oIdx) => {
+                                                                            const bubbleLabel = optStyle === 'en' 
+                                                                                ? String.fromCharCode(65 + oIdx) // A, B, C, D
+                                                                                : optStyle === 'roman'
+                                                                                ? ['I', 'II', 'III', 'IV', 'V'][oIdx]
+                                                                                : optStyle === 'num_en'
+                                                                                ? `${oIdx + 1}`
+                                                                                : optStyle === 'num_bn'
+                                                                                ? ['১', '২', '৩', '৪', '৫'][oIdx]
+                                                                                : ['ক', 'খ', 'গ', 'ঘ', 'ঙ'][oIdx] || String.fromCharCode(2453 + oIdx);
+
+                                                                            return (
+                                                                                <svg 
+                                                                                    key={oIdx} 
+                                                                                    width="14" 
+                                                                                    height="14" 
+                                                                                    viewBox="0 0 14 14" 
+                                                                                    className="select-none"
+                                                                                    style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                                                                                >
+                                                                                    <circle cx="7" cy="7" r="6.2" stroke="#1e293b" strokeWidth="1" fill="none" />
+                                                                                    <text 
+                                                                                        x="7" 
+                                                                                        y="7" 
+                                                                                        textAnchor="middle" 
+                                                                                        dominantBaseline="central" 
+                                                                                        fontSize="7.5px" 
+                                                                                        fontWeight="900" 
+                                                                                        fill="#1e293b"
+                                                                                        style={{ fontFamily: s.fontFamily || 'Kalpurush' }}
+                                                                                    >
+                                                                                        {bubbleLabel}
+                                                                                    </text>
+                                                                                </svg>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </td>
+                                                            </React.Fragment>
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <React.Fragment key={colIdx}>
+                                                                <td className={`py-1 px-1 text-slate-400 bg-slate-50/20 text-center border-r border-slate-300 ${rowIdx < numRows - 1 ? 'border-b border-slate-200' : ''}`} style={{ width: '4%' }}>-</td>
+                                                                <td className={`py-1 px-1.5 text-center ${colIdx < numCols - 1 ? 'border-r border-slate-300' : ''} ${rowIdx < numRows - 1 ? 'border-b border-slate-200' : ''}`} style={{ width: '16%' }}>-</td>
+                                                            </React.Fragment>
+                                                        );
+                                                    }
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 {/* Compact Answer Grid Inline */}
                 {s.includeAnswerSheet && s.ansLayout === 'compact' && documentQuestions && documentQuestions.length > 0 && (() => {
                     const mcqQuestions = [];
@@ -875,14 +1194,14 @@ const PaperCanvasV2 = React.memo(({
                     };
 
                     return (
-                        <div className="nexus-compact-answer-sheet mt-12 pt-6 border-t-2 border-slate-800 break-inside-avoid print:break-before-page" style={{ fontFamily: s.fontFamily || 'Kalpurush' }}>
+                        <div className="nexus-compact-answer-sheet mt-12 pt-6 border-t-2 border-slate-800 break-inside-avoid" style={{ fontFamily: s.fontFamily || 'Kalpurush' }}>
                             <h4 className="text-center font-bold mb-4" style={{ fontSize: ptToPx(s.subHeaderFontSize || 14) }}>
                                 {s.language === 'ENGLISH' ? 'Answer Sheet' : 'উত্তরপত্র'}
                             </h4>
                             
                             {/* MCQ Answers Grid Table */}
                             {totalMcq > 0 && (
-                                <table className="w-full border-collapse border-2 border-slate-800 text-center text-sm mb-6" style={{ fontSize: ptToPx(s.bodyFontSize || 12) }}>
+                                <table className="w-full border-collapse border-2 border-slate-800 text-center text-sm mb-6" style={{ tableLayout: 'fixed', fontSize: ptToPx(s.bodyFontSize || 12) }}>
                                     <thead>
                                         <tr className="bg-slate-50 border-b border-slate-800">
                                             {Array.from({ length: numCols }).map((_, colIdx) => (
@@ -927,17 +1246,17 @@ const PaperCanvasV2 = React.memo(({
 
                                                         return (
                                                             <React.Fragment key={colIdx}>
-                                                                <td className={`border border-slate-800 py-1.5 px-1 font-bold text-slate-700 bg-slate-50/50 ${colIdx > 0 ? 'border-l-2' : ''}`} style={{ fontSize: ptToPx(qFontSize) }}>
+                                                                <td className={`border border-slate-800 py-1.5 px-1 font-bold text-slate-700 bg-slate-50/50 ${colIdx > 0 ? 'border-l-2' : ''}`} style={{ width: '8%', fontSize: ptToPx(qFontSize) }}>
                                                                     {displayNum}
                                                                 </td>
-                                                                <td className="border border-slate-800 py-1.5 px-2 font-bold text-slate-900" style={{ fontSize: ptToPx(qFontSize) }} dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                                <td className="border border-slate-800 py-1.5 px-2 font-bold text-slate-900" style={{ width: '12%', fontSize: ptToPx(qFontSize) }} dangerouslySetInnerHTML={{ __html: renderLatexMath(ansText) }} />
                                                             </React.Fragment>
                                                         );
                                                     } else {
                                                         return (
                                                             <React.Fragment key={colIdx}>
-                                                                <td className={`border border-slate-800 py-1.5 px-1 bg-slate-50/30 ${colIdx > 0 ? 'border-l-2' : ''}`}>-</td>
-                                                                <td className="border border-slate-800 py-1.5 px-2">-</td>
+                                                                <td className={`border border-slate-800 py-1.5 px-1 bg-slate-50/30 ${colIdx > 0 ? 'border-l-2' : ''}`} style={{ width: '8%' }}>-</td>
+                                                                <td className="border border-slate-800 py-1.5 px-2" style={{ width: '12%' }}>-</td>
                                                             </React.Fragment>
                                                         );
                                                     }
@@ -976,7 +1295,7 @@ const PaperCanvasV2 = React.memo(({
                                                 <div key={displayNum} className="border-b border-slate-100 pb-2 last:border-b-0 break-inside-avoid" style={{ fontSize: ptToPx(qFontSize) }}>
                                                     <div className="flex gap-2">
                                                         <span className="font-bold text-slate-700">{displayNum}.</span>
-                                                        <div className="font-semibold text-slate-800 inline-block" dangerouslySetInnerHTML={{ __html: content }} />
+                                                        <div className="font-semibold text-slate-800 inline-block" dangerouslySetInnerHTML={{ __html: renderLatexMath(content) }} />
                                                     </div>
                                                     {hasSubParts ? (
                                                         <div className="pl-6 mt-1.5 space-y-2 text-slate-900 font-bold">
@@ -987,13 +1306,13 @@ const PaperCanvasV2 = React.memo(({
                                                                         {part.answer && (
                                                                             <div className="flex items-start gap-1 font-bold">
                                                                                 <span className="text-xs text-slate-800 font-bold shrink-0">({label}) {s.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
-                                                                                <div className="inline font-bold text-slate-900" dangerouslySetInnerHTML={{ __html: part.answer }} />
+                                                                                <div className="inline font-bold text-slate-900" dangerouslySetInnerHTML={{ __html: renderLatexMath(part.answer) }} />
                                                                             </div>
                                                                         )}
                                                                         {part.explanation && (
                                                                             <div className="flex items-start gap-1 pl-4 text-xs font-normal text-slate-600">
                                                                                 <span className="font-semibold shrink-0 text-slate-800">{!part.answer ? `(${label}) ` : ''}{s.language === 'ENGLISH' ? 'Explanation:' : 'ব্যাখ্যা:'}</span>
-                                                                                <div className="inline text-slate-700 font-normal" dangerouslySetInnerHTML={{ __html: part.explanation }} />
+                                                                                <div className="inline text-slate-700 font-normal" dangerouslySetInnerHTML={{ __html: renderLatexMath(part.explanation) }} />
                                                                             </div>
                                                                         )}
                                                                     </div>
@@ -1003,7 +1322,7 @@ const PaperCanvasV2 = React.memo(({
                                                     ) : (
                                                         <div className="pl-6 mt-1 text-slate-900 font-bold">
                                                             <span className="text-xs text-slate-500 font-normal mr-1.5">{s.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
-                                                            <div className="inline" dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                            <div className="inline" dangerouslySetInnerHTML={{ __html: renderLatexMath(ansText) }} />
                                                         </div>
                                                     )}
                                                 </div>

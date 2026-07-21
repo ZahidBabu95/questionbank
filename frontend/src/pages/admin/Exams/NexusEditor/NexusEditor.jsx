@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { NexusEditorProvider, useNexusEditor } from './context/NexusEditorContext';
 import { usePanelResizer } from './hooks/usePanelResizer';
 import { useAiImporter } from './hooks/useAiImporter';
@@ -14,8 +15,10 @@ import FilenameModal from './components/Layout/FilenameModal';
 import { PanelLeftOpen, PanelRightOpen, Database, Settings2 } from 'lucide-react';
 
 const NexusEditorContent = () => {
+    const { id } = useParams();
     const { 
         docSettings, editorMode, rawContent, setRawContent, 
+        isEditorLoaded, setIsEditorLoaded,
         zoom, workspaceTools, editorConfig, setPageCount,
         pendingInsertQuestion, setPendingInsertQuestion,
         pendingSwapQuestion, setPendingSwapQuestion,
@@ -25,6 +28,8 @@ const NexusEditorContent = () => {
         isLeftPanelOpen, isRightPanelOpen, leftPanelTab, activeTab,
         canvasTheme, uiLang, setEditor, isMobileApp, isTablet
     } = useNexusEditor();
+
+    const isLoading = id && (!rawContent || !isEditorLoaded);
 
     const setPendingInsertQuestionNull = React.useCallback(() => setPendingInsertQuestion(null), [setPendingInsertQuestion]);
     const setPendingSwapQuestionNull = React.useCallback(() => setPendingSwapQuestion(null), [setPendingSwapQuestion]);
@@ -157,6 +162,7 @@ const NexusEditorContent = () => {
                             canvasTheme={canvasTheme}
                             uiLang={uiLang}
                             setEditor={setEditor}
+                            setIsEditorLoaded={setIsEditorLoaded}
                         />
                     </div>
                 </div>
@@ -230,6 +236,28 @@ const NexusEditorContent = () => {
 
             {/* Premium Custom Filename Input Modal */}
             <FilenameModal />
+
+            {/* Glassmorphic Loading Overlay */}
+            {isLoading && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9999] flex flex-col items-center justify-center animate-in fade-in duration-300">
+                    <div className="bg-white/90 dark:bg-slate-900/90 p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-4 max-w-sm text-center border border-white/20">
+                        <div className="relative flex items-center justify-center">
+                            {/* Ring Spinner */}
+                            <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+                            {/* Inner Logo/Icon */}
+                            <div className="absolute text-indigo-600 animate-pulse font-bold text-lg">N</div>
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800 mt-2">
+                            {uiLang === 'bn' ? 'পরীক্ষা লোড হচ্ছে...' : 'Loading Exam...'}
+                        </h3>
+                        <p className="text-xs text-slate-500 max-w-[250px]">
+                            {uiLang === 'bn' 
+                                ? 'প্রশ্নপত্র এবং সেটিংস ডেটাবেজ থেকে প্রস্তুত করা হচ্ছে, দয়া করে অপেক্ষা করুন।' 
+                                : 'Preparing questions and settings from database, please wait.'}
+                        </p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

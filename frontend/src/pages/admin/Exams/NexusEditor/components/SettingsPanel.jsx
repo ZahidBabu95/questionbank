@@ -582,6 +582,10 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang, documen
                                     <Toggle checked={s[k]} onChange={e=>u(k,e.target.checked)}/>
                                 </div>
                             ))}
+                            <div className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0">
+                                <span className="text-xs text-slate-600 font-bold">{t.answerSheet || 'Answer Sheet'}</span>
+                                <Toggle checked={s.showStudentAnswerSheet || false} onChange={e=>u("showStudentAnswerSheet",e.target.checked)}/>
+                            </div>
                         </div>
                         
                         {(s.showName || s.showRoll || s.showReg) && (

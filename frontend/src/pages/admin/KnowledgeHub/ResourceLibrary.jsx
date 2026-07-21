@@ -1,21 +1,23 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
 import { 
-    Book, Plus, Search, Library, UploadCloud, User, Building, 
-    Calendar, CheckCircle, Edit2, Trash2, Image as ImageIcon, 
-    ScanLine, Map, Clock, AlertCircle, X, ChevronRight, Share2, Globe, GraduationCap, Folder, Layers, Sparkles
+    Plus, Search, Library, X
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import axios from '../../../utils/axios';
 import academicService from '../../../services/academicService';
 import { knowledgeHubService } from '../../../services/knowledgeHubService';
+import useDebounce from '../../../hooks/useDebounce';
+import LibraryStats from './components/LibraryStats';
+import BookCard from './components/BookCard';
+import BookRegistryModal from './components/BookRegistryModal';
 
 const bookTypesList = ['ALL', 'TEXTBOOK', 'GUIDE', 'QUESTION_BANK', 'LECTURE_SHEET'];
 
 const ResourceLibrary = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const debouncedSearchQuery = useDebounce(searchQuery, 300);
     const [activeFilterType, setActiveFilterType] = useState('ALL');
     const [books, setBooks] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -25,9 +27,7 @@ const ResourceLibrary = () => {
     const [editingBookId, setEditingBookId] = useState(null);
     
     // Pagination & Infinite Scroll State
-    const [page, setPage] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
-    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [displayLimit, setDisplayLimit] = useState(12);
     const observerTarget = useRef(null);
 
     const [portalTarget, setPortalTarget] = useState(null);
@@ -109,18 +109,16 @@ const ResourceLibrary = () => {
         }
     }, [books]);
 
-    const [displayLimit, setDisplayLimit] = useState(12);
-
     // Auto-reset pagination limit when any filter changes
     useEffect(() => {
         setDisplayLimit(12);
-    }, [searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterExtractPercent, filterMedium]);
+    }, [debouncedSearchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterExtractPercent, filterMedium]);
 
     const filteredBooks = useMemo(() => {
         return books.filter(b => {
-            const matchesSearch = b.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                 (b.authorName && b.authorName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                                 (b.publisher && b.publisher.toLowerCase().includes(searchQuery.toLowerCase()));
+            const matchesSearch = b.title.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) || 
+                                 (b.authorName && b.authorName.toLowerCase().includes(debouncedSearchQuery.toLowerCase())) ||
+                                 (b.publisher && b.publisher.toLowerCase().includes(debouncedSearchQuery.toLowerCase()));
             const matchesType = activeFilterType === 'ALL' || b.bookType === activeFilterType;
             
             const syncPercent = b.totalPages > 0 ? Math.round(((b.goldenPages || 0) / b.totalPages) * 100) : 0;
@@ -172,7 +170,7 @@ const ResourceLibrary = () => {
 
             return matchesSearch && matchesType && matchesHierarchy && matchesSyncPercent && matchesExtractPercent && matchesMedium;
         });
-    }, [books, searchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterExtractPercent, filterMedium, hierarchy]);
+    }, [books, debouncedSearchQuery, activeFilterType, filterLevel, filterStream, filterClass, filterSubject, filterSyncPercent, filterExtractPercent, filterMedium, hierarchy]);
 
     const filteredClassSubjectsForModal = useMemo(() => {
         if (!modalClass || !hierarchy.classSubjects) return [];
@@ -220,7 +218,6 @@ const ResourceLibrary = () => {
         };
     }, [isLoading, filteredBooks.length, displayLimit]);
 
-
     const fetchSourceBooks = async (isSilent = false) => {
         try {
             if (!isSilent) setIsLoading(true);
@@ -265,7 +262,7 @@ const ResourceLibrary = () => {
     };
 
     const openCreateModal = () => {
-        setFormData({ title: '', authorName: '', publisher: '', coverImageUrl: '', firstPublished: '', latestEdition: '', bookType: 'TEXTBOOK', language: '', classSubjectId: '' });
+        setFormData({ title: '', authorName: '', publisher: '', coverImageUrl: '', firstPublished: '', latestEdition: '', bookType: 'TEXTBOOK', language: 'Bangla', classSubjectId: '' });
         setIsEditMode(false);
         setEditingBookId(null);
         setModalLevel('');
@@ -393,7 +390,7 @@ const ResourceLibrary = () => {
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={openCreateModal}
-                        className="flex items-center gap-2 px-3 md:px-5 py-2 md:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md md:shadow-lg shadow-indigo-200 transition-all active:scale-95 text-xs md:text-sm"
+                        className="flex items-center gap-2 px-3 md:px-5 py-2 md:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md md:shadow-lg shadow-indigo-200 transition-all active:scale-95 text-xs md:text-sm cursor-pointer"
                     >
                         <Plus size={18} strokeWidth={3} />
                         <span className="hidden md:inline">Register New Source</span>
@@ -404,50 +401,7 @@ const ResourceLibrary = () => {
 
             {/* ═══ Hero Statistics Section ═══ */}
             <div className="px-6 pt-6 pb-2">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                    <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm flex items-center gap-4">
-                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
-                            <Library size={24} />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Books</p>
-                            <h4 className="text-2xl font-black text-slate-800">{books.length}</h4>
-                        </div>
-                    </div>
-                    <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm flex items-center gap-4">
-                        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
-                            <CheckCircle size={24} />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Digitized</p>
-                            <h4 className="text-2xl font-black text-slate-800">
-                                {books.reduce((acc, curr) => acc + (curr.goldenPages || 0), 0)}
-                            </h4>
-                        </div>
-                    </div>
-                    <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm flex items-center gap-4">
-                        <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
-                            <Layers size={24} />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">In Progress</p>
-                            <h4 className="text-2xl font-black text-slate-800">
-                                {books.filter(b => (b.extractedPages || 0) > (b.goldenPages || 0)).length}
-                            </h4>
-                        </div>
-                    </div>
-                    <div className="bg-white p-5 rounded-3xl border border-slate-200/60 shadow-sm flex items-center gap-4">
-                        <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center">
-                            <AlertCircle size={24} />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Pending</p>
-                            <h4 className="text-2xl font-black text-slate-800">
-                                {books.filter(b => (b.totalPages || 0) === 0).length}
-                            </h4>
-                        </div>
-                    </div>
-                </div>
+                <LibraryStats books={books} />
 
                 {/* ═══ Professional Filters & Search ═══ */}
                 <div className="sticky top-0 z-30 bg-[#F8FAFC]/80 backdrop-blur-md py-4 space-y-4">
@@ -558,7 +512,7 @@ const ResourceLibrary = () => {
                                 className="w-full pl-12 pr-12 py-3.5 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-bold shadow-sm placeholder:text-slate-400"
                             />
                             {searchQuery && (
-                                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 transition-colors p-1">
+                                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 transition-colors p-1 cursor-pointer">
                                     <X size={18} strokeWidth={3} />
                                 </button>
                             )}
@@ -570,7 +524,7 @@ const ResourceLibrary = () => {
                             <button
                                 key={type}
                                 onClick={() => setActiveFilterType(type)}
-                                className={`px-6 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all duration-300 border ${
+                                className={`px-6 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all duration-300 border cursor-pointer ${
                                     activeFilterType === type 
                                     ? 'bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-200 scale-105' 
                                     : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600'
@@ -593,11 +547,11 @@ const ResourceLibrary = () => {
                 ) : filteredBooks.length === 0 ? (
                     <div className="bg-white border-2 border-dashed border-slate-200 rounded-[40px] py-32 text-center flex flex-col items-center justify-center shadow-inner mt-4">
                         <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6 border border-slate-100 shadow-sm">
-                            <Book className="text-slate-300" size={48} strokeWidth={1} />
+                            <Library className="text-slate-300" size={48} strokeWidth={1} />
                         </div>
                         <h3 className="text-2xl font-black text-slate-800 tracking-tight">Library is Empty</h3>
                         <p className="text-slate-500 mt-2 max-w-sm font-medium mb-8">Start growing your knowledge hub by adding source books and materials.</p>
-                        <button onClick={openCreateModal} className="px-8 py-3 bg-indigo-600 text-white font-black rounded-2xl hover:bg-slate-900 transition-all shadow-xl shadow-indigo-100 active:scale-95">
+                        <button onClick={openCreateModal} className="px-8 py-3 bg-indigo-600 text-white font-black rounded-2xl hover:bg-slate-900 transition-all shadow-xl shadow-indigo-100 active:scale-95 cursor-pointer">
                             Register Your First Book
                         </button>
                     </div>
@@ -605,178 +559,15 @@ const ResourceLibrary = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
                         <AnimatePresence mode="popLayout">
                             {filteredBooks.slice(0, displayLimit).map((book, idx) => (
-                                <motion.div 
-                                    layout
-                                    initial={{ opacity: 0, y: 30 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: idx * 0.05, duration: 0.5, type: "spring", stiffness: 100 }}
-                                    key={book.id} 
-                                    className="group relative flex flex-col bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-500 overflow-hidden"
-                                >
-                                    {/* Action Header */}
-                                    <div className="absolute top-4 right-4 flex items-center gap-2 z-20 opacity-0 group-hover:opacity-100 translate-x-4 group-hover:translate-x-0 transition-all duration-500 delay-75">
-                                        <button onClick={(e) => openEditModal(book, e)} className="w-9 h-9 bg-white shadow-xl flex items-center justify-center rounded-xl text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all border border-slate-100">
-                                            <Edit2 size={16} strokeWidth={2.5} />
-                                        </button>
-                                        <button onClick={(e) => handleDeleteBook(book.id, e)} className="w-9 h-9 bg-white shadow-xl flex items-center justify-center rounded-xl text-rose-500 hover:bg-rose-500 hover:text-white transition-all border border-slate-100">
-                                            <Trash2 size={16} strokeWidth={2.5} />
-                                        </button>
-                                    </div>
-
-                                    {/* Type & Sync Badges */}
-                                    <div className="absolute top-4 left-4 z-20 flex flex-col items-start gap-1.5 pointer-events-none">
-                                        <span className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-lg border shadow-sm ${getBadgeStyle(book.bookType)}`}>
-                                            {book.bookType.replace('_', ' ')}
-                                        </span>
-                                        {book.vectorizedChunks > 0 && (
-                                            <motion.span 
-                                                initial={{ scale: 0.8, opacity: 0 }}
-                                                animate={{ scale: 1, opacity: 1 }}
-                                                className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[9px] font-black uppercase tracking-widest rounded-lg shadow-md shadow-indigo-500/30 border border-indigo-400/50"
-                                            >
-                                                <Sparkles size={10} strokeWidth={3} className="text-indigo-100" />
-                                                <span>AI Synced</span>
-                                            </motion.span>
-                                        )}
-                                        {hasLanguageMismatch(book) && (
-                                            <motion.span 
-                                                animate={{ scale: [1, 1.06, 1], opacity: [0.9, 1, 0.9] }}
-                                                transition={{ repeat: Infinity, duration: 2 }}
-                                                className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-rose-600 to-red-500 text-white text-[9px] font-black uppercase tracking-widest rounded-lg shadow-md shadow-rose-500/40 border border-rose-500"
-                                                title="The book medium does not match the curriculum subject medium!"
-                                            >
-                                                <AlertCircle size={10} strokeWidth={3} className="animate-pulse text-rose-100" />
-                                                <span>Mismatch Alert</span>
-                                            </motion.span>
-                                        )}
-                                    </div>
-
-                                    <div className="p-6">
-                                        <div className="flex gap-6">
-                                            {/* Book Cover */}
-                                            <div className="w-[110px] sm:w-[130px] flex-shrink-0 relative group/cover">
-                                                <div className="aspect-[3/4.2] rounded-xl overflow-hidden shadow-sm bg-slate-100 border border-slate-200 hover:shadow-md transition-all duration-300">
-                                                    {book.coverImageUrl ? (
-                                                        <img src={book.coverImageUrl} className="w-full h-full object-cover" alt={book.title} />
-                                                    ) : (
-                                                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
-                                                            <Book size={40} strokeWidth={1} />
-                                                            <span className="text-[8px] font-black mt-2 opacity-50 uppercase tracking-tighter">No Preview</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex-1 flex flex-col min-w-0">
-                                            <div className="flex gap-2 mb-2">
-                                                {book.language === 'English' && <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded uppercase border border-indigo-100 shadow-sm">EN</span>}
-                                                {book.language === 'Bangla' && <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase border border-emerald-100 shadow-sm">BN</span>}
-                                                {(book.language === 'Bilingual' || book.language === 'Mixed') && <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase border border-amber-100 shadow-sm">BI</span>}
-                                            </div>
-                                                
-                                                <h3 className="text-xl font-black text-slate-800 leading-tight mb-2 line-clamp-2 select-text" title={book.title}>
-                                                    {book.title}
-                                                </h3>
-                                                
-                                                <div className="space-y-1.5 mt-auto">
-                                                    <div className="flex items-center gap-2 text-slate-500">
-                                                        <User size={14} className="flex-shrink-0 text-slate-400" />
-                                                        <p className="text-xs font-bold truncate tracking-tight">{book.authorName || 'No Author Info'}</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-slate-500">
-                                                        <Building size={14} className="flex-shrink-0 text-slate-400" />
-                                                        <p className="text-xs font-bold truncate tracking-tight">{book.publisher || 'Unknown Publisher'}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Digitization Progress */}
-                                        <div className="mt-8 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100 group/progress relative overflow-hidden">
-                                            {book.isProcessing ? (
-                                                <div className="absolute inset-0 bg-indigo-600 flex flex-col justify-center items-center z-10 px-4 text-center">
-                                                    <div className="w-full flex items-center justify-between mb-2">
-                                                        <span className="text-[10px] font-black text-white/80 uppercase tracking-widest flex items-center gap-1.5">
-                                                            <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                                                            Background Engine Active
-                                                        </span>
-                                                        <span className="text-xs font-black text-white">{book.processedPagesCount || 0}/{book.totalPagesToProcess || 0}</span>
-                                                    </div>
-                                                    <div className="h-1.5 w-full bg-indigo-900/50 rounded-full overflow-hidden flex">
-                                                        <motion.div 
-                                                            initial={{ width: 0 }}
-                                                            animate={{ width: `${book.totalPagesToProcess > 0 ? ((book.processedPagesCount || 0) / book.totalPagesToProcess) * 100 : 0}%` }}
-                                                            transition={{ duration: 0.5 }}
-                                                            className="h-full bg-white relative overflow-hidden"
-                                                        >
-                                                            <div className="absolute inset-0 bg-white/50 w-full animate-[shimmer_1.5s_infinite] -translate-x-full" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent)' }} />
-                                                        </motion.div>
-                                                    </div>
-                                                    <p className="text-[9px] text-indigo-200 uppercase font-black tracking-widest mt-2">Uploading & Extracting Base Data...</p>
-                                                </div>
-                                            ) : null}
-
-                                            <div className="flex justify-between items-center mb-3">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Digitization Pulse</span>
-                                                </div>
-                                                <span className="text-xs font-black text-slate-800 whitespace-nowrap">
-                                                    {book.goldenPages || 0} <span className="text-slate-300 mx-1">/</span> {book.totalPages || 0}
-                                                </span>
-                                            </div>
-                                            <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden flex shadow-inner">
-                                                <motion.div 
-                                                    initial={{ width: 0 }}
-                                                    animate={{ width: `${book.totalPages > 0 ? ((book.goldenPages || 0) / book.totalPages) * 100 : 0}%` }}
-                                                    transition={{ duration: 1, delay: idx * 0.1 }}
-                                                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 relative group-hover/progress:from-indigo-600 group-hover/progress:to-indigo-400 transition-all duration-500"
-                                                />
-                                                <motion.div 
-                                                    initial={{ width: 0 }}
-                                                    animate={{ width: `${book.totalPages > 0 ? (((book.extractedPages || 0) - (book.goldenPages || 0)) / book.totalPages) * 100 : 0}%` }}
-                                                    transition={{ duration: 1, delay: idx * 0.1 + 0.2 }}
-                                                    className="h-full bg-slate-300/50"
-                                                />
-                                            </div>
-                                            <div className="mt-2 flex justify-between text-[9px] font-black uppercase tracking-widest text-slate-400">
-                                                <span>Golden Record</span>
-                                                <span className="text-slate-800">{book.totalPages > 0 ? Math.round(((book.goldenPages || 0) / book.totalPages) * 100) : 0}%</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex gap-3">
-                                            <div className="flex-1 bg-white border border-slate-200 p-2.5 rounded-xl text-center">
-                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight mb-0.5">Academic Map</p>
-                                                <p className="text-[10px] font-black text-slate-700 truncate">{book.mappedClassName || 'Global Repo'}</p>
-                                            </div>
-                                            <div className="flex-1 bg-white border border-slate-200 p-2.5 rounded-xl text-center">
-                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight mb-0.5">Bookshelf</p>
-                                                <p className="text-[10px] font-black text-slate-700 truncate">{book.bookType.charAt(0) + book.bookType.slice(1).toLowerCase()}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Action Footprints */}
-                                    <div className="mt-auto grid grid-cols-2 p-4 pt-0 gap-3">
-                                        <Link 
-                                            to={`/knowledge-hub/digitization/${book.id}`} 
-                                            target="_blank" rel="noopener noreferrer"
-                                            className="group/scan bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-700 px-4 py-3 rounded-2xl flex items-center justify-center gap-2 transition-all duration-300"
-                                        >
-                                            <ScanLine size={16} className="group-hover/scan:rotate-12 transition-transform" />
-                                            <span className="text-xs font-black uppercase tracking-wider">Scans</span>
-                                        </Link>
-                                        <Link 
-                                            to={`/knowledge-hub/proofreading/${book.id}`} 
-                                            target="_blank" rel="noopener noreferrer"
-                                            className="bg-indigo-600 hover:bg-slate-900 text-white px-4 py-3 rounded-2xl flex items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-indigo-100 hover:shadow-none"
-                                        >
-                                            <Map size={16} />
-                                            <span className="text-xs font-black uppercase tracking-wider">Focus</span>
-                                        </Link>
-                                    </div>
-                                </motion.div>
+                                <BookCard
+                                    key={book.id}
+                                    book={book}
+                                    idx={idx}
+                                    openEditModal={openEditModal}
+                                    handleDeleteBook={handleDeleteBook}
+                                    getBadgeStyle={getBadgeStyle}
+                                    hasLanguageMismatch={hasLanguageMismatch}
+                                />
                             ))}
                         </AnimatePresence>
                         
@@ -796,258 +587,29 @@ const ResourceLibrary = () => {
             </div>
 
             {/* ═══ Premium Modal Logic Layer ═══ */}
-            <AnimatePresence>
-                {isAddModalOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                        <motion.div 
-                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
-                            onClick={closeModal}
-                        />
-                        <motion.div 
-                            initial={{ opacity: 0, scale: 0.95, y: 40 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 40 }}
-                            className="bg-white rounded-[2.5rem] w-full max-w-5xl overflow-hidden shadow-2xl relative z-[110] flex flex-col max-h-[95vh] border border-white/20"
-                        >
-                            {/* Modal Header */}
-                            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-white">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-200">
-                                        <UploadCloud size={28} strokeWidth={2.5} />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-                                            {isEditMode ? 'Metadata Sync' : 'Intelligence Registration'}
-                                        </h2>
-                                        <p className="text-sm text-slate-400 font-bold uppercase tracking-widest">Knowledge Hub Core Registry</p>
-                                    </div>
-                                </div>
-                                <button onClick={closeModal} className="w-12 h-12 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-500 rounded-full flex items-center justify-center transition-all active:scale-90">
-                                    <X size={24} strokeWidth={3} />
-                                </button>
-                            </div>
-                            
-                            <form onSubmit={handleCreateOrUpdateBook} onPaste={handleCoverPaste} className="flex-1 overflow-y-auto bg-white p-8 md:p-10 custom-scrollbar">
-                                <div className="flex flex-col md:flex-row gap-12">
-                                    
-                                    {/* Left Shadow Box: Cover */}
-                                    <div className="w-full md:w-[280px] shrink-0">
-                                        <div className="sticky top-0 space-y-6">
-                                            <div className="relative group">
-                                                <div className="aspect-[3/4.2] bg-slate-50 rounded-[2rem] border-4 border-dashed border-slate-200 overflow-hidden shadow-inner flex flex-col items-center justify-center text-center transition-all duration-500 group-hover:border-indigo-400 p-4">
-                                                    {formData.coverImageUrl ? (
-                                                        <img src={formData.coverImageUrl} className="w-full h-full object-cover rounded-xl" alt="Preview" />
-                                                    ) : (
-                                                        <div className="p-4 flex flex-col items-center gap-3">
-                                                            <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-slate-200">
-                                                                <ImageIcon size={32} />
-                                                            </div>
-                                                            <span className="text-xs font-black text-slate-400 uppercase tracking-widest leading-relaxed">
-                                                                Drop Image Here<br/>or Paste URL
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    
-                                                    {/* Pro Upload Overlay */}
-                                                    <label className="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 cursor-pointer backdrop-blur-sm">
-                                                        {isUploadingCover ? (
-                                                            <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                        ) : (
-                                                            <>
-                                                                <div className="w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-xl mb-4 animate-bounce">
-                                                                    <UploadCloud size={28} />
-                                                                </div>
-                                                                <span className="text-[10px] uppercase font-black tracking-[0.2em] text-white">Upload New Cover</span>
-                                                            </>
-                                                        )}
-                                                        <input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files[0] && uploadCoverImage(e.target.files[0])} />
-                                                    </label>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] pl-1">Cover Link (Optional)</label>
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="https://..." 
-                                                    value={formData.coverImageUrl} 
-                                                    onChange={e => setFormData({...formData, coverImageUrl: e.target.value})} 
-                                                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/5 transition-all text-xs font-bold outline-none shadow-sm"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                     {/* Right Content Area */}
-                                    <div className="flex-1 space-y-10 pb-10">
-                                        {/* Step 1: Version Selection */}
-                                        <section className="space-y-4">
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center">
-                                                    <Globe size={18} />
-                                                </div>
-                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Book Version (ধাপ ১)</h3>
-                                            </div>
-                                            <div className="relative group">
-                                                <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Language Version / সংস্করণ</label>
-                                                <select 
-                                                    required 
-                                                    value={formData.language} 
-                                                    onChange={e => {
-                                                        const lang = e.target.value;
-                                                        setFormData({...formData, language: lang, classSubjectId: ''});
-                                                    }} 
-                                                    className="w-full px-6 py-5 bg-white border-2 border-indigo-500 rounded-3xl focus:border-indigo-600 text-base font-black text-slate-800 outline-none transition-all appearance-none cursor-pointer shadow-lg shadow-indigo-100/50"
-                                                >
-                                                    <option value="">Select Version (ভার্সন নির্বাচন করুন)</option>
-                                                    <option value="Bangla">Bangla Version (বাংলা সংস্করণ)</option>
-                                                    <option value="English">English Version (ইংরেজি সংস্করণ)</option>
-                                                    <option value="Bilingual">Bilingual / Mixed Version (দ্বিভাষিক সংস্করণ)</option>
-                                                </select>
-                                            </div>
-                                        </section>
-
-                                        {/* Step 2: Curriculum Mapping */}
-                                        <section className={`space-y-4 transition-all duration-300 ${!formData.language ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
-                                            <div className="flex items-center gap-3 mb-6">
-                                                <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center">
-                                                    <Map size={18} />
-                                                </div>
-                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Curriculum Mapping (ধাপ ২)</h3>
-                                            </div>
-                                            
-                                            <div className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 space-y-5">
-                                                <div className="flex items-center flex-wrap gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                                                    <DriveRoot size={14}/> <span>Knowledge Root</span>
-                                                    {modalLevel && <><ChevronRight size={10}/> <span className="text-slate-900 bg-white px-2 py-1 rounded shadow-sm">{hierarchy.levels?.find(l=>l.id===modalLevel)?.name}</span></>}
-                                                    {modalStream && <><ChevronRight size={10}/> <span className="text-slate-900 bg-white px-2 py-1 rounded shadow-sm">{hierarchy.streams?.find(s=>s.id===modalStream)?.name}</span></>}
-                                                    {modalClass && <><ChevronRight size={10}/> <span className="text-slate-900 bg-white px-2 py-1 rounded shadow-sm">{hierarchy.classes?.find(c=>c.id===modalClass)?.name}</span></>}
-                                                </div>
-
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                                    <select disabled={!formData.language} value={modalLevel} onChange={e => {setModalLevel(e.target.value); setModalStream(''); setModalClass(''); setFormData({...formData, classSubjectId: ''});}} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black text-slate-700 outline-none focus:border-indigo-500 shadow-sm transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed">
-                                                        <option value="">Level</option>
-                                                        {hierarchy.levels?.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                                                    </select>
-                                                    <select disabled={!formData.language || !modalLevel} value={modalStream} onChange={e => {setModalStream(e.target.value); setModalClass(''); setFormData({...formData, classSubjectId: ''});}} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black text-slate-700 outline-none focus:border-indigo-500 shadow-sm transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed">
-                                                        <option value="">Stream</option>
-                                                        {hierarchy.streams?.filter(s => !modalLevel || s._levelId === modalLevel).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                                    </select>
-                                                    <select disabled={!formData.language || !modalLevel || (hierarchy.streams?.filter(s => s._levelId === modalLevel).length > 0 && !modalStream)} value={modalClass} onChange={e => {setModalClass(e.target.value); setFormData({...formData, classSubjectId: ''});}} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl text-[11px] font-black text-slate-700 outline-none focus:border-indigo-500 shadow-sm transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed">
-                                                        <option value="">Class</option>
-                                                        {hierarchy.classes?.filter(c => !modalStream || c._streamId === modalStream).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                                    </select>
-                                                    <select disabled={!formData.language || !modalClass || filteredClassSubjectsForModal.length === 0} value={formData.classSubjectId} onChange={e => setFormData({...formData, classSubjectId: e.target.value})} className="w-full px-4 py-3 bg-indigo-600 border border-indigo-600 rounded-2xl text-[11px] font-black text-white outline-none shadow-lg shadow-indigo-100 transition-all disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:cursor-not-allowed">
-                                                        <option value="">Target Subject</option>
-                                                         {filteredClassSubjectsForModal.map(cs => {
-                                                             const subData = subjectLanguageMap[cs.id];
-                                                             return (
-                                                                 <option key={cs.id} value={cs.id} className="text-slate-800 bg-white">
-                                                                     {subData?.name || 'Unknown'} {subData?.isEnglish ? '[EN]' : '[BN]'}
-                                                                 </option>
-                                                             );
-                                                         })}
-                                                    </select>
-                                                </div>
-                                                {modalClass && filteredClassSubjectsForModal.length === 0 && (
-                                                    <p className="text-[10px] font-black text-rose-500 mt-2 px-2 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
-                                                        <AlertCircle size={14} strokeWidth={2.5} /> No {formData.language} Version subjects mapped to this class! Map it in settings first.
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </section>
-
-                                        {/* Step 3: Identity & Publication Details */}
-                                        <section className={`space-y-6 transition-all duration-300 ${!formData.language ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
-                                                    <AlertCircle size={18} />
-                                                </div>
-                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Base Identity (ধাপ ৩)</h3>
-                                            </div>
-                                            
-                                            <div className="grid grid-cols-1 gap-6">
-                                                <div className="relative group">
-                                                    <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Official Book Title</label>
-                                                    <input disabled={!formData.language} required type="text" placeholder="e.g. পদার্থবিজ্ঞান ১ম পত্র (Class 11)" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-3xl focus:border-indigo-500 text-base font-black text-slate-800 outline-none transition-all shadow-sm group-hover:border-slate-200 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"/>
-                                                </div>
-                                                
-                                                <div className="grid grid-cols-1 gap-6">
-                                                    <div className="relative group">
-                                                        <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Asset Type</label>
-                                                        <select disabled={!formData.language} value={formData.bookType} onChange={e => setFormData({...formData, bookType: e.target.value})} className="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:bg-white focus:border-indigo-500 text-sm font-black text-slate-700 outline-none transition-all appearance-none cursor-pointer disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed">
-                                                            <option value="TEXTBOOK">Standard Textbook</option>
-                                                            <option value="GUIDE">Ref Guide / Solution</option>
-                                                            <option value="QUESTION_BANK">Question Repository</option>
-                                                            <option value="LECTURE_SHEET">Lecture Materials</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </section>
-
-                                        <section className={`space-y-6 transition-all duration-300 ${!formData.language ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <div className="w-8 h-8 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center">
-                                                    <Share2 size={18} />
-                                                </div>
-                                                <h3 className="text-sm font-black uppercase text-slate-800 tracking-widest">Publication Intelligence (ধাপ ৪)</h3>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                                <div className="relative group">
-                                                    <User size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" />
-                                                    <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Primary Author</label>
-                                                    <input disabled={!formData.language} type="text" placeholder="ড. শাহজাহান তপন" value={formData.authorName} onChange={e => setFormData({...formData, authorName: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"/>
-                                                </div>
-                                                <div className="relative group">
-                                                    <Building size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" />
-                                                    <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Publisher</label>
-                                                    <input disabled={!formData.language} type="text" placeholder="e.g. NCTB, হাসান বুকস" value={formData.publisher} onChange={e => setFormData({...formData, publisher: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"/>
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-6">
-                                                <div className="relative group">
-                                                    <Calendar size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" />
-                                                    <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Initial Year</label>
-                                                    <input disabled={!formData.language} type="text" placeholder="2015" value={formData.firstPublished} onChange={e => setFormData({...formData, firstPublished: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"/>
-                                                </div>
-                                                <div className="relative group">
-                                                    <Clock size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" />
-                                                    <label className="absolute -top-2 left-4 bg-white px-2 text-[10px] font-black text-indigo-500 uppercase z-10">Active Edition</label>
-                                                    <input disabled={!formData.language} type="text" placeholder="25th Ed, 2024" value={formData.latestEdition} onChange={e => setFormData({...formData, latestEdition: e.target.value})} className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-2xl focus:border-indigo-500 text-sm font-bold text-slate-800 outline-none shadow-sm disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed"/>
-                                                </div>
-                                            </div>
-                                        </section>
-                                    </div>
-                                </div>
-                            </form>
-
-                            {/* Sticky Modal Footer */}
-                            <div className="px-10 py-6 bg-slate-50 border-t border-slate-100 flex justify-end items-center gap-4 shrink-0">
-                                <button type="button" onClick={closeModal} className="px-8 py-3.5 text-slate-500 hover:text-rose-500 font-black uppercase tracking-widest text-xs transition-colors">Discard Changes</button>
-                                <button type="submit" onClick={handleCreateOrUpdateBook} disabled={isSaving || isUploadingCover || !formData.title.trim() || !formData.language} className="flex items-center gap-3 px-10 py-4 bg-indigo-600 text-white font-black rounded-[1.5rem] hover:bg-slate-900 active:scale-95 transition-all shadow-xl shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">
-                                    {isSaving ? <><span className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"></span> Syncing...</> : (isEditMode ? 'Commit Updates' : 'Initialize Book')}
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
+            <BookRegistryModal
+                isOpen={isAddModalOpen}
+                isEditMode={isEditMode}
+                closeModal={closeModal}
+                formData={formData}
+                setFormData={setFormData}
+                isSaving={isSaving}
+                isUploadingCover={isUploadingCover}
+                uploadCoverImage={uploadCoverImage}
+                handleCreateOrUpdateBook={handleCreateOrUpdateBook}
+                handleCoverPaste={handleCoverPaste}
+                hierarchy={hierarchy}
+                modalLevel={modalLevel}
+                setModalLevel={setModalLevel}
+                modalStream={modalStream}
+                setModalStream={setModalStream}
+                modalClass={modalClass}
+                setModalClass={setModalClass}
+                filteredClassSubjectsForModal={filteredClassSubjectsForModal}
+                subjectLanguageMap={subjectLanguageMap}
+            />
         </div>
     );
 };
-
-// Custom Icon for Drive Root representation
-const DriveRoot = ({size}) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2L4 7V17L12 22L20 17V7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M12 22V12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M20 7L12 12L4 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <circle cx="12" cy="12" r="3" fill="currentColor" fillOpacity="0.2"/>
-    </svg>
-);
 
 export default ResourceLibrary;

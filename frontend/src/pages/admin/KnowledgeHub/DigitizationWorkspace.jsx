@@ -72,7 +72,8 @@ const DigitizationWorkspace = () => {
     };
 
     return (
-        <div className="p-4 md:p-6 lg:p-10 w-full max-w-[1600px] mx-auto space-y-6">
+        <div className="h-full overflow-y-auto custom-scrollbar">
+            <div className="p-4 md:p-6 lg:p-10 w-full max-w-[1600px] mx-auto space-y-6">
             
             {/* Header Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
@@ -237,6 +238,7 @@ const DigitizationWorkspace = () => {
                 </div>
             </div>
 
+            </div>
         </div>
     );
 };

@@ -18,6 +18,7 @@ import AttachmentPanel from './components/AttachmentPanel';
 import EquationEditorModal from '../../../components/EquationEditorModal';
 import ImageEditorModal from '../../../components/ImageEditorModal';
 import PresentationWizard from './components/PresentationWizard';
+import ImportKnowledgeHubModal from './components/ImportKnowledgeHubModal';
 
 const generateUUID = () => {
     if (window.crypto && window.crypto.randomUUID) {
@@ -268,6 +269,7 @@ const LectureEditor = () => {
     const [equationModalOpen, setEquationModalOpen] = useState(false);
     const [imageModalOpen, setImageModalOpen] = useState(false);
     const [pendingImageFile, setPendingImageFile] = useState(null);
+    const [importModalOpen, setImportModalOpen] = useState(false);
 
     // Single unified tiptap states
     const [rawContent, setRawContent] = useState('');
@@ -504,6 +506,87 @@ const LectureEditor = () => {
         triggerToast('success', 'নতুন প্রশ্ন যোগ করা হয়েছে!');
     };
 
+    const handleImportSuccess = (htmlContent, matchedTopics, classSubjectId, chapterId) => {
+        if (!editor) return;
+        
+        let cName = lecture.className;
+        let sName = lecture.subjectName;
+        if (classSubjectId && hierarchy?.classSubjects) {
+            const cs = hierarchy.classSubjects.find(c => c.id === classSubjectId);
+            if (cs) {
+                sName = cs.name || cs.subjectName || '';
+                const cl = hierarchy.classes?.find(x => x.id === cs._classId);
+                if (cl) cName = cl.name || '';
+            }
+        }
+
+        setLecture(prev => {
+            const existingSections = prev.sections || [];
+            
+            const newSections = matchedTopics.map(t => {
+                const goldenContent = t.goldenText 
+                    ? `<blockquote class="golden-ref" style="border-left: 4px solid #4f46e5; padding-left: 12px; margin-left: 0; color: #475569; font-style: normal; background-color: #f8fafc; padding: 12px; border-radius: 8px;">` + t.goldenText.replace(/\n/g, '<br/>') + `</blockquote>`
+                    : `<p style="color: #94a3b8; font-style: normal;">এই টপিকের অধীনে কোনো গোল্ডেন মেটেরিয়াল পাওয়া যায়নি।</p>`;
+
+                const templateContent = `
+                    <h3>📖 ${t.name}</h3>
+                    ${goldenContent}
+                `.trim();
+
+                return {
+                    id: t.id,
+                    sectionTitle: t.name,
+                    content: templateContent,
+                    questions: t.approvedQuestions ? t.approvedQuestions.map(q => ({
+                        questionId: q.questionId || q.id,
+                        questionText: q.questionText,
+                        type: q.type,
+                        difficulty: q.difficulty,
+                        marks: q.marks,
+                        mcqType: q.mcqType,
+                        statements: q.statements,
+                        options: q.options || [],
+                        stimulus: q.stimulus || '',
+                        explanation: q.explanation || '',
+                        answer: q.answer || q.correctAnswer || '',
+                        chapterName: q.chapterName || ''
+                    })) : []
+                };
+            });
+
+            newSections.forEach(s => {
+                if (s.questions && s.questions.length > 0) {
+                    questionService.seedQuestionCache(s.questions);
+                }
+            });
+
+            const mergedSections = [...existingSections];
+            newSections.forEach(ns => {
+                const exists = mergedSections.some(es => es.sectionTitle.trim().toLowerCase() === ns.sectionTitle.trim().toLowerCase());
+                if (!exists) {
+                    mergedSections.push(ns);
+                }
+            });
+
+            const updatedTitle = prev.title === 'New Lecture Sheet' || prev.title === 'Untitled Lecture'
+                ? `লেকচার শিট - ${matchedTopics[0]?.name || 'টপিক'}${matchedTopics.length > 1 ? ` (এবং আরও ${matchedTopics.length - 1} টি টপিক)` : ''}`
+                : prev.title;
+
+            return {
+                ...prev,
+                title: updatedTitle,
+                className: cName || prev.className,
+                subjectName: sName || prev.subjectName,
+                classSubjectId: classSubjectId || prev.classSubjectId,
+                chapterId: chapterId || prev.chapterId,
+                sections: mergedSections
+            };
+        });
+
+        editor.chain().focus().insertContent(htmlContent).run();
+        triggerToast('success', `${matchedTopics.length}টি টপিক সফলভাবে ইম্পোর্ট করা হয়েছে!`);
+    };
+
     const handleEditorChange = (html) => {
         if (debouncedEditorChangeRef.current) {
             clearTimeout(debouncedEditorChangeRef.current);
@@ -606,6 +689,21 @@ const LectureEditor = () => {
     const [showAttachments, setShowAttachments] = useState(false);
     const [aiGenerating, setAiGenerating] = useState(false);
     const [hierarchy, setHierarchy] = useState({ classSubjects: [], classes: [], streams: [], levels: [], subjects: [] });
+
+    const subjectLanguageMap = React.useMemo(() => {
+        const map = {};
+        if (!hierarchy.classSubjects || !hierarchy.subjects) return map;
+        hierarchy.classSubjects.forEach(cs => {
+            const subject = hierarchy.subjects.find(s => s.id === cs._subjectId);
+            if (subject) {
+                map[cs.id] = {
+                    name: subject.name || '',
+                    isEnglish: subject.isEnglishVersion || subject.englishVersion || false
+                };
+            }
+        });
+        return map;
+    }, [hierarchy.classSubjects, hierarchy.subjects]);
 
     // Toast message helper
     const triggerToast = (type, text) => {
@@ -2253,6 +2351,7 @@ const LectureEditor = () => {
                 editorStyles={editorStyles}
                 getFontFamilyClass={getFontFamilyClass}
                 editor={editor}
+                handleOpenImportModal={() => setImportModalOpen(true)}
             />
 
             {/* Main Editor Body */}
@@ -2383,6 +2482,14 @@ const LectureEditor = () => {
                 onClose={() => setIsPresentationOpen(false)}
                 htmlContent={rawContent}
                 title={lecture.title}
+            />
+
+            <ImportKnowledgeHubModal
+                isOpen={importModalOpen}
+                closeModal={() => setImportModalOpen(false)}
+                hierarchy={hierarchy}
+                subjectLanguageMap={subjectLanguageMap}
+                onImportSuccess={handleImportSuccess}
             />
 
             {/* Global Loader for PDF Export */}

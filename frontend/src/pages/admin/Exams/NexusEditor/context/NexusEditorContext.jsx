@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { useParams } from 'react-router-dom';
 import { DEFAULT_SETTINGS, DEFAULT_PORTRAIT_SETTINGS, DEFAULT_LANDSCAPE_SETTINGS } from '../components/DocumentSettings';
 import { UI_TEXT } from '../components/translations';
 
@@ -37,6 +38,8 @@ export const NexusEditorProvider = ({ children }) => {
     }, []);
 
     // --- Core Document State ---
+    const { id } = useParams();
+    const [isEditorLoaded, setIsEditorLoaded] = useState(!id);
     const [editorMode, setEditorMode] = useState('STRICT_LINKED');
     const [rawContent, setRawContent] = useState('');
     const [docSettings, setDocSettings] = useState(DEFAULT_SETTINGS);
@@ -375,6 +378,7 @@ export const NexusEditorProvider = ({ children }) => {
         // Core
         editorMode, setEditorMode,
         rawContent, setRawContent,
+        isEditorLoaded, setIsEditorLoaded,
         docSettings, setDocSettings, updateSetting, updateMultiSettings,
         zoom, setZoom,
         pageCount, setPageCount,
@@ -401,6 +405,7 @@ export const NexusEditorProvider = ({ children }) => {
         leftPanelWidth, setLeftPanelWidth,
         leftPanelTab, setLeftPanelTab,
         
+        // Panels
         isRightPanelOpen, setIsRightPanelOpen,
         rightPanelWidth, setRightPanelWidth,
         activeTab, setActiveTab,
@@ -412,7 +417,7 @@ export const NexusEditorProvider = ({ children }) => {
         selectedImageConfig, setSelectedImageConfig,
         documentQuestions, setDocumentQuestions
     }), [
-        editorMode, rawContent, docSettings, updateSetting, updateMultiSettings,
+        editorMode, rawContent, isEditorLoaded, docSettings, updateSetting, updateMultiSettings,
         zoom, pageCount, examData, isSavingDocument, editor,
         isDownloadingPdf, downloadProgress, downloadStatus, showFilenameModal,
         editorConfig, generationBlueprint,

@@ -10,7 +10,8 @@ import java.util.List;
 @Entity
 @Table(name = "exams", indexes = {
         @Index(name = "idx_exam_tenant", columnList = "tenant_id"),
-        @Index(name = "idx_exam_class_subject", columnList = "class_subject_id")
+        @Index(name = "idx_exam_class_subject", columnList = "class_subject_id"),
+        @Index(name = "idx_exam_creator_deleted", columnList = "created_by, deleted")
 })
 @Getter
 @Setter

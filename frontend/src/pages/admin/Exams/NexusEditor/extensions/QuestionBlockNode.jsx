@@ -2,7 +2,8 @@ import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
 import React from 'react';
 import questionService from '../../../../../services/questionService';
-import { useNexusEditor } from '../context/NexusEditorContext';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 const parseMarkdownImages = (text, contextId = 'unknown') => {
     if (!text) return text;
@@ -69,7 +70,6 @@ const formatMarksDigits = (marksVal, numberingStyle) => {
     }
     return str;
 };
-
 const isPlaceholderText = (text) => {
     if (!text) return true;
     const clean = text.toString().replace(/<[^>]*>?/gm, '').trim().toLowerCase();
@@ -192,6 +192,171 @@ const getFormattedNumber = (num, numberingStyle, language) => {
     return `${n}.`;
 };
 
+const formatMathPowers = (html) => {
+    if (!html) return '';
+    return html.replace(/(<[^>]+>)|(([a-zA-Z0-9\)\}])\^\{?(-?[a-zA-Z0-9.]+)\}?)|(([a-zA-Z0-9\)\}])_\{?(-?[a-zA-Z0-9.]+)\}?)/g, (match, tag, powMatch, powBase, powExp, subMatch, subBase, subVal) => {
+        if (tag) return tag;
+        if (powMatch) return `${powBase}<sup>${powExp}</sup>`;
+        if (subMatch) return `${subBase}<sub>${subVal}</sub>`;
+        return match;
+    });
+};
+
+const renderLatexMath = (html) => {
+    if (!html) return '';
+    const mathBlocks = [];
+    let count = 0;
+    
+    // Replace inline latex $...$ with placeholders
+    let processed = html.replace(/\$(.*?)\$/g, (match, formula) => {
+        try {
+            const cleanFormula = formula
+                .replace(/<[^>]+>/g, '') // Strip HTML tags inside formula
+                .replace(/&nbsp;/g, ' ')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&');
+                
+            const rendered = katex.renderToString(cleanFormula, {
+                throwOnError: false,
+                displayMode: false
+            });
+            const placeholder = `___MATH_BLOCK_${count}___`;
+            mathBlocks.push({ placeholder, html: rendered });
+            count++;
+            return placeholder;
+        } catch (e) {
+            console.error("KaTeX error in QuestionBlockNode:", e);
+            return match;
+        }
+    });
+    
+    // Process regular math powers/subscripts on the rest of the text
+    processed = formatMathPowers(processed);
+    
+    // Restore KaTeX rendered blocks
+    mathBlocks.forEach(block => {
+        processed = processed.replace(block.placeholder, block.html);
+    });
+    
+    return processed;
+};
+
+const processTabularHTML = (html) => {
+    if (!html) return '';
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        const isTabularText = (text) => {
+            return /\t| {3,}|(?:\s*&nbsp;\s*){2,}/i.test(text) || text.includes('\u00A0\u00A0');
+        };
+        
+        const processBlock = (blockNode) => {
+            const children = Array.from(blockNode.childNodes);
+            if (children.length === 0) return;
+            
+            const lines = [];
+            let currentLine = [];
+            
+            children.forEach(child => {
+                if (child.tagName === 'BR') {
+                    lines.push(currentLine);
+                    currentLine = [];
+                } else {
+                    currentLine.push(child);
+                }
+            });
+            if (currentLine.length > 0 || children[children.length - 1]?.tagName === 'BR') {
+                lines.push(currentLine);
+            }
+            
+            const lineIsTabular = lines.map(lineNodes => {
+                return lineNodes.some(node => {
+                    const text = node.nodeType === 3 ? node.nodeValue : (node.textContent || '');
+                    return isTabularText(text);
+                });
+            });
+            
+            const groups = [];
+            let currentGroup = { isTable: false, lines: [] };
+            
+            for (let i = 0; i < lines.length; i++) {
+                const isTab = lineIsTabular[i];
+                if (isTab) {
+                    if (currentGroup.isTable) {
+                        currentGroup.lines.push(lines[i]);
+                    } else {
+                        if (currentGroup.lines.length > 0) {
+                            groups.push(currentGroup);
+                        }
+                        currentGroup = { isTable: true, lines: [lines[i]] };
+                    }
+                } else {
+                    const nextLineIsTabular = i + 1 < lines.length && lineIsTabular[i + 1];
+                    if (currentGroup.isTable && nextLineIsTabular) {
+                        currentGroup.lines.push(lines[i]);
+                    } else {
+                        if (currentGroup.lines.length > 0) {
+                            groups.push(currentGroup);
+                        }
+                        currentGroup = { isTable: false, lines: [lines[i]] };
+                    }
+                }
+            }
+            if (currentGroup.lines.length > 0) {
+                groups.push(currentGroup);
+            }
+            
+            while (blockNode.firstChild) {
+                blockNode.removeChild(blockNode.firstChild);
+            }
+            
+            groups.forEach((group, gIdx) => {
+                if (group.isTable) {
+                    const tableDiv = doc.createElement('div');
+                    tableDiv.className = 'nexus-tabular-grid';
+                    tableDiv.setAttribute('style', "font-family: Consolas, Monaco, 'Courier New', monospace !important; white-space: pre !important; font-size: 12.5px !important; line-height: 1.5 !important; background-color: #fafafa; border: 1px solid #d1d5db; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 10px 0; letter-spacing: 0.03em; color: #111827; display: block; width: 100%; box-sizing: border-box;");
+                    
+                    group.lines.forEach((lineNodes, lIdx) => {
+                        lineNodes.forEach(node => {
+                            if (node.nodeType === 3) {
+                                node.nodeValue = node.nodeValue.replace(/\u00A0/g, ' ');
+                            }
+                            tableDiv.appendChild(node);
+                        });
+                        if (lIdx < group.lines.length - 1) {
+                            tableDiv.appendChild(doc.createElement('br'));
+                        }
+                    });
+                    blockNode.appendChild(tableDiv);
+                } else {
+                    group.lines.forEach((lineNodes, lIdx) => {
+                        lineNodes.forEach(node => {
+                            blockNode.appendChild(node);
+                        });
+                        if (lIdx < group.lines.length - 1 || gIdx < groups.length - 1) {
+                            blockNode.appendChild(doc.createElement('br'));
+                        }
+                    });
+                }
+            });
+        };
+        
+        const blocks = Array.from(doc.body.querySelectorAll('p, div, td, th, li'));
+        if (blocks.length === 0) {
+            processBlock(doc.body);
+        } else {
+            blocks.forEach(block => processBlock(block));
+        }
+        
+        return doc.body.innerHTML;
+    } catch (e) {
+        console.error("Error in processTabularHTML:", e);
+        return html;
+    }
+};
+
 const cleanHtml = (html) => {
     if (!html) return '';
     let cleaned = html;
@@ -206,7 +371,7 @@ const cleanHtml = (html) => {
             .replace(/^\s*<br[^>]*>/gi, '')
             .trim();
     } while (cleaned !== prev);
-    return cleaned;
+    return renderLatexMath(processTabularHTML(cleaned));
 };
 
 
@@ -246,16 +411,8 @@ const syncedQuestionIds = new Set();
         const mcqType = node.attrs.mcqType || cachedQ.mcqType || 'SINGLE_CHOICE';
         const dynamicData = node.attrs.dynamicData || cachedQ.dynamicData;
 
-        let docSettings = editor?.docSettings;
-        let documentQuestions = editor?.documentQuestions;
-
-        try {
-            const context = useNexusEditor();
-            if (!docSettings) docSettings = context.docSettings;
-            if (!documentQuestions) documentQuestions = context.documentQuestions;
-        } catch (e) {
-            // Ignore context error if editor properties are available
-        }
+        const docSettings = editor?.docSettings;
+        const documentQuestions = editor?.documentQuestions;
 
         const activeSet = docSettings?.activeSet;
         const count = docSettings?.setCount || 4;
@@ -269,10 +426,13 @@ const syncedQuestionIds = new Set();
         const mappings = docSettings?.setMappings || {};
         const setMapping = activeSet ? mappings[activeSet] : null;
 
-        let displayQuestionNumber = node.attrs.questionNumber;
         const isMCQ = type === 'MCQ';
+        const mcqs = (documentQuestions || []).filter(q => (q.attrs?.type || questionService.getQuestionFromCache(q.attrs?.questionId)?.type || 'MCQ') === 'MCQ');
+        const currentPos = typeof getPos === 'function' ? getPos() : null;
+        const isLastMCQ = isMCQ && (mcqs.length > 0) && (mcqs[mcqs.length - 1].pos === currentPos);
+
+        let displayQuestionNumber = node.attrs.questionNumber;
         if (isMCQ) {
-            const mcqs = (documentQuestions || []).filter(q => (q.attrs?.type || questionService.getQuestionFromCache(q.attrs?.questionId)?.type || 'MCQ') === 'MCQ');
             const originalIndex = mcqs.findIndex(q => q.attrs?.questionId === node.attrs.questionId);
             
             if (isShuffledSet) {
@@ -668,7 +828,13 @@ const syncedQuestionIds = new Set();
         }, [
             node.attrs.optionLayout,
             node.attrs.smartFit,
-            node.attrs.options,
+            JSON.stringify(node.attrs.options || []),
+            docSettings?.pageSize,
+            docSettings?.orientation,
+            docSettings?.marginLeft,
+            docSettings?.marginRight,
+            docSettings?.colGap,
+            docSettings?.columns,
             node.attrs.pageSize,
             node.attrs.orientation,
             node.attrs.customW,
@@ -766,7 +932,7 @@ const syncedQuestionIds = new Set();
             }
             
             return '';
-        }, [dynamicDataParsed, docSettings]);
+        }, [dynamicDataParsed, docSettings?.setLanguage]);
 
         const hasSubPartsAnswers = React.useMemo(() => {
             return dynamicDataParsed && dynamicDataParsed.sub_parts && Array.isArray(dynamicDataParsed.sub_parts) && dynamicDataParsed.sub_parts.some(part => part.answer);
@@ -1197,6 +1363,8 @@ const syncedQuestionIds = new Set();
                         </div>
                     )}
                 </div>
+
+
 
         </NodeViewWrapper>
     );

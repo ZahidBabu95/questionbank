@@ -13,12 +13,16 @@ import java.util.UUID;
 @Repository
 public interface ExamRepository extends JpaRepository<Exam, UUID> {
 
-        @Query("SELECT e FROM Exam e WHERE (:tenantId = 'DEFAULT' OR e.tenantId = :tenantId) AND e.deleted = false " +
+        @Query("SELECT e FROM Exam e " +
+                        "LEFT JOIN FETCH e.classSubject cs " +
+                        "LEFT JOIN FETCH cs.subject s " +
+                        "LEFT JOIN FETCH cs.academicClass ac " +
+                        "WHERE (:tenantId = 'DEFAULT' OR e.tenantId = :tenantId) AND e.deleted = false " +
                         "AND (:title IS NULL OR LOWER(e.title) LIKE LOWER(CONCAT('%', :title, '%'))) " +
                         "AND (:createdBy IS NULL OR e.createdBy = :createdBy) " +
                         "AND (:examType IS NULL OR e.examType = :examType) " +
                         "AND (:status IS NULL OR e.status = :status) " +
-                        "AND (:classSubjectId IS NULL OR e.classSubject.id = :classSubjectId)")
+                        "AND (:classSubjectId IS NULL OR cs.id = :classSubjectId)")
         Page<Exam> findByTenantAndOptionalCreator(@Param("tenantId") String tenantId,
                         @Param("title") String title,
                         @Param("createdBy") String createdBy,
@@ -79,4 +83,10 @@ public interface ExamRepository extends JpaRepository<Exam, UUID> {
 
         @Query("SELECT e FROM Exam e WHERE e.classSubject.academicClass.id = :classId AND e.status = com.testshaper.entity.Exam$ExamStatus.ONLINE_EXAM AND e.deleted = false")
         java.util.List<Exam> findActiveExamsByClassId(@Param("classId") UUID classId);
+
+        @Query("SELECT e FROM Exam e " +
+               "LEFT JOIN FETCH e.examQuestions eq " +
+               "LEFT JOIN FETCH eq.question q " +
+               "WHERE e.id = :id")
+        java.util.Optional<Exam> findByIdWithQuestions(@Param("id") UUID id);
 }

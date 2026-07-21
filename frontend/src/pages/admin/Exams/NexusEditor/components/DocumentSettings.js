@@ -30,6 +30,7 @@ export const DEFAULT_PORTRAIT_SETTINGS = {
   showRoll: false,
   showReg: false,
   candidateLayout: "stacked",
+  showStudentAnswerSheet: false,
   setCode: "",
   showSetCode: false,
   multipleSetsEnabled: false,

@@ -260,20 +260,50 @@ export const useExamManager = () => {
         if (!id) return;
         const fetchExam = async () => {
             try {
-                const res = await deduplicatedGetExam(id);
+                // Fetch exam and curriculum rules in parallel
+                const [res, kbRes] = await Promise.all([
+                    deduplicatedGetExam(id),
+                    deduplicatedGetKnowledge().catch(e => {
+                        console.error("Failed to load knowledge rules", e);
+                        return { data: [] };
+                    })
+                ]);
+
                 if (res?.data) {
                     setExamData(res.data);
                     if (res.data.editorMode) {
                         setEditorMode(res.data.editorMode);
                     }
 
-                    // Fetch Subject specific curriculum schema
+                    // Pre-extract question IDs to fetch revisions in parallel
+                    let ids = [];
+                    if (res.data.rawContent) {
+                        try {
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(res.data.rawContent, 'text/html');
+                            const nodes = doc.querySelectorAll('div[data-type="question-block"]');
+                            ids = Array.from(nodes).map(n => n.getAttribute('questionid')).filter(Boolean);
+                        } catch (e) {
+                            console.error("Failed to pre-parse question IDs for revisions:", e);
+                        }
+                    } else if (res.data.questions && res.data.questions.length > 0) {
+                        ids = res.data.questions.map(q => q.originalQuestionId || q.id).filter(Boolean);
+                    }
+
+                    // Kick off revisions fetch immediately
+                    const revisionsPromise = ids.length > 0 
+                        ? questionService.getMyPendingRevisions(ids).catch(e => {
+                            console.error("Failed to fetch pending revisions:", e);
+                            return {};
+                          })
+                        : Promise.resolve({});
+
+                    // Fetch Subject specific curriculum schema using the pre-fetched kbRes
                     let blueprintSections = null;
                     if (res.data.subjectName) {
                         try {
                             const subTag = 'RULE_FOR_' + res.data.subjectName.replace(/\s/g, '');
                             const altTag = res.data.subjectName;
-                            const kbRes = await deduplicatedGetKnowledge();
                             let rules = kbRes.data.filter(k => k.tags && (k.tags.includes(subTag) || k.tags.includes(altTag)));
                             if (rules.length === 0) rules = kbRes.data.filter(k => k.content && k.content.includes(res.data.subjectName));
                             if (rules.length > 0) {
@@ -317,33 +347,34 @@ export const useExamManager = () => {
 
                     console.log("[useExamManager] Fetching exam, docSettingsJson is empty?", hasNoSettings, "subject:", res.data.subjectName, "class:", res.data.className);
 
+                    // Kick off settings fetch if needed
+                    let settingsPromise = Promise.resolve([null, null]);
                     if (hasNoSettings && res.data.subjectName) {
-                        try {
-                            const subjectName = res.data.subjectName;
-                            const className = res.data.className;
+                        settingsPromise = Promise.all([
+                            deduplicatedGetSettings('EXAM', false).catch(() => null),
+                            deduplicatedGetSettings('EXAM', true).catch(() => null)
+                        ]);
+                    }
 
-                            // 1. Try loading from institute settings
-                            try {
-                                const examSettings = await deduplicatedGetSettings('EXAM', false);
-                                subjectDefaultSettings = findDefaultLayoutInSettings(examSettings, className, subjectName);
-                            } catch (e) {
-                                console.warn("Failed to load institute default layout:", e);
-                            }
+                    // Await both settings and revisions in parallel (Stage 2)
+                    const [settingsRes, revisions] = await Promise.all([
+                        settingsPromise,
+                        revisionsPromise
+                    ]);
 
-                            // 2. Fallback to global settings
-                            if (!subjectDefaultSettings) {
-                                try {
-                                    const globalSettings = await deduplicatedGetSettings('EXAM', true);
-                                    subjectDefaultSettings = findDefaultLayoutInSettings(globalSettings, className, subjectName);
-                                } catch (e) {
-                                    console.warn("Failed to load global default layout:", e);
-                                }
-                            }
-
-                            if (subjectDefaultSettings) {
-                                console.log("[useExamManager] Found matching default layout settings:", subjectDefaultSettings);
-                            }
-                        } catch (schemaErr) { console.error("Failed to load subject default settings:", schemaErr); }
+                    if (hasNoSettings && res.data.subjectName && settingsRes) {
+                        const [examSettings, globalSettings] = settingsRes;
+                        const subjectName = res.data.subjectName;
+                        const className = res.data.className;
+                        if (examSettings) {
+                            subjectDefaultSettings = findDefaultLayoutInSettings(examSettings, className, subjectName);
+                        }
+                        if (!subjectDefaultSettings && globalSettings) {
+                            subjectDefaultSettings = findDefaultLayoutInSettings(globalSettings, className, subjectName);
+                        }
+                        if (subjectDefaultSettings) {
+                            console.log("[useExamManager] Found matching default layout settings:", subjectDefaultSettings);
+                        }
                     }
 
                     let finalHtml = res.data.rawContent || '';
@@ -482,32 +513,26 @@ export const useExamManager = () => {
                             }
                         });
 
-                        // Apply pending revisions before setting raw content
-                        if (finalHtml) {
+                        // Apply pending revisions before setting raw content (using pre-fetched revisions)
+                        if (finalHtml && revisions && Object.keys(revisions).length > 0) {
                             try {
                                 const parser = new DOMParser();
                                 const doc = parser.parseFromString(finalHtml, 'text/html');
                                 const nodes = doc.querySelectorAll('div[data-type="question-block"]');
-                                const ids = Array.from(nodes).map(n => n.getAttribute('questionid')).filter(Boolean);
-                                if (ids.length > 0) {
-                                    const revisions = await questionService.getMyPendingRevisions(ids);
-                                    if (revisions && Object.keys(revisions).length > 0) {
-                                        nodes.forEach(node => {
-                                            const qid = node.getAttribute('questionid');
-                                            if (revisions[qid]) {
-                                                const rev = revisions[qid];
-                                                node.setAttribute('questiontext', rev.questionText ? rev.questionText.replace(/"/g, "&quot;") : "");
-                                                node.setAttribute('stimulus', rev.stimulus ? rev.stimulus.replace(/"/g, "&quot;") : "");
-                                                node.setAttribute('explanation', rev.explanation ? rev.explanation.replace(/"/g, "&quot;") : "");
-                                                node.setAttribute('answer', rev.correctAnswer ? rev.correctAnswer.replace(/"/g, "&quot;") : "");
-                                                if (rev.options) node.setAttribute('data-options', JSON.stringify(rev.options).replace(/'/g, "&#39;"));
-                                                if (rev.statements) node.setAttribute('data-statements', JSON.stringify(rev.statements).replace(/'/g, "&#39;"));
-                                            }
-                                        });
-                                        finalHtml = doc.body.innerHTML;
+                                nodes.forEach(node => {
+                                    const qid = node.getAttribute('questionid');
+                                    if (revisions[qid]) {
+                                        const rev = revisions[qid];
+                                        node.setAttribute('questiontext', rev.questionText ? rev.questionText.replace(/"/g, "&quot;") : "");
+                                        node.setAttribute('stimulus', rev.stimulus ? rev.stimulus.replace(/"/g, "&quot;") : "");
+                                        node.setAttribute('explanation', rev.explanation ? rev.explanation.replace(/"/g, "&quot;") : "");
+                                        node.setAttribute('answer', rev.correctAnswer ? rev.correctAnswer.replace(/"/g, "&quot;") : "");
+                                        if (rev.options) node.setAttribute('data-options', JSON.stringify(rev.options).replace(/'/g, "&#39;"));
+                                        if (rev.statements) node.setAttribute('data-statements', JSON.stringify(rev.statements).replace(/'/g, "&#39;"));
                                     }
-                                }
-                            } catch (e) { console.error("Failed to fetch pending revisions", e); }
+                                });
+                                finalHtml = doc.body.innerHTML;
+                            } catch (e) { console.error("Failed to apply pending revisions", e); }
                         }
 
                         setRawContent(finalHtml);
@@ -577,32 +602,26 @@ export const useExamManager = () => {
                             }));
                         }
                     } else {
-                        // Apply pending revisions before setting raw content
-                        if (finalHtml) {
+                        // Apply pending revisions before setting raw content (using pre-fetched revisions)
+                        if (finalHtml && revisions && Object.keys(revisions).length > 0) {
                             try {
                                 const parser = new DOMParser();
                                 const doc = parser.parseFromString(finalHtml, 'text/html');
                                 const nodes = doc.querySelectorAll('div[data-type="question-block"]');
-                                const ids = Array.from(nodes).map(n => n.getAttribute('questionid')).filter(Boolean);
-                                if (ids.length > 0) {
-                                    const revisions = await questionService.getMyPendingRevisions(ids);
-                                    if (revisions && Object.keys(revisions).length > 0) {
-                                        nodes.forEach(node => {
-                                            const qid = node.getAttribute('questionid');
-                                            if (revisions[qid]) {
-                                                const rev = revisions[qid];
-                                                node.setAttribute('questiontext', rev.questionText ? rev.questionText.replace(/"/g, "&quot;") : "");
-                                                node.setAttribute('stimulus', rev.stimulus ? rev.stimulus.replace(/"/g, "&quot;") : "");
-                                                node.setAttribute('explanation', rev.explanation ? rev.explanation.replace(/"/g, "&quot;") : "");
-                                                node.setAttribute('answer', rev.correctAnswer ? rev.correctAnswer.replace(/"/g, "&quot;") : "");
-                                                if (rev.options) node.setAttribute('data-options', JSON.stringify(rev.options).replace(/'/g, "&#39;"));
-                                                if (rev.statements) node.setAttribute('data-statements', JSON.stringify(rev.statements).replace(/'/g, "&#39;"));
-                                            }
-                                        });
-                                        finalHtml = doc.body.innerHTML;
+                                nodes.forEach(node => {
+                                    const qid = node.getAttribute('questionid');
+                                    if (revisions[qid]) {
+                                        const rev = revisions[qid];
+                                        node.setAttribute('questiontext', rev.questionText ? rev.questionText.replace(/"/g, "&quot;") : "");
+                                        node.setAttribute('stimulus', rev.stimulus ? rev.stimulus.replace(/"/g, "&quot;") : "");
+                                        node.setAttribute('explanation', rev.explanation ? rev.explanation.replace(/"/g, "&quot;") : "");
+                                        node.setAttribute('answer', rev.correctAnswer ? rev.correctAnswer.replace(/"/g, "&quot;") : "");
+                                        if (rev.options) node.setAttribute('data-options', JSON.stringify(rev.options).replace(/'/g, "&#39;"));
+                                        if (rev.statements) node.setAttribute('data-statements', JSON.stringify(rev.statements).replace(/'/g, "&#39;"));
                                     }
-                                }
-                            } catch (e) { console.error("Failed to fetch pending revisions", e); }
+                                });
+                                finalHtml = doc.body.innerHTML;
+                            } catch (e) { console.error("Failed to apply pending revisions", e); }
                         }
 
                         setRawContent(finalHtml);
@@ -670,8 +689,6 @@ export const useExamManager = () => {
                             }));
                         }
                     }
-
-                    // Fetch Subject specific curriculum schema removed as it has been moved to the top of fetchExam
                 }
             } catch (err) { console.error("Failed to load exam:", err); }
         };
@@ -1016,6 +1033,28 @@ export const useExamManager = () => {
                   return 'sans-serif';
               };
 
+              const getBalancedContentHeight = (container, columnsCount) => {
+                  if (!container) return 0;
+                  if (columnsCount <= 1) return container.offsetHeight;
+
+                  const childrenNodes = Array.from(container.children);
+                  if (childrenNodes.length === 0) return 0;
+
+                  let sumHeight = 0;
+                  let maxHeight = 0;
+                  childrenNodes.forEach(c => {
+                      const ch = c.offsetHeight || 0;
+                      sumHeight += ch;
+                      if (ch > maxHeight) maxHeight = ch;
+                  });
+
+                  const measured = container.offsetHeight;
+                  if (measured > sumHeight * 0.8) {
+                      return Math.max(maxHeight, sumHeight / columnsCount);
+                  }
+                  return measured;
+              };
+
               const maxPrintableHeight = h - paddingTop - paddingBottom;
               const safetyBuffer = 10; // 10px safety buffer to prevent subpixel overflow/clipping at page bottom
 
@@ -1030,6 +1069,9 @@ export const useExamManager = () => {
               // 2. Clone and place native header inside Page 1 (conditional flow vs span)
               const globalColCount = Number(docSettings.columns) || 1;
               const isGlobalColActive = globalColCount > 1;
+              const pdfColCount = isGlobalColActive 
+                  ? globalColCount 
+                  : Math.max(1, ...(docSettings.sections || []).map(sec => Number(sec.columns) || 1));
               let headerHeight = 0;
               if (header) {
                   const clonedHeader = header.cloneNode(true);
@@ -1253,9 +1295,10 @@ export const useExamManager = () => {
 
                   currentPageContent.appendChild(nodeToAppend);
 
-                  // Measure scroll height vs max height allowed (subtracting header height on first page, minus safety buffer)
+                  // Measure offset height (adjusted for multi-column balancing) vs max height allowed
                   const limit = (pages.length === 1 ? (maxPrintableHeight - headerHeight) : maxPrintableHeight) - safetyBuffer;
-                  if (currentPageContent.scrollHeight > limit) {
+                  const currentContentHeight = getBalancedContentHeight(currentPageContent, pdfColCount);
+                  if (currentContentHeight > limit) {
                       if (currentPageContent.children.length > 1) {
                           nodeToAppend.remove(); // Remove from current page
 
@@ -1270,26 +1313,63 @@ export const useExamManager = () => {
                   }
               }
 
+              // 4a. Handle student OMR answer sheet if appended inside element
+              const studentOmrSheet = element.querySelector('.nexus-student-omr-sheet');
+              if (studentOmrSheet) {
+                  const clonedOmr = studentOmrSheet.cloneNode(true);
+                  clonedOmr.style.color = '#000000';
+                  
+                  const currentInnerWrapper = currentPage.querySelector('.print-page-inner-wrapper');
+                  currentInnerWrapper.appendChild(clonedOmr);
+
+                  const headerEl = currentPage.querySelector('.print-page-header');
+                  const headerH = headerEl ? headerEl.offsetHeight : 0;
+                  const contentH = getBalancedContentHeight(currentPageContent, pdfColCount);
+                  const omrH = clonedOmr.offsetHeight || studentOmrSheet.offsetHeight || 200;
+                  
+                  const totalPageHeight = paddingTop + paddingBottom + headerH + contentH + omrH;
+
+                  if (totalPageHeight > h - safetyBuffer) {
+                      clonedOmr.remove();
+
+                      // Create final page just for OMR
+                      currentPage = createNewPageElement(pages.length + 1);
+                      printContainer.appendChild(currentPage);
+                      pages.push(currentPage);
+
+                      const newInnerWrapper = currentPage.querySelector('.print-page-inner-wrapper');
+                      newInnerWrapper.appendChild(clonedOmr);
+                      currentPageContent = currentPage.querySelector('.print-page-content');
+                  }
+              }
+
               // 4. Handle inline compact answer sheet if appended inside element
               const compactSheet = element.querySelector('.nexus-compact-answer-sheet');
               if (compactSheet) {
                   const clonedSheet = compactSheet.cloneNode(true);
                   clonedSheet.style.color = '#000000';
-                  currentPageContent.appendChild(clonedSheet);
+                  
+                  const currentInnerWrapper = currentPage.querySelector('.print-page-inner-wrapper');
+                  currentInnerWrapper.appendChild(clonedSheet);
 
-                  const limit = (pages.length === 1 ? (maxPrintableHeight - headerHeight) : maxPrintableHeight) - safetyBuffer;
-                  if (currentPageContent.scrollHeight > limit) {
-                      if (currentPageContent.children.length > 1) {
-                          clonedSheet.remove();
+                  const headerEl = currentPage.querySelector('.print-page-header');
+                  const headerH = headerEl ? headerEl.offsetHeight : 0;
+                  const contentH = getBalancedContentHeight(currentPageContent, pdfColCount);
+                  const sheetH = clonedSheet.offsetHeight || compactSheet.offsetHeight || 150;
+                  
+                  const totalPageHeight = paddingTop + paddingBottom + headerH + contentH + sheetH;
 
-                          // Create final page just for answers
-                          currentPage = createNewPageElement(pages.length + 1);
-                          printContainer.appendChild(currentPage);
-                          pages.push(currentPage);
+                  if (totalPageHeight > h - safetyBuffer) {
+                      clonedSheet.remove();
 
-                          currentPageContent = currentPage.querySelector('.print-page-content');
-                          currentPageContent.appendChild(clonedSheet);
-                      }
+                      // Create final page just for answers
+                      currentPage = createNewPageElement(pages.length + 1);
+                      printContainer.appendChild(currentPage);
+                      pages.push(currentPage);
+
+                      const newInnerWrapper = currentPage.querySelector('.print-page-inner-wrapper');
+                      newInnerWrapper.appendChild(clonedSheet);
+                      currentPageContent = currentPage.querySelector('.print-page-content');
                   }
               }
 

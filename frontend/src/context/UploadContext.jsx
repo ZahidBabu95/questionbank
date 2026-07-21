@@ -30,7 +30,7 @@ export const UploadProvider = ({ children }) => {
             pdfDocument = await pdfjsLib.getDocument(typedArray).promise;
             totalExpectedPages = pdfDocument.numPages;
         } else {
-            totalExpectedPages = files.length + resumeFromIndex;
+            totalExpectedPages = files.length;
         }
 
         setUploadTasks(prev => [...prev, {
@@ -76,9 +76,8 @@ export const UploadProvider = ({ children }) => {
                         canvas.height = 0;
                     }
                 } else {
-                    // Raw images (offset by resume index)
-                    const sliceStart = i - resumeFromIndex;
-                    chunkFiles.push(...files.slice(sliceStart, sliceStart + CHUNK_SIZE));
+                    // Raw images (slice starting from index i)
+                    chunkFiles.push(...files.slice(i, i + CHUNK_SIZE));
                 }
 
                 // 2B: Prepare R2 URLs for this Chunk

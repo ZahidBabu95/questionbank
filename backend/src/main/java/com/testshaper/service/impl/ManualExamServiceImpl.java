@@ -459,7 +459,7 @@ public class ManualExamServiceImpl {
     // ── Get Exam ──────────────────────────────────────────────────────────────
     @Transactional(readOnly = true)
     public ExamDTO getExam(UUID examId) {
-        Exam exam = examRepository.findById(examId)
+        Exam exam = examRepository.findByIdWithQuestions(examId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
                 
         String currentTenant = TenantContext.getTenantId();

@@ -85,7 +85,8 @@ const LectureToolbar = ({
     setHighlightedSection,
     editorStyles = {},
     getFontFamilyClass = () => '',
-    editor = null
+    editor = null,
+    handleOpenImportModal
 }) => {
     const [showColorPicker, setShowColorPicker] = React.useState(false);
     const [showHighlightPicker, setShowHighlightPicker] = React.useState(false);
@@ -474,6 +475,17 @@ const LectureToolbar = ({
                             >
                                 <Sparkles size={18} className={`text-indigo-600 ${aiGenerating ? 'animate-spin' : ''}`} />
                                 <span className="text-[10px] font-black text-indigo-700">AI Write Assist</span>
+                            </button>
+                        </ToolbarGroup>
+
+                        <ToolbarGroup label="Knowledge Hub">
+                            <button 
+                                onClick={handleOpenImportModal}
+                                className="flex flex-col items-center justify-center gap-0.5 px-4 hover:bg-indigo-50 rounded py-0.5 transition-colors cursor-pointer"
+                                title="Import from Knowledge Hub"
+                            >
+                                <BookOpen size={18} className="text-indigo-600 hover:scale-110 transition-transform" />
+                                <span className="text-[10px] font-black text-indigo-700">Import topics</span>
                             </button>
                         </ToolbarGroup>
                     </>

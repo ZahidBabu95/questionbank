@@ -3,6 +3,173 @@ import { useNexusEditor } from '../context/NexusEditorContext';
 import { X, Printer, Loader2 } from 'lucide-react';
 import questionService from '../../../../../services/questionService';
 import { formatDurationString } from '../../../../../utils/formatUtils';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+
+const formatMathPowers = (html) => {
+    if (!html) return '';
+    return html.replace(/(<[^>]+>)|(([a-zA-Z0-9\)\}])\^\{?(-?[a-zA-Z0-9.]+)\}?)|(([a-zA-Z0-9\)\}])_\{?(-?[a-zA-Z0-9.]+)\}?)/g, (match, tag, powMatch, powBase, powExp, subMatch, subBase, subVal) => {
+        if (tag) return tag;
+        if (powMatch) return `${powBase}<sup>${powExp}</sup>`;
+        if (subMatch) return `${subBase}<sub>${subVal}</sub>`;
+        return match;
+    });
+};
+
+const processTabularHTML = (html) => {
+    if (!html) return '';
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        const isTabularText = (text) => {
+            return /\t| {3,}|(?:\s*&nbsp;\s*){2,}/i.test(text) || text.includes('\u00A0\u00A0');
+        };
+        
+        const processBlock = (blockNode) => {
+            const children = Array.from(blockNode.childNodes);
+            if (children.length === 0) return;
+            
+            const lines = [];
+            let currentLine = [];
+            
+            children.forEach(child => {
+                if (child.tagName === 'BR') {
+                    lines.push(currentLine);
+                    currentLine = [];
+                } else {
+                    currentLine.push(child);
+                }
+            });
+            if (currentLine.length > 0 || children[children.length - 1]?.tagName === 'BR') {
+                lines.push(currentLine);
+            }
+            
+            const lineIsTabular = lines.map(lineNodes => {
+                return lineNodes.some(node => {
+                    const text = node.nodeType === 3 ? node.nodeValue : (node.textContent || '');
+                    return isTabularText(text);
+                });
+            });
+            
+            const groups = [];
+            let currentGroup = { isTable: false, lines: [] };
+            
+            for (let i = 0; i < lines.length; i++) {
+                const isTab = lineIsTabular[i];
+                if (isTab) {
+                    if (currentGroup.isTable) {
+                        currentGroup.lines.push(lines[i]);
+                    } else {
+                        if (currentGroup.lines.length > 0) {
+                            groups.push(currentGroup);
+                        }
+                        currentGroup = { isTable: true, lines: [lines[i]] };
+                    }
+                } else {
+                    const nextLineIsTabular = i + 1 < lines.length && lineIsTabular[i + 1];
+                    if (currentGroup.isTable && nextLineIsTabular) {
+                        currentGroup.lines.push(lines[i]);
+                    } else {
+                        if (currentGroup.lines.length > 0) {
+                            groups.push(currentGroup);
+                        }
+                        currentGroup = { isTable: false, lines: [lines[i]] };
+                    }
+                }
+            }
+            if (currentGroup.lines.length > 0) {
+                groups.push(currentGroup);
+            }
+            
+            while (blockNode.firstChild) {
+                blockNode.removeChild(blockNode.firstChild);
+            }
+            
+            groups.forEach((group, gIdx) => {
+                if (group.isTable) {
+                    const tableDiv = doc.createElement('div');
+                    tableDiv.className = 'nexus-tabular-grid';
+                    tableDiv.setAttribute('style', "font-family: Consolas, Monaco, 'Courier New', monospace !important; white-space: pre !important; font-size: 12.5px !important; line-height: 1.5 !important; background-color: #fafafa; border: 1px solid #d1d5db; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 10px 0; letter-spacing: 0.03em; color: #111827; display: block; width: 100%; box-sizing: border-box;");
+                    
+                    group.lines.forEach((lineNodes, lIdx) => {
+                        lineNodes.forEach(node => {
+                            if (node.nodeType === 3) {
+                                node.nodeValue = node.nodeValue.replace(/\u00A0/g, ' ');
+                            }
+                            tableDiv.appendChild(node);
+                        });
+                        if (lIdx < group.lines.length - 1) {
+                            tableDiv.appendChild(doc.createElement('br'));
+                        }
+                    });
+                    blockNode.appendChild(tableDiv);
+                } else {
+                    group.lines.forEach((lineNodes, lIdx) => {
+                        lineNodes.forEach(node => {
+                            blockNode.appendChild(node);
+                        });
+                        if (lIdx < group.lines.length - 1 || gIdx < groups.length - 1) {
+                            blockNode.appendChild(doc.createElement('br'));
+                        }
+                    });
+                }
+            });
+        };
+        
+        const blocks = Array.from(doc.body.querySelectorAll('p, div, td, th, li'));
+        if (blocks.length === 0) {
+            processBlock(doc.body);
+        } else {
+            blocks.forEach(block => processBlock(block));
+        }
+        
+        return doc.body.innerHTML;
+    } catch (e) {
+        console.error("Error in processTabularHTML:", e);
+        return html;
+    }
+};
+
+const renderLatexMath = (html) => {
+    if (!html) return '';
+    const mathBlocks = [];
+    let count = 0;
+    
+    // Replace inline latex $...$ with placeholders
+    let processed = html.replace(/\$(.*?)\$/g, (match, formula) => {
+        try {
+            const cleanFormula = formula
+                .replace(/<[^>]+>/g, '') // Strip HTML tags inside formula
+                .replace(/&nbsp;/g, ' ')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&');
+                
+            const rendered = katex.renderToString(cleanFormula, {
+                throwOnError: false,
+                displayMode: false
+            });
+            const placeholder = `___MATH_BLOCK_${count}___`;
+            mathBlocks.push({ placeholder, html: rendered });
+            count++;
+            return placeholder;
+        } catch (e) {
+            console.error("KaTeX error in AnswerSheetPreview:", e);
+            return match;
+        }
+    });
+    
+    // Process regular math math powers/subscripts on the rest of the text
+    processed = formatMathPowers(processed);
+    
+    // Restore KaTeX rendered blocks
+    mathBlocks.forEach(block => {
+        processed = processed.replace(block.placeholder, block.html);
+    });
+    
+    return processTabularHTML(processed);
+};
 
 const isPlaceholderText = (text) => {
     if (!text) return true;
@@ -63,7 +230,7 @@ const getDisplayQuestionText = (q) => {
                     if (val && typeof val === 'string') {
                         const cleanVal = val.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
                         if (cleanVal && !cleanVal.startsWith('generated question') && !cleanVal.startsWith('dynamic question') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন')) {
-                            return val;
+                            return renderLatexMath(val);
                         }
                     }
                 }
@@ -88,14 +255,14 @@ const getDisplayQuestionText = (q) => {
                         }
                     });
                     if (partsTexts.length > 0) {
-                        return partsTexts.join(' ');
+                        return renderLatexMath(partsTexts.join(' '));
                     }
                 }
             }
         }
         return '';
     }
-    return text;
+    return renderLatexMath(text);
 };
 
 const AnswerSheetPreview = () => {
@@ -421,7 +588,7 @@ const AnswerSheetPreview = () => {
                                                                     <td className={`border border-slate-800 py-1.5 px-1 font-bold text-slate-700 bg-slate-50/50 ${colIdx > 0 ? 'border-l-2' : ''}`} style={{ fontSize: ptToPx(qFontSize) }}>
                                                                         {displayNum}
                                                                     </td>
-                                                                    <td className="border border-slate-800 py-1.5 px-2 font-bold text-slate-900" style={{ fontSize: ptToPx(qFontSize) }} dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                                    <td className="border border-slate-800 py-1.5 px-2 font-bold text-slate-900" style={{ fontSize: ptToPx(qFontSize) }} dangerouslySetInnerHTML={{ __html: renderLatexMath(ansText) }} />
                                                                 </React.Fragment>
                                                             );
                                                         } else {
@@ -477,12 +644,12 @@ const AnswerSheetPreview = () => {
                                                                         <div key={pIdx} className="flex flex-col gap-0.5 pb-1 border-b border-slate-100 last:border-0 last:pb-0">
                                                                             <div className="flex items-start gap-1.5 text-xs font-bold text-slate-800">
                                                                                 <span className="text-slate-900 font-bold shrink-0">({label}) {docSettings?.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
-                                                                                <div className="inline font-bold text-slate-900" dangerouslySetInnerHTML={{ __html: part.answer || 'N/A' }} />
+                                                                                <div className="inline font-bold text-slate-900" dangerouslySetInnerHTML={{ __html: renderLatexMath(part.answer || 'N/A') }} />
                                                                             </div>
                                                                             {part.explanation && (
                                                                                 <div className="flex items-start gap-1.5 pl-4 text-xs font-normal text-slate-600">
                                                                                     <span className="font-semibold shrink-0 text-slate-800">{docSettings?.language === 'ENGLISH' ? 'Explanation:' : 'ব্যাখ্যা:'}</span>
-                                                                                    <div className="inline text-slate-700 font-normal" dangerouslySetInnerHTML={{ __html: part.explanation }} />
+                                                                                    <div className="inline text-slate-700 font-normal" dangerouslySetInnerHTML={{ __html: renderLatexMath(part.explanation) }} />
                                                                                 </div>
                                                                             )}
                                                                         </div>
@@ -492,7 +659,7 @@ const AnswerSheetPreview = () => {
                                                         ) : (
                                                             <div className="pl-6 mt-1 text-slate-900 font-bold">
                                                                 <span className="text-xs text-slate-500 font-normal mr-1.5">{docSettings?.language === 'ENGLISH' ? 'Ans:' : 'উত্তর:'}</span>
-                                                                <div className="inline" dangerouslySetInnerHTML={{ __html: ansText }} />
+                                                                <div className="inline" dangerouslySetInnerHTML={{ __html: renderLatexMath(ansText) }} />
                                                             </div>
                                                         )}
                                                     </div>
@@ -518,7 +685,7 @@ const AnswerSheetPreview = () => {
                                     <div key={i} className="flex flex-col gap-2 break-inside-avoid">
                                         <div className="w-full flex flex-col gap-1">
                                             {q.attrs?.stimulus && !isPlaceholderText(q.attrs.stimulus) && (
-                                                <div dangerouslySetInnerHTML={{ __html: q.attrs.stimulus }} className="mb-1" />
+                                                <div dangerouslySetInnerHTML={{ __html: renderLatexMath(q.attrs.stimulus) }} className="mb-1" />
                                             )}
                                         </div>
                                         <div className="flex gap-2">
@@ -533,7 +700,7 @@ const AnswerSheetPreview = () => {
                                                     return (
                                                         <div key={sIdx} className="flex gap-2 items-start text-[0.95em]">
                                                             <span className="font-medium mt-[1px]">{roman}.</span>
-                                                            <div dangerouslySetInnerHTML={{ __html: cleanStmt }} />
+                                                            <div dangerouslySetInnerHTML={{ __html: renderLatexMath(cleanStmt) }} />
                                                         </div>
                                                     );
                                                 })}
@@ -548,7 +715,7 @@ const AnswerSheetPreview = () => {
                                                     return (
                                                         <div key={oi} className={`flex gap-2 p-1.5 rounded ${isCorrect ? 'bg-green-50 font-bold border border-green-300' : ''}`}>
                                                             <span>{label})</span>
-                                                            <div dangerouslySetInnerHTML={{ __html: text }} />
+                                                            <div dangerouslySetInnerHTML={{ __html: renderLatexMath(text) }} />
                                                             {isCorrect && <span className="text-green-600 ml-auto flex-shrink-0">✔️</span>}
                                                         </div>
                                                     );
@@ -603,7 +770,7 @@ const AnswerSheetPreview = () => {
                                     <div key={i} className="flex flex-col gap-3 pb-6 border-b border-slate-100 last:border-0 break-inside-avoid">
                                         <div className="w-full flex flex-col gap-1">
                                             {q.attrs?.stimulus && !isPlaceholderText(q.attrs.stimulus) && (
-                                                <div dangerouslySetInnerHTML={{ __html: q.attrs.stimulus }} className="mb-1 text-lg" />
+                                                <div dangerouslySetInnerHTML={{ __html: renderLatexMath(q.attrs.stimulus) }} className="mb-1 text-lg" />
                                             )}
                                         </div>
                                         <div className="flex gap-2">
@@ -618,7 +785,7 @@ const AnswerSheetPreview = () => {
                                                     return (
                                                         <div key={sIdx} className="flex gap-2 items-start text-[0.95em] text-lg">
                                                             <span className="font-medium mt-[1px]">{roman}.</span>
-                                                            <div dangerouslySetInnerHTML={{ __html: cleanStmt }} />
+                                                            <div dangerouslySetInnerHTML={{ __html: renderLatexMath(cleanStmt) }} />
                                                         </div>
                                                     );
                                                 })}
@@ -633,12 +800,12 @@ const AnswerSheetPreview = () => {
                                                             <div key={pIdx} className="bg-slate-50/50 p-3 rounded-lg border border-slate-200 space-y-1">
                                                                 <div className="flex items-start gap-1.5 font-bold text-slate-800 text-sm">
                                                                     <span className="text-slate-900 font-bold shrink-0">({label}) {uiLang === 'bn' ? 'সঠিক উত্তর:' : 'Correct Answer:'}</span>
-                                                                    <div className="inline font-bold text-slate-900" dangerouslySetInnerHTML={{ __html: part.answer || 'N/A' }} />
+                                                                    <div className="inline font-bold text-slate-900" dangerouslySetInnerHTML={{ __html: renderLatexMath(part.answer || 'N/A') }} />
                                                                 </div>
                                                                 {part.explanation && (
                                                                     <div className="text-sm mt-1.5 flex items-start gap-1">
                                                                         <span className="font-bold text-slate-800 shrink-0">{uiLang === 'bn' ? 'ব্যাখ্যা:' : 'Explanation:'} </span>
-                                                                        <div className="font-normal text-slate-700" dangerouslySetInnerHTML={{ __html: part.explanation }} />
+                                                                        <div className="font-normal text-slate-700" dangerouslySetInnerHTML={{ __html: renderLatexMath(part.explanation) }} />
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -649,12 +816,12 @@ const AnswerSheetPreview = () => {
                                                 <>
                                                     <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                                                         <span className="font-bold text-slate-900 text-sm">{uiLang === 'bn' ? 'সঠিক উত্তর:' : 'Correct Answer:'} </span>
-                                                        <div className="inline font-bold" dangerouslySetInnerHTML={{ __html: answerHtml || 'N/A' }} />
+                                                        <div className="inline font-bold" dangerouslySetInnerHTML={{ __html: renderLatexMath(answerHtml || 'N/A') }} />
                                                     </div>
                                                     {explanationHtml && (
                                                         <div className="text-sm mt-1.5 flex items-start gap-1">
                                                             <span className="font-bold text-slate-800 shrink-0">{uiLang === 'bn' ? 'ব্যাখ্যা:' : 'Explanation:'} </span>
-                                                            <div dangerouslySetInnerHTML={{ __html: explanationHtml }} />
+                                                            <div dangerouslySetInnerHTML={{ __html: renderLatexMath(explanationHtml) }} />
                                                         </div>
                                                     )}
                                                 </>
