@@ -13,6 +13,7 @@ import java.util.Optional;
 public interface KnowledgePageRepository extends JpaRepository<KnowledgePage, UUID> {
     List<KnowledgePage> findBySourceBookIdOrderByPageNumberAsc(UUID sourceBookId);
     Optional<KnowledgePage> findFirstBySourceBookIdOrderByPageNumberDesc(UUID sourceBookId);
+    Optional<KnowledgePage> findBySourceBookIdAndPageNumber(UUID sourceBookId, Integer pageNumber);
     long countBySourceBookIndexId(UUID sourceBookIndexId);
     List<KnowledgePage> findBySourceBookIndexId(UUID sourceBookIndexId);
     

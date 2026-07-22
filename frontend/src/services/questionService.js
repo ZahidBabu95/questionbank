@@ -231,6 +231,11 @@ const getQuestionSources = async (questionId) => {
     return response.data;
 };
 
+const getQuestionSourceContext = async (id) => {
+    const response = await axios.get(`${API_URL}/${id}/source-context`);
+    return response.data;
+};
+
 const addQuestionSource = async (questionId, source) => {
     const response = await axios.post(`${API_URL}/${questionId}/sources`, source);
     return response.data;
@@ -314,6 +319,7 @@ export default {
     updateStatusBulk,
     uploadStimulusImage,
     getQuestionSources,
+    getQuestionSourceContext,
     addQuestionSource,
     deleteQuestionSource,
     submitRevision,

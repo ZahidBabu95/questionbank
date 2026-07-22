@@ -71,7 +71,11 @@ const QuestionPreviewContent = ({ selectedQuestion, isDark = false }) => {
                         })
                     ) : (
                         selectedQuestion.sourceReference && (
-                            selectedQuestion.sourceReference === 'Textbook Content' ? (
+                            selectedQuestion.sourceReference.toUpperCase().includes('CHUNK_') ? (
+                                <span className={`px-2.5 py-1 ${isDark ? 'bg-indigo-950/40 text-indigo-400 border-indigo-800/40' : 'bg-indigo-50 text-indigo-700 border-indigo-150'} rounded-xl text-xs font-black border uppercase whitespace-nowrap flex items-center gap-1 shadow-sm`}>
+                                    📖 Textbook Source
+                                </span>
+                            ) : selectedQuestion.sourceReference === 'Textbook Content' ? (
                                 <span className={`px-2.5 py-1 ${isDark ? 'bg-slate-800 text-slate-300 border-slate-750' : 'bg-slate-50 text-slate-600 border-slate-200'} rounded-xl text-xs font-black border uppercase whitespace-nowrap flex items-center gap-1 shadow-sm`}>
                                     📖 Textbook Content
                                 </span>

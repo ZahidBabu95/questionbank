@@ -46,11 +46,13 @@ export default function QuestionPreviewModal({
                             </div>
                         )}
 
-                        {!selectedQuestion.classSubject && selectedQuestion.sourceReference && !selectedQuestion.sourceReference.toUpperCase().includes('CHUNK_') && (
+                        {!selectedQuestion.classSubject && selectedQuestion.sourceReference && (
                             <div>
                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Source / Context</h3>
                                 <div className="p-4 bg-violet-50/80 rounded-xl border border-violet-100 flex items-center gap-3">
-                                    <p className="text-slate-800 font-semibold flex-1">{selectedQuestion.sourceReference}</p>
+                                    <p className="text-slate-800 font-semibold flex-1">
+                                        {selectedQuestion.sourceReference.toUpperCase().includes('CHUNK_') ? '📖 Textbook Source' : selectedQuestion.sourceReference}
+                                    </p>
                                     {selectedQuestion.aiGenerated && <span className="text-[10px] bg-violet-100 text-violet-600 border border-violet-200 px-2 py-0.5 rounded-md font-bold whitespace-nowrap">AI Imported</span>}
                                 </div>
                             </div>

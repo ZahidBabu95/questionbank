@@ -17,6 +17,7 @@ import useDebounce from '../../../hooks/useDebounce';
 import SubjectSelectorModal from './components/SubjectSelectorModal';
 import QuestionPreviewModal from './components/QuestionPreviewModal';
 import QuestionFilterPanel from './components/QuestionFilterPanel';
+import SourceDocumentViewer from './components/SourceDocumentViewer';
 
 
 const QuestionList = () => {
@@ -106,6 +107,36 @@ const QuestionList = () => {
     });
 
     const [selectedQuestionMap, setSelectedQuestionMap] = useState({});
+
+    const [rightPanelTab, setRightPanelTab] = useState('EDIT'); // 'EDIT' or 'SOURCE'
+    const [sourceContext, setSourceContext] = useState(null);
+    const [loadingSource, setLoadingSource] = useState(false);
+
+    useEffect(() => {
+        if (!selectedQuestion?.id) {
+            setSourceContext(null);
+            return;
+        }
+        let active = true;
+        const loadSource = async () => {
+            setLoadingSource(true);
+            try {
+                const data = await questionService.getQuestionSourceContext(selectedQuestion.id);
+                if (active) {
+                    setSourceContext(data);
+                }
+            } catch (err) {
+                console.error("Failed to load source context:", err);
+                if (active) setSourceContext(null);
+            } finally {
+                if (active) setLoadingSource(false);
+            }
+        };
+        loadSource();
+        return () => {
+            active = false;
+        };
+    }, [selectedQuestion?.id]);
     const [isCartOpen, setIsCartOpen] = useState(false);
     const cartRef = useRef(null);
 
@@ -1808,18 +1839,100 @@ const QuestionList = () => {
                         {selectedQuestion ? (
                             <>
                                 <div className="bg-slate-50/90 backdrop-blur-sm m-2 rounded-xl shadow-lg border border-slate-200 overflow-hidden flex flex-col flex-1 relative">
-                                    <QuestionEdit 
-                                        inlineId={selectedQuestion.id} 
-                                        key={selectedQuestion.id} 
-                                        onSaveComplete={() => {
-                                            fetchQuestions();
-                                            // auto-select next question
-                                            const currentIndex = questions.findIndex(q => q.id === selectedQuestion.id);
-                                            if (currentIndex >= 0 && currentIndex < questions.length - 1) {
-                                                handleViewQuestion(questions[currentIndex + 1]);
-                                            }
-                                        }} 
-                                    />
+                                    {/* Tabbed Header */}
+                                    <div className="flex bg-slate-100 border-b border-slate-200 p-1 gap-1 shrink-0">
+                                        <button
+                                            onClick={() => setRightPanelTab('EDIT')}
+                                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${rightPanelTab === 'EDIT' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60' : 'text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            📝 প্রশ্ন সম্পাদনা (Edit)
+                                        </button>
+                                        <button
+                                            onClick={() => setRightPanelTab('SOURCE')}
+                                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${rightPanelTab === 'SOURCE' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60' : 'text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            📖 উৎস পেজ ও OCR (Source)
+                                        </button>
+                                    </div>
+
+                                    {/* Tab 1: Edit Question */}
+                                    <div className={`flex-1 flex-col overflow-hidden w-full ${rightPanelTab === 'EDIT' ? 'flex' : 'hidden'}`}>
+                                        <QuestionEdit 
+                                            inlineId={selectedQuestion.id} 
+                                            key={selectedQuestion.id} 
+                                            onSaveComplete={() => {
+                                                fetchQuestions();
+                                                // auto-select next question
+                                                const currentIndex = questions.findIndex(q => q.id === selectedQuestion.id);
+                                                if (currentIndex >= 0 && currentIndex < questions.length - 1) {
+                                                    handleViewQuestion(questions[currentIndex + 1]);
+                                                }
+                                            }} 
+                                        />
+                                    </div>
+
+                                    {/* Tab 2: Original Book Source Context & Scanned Page Viewer */}
+                                    {rightPanelTab === 'SOURCE' && (
+                                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-white flex flex-col gap-4 w-full">
+                                            {loadingSource ? (
+                                                <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-500">
+                                                    <div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                                                    <span className="text-xs font-bold">লোডিং সোর্স কন্টেন্ট...</span>
+                                                </div>
+                                            ) : sourceContext?.chunk ? (
+                                                <>
+                                                    {/* Book Info Header */}
+                                                    <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100/80 flex flex-col gap-1 shrink-0">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-[10px] font-extrabold uppercase bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
+                                                                {sourceContext.chunk.sourceBook?.bookType || 'TEXTBOOK'}
+                                                            </span>
+                                                            {sourceContext.chunk.pageNumber && (
+                                                                <span className="text-xs font-black text-slate-600">
+                                                                    পৃষ্ঠা নম্বর: {sourceContext.chunk.pageNumber}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <h4 className="text-xs font-black text-slate-800 line-clamp-1">{sourceContext.chunk.sourceBook?.title}</h4>
+                                                        {sourceContext.chunk.sourceBookIndex?.title && (
+                                                            <p className="text-[11px] font-semibold text-slate-500">চ্যাপ্টার: {sourceContext.chunk.sourceBookIndex.title}</p>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Scanned Image or OCR Text */}
+                                                    <div className="flex flex-col gap-4 flex-1">
+                                                        {sourceContext.chunk.page?.imageUrl ? (
+                                                            <div className="h-[250px] border border-slate-200 rounded-xl overflow-hidden shrink-0 shadow-inner">
+                                                                <SourceDocumentViewer 
+                                                                    remoteUrl={(sourceContext.chunk.page.imageUrl.startsWith('http') && sourceContext.chunk.page.imageUrl.includes('r2.dev'))
+                                                                        ? `/api/v1/public/proxy-image?url=${encodeURIComponent(sourceContext.chunk.page.imageUrl)}`
+                                                                        : sourceContext.chunk.page.imageUrl} 
+                                                                    remoteType="image/jpeg" 
+                                                                />
+                                                            </div>
+                                                        ) : (
+                                                            <div className="p-4 bg-slate-50 text-slate-500 text-xs font-bold text-center border border-dashed border-slate-350 rounded-xl shrink-0">
+                                                                এই চাঙ্কের স্ক্যান করা পৃষ্ঠা চিত্র পাওয়া যায়নি।
+                                                            </div>
+                                                        )}
+
+                                                        <div className="flex-1 flex flex-col gap-2 min-h-[200px]">
+                                                            <h5 className="text-[11px] font-black text-slate-400 uppercase tracking-wider">মূল টেক্সট (OCR / Content Chunks)</h5>
+                                                            <div className="flex-1 p-4 bg-slate-50/60 rounded-xl border border-slate-200 overflow-y-auto custom-scrollbar font-mono text-[11px] leading-relaxed text-slate-700 select-text">
+                                                                <MarkdownRenderer content={sourceContext.chunk.chunkText} />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="py-20 text-center text-slate-400 font-bold flex flex-col items-center justify-center gap-2">
+                                                    <span className="text-3xl">📖</span>
+                                                    <p className="text-xs">এই প্রশ্নের জন্য কোনো এআই বুক চ্যাপ্টার সোর্স চাঙ্ক পাওয়া যায়নি।</p>
+                                                    <p className="text-[10px] text-slate-400 font-medium max-w-xs mt-1">এটি ম্যানুয়ালি তৈরি করা প্রশ্ন হতে পারে অথবা এতে সোর্স চাঙ্কের লিংক নেই।</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="p-3 bg-white border-t border-slate-200 flex items-center justify-between shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
                                     <div className="flex items-center gap-2">

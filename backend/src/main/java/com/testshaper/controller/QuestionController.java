@@ -37,6 +37,8 @@ public class QuestionController {
     private final UserRepository userRepository;
     private final QuestionSourceRepository questionSourceRepository;
     private final AcademicAutoLinkService autoLinkService;
+    private final com.testshaper.repository.CurriculumDocumentChunkRepository chunkRepository;
+    private final com.testshaper.repository.KnowledgePageRepository knowledgePageRepository;
 
     @PostMapping("/import/excel")
     public ResponseEntity<Map<String, Object>> importFromExcel(
@@ -139,6 +141,66 @@ public class QuestionController {
     @GetMapping("/{id}")
     public ResponseEntity<Question> getQuestion(@PathVariable UUID id) {
         return ResponseEntity.ok(questionService.getQuestion(id));
+    }
+
+    @GetMapping("/{id}/source-context")
+    public ResponseEntity<Map<String, Object>> getQuestionSourceContext(@PathVariable UUID id) {
+        Question question = questionService.getQuestion(id);
+        Map<String, Object> result = new java.util.HashMap<>();
+        result.put("sourceReference", question.getSourceReference());
+        
+        if (question.getSourceReference() != null && question.getSourceReference().toLowerCase().startsWith("chunk_")) {
+            try {
+                String chunkIdStr = question.getSourceReference().substring(6);
+                UUID chunkId = UUID.fromString(chunkIdStr);
+                
+                com.testshaper.entity.CurriculumDocumentChunk chunk = chunkRepository.findById(chunkId).orElse(null);
+                if (chunk != null) {
+                    Map<String, Object> chunkData = new java.util.HashMap<>();
+                    chunkData.put("id", chunk.getId());
+                    chunkData.put("chunkText", chunk.getChunkText());
+                    chunkData.put("pageNumber", chunk.getPageNumber());
+                    chunkData.put("imageUrl", chunk.getImageUrl());
+                    chunkData.put("isVisionExtracted", chunk.getIsVisionExtracted());
+                    
+                    if (chunk.getSourceBook() != null) {
+                        Map<String, Object> bookData = new java.util.HashMap<>();
+                        bookData.put("id", chunk.getSourceBook().getId());
+                        bookData.put("title", chunk.getSourceBook().getTitle());
+                        bookData.put("bookType", chunk.getSourceBook().getBookType() != null ? chunk.getSourceBook().getBookType().name() : null);
+                        bookData.put("coverImageUrl", chunk.getSourceBook().getCoverImageUrl());
+                        chunkData.put("sourceBook", bookData);
+                        
+                        if (chunk.getPageNumber() != null) {
+                            com.testshaper.entity.KnowledgePage kPage = knowledgePageRepository
+                                    .findBySourceBookIdAndPageNumber(chunk.getSourceBook().getId(), chunk.getPageNumber())
+                                    .orElse(null);
+                            if (kPage != null) {
+                                Map<String, Object> pageData = new java.util.HashMap<>();
+                                pageData.put("id", kPage.getId());
+                                pageData.put("pageNumber", kPage.getPageNumber());
+                                pageData.put("imageUrl", kPage.getR2FilePath());
+                                pageData.put("extractionStatus", kPage.getExtractionStatus() != null ? kPage.getExtractionStatus().name() : null);
+                                chunkData.put("page", pageData);
+                            }
+                        }
+                    }
+                    
+                    if (chunk.getSourceBookIndex() != null) {
+                        Map<String, Object> indexData = new java.util.HashMap<>();
+                        indexData.put("id", chunk.getSourceBookIndex().getId());
+                        indexData.put("title", chunk.getSourceBookIndex().getIndexName());
+                        chunkData.put("sourceBookIndex", indexData);
+                    }
+                    
+                    result.put("chunk", chunkData);
+                }
+            } catch (Exception e) {
+                // fallback
+            }
+        }
+        
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/batch")

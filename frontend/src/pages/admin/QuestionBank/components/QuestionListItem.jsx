@@ -134,8 +134,12 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                             );
                         })
                     ) : (
-                        q.sourceReference && !q.sourceReference.toUpperCase().includes('CHUNK_') && (
-                            q.sourceReference === 'Textbook Content' ? (
+                        q.sourceReference && (
+                            q.sourceReference.toUpperCase().includes('CHUNK_') ? (
+                                <span className="px-1 sm:px-1.5 py-px bg-indigo-50 text-indigo-700 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-indigo-150 uppercase whitespace-nowrap flex items-center gap-1 shadow-sm">
+                                    📖 Textbook Source
+                                </span>
+                            ) : q.sourceReference === 'Textbook Content' ? (
                                 <span className="px-1 sm:px-1.5 py-px bg-slate-100 text-slate-600 rounded text-[8.5px] sm:text-[9.5px] font-bold border border-slate-200 uppercase whitespace-nowrap flex items-center gap-1">
                                     📖 Textbook Content
                                 </span>
