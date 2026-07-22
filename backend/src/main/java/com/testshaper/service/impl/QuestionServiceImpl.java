@@ -17,6 +17,9 @@ import java.util.UUID;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+
 @Service
 @RequiredArgsConstructor
 @SuppressWarnings("null")
@@ -207,6 +210,112 @@ public class QuestionServiceImpl implements QuestionService {
                 source.setQuestion(question);
             }
         }
+
+        // Backward-Compatibility Parser: Convert dynamic_data JSON inputs to legacy relational tables/columns
+        if (question.getDynamicData() != null && !question.getDynamicData().isEmpty()) {
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode node = mapper.readTree(question.getDynamicData());
+
+                // 1. MCQ Compatibility
+                if ("MCQ".equalsIgnoreCase(question.getType()) || "MULTIPLE_CHOICE".equalsIgnoreCase(question.getType())) {
+                    if (node.has("stimulus")) {
+                        question.setStimulus(node.get("stimulus").asText());
+                    }
+                    if (node.has("questionText")) {
+                        question.setQuestionText(node.get("questionText").asText());
+                    }
+                    if (node.has("mcqType")) {
+                        question.setMcqType(node.get("mcqType").asText());
+                    }
+                    if (node.has("explanation")) {
+                        question.setExplanation(node.get("explanation").asText());
+                    }
+
+                    // Save parent question first to establish UUID for foreign key mapping
+                    Question savedQuestion = questionRepository.save(question);
+
+                    if (node.has("options") && node.get("options").isArray()) {
+                        JsonNode optionsNode = node.get("options");
+                        List<QuestionOption> optionsList = new java.util.ArrayList<>();
+                        char labelChar = 'ক';
+                        for (int i = 0; i < optionsNode.size(); i++) {
+                            JsonNode optNode = optionsNode.get(i);
+                            QuestionOption opt = new QuestionOption();
+                            opt.setQuestion(savedQuestion);
+                            opt.setOptionLabel(String.valueOf((char) (labelChar + i)));
+                            opt.setOptionText(optNode.has("text") ? optNode.get("text").asText() : "");
+
+                            boolean isCorrect = false;
+                            if (optNode.has("isCorrect")) {
+                                String isCorrectStr = optNode.get("isCorrect").asText();
+                                isCorrect = "true".equalsIgnoreCase(isCorrectStr) || "1".equals(isCorrectStr);
+                            }
+                            opt.setCorrect(isCorrect);
+                            optionsList.add(opt);
+                        }
+
+                        // Extract and set correct answer text in parent
+                        optionsList.stream().filter(QuestionOption::isCorrect).findFirst()
+                                .ifPresent(opt -> savedQuestion.setCorrectAnswer(opt.getOptionText()));
+
+                        optionRepository.saveAll(optionsList);
+                        savedQuestion.setOptions(optionsList);
+                    }
+                    return savedQuestion;
+                }
+
+                // 2. CQ Compatibility
+                if ("CQ".equalsIgnoreCase(question.getType()) || "CREATIVE".equalsIgnoreCase(question.getType())) {
+                    String stem = node.has("stimulus") ? node.get("stimulus").asText() : "";
+                    question.setStimulus(stem);
+
+                    if (node.has("subQuestions") && node.get("subQuestions").isArray()) {
+                        JsonNode subQNode = node.get("subQuestions");
+                        StringBuilder combinedHtml = new StringBuilder();
+                        combinedHtml.append("<div class=\"cq-stem\">").append(stem).append("</div>");
+                        combinedHtml.append("<div class=\"cq-questions\"><ol type=\"a\">");
+
+                        for (int i = 0; i < subQNode.size(); i++) {
+                            JsonNode sq = subQNode.get(i);
+                            String label = sq.has("label") ? sq.get("label").asText() : String.valueOf((char) ('ক' + i));
+                            String text = sq.has("text") ? sq.get("text").asText() : "";
+                            String marksVal = sq.has("marks") ? sq.get("marks").asText() : "1";
+
+                            combinedHtml.append("<li data-marks=\"").append(marksVal).append("\">")
+                                    .append("<span class=\"cq-text\">").append(text).append("</span> ")
+                                    .append("<span class=\"cq-marks\">(").append(marksVal).append(")</span></li>");
+                        }
+                        combinedHtml.append("</ol></div>");
+                        question.setQuestionText(combinedHtml.toString());
+                    }
+
+                    if (question.getMarks() == null || question.getMarks() == 0) {
+                        question.setMarks(10.0);
+                    }
+                }
+
+                // 3. SHORT Compatibility
+                if ("SHORT".equalsIgnoreCase(question.getType()) || "SHORT_ANSWER".equalsIgnoreCase(question.getType())) {
+                    if (node.has("questionText")) {
+                        question.setQuestionText(node.get("questionText").asText());
+                    }
+                    if (node.has("stimulus")) {
+                        question.setStimulus(node.get("stimulus").asText());
+                    }
+                    if (node.has("correctAnswer")) {
+                        question.setCorrectAnswer(node.get("correctAnswer").asText());
+                    }
+                    if (node.has("explanation")) {
+                        question.setExplanation(node.get("explanation").asText());
+                    }
+                }
+            } catch (Exception e) {
+                // Non-fatal parse failure fallback: let default JPA save run
+                System.err.println("Non-fatal error parsing dynamic data JSON: " + e.getMessage());
+            }
+        }
+
         return questionRepository.save(question);
     }
 

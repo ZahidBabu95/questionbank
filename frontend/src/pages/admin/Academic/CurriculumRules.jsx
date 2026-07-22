@@ -1,8 +1,433 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Book, FileText, Component as ComponentIcon, Folder, Database, Search, Target, CheckCircle2, Save, FileJson, Loader2, ArrowRightCircle, Check, ChevronRight, Eye, ExternalLink, Code, Pencil, Sparkles, AlertTriangle, Zap } from 'lucide-react';
+import { Book, FileText, Component as ComponentIcon, Folder, Database, Search, Target, CheckCircle2, Save, FileJson, Loader2, ArrowRightCircle, Check, ChevronRight, Eye, ExternalLink, Code, Pencil, Sparkles, AlertTriangle, Zap, Plus, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import axios from '../../../utils/axios';
 import academicService from '../../../services/academicService';
 import { Link } from 'react-router-dom';
+
+const VisualCurriculumRulesEditor = ({ value, onChange, dynamicTypes }) => {
+    let parsed = {
+        subject: '',
+        scraping_rules: [],
+        editor_config: { allowed_blocks: [], toolbar_features: [], validation_rules: {} },
+        generation_blueprint: { mandatory_sections: [], bloom_target: {}, custom_prompts: {} }
+    };
+    try {
+        parsed = typeof value === 'string' ? JSON.parse(value) : (value || {});
+    } catch (e) {
+        // Fallback
+    }
+
+    const update = (updated) => {
+        onChange(JSON.stringify(updated, null, 4));
+    };
+
+    const handleFieldChange = (path, val) => {
+        const copy = JSON.parse(JSON.stringify(parsed));
+        let cur = copy;
+        for (let i = 0; i < path.length - 1; i++) {
+            if (!cur[path[i]]) cur[path[i]] = {};
+            cur = cur[path[i]];
+        }
+        cur[path[path.length - 1]] = val;
+        update(copy);
+    };
+
+    const [activeSection, setActiveSection] = useState('rules'); // 'rules' | 'blueprint' | 'config'
+
+    // Merge hardcoded and dynamic types
+    const availableTypes = [
+        { code: 'MULTIPLE_CHOICE', name: 'MULTIPLE_CHOICE (MCQ)' },
+        { code: 'CREATIVE', name: 'CREATIVE (CQ / সৃজনশীল)' },
+        { code: 'SHORT', name: 'SHORT (সংক্ষিপ্ত প্রশ্ন)' }
+    ];
+
+    if (Array.isArray(dynamicTypes)) {
+        dynamicTypes.forEach(dt => {
+            if (!availableTypes.find(t => t.code === dt.code)) {
+                availableTypes.push({ code: dt.code, name: `${dt.name} (${dt.code})` });
+            }
+        });
+    }
+
+    const addRule = () => {
+        const rules = Array.isArray(parsed.scraping_rules) ? parsed.scraping_rules : [];
+        const newRule = {
+            questionType: 'MULTIPLE_CHOICE',
+            questionText: 'নতুন প্রশ্নের বিবরণ...',
+            options: [],
+            answer: '',
+            marks: 1,
+            totalQuestions: 5,
+            instructions: '',
+            bloomLevel: 'KNOWLEDGE',
+            difficulty: 'MEDIUM'
+        };
+        handleFieldChange(['scraping_rules'], [...rules, newRule]);
+    };
+
+    const removeRule = (idx) => {
+        const rules = Array.isArray(parsed.scraping_rules) ? parsed.scraping_rules : [];
+        handleFieldChange(['scraping_rules'], rules.filter((_, i) => i !== idx));
+    };
+
+    const updateRule = (idx, key, val) => {
+        const rules = Array.isArray(parsed.scraping_rules) ? parsed.scraping_rules : [];
+        const updated = rules.map((r, i) => i === idx ? { ...r, [key]: val } : r);
+        handleFieldChange(['scraping_rules'], updated);
+    };
+
+    const addSection = () => {
+        const blueprint = parsed.generation_blueprint || {};
+        const sections = Array.isArray(blueprint.mandatory_sections) ? blueprint.mandatory_sections : [];
+        const newSec = {
+            name: 'নতুন সেকশন',
+            type: 'MCQ',
+            target_ratio: '30%',
+            instructions: 'নির্দেশনা...',
+            conditions: 'মান: ১x১০=১০',
+            questionsToAnswer: 10,
+            marksPerQuestion: 1
+        };
+        handleFieldChange(['generation_blueprint', 'mandatory_sections'], [...sections, newSec]);
+    };
+
+    const removeSection = (idx) => {
+        const blueprint = parsed.generation_blueprint || {};
+        const sections = Array.isArray(blueprint.mandatory_sections) ? blueprint.mandatory_sections : [];
+        handleFieldChange(['generation_blueprint', 'mandatory_sections'], sections.filter((_, i) => i !== idx));
+    };
+
+    const updateSectionItem = (idx, key, val) => {
+        const blueprint = parsed.generation_blueprint || {};
+        const sections = Array.isArray(blueprint.mandatory_sections) ? blueprint.mandatory_sections : [];
+        const updated = sections.map((s, i) => i === idx ? { ...s, [key]: val } : s);
+        handleFieldChange(['generation_blueprint', 'mandatory_sections'], updated);
+    };
+
+    const scraping_rules = Array.isArray(parsed.scraping_rules) ? parsed.scraping_rules : [];
+    const blueprint = parsed.generation_blueprint || {};
+    const sections = Array.isArray(blueprint.mandatory_sections) ? blueprint.mandatory_sections : [];
+    const editorConfig = parsed.editor_config || {};
+    const validationRules = editorConfig.validation_rules || {};
+
+    return (
+        <div className="flex-1 overflow-y-auto bg-[#1a1a20] p-4 text-slate-350 flex flex-col h-full font-sans max-h-[500px]">
+            <div className="flex border-b border-slate-800 mb-4 bg-slate-950/40 p-1 rounded-xl shrink-0">
+                <button
+                    type="button"
+                    onClick={() => setActiveSection('rules')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${activeSection === 'rules' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                    ১. প্রশ্ন টাইপের নিয়ম (Scraping Rules)
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveSection('blueprint')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${activeSection === 'blueprint' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                    ২. পরীক্ষার কাঠামো (Blueprint)
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveSection('config')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${activeSection === 'config' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                    ৩. এডিটর সেটিংস (Editor Config)
+                </button>
+            </div>
+
+            {activeSection === 'rules' && (
+                <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">প্রশ্ন টাইপ ও মান বন্টন তালিকা:</span>
+                        <button
+                            type="button"
+                            onClick={addRule}
+                            className="bg-indigo-700 hover:bg-indigo-800 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm flex items-center gap-1"
+                        >
+                            <Plus size={12} /> Add Rule
+                        </button>
+                    </div>
+
+                    {scraping_rules.length === 0 ? (
+                        <div className="text-center py-8 text-xs italic text-slate-500 bg-[#23232b] rounded-xl border border-slate-800">
+                            কোনো নিয়ম যোগ করা হয়নি। "Add Rule" ক্লিক করুন।
+                        </div>
+                    ) : (
+                        scraping_rules.map((rule, idx) => (
+                            <div key={idx} className="p-3 bg-[#23232b] border border-slate-800 rounded-xl relative group shadow-sm">
+                                <button
+                                    type="button"
+                                    onClick={() => removeRule(idx)}
+                                    className="absolute top-2 right-2 p-1 text-slate-500 hover:text-rose-500 transition-colors"
+                                >
+                                    <Trash2 size={12} />
+                                </button>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pr-6">
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Question Type</label>
+                                        <select
+                                            value={rule.questionType || 'MULTIPLE_CHOICE'}
+                                            onChange={(e) => updateRule(idx, 'questionType', e.target.value)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                        >
+                                            {availableTypes.map(t => (
+                                                <option key={t.code} value={t.code}>{t.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Marks</label>
+                                        <input
+                                            type="number"
+                                            value={rule.marks || 0}
+                                            onChange={(e) => updateRule(idx, 'marks', parseInt(e.target.value) || 0)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Total Questions (RAG limit)</label>
+                                        <input
+                                            type="number"
+                                            value={rule.totalQuestions || 0}
+                                            onChange={(e) => updateRule(idx, 'totalQuestions', parseInt(e.target.value) || 0)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Bloom Level</label>
+                                        <select
+                                            value={rule.bloomLevel || 'KNOWLEDGE'}
+                                            onChange={(e) => updateRule(idx, 'bloomLevel', e.target.value)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                        >
+                                            <option value="KNOWLEDGE">KNOWLEDGE (জ্ঞানমূলক)</option>
+                                            <option value="UNDERSTANDING">UNDERSTANDING (অনুধাবন)</option>
+                                            <option value="APPLYING">APPLYING (প্রয়োগ)</option>
+                                            <option value="ANALYZING">ANALYZING (উচ্চতর দক্ষতা)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Difficulty</label>
+                                        <select
+                                            value={rule.difficulty || 'MEDIUM'}
+                                            onChange={(e) => updateRule(idx, 'difficulty', e.target.value)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                        >
+                                            <option value="EASY">Easy</option>
+                                            <option value="MEDIUM">Medium</option>
+                                            <option value="HARD">Hard</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Custom Prompt Rule (Optional)</label>
+                                        <input
+                                            type="text"
+                                            value={rule.instructions || ''}
+                                            onChange={(e) => updateRule(idx, 'instructions', e.target.value)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-250 outline-none"
+                                            placeholder="যেমন: ১টি উদ্দীপক সহ ৪টি উপপ্রশ্ন..."
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
+
+            {activeSection === 'blueprint' && (
+                <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">পরীক্ষা বা প্রশ্নপত্রের সেকশন বিন্যাস:</span>
+                        <button
+                            type="button"
+                            onClick={addSection}
+                            className="bg-indigo-700 hover:bg-indigo-800 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm flex items-center gap-1"
+                        >
+                            <Plus size={12} /> Add Section
+                        </button>
+                    </div>
+
+                    {sections.length === 0 ? (
+                        <div className="text-center py-8 text-xs italic text-slate-500 bg-[#23232b] rounded-xl border border-slate-800">
+                            কোনো সেকশন যোগ করা হয়নি। "Add Section" ক্লিক করুন।
+                        </div>
+                    ) : (
+                        sections.map((sec, idx) => (
+                            <div key={idx} className="p-3 bg-[#23232b] border border-slate-800 rounded-xl relative group shadow-sm">
+                                <button
+                                    type="button"
+                                    onClick={() => removeSection(idx)}
+                                    className="absolute top-2 right-2 p-1 text-slate-500 hover:text-rose-500 transition-colors"
+                                >
+                                    <Trash2 size={12} />
+                                </button>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pr-6">
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Section Name (Bangla)</label>
+                                        <input
+                                            type="text"
+                                            value={sec.name || ''}
+                                            onChange={(e) => updateSectionItem(idx, 'name', e.target.value)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                            placeholder="যেমন: বহুনির্বাচনি প্রশ্ন (MCQ)"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Section Type</label>
+                                        <select
+                                            value={sec.type || 'MCQ'}
+                                            onChange={(e) => updateSectionItem(idx, 'type', e.target.value)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                        >
+                                            <option value="MCQ">MCQ</option>
+                                            <option value="CQ">CQ (সৃজনশীল)</option>
+                                            <option value="SHORT">SHORT</option>
+                                            <option value="ESSAY">ESSAY</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Target Ratio (%)</label>
+                                        <input
+                                            type="text"
+                                            value={sec.target_ratio || ''}
+                                            onChange={(e) => updateSectionItem(idx, 'target_ratio', e.target.value)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                            placeholder="যেমন: 30%"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Questions to Answer</label>
+                                        <input
+                                            type="number"
+                                            value={sec.questionsToAnswer || 0}
+                                            onChange={(e) => updateSectionItem(idx, 'questionsToAnswer', parseInt(e.target.value) || 0)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Marks Per Question</label>
+                                        <input
+                                            type="number"
+                                            value={sec.marksPerQuestion || 0}
+                                            onChange={(e) => updateSectionItem(idx, 'marksPerQuestion', parseInt(e.target.value) || 0)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Conditions Label (Bangla)</label>
+                                        <input
+                                            type="text"
+                                            value={sec.conditions || ''}
+                                            onChange={(e) => updateSectionItem(idx, 'conditions', e.target.value)}
+                                            className="w-full px-2 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded text-slate-200 outline-none"
+                                            placeholder="যেমন: মান: ১০x৫=৫০"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
+
+            {activeSection === 'config' && (
+                <div className="space-y-4 overflow-y-auto flex-1 pr-1 bg-slate-950/20 p-4 rounded-xl border border-slate-800/80">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">CQ Total Marks</label>
+                            <input
+                                type="number"
+                                value={validationRules.CQ_TOTAL_MARKS || 10}
+                                onChange={(e) => handleFieldChange(['editor_config', 'validation_rules', 'CQ_TOTAL_MARKS'], parseInt(e.target.value) || 10)}
+                                className="w-full px-3 py-2 bg-slate-900 border border-slate-805 rounded-xl text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MCQ Total Marks</label>
+                            <input
+                                type="number"
+                                value={validationRules.MCQ_TOTAL_MARKS || 1}
+                                onChange={(e) => handleFieldChange(['editor_config', 'validation_rules', 'MCQ_TOTAL_MARKS'], parseInt(e.target.value) || 1)}
+                                className="w-full px-3 py-2 bg-slate-900 border border-slate-805 rounded-xl text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">CQ Max Sub-parts</label>
+                            <input
+                                type="number"
+                                value={validationRules.CQ_MAX_SUBPARTS || 4}
+                                onChange={(e) => handleFieldChange(['editor_config', 'validation_rules', 'CQ_MAX_SUBPARTS'], parseInt(e.target.value) || 4)}
+                                className="w-full px-3 py-2 bg-slate-900 border border-slate-805 rounded-xl text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-800">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Allowed Blocks in Exam Editor</label>
+                        <div className="flex flex-wrap gap-2">
+                            {["MCQ", "CQ", "SHORT", "EQUATION", "DIAGRAM", "COMPREHENSION"].map(block => {
+                                const allowed = Array.isArray(editorConfig.allowed_blocks) ? editorConfig.allowed_blocks : [];
+                                const isChecked = allowed.includes(block);
+                                return (
+                                    <button
+                                        type="button"
+                                        key={block}
+                                        onClick={() => {
+                                            const updated = isChecked ? allowed.filter(b => b !== block) : [...allowed, block];
+                                            handleFieldChange(['editor_config', 'allowed_blocks'], updated);
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${isChecked ? 'bg-indigo-600/35 border-indigo-500 text-indigo-300' : 'bg-slate-900 border-slate-800 text-slate-500'}`}
+                                    >
+                                        {block}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-800">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Toolbar Features</label>
+                        <div className="flex flex-wrap gap-2">
+                            {["math_formula", "draw_canvas", "table", "image_upload", "audio_voice", "text_formatting"].map(feat => {
+                                const features = Array.isArray(editorConfig.toolbar_features) ? editorConfig.toolbar_features : [];
+                                const isChecked = features.includes(feat);
+                                return (
+                                    <button
+                                        type="button"
+                                        key={feat}
+                                        onClick={() => {
+                                            const updated = isChecked ? features.filter(f => f !== feat) : [...features, feat];
+                                            handleFieldChange(['editor_config', 'toolbar_features'], updated);
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${isChecked ? 'bg-indigo-600/35 border-indigo-500 text-indigo-300' : 'bg-slate-900 border-slate-800 text-slate-500'}`}
+                                    >
+                                        {feat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 const CurriculumRules = () => {
     // --- Unified Multi-Select State ---
@@ -51,7 +476,8 @@ const CurriculumRules = () => {
     const [jsonRuleId, setJsonRuleId] = useState(null);
     const [jsonSchema, setJsonSchema] = useState('');
     const [isSaving, setIsSaving] = useState(false);
-    const [schemaViewMode, setSchemaViewMode] = useState('edit'); // 'edit' | 'preview'
+    const [schemaViewMode, setSchemaViewMode] = useState('visual'); // 'visual' | 'edit' | 'preview'
+    const [isSchemaMaximized, setIsSchemaMaximized] = useState(false);
     const [isGeneratingSchema, setIsGeneratingSchema] = useState(false);
 
     // --- Text Input Mode ---
@@ -483,6 +909,20 @@ const CurriculumRules = () => {
         }
     };
 
+    const availableTypes = [
+        { code: 'MULTIPLE_CHOICE', name: 'MULTIPLE_CHOICE (MCQ)' },
+        { code: 'CREATIVE', name: 'CREATIVE (CQ / সৃজনশীল)' },
+        { code: 'SHORT', name: 'SHORT (সংক্ষিপ্ত প্রশ্ন)' }
+    ];
+
+    if (Array.isArray(dynamicTypes)) {
+        dynamicTypes.forEach(dt => {
+            if (!availableTypes.find(t => t.code === dt.code)) {
+                availableTypes.push({ code: dt.code, name: `${dt.name} (${dt.code})` });
+            }
+        });
+    }
+
     return (
         <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-8rem)]">
             {/* LEFT PANE: Premium Step-by-Step Target Mapping Wizard */}
@@ -847,10 +1287,9 @@ const CurriculumRules = () => {
                                     </button>
                                 </div>
                             </div>
-                            
-                            <div className="flex-1 overflow-y-auto p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="p-6 md:p-8 flex flex-col xl:flex-row gap-8 overflow-y-auto flex-1 bg-[#F8FAFC]">
                                 {/* Auto-Mapped Priority Stack */}
-                                <div className="space-y-4">
+                                <div className="w-full xl:w-[360px] shrink-0 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 h-fit">
                                     <div className="border-b border-slate-100 pb-3 flex justify-between items-end">
                                         <div>
                                             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -925,27 +1364,41 @@ const CurriculumRules = () => {
                                 </div>
 
                                 {/* Custom JSON Editor with Preview */}
-                                <div className="space-y-4 flex flex-col h-full">
+                                <div className={isSchemaMaximized 
+                                     ? "fixed inset-0 z-50 bg-[#F8FAFC] p-8 flex flex-col min-w-0 overflow-y-auto" 
+                                     : "flex-1 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col space-y-4 min-w-0"
+                                 }>
                                     <div className="border-b border-slate-100 pb-3">
                                         <div className="flex justify-between items-center mb-2">
                                             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                                 <FileJson size={18} className="text-indigo-500"/> Parsing JSON Schema
                                             </h3>
                                             <div className="flex items-center gap-2">
+                                                {/* Maximize / Minimize Button */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsSchemaMaximized(!isSchemaMaximized)}
+                                                    className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all border border-slate-200 mr-2 flex items-center gap-1 text-[10px] font-bold"
+                                                     title={isSchemaMaximized ? "Exit Fullscreen" : "Fullscreen"}
+                                                 >
+                                                     {isSchemaMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />} {isSchemaMaximized ? "Minimize" : "Fullscreen"}
+                                                 </button>
                                                 {/* Dynamic Type Selector */}
                                                 <select
                                                     onChange={(e) => {
                                                         if (!e.target.value) return;
-                                                        const type = dynamicTypes.find(t => t.code === e.target.value);
-                                                        if (!type) return;
+                                                        const selectedCode = e.target.value;
+                                                        const dynamicType = dynamicTypes.find(t => t.code === selectedCode);
                                                         
                                                         let insertedSchema = {};
-                                                        try { insertedSchema = JSON.parse(type.schemaTemplate || '{}'); } catch(e){}
+                                                        if (dynamicType) {
+                                                            try { insertedSchema = JSON.parse(dynamicType.schemaTemplate || '{}'); } catch(e){}
+                                                        }
                                                         
                                                         const schemaObj = {
-                                                            questionType: type.code,
+                                                            questionType: selectedCode,
                                                             questionText: '(AI will generate question text here)',
-                                                            instructions: type.description || '',
+                                                            instructions: dynamicType ? (dynamicType.description || '') : '',
                                                             ...insertedSchema
                                                         };
                                                         
@@ -963,7 +1416,9 @@ const CurriculumRules = () => {
                                                     className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-xl border bg-indigo-50 text-indigo-700 border-indigo-200 cursor-pointer outline-none focus:ring-2 focus:ring-indigo-300"
                                                 >
                                                     <option value="">➕ Add Question Type</option>
-                                                    {dynamicTypes.map(dt => <option key={dt.code} value={dt.code}>{dt.name}</option>)}
+                                                    {availableTypes.map(t => (
+                                                        <option key={t.code} value={t.code}>{t.name}</option>
+                                                    ))}
                                                 </select>
                                                 
                                                 {/* Text Input Toggle */}
@@ -1046,14 +1501,25 @@ const CurriculumRules = () => {
                                             </p>
                                             <div className="flex bg-slate-100 rounded-lg p-0.5">
                                                 <button 
+                                                    type="button"
+                                                    onClick={() => setSchemaViewMode('visual')}
+                                                    className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all ${
+                                                        schemaViewMode === 'visual' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                                    }`}
+                                                >
+                                                    <Sparkles size={12} /> Visual Builder
+                                                </button>
+                                                <button 
+                                                    type="button"
                                                     onClick={() => setSchemaViewMode('edit')}
                                                     className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all ${
                                                         schemaViewMode === 'edit' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                                     }`}
                                                 >
-                                                    <Pencil size={12} /> Edit
+                                                    <Pencil size={12} /> Raw JSON
                                                 </button>
                                                 <button 
+                                                    type="button"
                                                     onClick={() => setSchemaViewMode('preview')}
                                                     className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-md transition-all ${
                                                         schemaViewMode === 'preview' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
@@ -1065,7 +1531,7 @@ const CurriculumRules = () => {
                                         </div>
                                     </div>
 
-                                    <div className="flex-1 relative flex flex-col bg-[#1e1e24] rounded-2xl overflow-hidden shadow-inner border border-slate-800">
+                                    <div className="flex-1 relative flex flex-col bg-[#1e1e24] rounded-2xl overflow-hidden shadow-inner border border-slate-800 min-h-[450px]">
                                         <div className="flex justify-between items-center px-4 py-2 bg-[#2d2d34] border-b border-[#3d3d44]">
                                             <div className="flex gap-1.5">
                                                 <div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div>
@@ -1074,17 +1540,25 @@ const CurriculumRules = () => {
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 {jsonRuleId && <span className="text-[10px] font-bold text-emerald-400">Custom Schema Saved ✅</span>}
-                                                <span className="text-[10px] font-bold text-slate-500 uppercase">{schemaViewMode === 'edit' ? 'JSON Editor' : 'Formatted Preview'}</span>
+                                                <span className="text-[10px] font-bold text-slate-500 uppercase">
+                                                    {schemaViewMode === 'visual' ? 'Visual Builder' : schemaViewMode === 'edit' ? 'JSON Editor' : 'Formatted Preview'}
+                                                </span>
                                             </div>
                                         </div>
 
-                                        {schemaViewMode === 'edit' ? (
+                                        {schemaViewMode === 'visual' ? (
+                                            <VisualCurriculumRulesEditor 
+                                                value={jsonSchema}
+                                                onChange={setJsonSchema}
+                                                dynamicTypes={dynamicTypes}
+                                            />
+                                        ) : schemaViewMode === 'edit' ? (
                                             <textarea 
                                                 value={jsonSchema}
                                                 onChange={e => setJsonSchema(e.target.value)}
-                                                className="w-full flex-1 bg-transparent text-emerald-300 font-mono text-sm p-4 outline-none resize-none leading-relaxed"
+                                                className="w-full flex-1 bg-transparent text-emerald-300 font-mono text-sm p-4 outline-none resize-none leading-relaxed min-h-[350px]"
                                                 spellCheck="false"
-                                                placeholder='[\n  {\n    "questionType": "MULTIPLE_CHOICE",\n    ...\n  }\n]'
+                                                placeholder='{"subject": "..."}'
                                             />
                                         ) : (
                                             <div className="w-full flex-1 overflow-y-auto p-4">
