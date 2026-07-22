@@ -11,6 +11,7 @@ import java.util.UUID;
 public interface CurriculumDocumentChunkRepository extends JpaRepository<CurriculumDocumentChunk, UUID> {
     
     List<CurriculumDocumentChunk> findByDocumentIdOrderByChunkIndexAsc(UUID documentId);
+    List<CurriculumDocumentChunk> findByPageNumberIsNull();
     List<CurriculumDocumentChunk> findByMappedTopicId(UUID mappedTopicId);
     List<CurriculumDocumentChunk> findBySourceBookIndexId(UUID sourceBookIndexId);
     

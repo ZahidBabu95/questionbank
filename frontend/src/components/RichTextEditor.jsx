@@ -30,6 +30,7 @@ const RichTextEditor = ({
     minimal = false,
     showEquation = true,
     className = '',
+    compact = false,
 }) => {
     const [showEquationModal, setShowEquationModal] = useState(false);
     const quillRef = useRef(null);
@@ -82,19 +83,23 @@ const RichTextEditor = ({
         <div className="relative">
             {/* Equation Button — appears above/right of editor */}
             {showEquation && (
-                <div className="flex items-center gap-1.5 mb-1.5">
+                <div className={compact ? "absolute top-1.5 right-1.5 z-10" : "flex items-center gap-1.5 mb-1.5"}>
                     <button
                         type="button"
                         onClick={() => setShowEquationModal(true)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 text-[11px] font-bold rounded-lg border border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 transition-all active:scale-95"
+                        className={`flex items-center gap-1 bg-indigo-50 text-indigo-750 border border-indigo-200 hover:bg-indigo-100 transition-all active:scale-95 shadow-sm ${
+                            compact ? 'px-1.5 py-0.5 rounded text-[10px] font-black' : 'px-2.5 py-1 text-[11px] font-bold rounded-lg'
+                        }`}
                         title="সমীকরণ যোগ করুন (LaTeX)"
                     >
-                        <span className="text-sm font-serif italic">Σ</span>
-                        সমীকরণ
+                        <span className="font-serif italic text-xs">Σ</span>
+                        {!compact && <span>সমীকরণ</span>}
                     </button>
-                    <span className="text-[10px] text-slate-400">
-                        • গাণিতিক সূত্র, সমীকরণ, রাসায়নিক সংকেত
-                    </span>
+                    {!compact && (
+                        <span className="text-[10px] text-slate-400">
+                            • গাণিতিক সূত্র, সমীকরণ, রাসায়নিক সংকেত
+                        </span>
+                    )}
                 </div>
             )}
 

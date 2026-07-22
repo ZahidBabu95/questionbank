@@ -13,7 +13,7 @@ const SourceDocumentViewer = ({ file, remoteUrl, remoteType, activeSourcePage = 
     
     // Convert backend stored file path to proxy endpoint if needed, or use createObjectURL
     const fileUrl = file ? URL.createObjectURL(file) : 
-                    remoteUrl.startsWith('http') ? remoteUrl : `/api/v1/storage?path=${encodeURIComponent(remoteUrl)}`;
+                    (remoteUrl.startsWith('http') || remoteUrl.startsWith('/')) ? remoteUrl : `/api/v1/storage?path=${encodeURIComponent(remoteUrl)}`;
 
     const fileName = file ? file.name : (remoteUrl.split('/').pop() || 'Remote Document');
 

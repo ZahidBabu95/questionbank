@@ -61,6 +61,7 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
     const [isLegacyCQ, setIsLegacyCQ] = useState(false);
     const [editMode, setEditMode] = useState('structured'); // 'legacy' or 'structured'
     const [showReference, setShowReference] = useState(true);
+    const [activeTab, setActiveTab] = useState('CONTENT'); // 'CONTENT', 'IMAGES', 'META'
 
     // Image Upload & Crop States
     const [imageUploading, setImageUploading] = useState(false);
@@ -651,55 +652,193 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className={`flex ${isInline ? 'flex-col' : 'flex-col lg:flex-row'} gap-6 items-start`}>
+            <form onSubmit={handleSubmit} className={`flex ${isInline ? 'flex-col h-full overflow-hidden' : 'flex-col lg:flex-row'} gap-4 items-stretch`}>
                 
-                {/* LEFT COLUMN: Main Editing Form */}
-                <div className="flex-1 w-full space-y-6">
-                    {/* Academic Mapping */}
-                    {/* Academic Mapping */}
-                    <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 ${isInline ? '' : 'p-6'}`}>
-                        {isInline ? (
-                            <details className="group p-4">
-                                <summary className="text-sm font-semibold text-slate-700 flex items-center justify-between cursor-pointer list-none select-none">
-                                    <div className="flex items-center gap-2">
-                                        <Book size={16} className="text-indigo-500" /> 
-                                        <span>Academic Context (Class, Subject, Chapter)</span>
-                                    </div>
-                                    <span className="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
-                                </summary>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-100">
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Class</label>
-                                        <select value={formData.academicClassId} onChange={handleClassChange} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-xs font-medium transition-all">
-                                            <option value="">Select Class</option>
-                                            {classes.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Subject</label>
-                                        <select value={formData.subjectId} onChange={handleSubjectChange} disabled={!formData.academicClassId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-xs font-medium transition-all">
-                                            <option value="">Select Subject</option>
-                                            {subjects.map(subj => <option key={subj.classSubjectId} value={subj.classSubjectId}>{subj.subjectName}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Chapter</label>
-                                        <select value={formData.chapterId} onChange={handleChapterChange} disabled={!formData.subjectId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-xs font-medium transition-all">
-                                            <option value="">Select Chapter</option>
-                                            {chapters.map(chap => <option key={chap.id} value={chap.id}>{chap.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Topic</label>
-                                        <select value={formData.topicId} onChange={(e) => setFormData({ ...formData, topicId: e.target.value })} disabled={!formData.chapterId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none disabled:opacity-60 text-xs font-medium transition-all">
-                                            <option value="">Select Topic</option>
-                                            {topics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
-                                        </select>
-                                    </div>
+                {isInline ? (
+                    /* COMPACT TAB VIEW FOR REVIEW WORKSPACE */
+                    <div className="flex-1 flex flex-col gap-3 min-h-0">
+                        {/* Tab Buttons */}
+                        <div className="flex bg-slate-100 p-1 rounded-xl gap-1 shrink-0 select-none border border-slate-200">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('CONTENT')}
+                                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all ${
+                                    activeTab === 'CONTENT' 
+                                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/50' 
+                                        : 'text-slate-500 hover:text-slate-800'
+                                }`}
+                            >
+                                📝 এডিট (Edit)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('IMAGES')}
+                                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 ${
+                                    activeTab === 'IMAGES' 
+                                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/50' 
+                                        : 'text-slate-500 hover:text-slate-800'
+                                }`}
+                            >
+                                🖼️ ইমেজ ({extractedSourceImages.length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('META')}
+                                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all ${
+                                    activeTab === 'META' 
+                                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/50' 
+                                        : 'text-slate-500 hover:text-slate-800'
+                                }`}
+                            >
+                                🏷️ ট্যাগ ও সোর্স
+                            </button>
+                        </div>
+
+                        {/* Tab Content Wrapper */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+                            {activeTab === 'CONTENT' && (
+                                <div className="space-y-4">
+                                    <QuestionContentEditor 
+                                        formData={formData} 
+                                        setFormData={setFormData} 
+                                        questionType={questionType} 
+                                        isLegacyCQ={isLegacyCQ}
+                                        editMode={editMode}
+                                        setEditMode={setEditMode}
+                                        showReference={showReference}
+                                        setShowReference={setShowReference}
+                                        originalQuestion={originalQuestion}
+                                        isInline={isInline}
+                                    />
+                                    {questionType === 'CQ' && editMode === 'structured' && (
+                                        <CQPartsEditor 
+                                            cqParts={cqParts}
+                                            setCqParts={setCqParts}
+                                            language={formData.language}
+                                            isInline={isInline}
+                                        />
+                                    )}
+                                    {questionType === 'MCQ' && (
+                                        <MCQOptionsEditor 
+                                            options={options} 
+                                            handleOptionChange={handleOptionChange} 
+                                            handleCorrectOption={handleCorrectOption} 
+                                            language={formData.language}
+                                            isInline={isInline}
+                                        />
+                                    )}
                                 </div>
-                            </details>
-                        ) : (
-                            <>
+                            )}
+
+                            {activeTab === 'IMAGES' && (
+                                <ImageSidebar
+                                    imageUploading={imageUploading}
+                                    fileInputRef={fileInputRef}
+                                    handleImageSelect={handleImageSelect}
+                                    extractedSourceImages={extractedSourceImages}
+                                    setLightboxSrc={setLightboxSrc}
+                                    handleReCropExistingImage={handleReCropExistingImage}
+                                    reCroppingUrl={reCroppingUrl}
+                                    handleRemoveExtractedImage={handleRemoveExtractedImage}
+                                    lightboxSrc={lightboxSrc}
+                                />
+                            )}
+
+                            {activeTab === 'META' && (
+                                <div className="space-y-4">
+                                    {/* Academic Mapping */}
+                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                                        <h3 className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                                            <Book size={14} className="text-indigo-500" /> একাডেমিক কনটেক্সট
+                                        </h3>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">শ্রেণি (Class)</label>
+                                                <select value={formData.academicClassId} onChange={handleClassChange} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold">
+                                                    <option value="">Select Class</option>
+                                                    {classes.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">বিষয় (Subject)</label>
+                                                <select value={formData.subjectId} onChange={handleSubjectChange} disabled={!formData.academicClassId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold disabled:opacity-50">
+                                                    <option value="">Select Subject</option>
+                                                    {subjects.map(subj => <option key={subj.classSubjectId} value={subj.classSubjectId}>{subj.subjectName}</option>)}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">অধ্যায় (Chapter)</label>
+                                                <select value={formData.chapterId} onChange={handleChapterChange} disabled={!formData.subjectId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold disabled:opacity-50">
+                                                    <option value="">Select Chapter</option>
+                                                    {chapters.map(chap => <option key={chap.id} value={chap.id}>{chap.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">টপিক (Topic)</label>
+                                                <select value={formData.topicId} onChange={(e) => setFormData({ ...formData, topicId: e.target.value })} disabled={!formData.chapterId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold disabled:opacity-50">
+                                                    <option value="">Select Topic</option>
+                                                    {topics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Exam Sources */}
+                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                                        <h3 className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                                            <Tag size={14} className="text-orange-500" /> পরীক্ষার উৎসসমূহ (Sources)
+                                        </h3>
+                                        <QuestionSourceTagger sources={examSources} onChange={setExamSources} />
+                                    </div>
+
+                                    {isRevision && (
+                                        <div className="bg-indigo-50/40 p-4 rounded-xl border border-indigo-150 shadow-sm space-y-2">
+                                            <h3 className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
+                                                <AlertTriangle size={14} className="text-indigo-650" /> রিভিশন বিবরণ (Revision Comment)
+                                            </h3>
+                                            <input
+                                                type="text"
+                                                value={versionComment}
+                                                onChange={(e) => setVersionComment(e.target.value)}
+                                                placeholder="উদা: অপশন ক-এর বানান ঠিক করা হয়েছে।"
+                                                className="w-full p-2 bg-white border border-indigo-200 rounded-lg outline-none text-xs font-semibold"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Sticky Save Button at Bottom */}
+                        <div className="pt-2 border-t border-slate-100 shrink-0">
+                            <button 
+                                type="submit" 
+                                disabled={saving} 
+                                className={`w-full py-2.5 font-black text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed text-white ${
+                                    isRevision ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-primary hover:bg-blue-700'
+                                }`}
+                            >
+                                {saving ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" /> 
+                                        <span>সেভ হচ্ছে...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        {isRevision ? <FileText size={16} /> : <Save size={16} />} 
+                                        <span>{isRevision ? 'রিভিশন জমা দিন' : 'প্রশ্ন সেভ করুন (Save)'}</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    /* STANDARD EXPANDED VIEW */
+                    <>
+                        {/* LEFT COLUMN: Main Editing Form */}
+                        <div className="flex-1 w-full space-y-6">
+                            {/* Academic Mapping */}
+                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                                 <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
                                     <Book size={18} className="text-indigo-500" /> Core Context *
                                 </h2>
@@ -733,75 +872,55 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                                         </select>
                                     </div>
                                 </div>
-                            </>
-                        )}
-                    </div>
+                            </div>
 
-                    {/* Question Info */}
-                    <QuestionContentEditor 
-                        formData={formData} 
-                        setFormData={setFormData} 
-                        questionType={questionType} 
-                        isLegacyCQ={isLegacyCQ}
-                        editMode={editMode}
-                        setEditMode={setEditMode}
-                        showReference={showReference}
-                        setShowReference={setShowReference}
-                        originalQuestion={originalQuestion}
-                    />
+                            {/* Question Info */}
+                            <QuestionContentEditor 
+                                formData={formData} 
+                                setFormData={setFormData} 
+                                questionType={questionType} 
+                                isLegacyCQ={isLegacyCQ}
+                                editMode={editMode}
+                                setEditMode={setEditMode}
+                                showReference={showReference}
+                                setShowReference={setShowReference}
+                                originalQuestion={originalQuestion}
+                                isInline={isInline}
+                            />
 
-                    {/* CQ Parts (Conditional) */}
-                    {questionType === 'CQ' && editMode === 'structured' && (
-                        <CQPartsEditor 
-                            cqParts={cqParts}
-                            setCqParts={setCqParts}
-                            language={formData.language}
-                        />
-                    )}
+                            {/* CQ Parts (Conditional) */}
+                            {questionType === 'CQ' && editMode === 'structured' && (
+                                <CQPartsEditor 
+                                    cqParts={cqParts}
+                                    setCqParts={setCqParts}
+                                    language={formData.language}
+                                    isInline={isInline}
+                                />
+                            )}
 
-                    {/* MCQ Options (Conditional) */}
-                    {questionType === 'MCQ' && (
-                        <MCQOptionsEditor 
-                            options={options} 
-                            handleOptionChange={handleOptionChange} 
-                            handleCorrectOption={handleCorrectOption} 
-                            language={formData.language}
-                        />
-                    )}
+                            {/* MCQ Options (Conditional) */}
+                            {questionType === 'MCQ' && (
+                                <MCQOptionsEditor 
+                                    options={options} 
+                                    handleOptionChange={handleOptionChange} 
+                                    handleCorrectOption={handleCorrectOption} 
+                                    language={formData.language}
+                                    isInline={isInline}
+                                />
+                            )}
 
-                    {/* Exam Sources */}
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                        <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                            <Tag size={18} className="text-orange-500" /> Exam Sources
-                        </h2>
-                        <QuestionSourceTagger sources={examSources} onChange={setExamSources} />
-                    </div>
+                            {/* Exam Sources */}
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                                <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                                    <Tag size={18} className="text-orange-500" /> Exam Sources
+                                </h2>
+                                <QuestionSourceTagger sources={examSources} onChange={setExamSources} />
+                            </div>
 
-                    {isRevision && (
-                        <div className={`bg-indigo-50/50 rounded-2xl shadow-sm border border-indigo-200 ${isInline ? 'p-4' : 'p-6'}`}>
-                            {isInline ? (
-                                <details className="group">
-                                    <summary className="text-sm font-semibold text-indigo-900 flex items-center justify-between cursor-pointer list-none select-none">
-                                        <div className="flex items-center gap-2">
-                                            <AlertTriangle size={16} className="text-indigo-600" /> 
-                                            <span>Revision Details (Optional)</span>
-                                        </div>
-                                        <span className="text-indigo-400 group-open:rotate-180 transition-transform">▼</span>
-                                    </summary>
-                                    <div className="mt-3 pt-3 border-t border-indigo-100/50">
-                                        <input
-                                            type="text"
-                                            value={versionComment}
-                                            onChange={(e) => setVersionComment(e.target.value)}
-                                            placeholder="E.g., Fixed typos in option A."
-                                            className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-xs transition-all shadow-sm"
-                                        />
-                                    </div>
-                                </details>
-                            ) : (
-                                <>
+                            {isRevision && (
+                                <div className="bg-indigo-50/50 rounded-2xl shadow-sm border border-indigo-200 p-6">
                                     <h2 className="text-lg font-semibold text-indigo-900 mb-4 flex items-center gap-2">
-                                        <AlertTriangle size={18} className="text-indigo-600" /> Revision Details *
+                                        <AlertTriangle size={18} className="text-indigo-650" /> Revision Details *
                                     </h2>
                                     <div>
                                         <label className="block text-sm font-semibold text-indigo-800 mb-2">What did you change? (Required)</label>
@@ -812,31 +931,31 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                                             className="w-full p-4 bg-white border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm transition-all resize-y min-h-[100px] shadow-sm"
                                         />
                                     </div>
-                                </>
+                                </div>
                             )}
+
+                            {/* Submit Action */}
+                            <div className="pt-4 pb-12">
+                                <button type="submit" disabled={saving} className={`w-full py-4 font-bold text-lg rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed text-white ${isRevision ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/25' : 'bg-primary hover:bg-blue-700 shadow-primary/25'}`}>
+                                    {saving ? <><Loader2 size={24} className="animate-spin" /> Saving changes...</> : <>{isRevision ? <FileText size={24} /> : <Save size={24} />} {isRevision ? 'Submit Revision for Review' : 'Save Question Updates'}</>}
+                                </button>
+                            </div>
                         </div>
-                    )}
 
-                    {/* Submit Action */}
-                    <div className="pt-4 pb-12">
-                        <button type="submit" disabled={saving} className={`w-full py-4 font-bold text-lg rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed text-white ${isRevision ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/25' : 'bg-primary hover:bg-blue-700 shadow-primary/25'}`}>
-                            {saving ? <><Loader2 size={24} className="animate-spin" /> Saving changes...</> : <>{isRevision ? <FileText size={24} /> : <Save size={24} />} {isRevision ? 'Submit Revision for Review' : 'Save Question Updates'}</>}
-                        </button>
-                    </div>
-                </div>
-
-                {/* RIGHT COLUMN: Sticky Toolbar & Live Preview */}
-                <ImageSidebar
-                    imageUploading={imageUploading}
-                    fileInputRef={fileInputRef}
-                    handleImageSelect={handleImageSelect}
-                    extractedSourceImages={extractedSourceImages}
-                    setLightboxSrc={setLightboxSrc}
-                    handleReCropExistingImage={handleReCropExistingImage}
-                    reCroppingUrl={reCroppingUrl}
-                    handleRemoveExtractedImage={handleRemoveExtractedImage}
-                    lightboxSrc={lightboxSrc}
-                />
+                        {/* RIGHT COLUMN: Sticky Toolbar & Live Preview */}
+                        <ImageSidebar
+                            imageUploading={imageUploading}
+                            fileInputRef={fileInputRef}
+                            handleImageSelect={handleImageSelect}
+                            extractedSourceImages={extractedSourceImages}
+                            setLightboxSrc={setLightboxSrc}
+                            handleReCropExistingImage={handleReCropExistingImage}
+                            reCroppingUrl={reCroppingUrl}
+                            handleRemoveExtractedImage={handleRemoveExtractedImage}
+                            lightboxSrc={lightboxSrc}
+                        />
+                    </>
+                )}
 
             </form>
 

@@ -441,6 +441,7 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
         SourceBookIndex index = sourceBookIndexRepository.findById(sourceBookIndexId).orElseThrow(() -> new RuntimeException("SourceBookIndex not found"));
         Chapter mappedChapter = mappedChapterId != null ? chapterRepository.findById(mappedChapterId).orElse(null) : null;
         
+        List<KnowledgePage> allPages = knowledgePageRepository.findBySourceBookIndexId(sourceBookIndexId);
         int chunkIndex = batchIndex * 100;
 
         for (JsonNode node : rootArray) {
@@ -482,6 +483,10 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
             chunk.setSourceBook(index.getSourceBook());
             chunk.setSourceBookIndex(index);
             chunk.setChunkText(content);
+            
+            Integer resolvedPageNumber = findBestMatchingPageNumber(content, allPages);
+            chunk.setPageNumber(resolvedPageNumber);
+            
             if (!metadataNode.isMissingNode() && !metadataNode.isNull()) {
                 chunk.setMetadata(metadataNode.toString());
             }
@@ -508,6 +513,55 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
             urls.add(m.group(1));
         }
         return urls;
+    }
+
+    public Integer findBestMatchingPageNumber(String chunkText, List<KnowledgePage> pages) {
+        if (chunkText == null || chunkText.isBlank() || pages == null || pages.isEmpty()) {
+            return null;
+        }
+        
+        String cleanChunk = cleanText(chunkText);
+        if (cleanChunk.length() < 10) return pages.get(0).getPageNumber();
+        
+        String sample = cleanChunk.substring(0, Math.min(100, cleanChunk.length()));
+        for (KnowledgePage page : pages) {
+            String pageText = page.getGoldenMarkdown() != null ? page.getGoldenMarkdown() : page.getExtractedMarkdown();
+            if (pageText != null && cleanText(pageText).contains(sample)) {
+                return page.getPageNumber();
+            }
+        }
+        
+        int maxOverlap = -1;
+        KnowledgePage bestPage = pages.get(0);
+        for (KnowledgePage page : pages) {
+            String pageText = page.getGoldenMarkdown() != null ? page.getGoldenMarkdown() : page.getExtractedMarkdown();
+            if (pageText == null) continue;
+            
+            String cleanPage = cleanText(pageText);
+            int overlap = calculateOverlap(cleanChunk, cleanPage);
+            if (overlap > maxOverlap) {
+                maxOverlap = overlap;
+                bestPage = page;
+            }
+        }
+        return bestPage.getPageNumber();
+    }
+
+    private String cleanText(String text) {
+        return text.replaceAll("\\s+", "").toLowerCase();
+    }
+
+    private int calculateOverlap(String chunk, String page) {
+        int score = 0;
+        int length = chunk.length();
+        int step = Math.max(20, length / 10);
+        for (int i = 0; i < length; i += step) {
+            String part = chunk.substring(i, Math.min(i + 20, length));
+            if (page.contains(part)) {
+                score += part.length();
+            }
+        }
+        return score;
     }
 
     @Override

@@ -443,3 +443,19 @@
   color: #475569;
   margin-left: 0.4em;
 }
+
+/* Compact review workspace images rule */
+.professional-review-image img {
+  max-height: 120px !important;
+  width: auto !important;
+  object-fit: contain !important;
+  border-radius: 8px !important;
+  border: 1px solid #e2e8f0 !important;
+  margin: 6px auto !important;
+  display: block !important;
+  cursor: zoom-in !important;
+  transition: transform 0.2s ease;
+}
+.professional-review-image img:hover {
+  transform: scale(1.03);
+}

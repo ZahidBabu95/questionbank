@@ -112,6 +112,95 @@ const QuestionList = () => {
     const [sourceContext, setSourceContext] = useState(null);
     const [loadingSource, setLoadingSource] = useState(false);
 
+    const [loadingNextPage, setLoadingNextPage] = useState(false);
+
+    const [colWidths, setColWidths] = useState({ col1: 34, col2: 33, col3: 33 });
+    const [sourceViewerHeight, setSourceViewerHeight] = useState(260);
+    const [navDrawerHeight, setNavDrawerHeight] = useState(120);
+    const containerRef = useRef(null);
+
+    const handleColResizeStart = (e, dividerIndex) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const containerWidth = containerRef.current?.getBoundingClientRect().width || 1000;
+        const startWidths = { ...colWidths };
+
+        const handleMouseMove = (moveEvent) => {
+            const deltaX = moveEvent.clientX - startX;
+            const deltaPct = (deltaX / containerWidth) * 100;
+
+            setColWidths(prev => {
+                let newWidths = { ...prev };
+                if (dividerIndex === 1) {
+                    const nextCol1 = Math.max(20, Math.min(60, startWidths.col1 + deltaPct));
+                    const diff = nextCol1 - startWidths.col1;
+                    const nextCol2 = Math.max(20, startWidths.col2 - diff);
+                    newWidths.col1 = nextCol1;
+                    newWidths.col2 = prev.col1 + prev.col2 + prev.col3 - nextCol1 - prev.col3;
+                } else if (dividerIndex === 2) {
+                    const nextCol2 = Math.max(20, Math.min(60, startWidths.col2 + deltaPct));
+                    const diff = nextCol2 - startWidths.col2;
+                    const nextCol3 = Math.max(20, startWidths.col3 - diff);
+                    newWidths.col2 = nextCol2;
+                    newWidths.col3 = prev.col1 + prev.col2 + prev.col3 - prev.col1 - newWidths.col2;
+                }
+
+                const sum = newWidths.col1 + newWidths.col2 + newWidths.col3;
+                newWidths.col1 = (newWidths.col1 / sum) * 100;
+                newWidths.col2 = (newWidths.col2 / sum) * 100;
+                newWidths.col3 = (newWidths.col3 / sum) * 100;
+
+                return newWidths;
+            });
+        };
+
+        const handleMouseUp = () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    };
+
+    const handleSourceHeightResizeStart = (e) => {
+        e.preventDefault();
+        const startY = e.clientY;
+        const startHeight = sourceViewerHeight;
+
+        const handleMouseMove = (moveEvent) => {
+            const deltaY = moveEvent.clientY - startY;
+            setSourceViewerHeight(Math.max(120, Math.min(600, startHeight + deltaY)));
+        };
+
+        const handleMouseUp = () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    };
+
+    const handleNavDrawerHeightResizeStart = (e) => {
+        e.preventDefault();
+        const startY = e.clientY;
+        const startHeight = navDrawerHeight;
+
+        const handleMouseMove = (moveEvent) => {
+            const deltaY = moveEvent.clientY - startY;
+            setNavDrawerHeight(Math.max(80, Math.min(300, startHeight - deltaY)));
+        };
+
+        const handleMouseUp = () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    };
+
     useEffect(() => {
         if (!selectedQuestion?.id) {
             setSourceContext(null);
@@ -314,7 +403,6 @@ const QuestionList = () => {
         return '';
     }, [selectedClassId, classes, selectedSubjectId, fullHierarchy]);
 
-    // Update dynamic header title/subtitle to the default clean state
     useEffect(() => {
         if (isDefaultOrSuperAdmin) {
             const titleText = activeSubjectName 
@@ -327,7 +415,8 @@ const QuestionList = () => {
             window.dispatchEvent(new CustomEvent('setDynamicPageTitle', {
                 detail: {
                     title: titleText,
-                    subtitle: subtitleText
+                    subtitle: subtitleText,
+                    hideLayoutBars: splitScreenMode
                 }
             }));
         } else {
@@ -336,8 +425,23 @@ const QuestionList = () => {
         return () => {
             window.dispatchEvent(new CustomEvent('setDynamicPageTitle', { detail: null }));
         };
-    }, [isDefaultOrSuperAdmin, activeSubjectName, activeClassName]);
+    }, [isDefaultOrSuperAdmin, activeSubjectName, activeClassName, splitScreenMode]);
 
+    useEffect(() => {
+        if (splitScreenMode && questions.length > 0 && !selectedQuestion) {
+            handleViewQuestion(questions[0]);
+        }
+    }, [splitScreenMode, questions, selectedQuestion]);
+
+    useEffect(() => {
+        if (splitScreenMode && loadingNextPage && questions.length > 0) {
+            const prevIndex = questions.findIndex(q => q.id === selectedQuestion?.id);
+            if (prevIndex >= 0 && prevIndex < questions.length - 1) {
+                handleViewQuestion(questions[prevIndex + 1]);
+                setLoadingNextPage(false);
+            }
+        }
+    }, [questions, splitScreenMode, loadingNextPage, selectedQuestion]);
     // Parameter builders
     const getHierarchyParams = React.useCallback(() => {
         return {
@@ -1392,6 +1496,419 @@ const QuestionList = () => {
             </div>
         );
     };
+
+    const renderProfessionalReviewWorkspace = () => {
+        if (!selectedQuestion && questions.length > 0) {
+            return (
+                <div className="fixed inset-0 z-50 bg-slate-100 flex items-center justify-center p-8">
+                    <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center gap-3">
+                        <Loader2 className="animate-spin text-indigo-600 w-8 h-8" />
+                        <span className="text-sm font-bold text-slate-500">রিভিউ মোড লোড হচ্ছে...</span>
+                    </div>
+                </div>
+            );
+        }
+
+        const currentIndex = selectedQuestion ? questions.findIndex(q => q.id === selectedQuestion.id) : -1;
+        const totalCount = questions.length;
+
+        const handlePrev = () => {
+            if (currentIndex > 0) {
+                handleViewQuestion(questions[currentIndex - 1]);
+            }
+        };
+
+        const handleNext = () => {
+            if (currentIndex < totalCount - 1) {
+                handleViewQuestion(questions[currentIndex + 1]);
+            } else if (currentPage < totalPages) {
+                setLoadingNextPage(true);
+                setCurrentPage(prev => prev + 1);
+            }
+        };
+
+        return (
+            <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col overflow-hidden h-screen w-screen font-sans text-slate-900 select-none">
+                {/* 1. Header Toolbar */}
+                <div className="bg-white border-b border-slate-200/80 px-4 md:px-6 h-16 flex items-center justify-between shrink-0 shadow-sm relative z-10">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => setSplitScreenMode(false)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 rounded-xl text-xs font-black transition-all active:scale-95 shadow-sm"
+                            title="Exit Review Mode"
+                        >
+                            <ArrowLeft size={14} className="stroke-[2.5]" />
+                            <span>প্রস্থান (Exit)</span>
+                        </button>
+                        <div className="w-px h-6 bg-slate-200"></div>
+                        <div className="flex flex-col text-left">
+                            <span className="text-xs font-black text-slate-800 leading-tight">
+                                🔍 প্রফেশনাল রিভিউ মোড
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-bold tracking-tight">
+                                {activeSubjectName || 'সব বিষয়'} {activeClassName ? `(${activeClassName})` : ''}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Navigation Counter */}
+                    {selectedQuestion && (
+                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200/60 p-1.5 rounded-xl">
+                            <button
+                                onClick={handlePrev}
+                                disabled={currentIndex <= 0}
+                                className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white rounded-lg text-[10px] font-black transition-colors"
+                            >
+                                Prev
+                            </button>
+                            <span className="text-[11px] font-bold text-slate-600 min-w-[70px] text-center font-mono">
+                                প্রশ্ন {currentIndex + 1} / {totalElements}
+                            </span>
+                            <button
+                                onClick={handleNext}
+                                disabled={(currentIndex >= totalCount - 1 && currentPage >= totalPages) || loadingMore}
+                                className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white rounded-lg text-[10px] font-black transition-colors"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Quick Decision Actions */}
+                    {selectedQuestion && (
+                        <div className="flex items-center gap-2">
+                            {isSuperAdmin && (
+                                <button
+                                    onClick={async () => {
+                                        const proceed = window.confirm("Are you sure you want to delete this question?");
+                                        if (proceed) {
+                                            const nextIdx = currentIndex < totalCount - 1 ? currentIndex + 1 : currentIndex > 0 ? currentIndex - 1 : -1;
+                                            await handleDelete(selectedQuestion.id);
+                                            if (nextIdx >= 0) {
+                                                handleViewQuestion(questions[nextIdx]);
+                                            } else {
+                                                setSelectedQuestion(null);
+                                            }
+                                        }
+                                    }}
+                                    className="flex items-center justify-center w-9 h-9 bg-white border border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 rounded-xl transition-colors shadow-sm"
+                                    title="Delete Question"
+                                >
+                                    <Trash2 size={15} />
+                                </button>
+                            )}
+                            <button
+                                onClick={() => handleQuickAction(selectedQuestion.id, 'REJECTED')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 text-rose-650 hover:bg-rose-55 rounded-xl text-xs font-black transition-colors shadow-sm"
+                            >
+                                <ThumbsDown size={13} strokeWidth={3} /> Reject
+                            </button>
+                            <button
+                                onClick={() => handleQuickAction(selectedQuestion.id, 'APPROVED')}
+                                className="flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-400 rounded-xl text-xs font-black transition-all shadow-sm transform hover:scale-[1.02] active:scale-[0.98]"
+                            >
+                                <ThumbsUp size={13} strokeWidth={3} /> Approve
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* 2. Three Columns Layout */}
+                <div ref={containerRef} className="flex-1 flex gap-2 p-4 overflow-hidden h-[calc(100vh-64px)] relative z-0">
+                    
+                    {/* COLUMN 1: Source PDF & OCR Text (Left Column - resizable width) */}
+                    <div style={{ width: `${colWidths.col1}%` }} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full shrink-0">
+                        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0">
+                            <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                                📖 উৎস পেজ ও OCR (Source)
+                            </span>
+                            {sourceContext?.chunk?.pageNumber && (
+                                <span className="text-[10px] font-extrabold bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded">
+                                    পৃষ্ঠা নম্বর: {sourceContext.chunk.pageNumber}
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 flex flex-col gap-4">
+                            {loadingSource ? (
+                                <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
+                                    <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+                                    <span className="text-xs font-bold">লোডিং সোর্স কন্টেন্ট...</span>
+                                </div>
+                            ) : sourceContext?.chunk ? (
+                                <>
+                                    {/* Scanned Image background document */}
+                                    {sourceContext.chunk.page?.imageUrl ? (
+                                        <div style={{ height: `${sourceViewerHeight}px` }} className="border border-slate-200 rounded-xl overflow-hidden shrink-0 shadow-inner bg-slate-900">
+                                            <SourceDocumentViewer
+                                                remoteUrl={(sourceContext.chunk.page.imageUrl.startsWith('http') && sourceContext.chunk.page.imageUrl.includes('r2.dev'))
+                                                    ? `/api/v1/public/proxy-image?url=${encodeURIComponent(sourceContext.chunk.page.imageUrl)}`
+                                                    : sourceContext.chunk.page.imageUrl}
+                                                remoteType="image/jpeg"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="p-4 bg-slate-50 text-slate-550 text-xs font-bold text-center border border-dashed border-slate-350 rounded-xl shrink-0">
+                                            এই চাঙ্কের স্ক্যান করা পৃষ্ঠা চিত্র পাওয়া যায়নি।
+                                        </div>
+                                    )}
+
+                                    {/* Height Resizer Handle */}
+                                    <div 
+                                        onMouseDown={handleSourceHeightResizeStart} 
+                                        className="h-2 hover:bg-indigo-500/80 bg-slate-100 hover:text-white border-y border-slate-200 cursor-row-resize transition-all shrink-0 w-full flex items-center justify-center text-[10px] text-slate-400 font-bold select-none rounded hover:scale-y-110 active:scale-y-95 shadow-sm"
+                                        title="টেনে সোর্স ইমেজের আকার পরিবর্তন করুন"
+                                    >
+                                        •••
+                                    </div>
+
+                                    {/* OCR text segment */}
+                                    <div className="flex-1 flex flex-col gap-2 min-h-[120px] overflow-hidden">
+                                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider shrink-0">মূল টেক্সট (OCR / Content Chunks)</h5>
+                                        <div className="flex-1 p-4 bg-slate-50/60 rounded-xl border border-slate-200 overflow-y-auto custom-scrollbar font-mono text-[11px] leading-relaxed text-slate-700 select-text">
+                                            <MarkdownRenderer content={sourceContext.chunk.chunkText} />
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-400 font-bold py-20 gap-2">
+                                    <span className="text-3xl">📖</span>
+                                    <p className="text-xs">এই প্রশ্নের জন্য কোনো এআই বুক চ্যাপ্টার সোর্স চাঙ্ক পাওয়া যায়নি।</p>
+                                    <p className="text-[10px] text-slate-400 font-medium max-w-xs mt-1">এটি ম্যানুয়ালি তৈরি করা প্রশ্ন হতে পারে অথবা এতে সোর্স চাঙ্কের লিংক নেই।</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Column 1-2 Horizontal Resizer handle */}
+                    <div 
+                        onMouseDown={(e) => handleColResizeStart(e, 1)} 
+                        className="w-1.5 hover:w-2 hover:bg-indigo-650/80 bg-slate-200/40 cursor-col-resize transition-all self-stretch shrink-0 rounded-full my-1 flex items-center justify-center text-[8px] text-slate-450 font-bold select-none group"
+                        title="টেনে বাম পাশের কলামের সাইজ পরিবর্তন করুন"
+                    >
+                        <span className="opacity-0 group-hover:opacity-100 text-white font-black">⋮</span>
+                    </div>
+
+                    {/* COLUMN 2: Question Preview & Mini Navigation (Middle Column - resizable width) */}
+                    <div style={{ width: `${colWidths.col2}%` }} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full shrink-0">
+                        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0">
+                            <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                                ❓ প্রশ্ন প্রিভিউ (Preview)
+                            </span>
+                            <span className="text-[10px] font-extrabold bg-slate-100 text-slate-600 px-2 py-0.5 rounded uppercase">
+                                {selectedQuestion.type}
+                            </span>
+                        </div>
+
+                        {/* Top Preview Content */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 flex flex-col gap-4 select-text professional-review-image">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide border ${
+                                    selectedQuestion.difficulty === 'EASY' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                                    selectedQuestion.difficulty === 'MEDIUM' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                    'bg-rose-50 border-rose-200 text-rose-700'
+                                }`}>
+                                    {selectedQuestion.difficulty}
+                                </span>
+                                {selectedQuestion.status && getStatusBadge && getStatusBadge(selectedQuestion.status)}
+                                {selectedQuestion.aiGenerated && (
+                                    <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-indigo-50 border border-indigo-150 text-indigo-700 uppercase tracking-wide">
+                                        AI Generated
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="space-y-4 mt-2">
+                                {/* Stimulus / passage context */}
+                                {selectedQuestion.stimulus && (() => {
+                                    const cleanStimulus = selectedQuestion.stimulus.replace(/<[^>]*>/g, '').trim().toLowerCase();
+                                    const isPlaceholder = 
+                                        cleanStimulus === '' || 
+                                        cleanStimulus === 'generated question' || 
+                                        cleanStimulus === 'dynamic question' || 
+                                        cleanStimulus === 'ডায়নামিক প্রশ্ন' ||
+                                        cleanStimulus === 'ডায়নামিক প্রশ্ন';
+                                    if (isPlaceholder) return null;
+                                    return (
+                                        <div className="space-y-1">
+                                            <h5 className="text-[10px] font-black text-amber-600 uppercase tracking-wider">Stimulus / উদ্দীপক</h5>
+                                            <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-100/70 text-slate-700 text-xs font-semibold leading-relaxed">
+                                                <MarkdownRenderer content={selectedQuestion.stimulus} />
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Question body */}
+                                <div className="space-y-1">
+                                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">প্রশ্ন (Question Text)</h5>
+                                    <div className="text-sm font-semibold text-slate-800 leading-relaxed bg-slate-50/40 p-3 rounded-xl border border-slate-100">
+                                        {selectedQuestion.type === 'CQ' ? (
+                                            <CQCombinedRenderer q={selectedQuestion} showAnswer={true} showExplanation={true} />
+                                        ) : (
+                                            <MarkdownRenderer content={selectedQuestion.questionText} />
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* MCQ Multiple Statements if present */}
+                                {selectedQuestion.mcqType === 'MULTIPLE_COMPLETION' && selectedQuestion.statements && selectedQuestion.statements.length > 0 && (
+                                    <div className="pl-3 border-l-2 border-indigo-200 space-y-1">
+                                        {selectedQuestion.statements.map((stmt, sIdx) => (
+                                            <div key={sIdx} className="text-xs text-slate-600 font-bold leading-normal">
+                                                <MarkdownRenderer content={stmt} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* MCQ Options */}
+                                {selectedQuestion.type === 'MCQ' && selectedQuestion.options && selectedQuestion.options.length > 0 && (
+                                    <div className="space-y-2">
+                                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">বিকল্পসমূহ (Options)</h5>
+                                        <div className="grid grid-cols-1 gap-2">
+                                            {selectedQuestion.options.map(opt => (
+                                                <div 
+                                                    key={opt.id} 
+                                                    className={`p-2.5 rounded-xl border flex items-center gap-2.5 ${
+                                                        opt.isCorrect 
+                                                            ? 'border-emerald-300 bg-emerald-50/30' 
+                                                            : 'border-slate-100 bg-white'
+                                                    }`}
+                                                >
+                                                    <span className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-extrabold ${
+                                                        opt.isCorrect 
+                                                            ? 'bg-emerald-500 text-white' 
+                                                            : 'bg-slate-150 text-slate-550'
+                                                    }`}>
+                                                        {opt.optionLabel}
+                                                    </span>
+                                                    <span className={`text-xs ${opt.isCorrect ? 'text-emerald-900 font-bold' : 'text-slate-700 font-semibold'}`}>
+                                                        <MarkdownRenderer content={opt.optionText} />
+                                                    </span>
+                                                    {opt.isCorrect && <CheckCircle size={15} className="text-emerald-555 ml-auto shrink-0" />}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Correct Answer for non-MCQ / non-CQ */}
+                                {selectedQuestion.correctAnswer && selectedQuestion.type !== 'MCQ' && selectedQuestion.type !== 'CQ' && (
+                                    <div className="space-y-1">
+                                        <h5 className="text-[10px] font-black text-emerald-600 uppercase tracking-wider flex items-center gap-1"><CheckCircle size={12} /> সঠিক উত্তর (Correct Answer)</h5>
+                                        <div className="p-3 bg-emerald-50/30 text-emerald-950 text-xs font-semibold leading-relaxed rounded-xl border border-emerald-100">
+                                            <MarkdownRenderer content={selectedQuestion.correctAnswer} />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Explanation */}
+                                {selectedQuestion.explanation && selectedQuestion.type !== 'CQ' && (
+                                    <div className="space-y-1">
+                                        <h5 className="text-[10px] font-black text-indigo-500 uppercase tracking-wider">ব্যাখ্যা (Explanation)</h5>
+                                        <div className="p-3 bg-indigo-50/30 text-indigo-900 text-xs font-semibold leading-relaxed rounded-xl border border-indigo-100/60">
+                                            <MarkdownRenderer content={selectedQuestion.explanation} />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Height Resizer Handle */}
+                        <div 
+                            onMouseDown={handleNavDrawerHeightResizeStart} 
+                            className="h-2 hover:bg-indigo-500/80 bg-slate-100 hover:text-white border-y border-slate-200 cursor-row-resize transition-all shrink-0 w-full flex items-center justify-center text-[10px] text-slate-400 font-bold select-none rounded hover:scale-y-110 active:scale-y-95 shadow-sm"
+                            title="টেনে নিচের তালিকা ড্রয়ারের আকার পরিবর্তন করুন"
+                        >
+                            •••
+                        </div>
+
+                        {/* Bottom navigation mini question drawer list */}
+                        <div style={{ height: `${navDrawerHeight}px` }} className="bg-slate-50 border-t border-slate-200/80 p-3 shrink-0 flex flex-col gap-1.5 overflow-hidden">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">
+                                তালিকা নেভিগেশন (Jump to Question)
+                            </span>
+                            <div className="flex-1 flex gap-2 overflow-x-auto py-1 no-scrollbar items-center">
+                                {questions.map((q, idx) => (
+                                    <button
+                                        key={q.id}
+                                        onClick={() => handleViewQuestion(q)}
+                                        className={`px-3 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all border flex items-center gap-1.5 shrink-0 ${
+                                            selectedQuestion.id === q.id 
+                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-150' 
+                                                : q.status === 'APPROVED' 
+                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60 hover:bg-emerald-100/40'
+                                                    : q.status === 'REJECTED'
+                                                        ? 'bg-rose-50 text-rose-700 border-rose-200/60 hover:bg-rose-100/40'
+                                                        : 'bg-white text-slate-650 border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <span>Q #{idx + 1}</span>
+                                        <span className="text-[9px] font-extrabold opacity-60">({q.type})</span>
+                                    </button>
+                                ))}
+                                {currentPage < totalPages && (
+                                    <button
+                                        onClick={() => setCurrentPage(prev => prev + 1)}
+                                        disabled={loadingMore}
+                                        className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 disabled:opacity-50 disabled:pointer-events-none rounded-xl text-xs font-black whitespace-nowrap transition-all border flex items-center gap-1.5 shrink-0"
+                                    >
+                                        {loadingMore ? (
+                                            <>
+                                                <Loader2 className="w-3 h-3 animate-spin text-indigo-650 animate-pulse" />
+                                                <span>লোডিং...</span>
+                                            </>
+                                        ) : (
+                                            <span>আরও ৫০টি লোড করুন</span>
+                                        )}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Column 2-3 Horizontal Resizer handle */}
+                    <div 
+                        onMouseDown={(e) => handleColResizeStart(e, 2)} 
+                        className="w-1.5 hover:w-2 hover:bg-indigo-600/80 bg-slate-200/40 cursor-col-resize transition-all self-stretch shrink-0 rounded-full my-1 flex items-center justify-center text-[8px] text-slate-450 font-bold select-none group"
+                        title="টেনে ডান পাশের কলামের সাইজ পরিবর্তন করুন"
+                    >
+                        <span className="opacity-0 group-hover:opacity-100 text-white font-black">⋮</span>
+                    </div>
+
+                    {/* COLUMN 3: Edit Form (Right Column - resizable width) */}
+                    <div style={{ width: `${colWidths.col3}%` }} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full shrink-0">
+                        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0">
+                            <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                                📝 প্রশ্ন সম্পাদনা (Edit Question)
+                            </span>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50/50">
+                            <QuestionEdit
+                                inlineId={selectedQuestion.id}
+                                key={selectedQuestion.id}
+                                onSaveComplete={() => {
+                                    fetchQuestions();
+                                    // Auto-select next question or stay
+                                    const nextIdx = currentIndex < totalCount - 1 ? currentIndex + 1 : currentIndex;
+                                    if (nextIdx < totalCount) {
+                                        handleViewQuestion(questions[nextIdx]);
+                                    }
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        );
+    };
+
+    if (splitScreenMode && hasFullLangAccess) {
+        return renderProfessionalReviewWorkspace();
+    }
 
     return (
         <div className="relative min-h-screen w-full bg-slate-50 flex flex-col">

@@ -39,66 +39,66 @@ export default function ImageSidebar({
                         <ImageIcon size={16} className="text-blue-400" />
                         <h2 className="font-bold text-sm tracking-wide">প্রশ্নের ছবিসমূহ</h2>
                     </div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-700 px-2 py-0.5 rounded">{extractedSourceImages.length}টি ছবি</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-700 px-2 py-0.5 rounded">
+                        {extractedSourceImages.length}টি ছবি
+                    </span>
                 </div>
-
-                <div className="p-4 overflow-y-auto bg-slate-50 flex-1 hide-scrollbar space-y-4">
+                
+                <div className="p-4 overflow-y-auto bg-slate-50 flex-1 hide-scrollbar">
                     {extractedSourceImages.length === 0 ? (
                         <div className="text-center py-10 text-slate-400">
                             <ImageIcon size={32} className="mx-auto mb-2 opacity-50" />
                             <p className="text-sm">এই প্রশ্নে কোনো ছবি নেই।</p>
-                            <p className="text-xs mt-1 text-slate-300">উপরে Upload / Crop বাটন ব্যবহার করে ছবি যোগ করুন।</p>
+                            <p className="text-xs mt-1 text-slate-305">উপরে Upload / Crop বাটন ব্যবহার করে ছবি যোগ করুন।</p>
                         </div>
                     ) : (
-                        extractedSourceImages.map((src, idx) => (
-                            <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden group hover:border-indigo-300 hover:shadow-indigo-100 transition-all">
-                                {/* Image header */}
-                                <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-100">
-                                    <span className="text-[10px] uppercase font-bold text-slate-400">ছবি {idx + 1}</span>
-                                    <div className="flex items-center gap-1">
-                                        {/* Fullscreen preview */}
-                                        <button type="button"
+                        <div className="grid grid-cols-3 gap-3">
+                            {extractedSourceImages.map((src, idx) => (
+                                <div key={idx} className="relative aspect-square border border-slate-200 rounded-xl overflow-hidden bg-slate-900 flex items-center justify-center cursor-pointer shadow-sm group hover:border-indigo-500 hover:shadow-md transition-all">
+                                    <img 
+                                        src={src} 
+                                        alt={`ছবি ${idx + 1}`}
+                                        className="max-w-full max-h-full object-contain transition-transform group-hover:scale-105"
+                                        onClick={() => setLightboxSrc(src)}
+                                    />
+                                    <div className="absolute inset-0 bg-slate-950/75 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1 z-10">
+                                        <button 
+                                            type="button"
                                             onClick={() => setLightboxSrc(src)}
-                                            className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-blue-500 hover:border-blue-300 transition-colors"
-                                            title="পূর্ণ আকারে দেখুন">
-                                            <Eye size={13} />
+                                            className="p-1 rounded bg-white hover:bg-slate-100 text-slate-600 hover:text-indigo-650 transition-colors shadow-sm"
+                                            title="পূর্ণ আকারে দেখুন"
+                                        >
+                                            <Eye size={12} className="stroke-[2.5]" />
                                         </button>
-                                        {/* Re-crop button */}
-                                        <button type="button"
+                                        <button 
+                                            type="button"
                                             onClick={() => handleReCropExistingImage(src)}
                                             disabled={imageUploading}
-                                            className="p-1.5 rounded-lg bg-white border border-indigo-200 text-indigo-500 hover:bg-indigo-50 hover:border-indigo-400 transition-colors disabled:opacity-50"
-                                            title="এই ছবিটি পুনরায় ক্রপ করুন">
-                                            {imageUploading && reCroppingUrl === src
-                                                ? <Loader2 size={13} className="animate-spin" />
-                                                : <RotateCw size={13} />}
+                                            className="p-1 rounded bg-white hover:bg-slate-100 text-indigo-600 hover:text-indigo-700 transition-colors shadow-sm disabled:opacity-50"
+                                            title="পুনরায় ক্রপ করুন"
+                                        >
+                                            <RotateCw size={12} className="stroke-[2.5]" />
                                         </button>
-                                        {/* Remove */}
-                                        <button type="button"
+                                        <button 
+                                            type="button"
                                             onClick={() => handleRemoveExtractedImage(src)}
-                                            className="p-1.5 rounded-lg bg-white border border-red-200 text-red-400 hover:bg-red-50 hover:border-red-400 transition-colors"
-                                            title="এই ছবিটি প্রশ্ন থেকে সরান">
-                                            <Trash2 size={13} />
+                                            className="p-1 rounded bg-white hover:bg-slate-100 text-red-500 hover:text-red-600 transition-colors shadow-sm"
+                                            title="মুছে ফেলুন"
+                                        >
+                                            <Trash2 size={12} className="stroke-[2.5]" />
                                         </button>
                                     </div>
+                                    <span className="absolute bottom-1 left-1 bg-black/60 backdrop-blur-[2px] text-white text-[8px] font-black px-1.5 py-0.5 rounded leading-none">
+                                        #{idx + 1}
+                                    </span>
                                 </div>
-                                {/* Image preview — click to fullscreen */}
-                                <div
-                                    className="bg-slate-900 flex items-center justify-center min-h-[120px] max-h-[280px] overflow-hidden cursor-zoom-in"
-                                    onClick={() => setLightboxSrc(src)}
-                                    title="ক্লিক করুন পূর্ণ আকারে দেখতে">
-                                    <img src={src} alt={`প্রশ্নের ছবি ${idx + 1}`}
-                                        className="max-w-full max-h-[280px] object-contain transition-transform hover:scale-[1.02]"
-                                    />
-                                </div>
-                                {/* Action hint */}
-                                <div className="px-3 py-2 text-[10px] text-slate-400 bg-slate-50 border-t border-slate-100 flex items-center gap-1.5">
-                                    <RotateCw size={10} className="text-indigo-400" />
-                                    পুনরায় ক্রপ করতে 🔁 বাটনে ক্লিক করুন • পেস্ট করতে Ctrl+V চাপুন
-                                </div>
-                            </div>
-                        ))
+                            ))}
+                        </div>
                     )}
+                    <div className="mt-4 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100/50 flex items-start gap-2 text-[10px] text-indigo-600">
+                        <RotateCw size={10} className="text-indigo-400 mt-0.5" />
+                        <span>পুনরায় ক্রপ করতে 🔁 বাটনে ক্লিক করুন • পেস্ট করতে Ctrl+V চাপুন</span>
+                    </div>
                 </div>
             </div>
 
