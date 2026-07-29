@@ -12,7 +12,9 @@ import MCQOptionsEditor from './components/MCQOptionsEditor';
 import QuestionContentEditor from './components/QuestionContentEditor';
 import CQPartsEditor from './components/CQPartsEditor';
 import QuestionSourceTagger from './components/QuestionSourceTagger';
+import AiCoPilotPanel from './components/AiCoPilotPanel';
 import { Tag } from 'lucide-react';
+
 
 // Helpher function to convert Markdown Images to HTML so RichTextEditor can render them visually!
 const convertMarkdownImagesToHtml = (text) => {
@@ -600,7 +602,105 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
         }
     };
 
+    const handleApplyCoPilotFix = async (updatedFromCoPilot) => {
+        const targetQuestionId = originalQuestion?.id || id;
+        if (!targetQuestionId || targetQuestionId === 'undefined') {
+            setMessage({ type: 'error', text: 'প্রশ্ন আইডি সঠিকভাবে পাওয়া যায়নি।' });
+            return;
+        }
+
+        try {
+            setSaving(true);
+            setMessage(null);
+
+            let newTopicId = formData.topicId || originalQuestion?.topic?.id;
+            // Match suggested topic name to available topics
+            if (updatedFromCoPilot.topicName) {
+                let freshTopics = topics;
+                if (!freshTopics || freshTopics.length === 0) {
+                    const chId = formData.chapterId || originalQuestion?.chapter?.id;
+                    if (chId) {
+                        try {
+                            freshTopics = await academicService.getTopicsByChapter(chId);
+                            setTopics(freshTopics);
+                        } catch (e) {
+                            console.error("Failed to load topics:", e);
+                        }
+                    }
+                }
+                if (freshTopics && freshTopics.length > 0) {
+                    const targetName = updatedFromCoPilot.topicName.trim().toLowerCase();
+                    const matchedTopic = freshTopics.find(t => 
+                        t.name?.trim().toLowerCase() === targetName ||
+                        t.name?.trim().toLowerCase().includes(targetName) ||
+                        targetName.includes(t.name?.trim().toLowerCase())
+                    );
+                    if (matchedTopic) {
+                        newTopicId = matchedTopic.id;
+                    }
+                }
+            }
+
+            const newText = updatedFromCoPilot.questionText || formData.questionText || originalQuestion?.questionText;
+            const newExp = updatedFromCoPilot.explanation || formData.explanation || originalQuestion?.explanation;
+
+            // Update local formData
+            setFormData(prev => ({
+                ...prev,
+                questionText: newText,
+                explanation: newExp,
+                topicId: newTopicId
+            }));
+
+            // Prepare save payload conforming to backend UpdateQuestionRequest structure
+            const questionObject = {
+                id: targetQuestionId,
+                type: questionType || originalQuestion?.type || 'MCQ',
+                questionText: newText,
+                explanation: newExp,
+                difficulty: formData.difficulty || originalQuestion?.difficulty || 'MEDIUM',
+                marks: formData.marks || originalQuestion?.marks || 1,
+                language: formData.language || originalQuestion?.language || 'Bangla',
+                bloomLevel: formData.bloomLevel || originalQuestion?.bloomLevel || 'KNOWLEDGE',
+                mcqType: formData.mcqType || originalQuestion?.mcqType || 'SIMPLE',
+                topic: newTopicId ? { id: newTopicId } : (originalQuestion?.topic ? { id: originalQuestion.topic.id } : null),
+                chapter: originalQuestion?.chapter ? { id: originalQuestion.chapter.id } : (formData.chapterId ? { id: formData.chapterId } : null),
+                classSubject: originalQuestion?.classSubject ? { id: originalQuestion.classSubject.id } : (formData.subjectId ? { id: formData.subjectId } : null)
+            };
+            const optionsArray = options.map(o => ({
+                optionLabel: o.optionLabel,
+                optionText: o.optionText,
+                isCorrect: o.isCorrect
+            }));
+
+            // Save to backend database
+            const saveRes = await questionService.updateQuestion(targetQuestionId, questionObject, optionsArray);
+
+            // Immediately re-run AI audit so quality score turns 100% and topic match turns PASS!
+            const reAuditRes = await questionService.runAiAudit(targetQuestionId);
+            if (reAuditRes.data) {
+                const finalQuestionData = {
+                    ...saveRes.data,
+                    aiAuditScore: reAuditRes.data.qualityScore,
+                    aiAuditSuggestions: reAuditRes.data.rawSuggestionsJson,
+                    aiFlagged: reAuditRes.data.qualityScore < 80 || !reAuditRes.data.topicMatch
+                };
+                setOriginalQuestion(finalQuestionData);
+                setMessage({ type: 'success', text: '⚡ এআই প্রস্তাবিত ফিক্স ও টপিক পরিবর্তন সফলভাবে ডাটাবেজে সেভ করা হয়েছে!' });
+            } else {
+                setOriginalQuestion(saveRes.data);
+            }
+        } catch (err) {
+            console.error("Failed to auto-apply Co-Pilot fix:", err);
+            setMessage({ type: 'error', text: 'ফিক্স প্রয়োগ করতে ব্যর্থ হয়েছে।' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+
     if (loadingData) {
+
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-500">
                 <Loader2 className="animate-spin mb-4" size={32} />
@@ -692,10 +792,28 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                             >
                                 🏷️ ট্যাগ ও সোর্স
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('AI_AUDIT')}
+                                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all ${
+                                    activeTab === 'AI_AUDIT' 
+                                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/50' 
+                                        : 'text-indigo-600 font-bold bg-indigo-50 hover:bg-indigo-100'
+                                }`}
+                            >
+                                🤖 AI Co-Pilot
+                            </button>
                         </div>
 
                         {/* Tab Content Wrapper */}
                         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+                            {activeTab === 'AI_AUDIT' && originalQuestion && (
+                                <AiCoPilotPanel
+                                    question={originalQuestion}
+                                    onUpdateQuestion={handleApplyCoPilotFix}
+                                />
+                            )}
+
                             {activeTab === 'CONTENT' && (
                                 <div className="space-y-4">
                                     <QuestionContentEditor 

@@ -39,6 +39,7 @@ public class ExamGenerationServiceImpl {
     private final com.testshaper.repository.QuestionFavoriteRepository favoriteRepository;
     private final com.testshaper.repository.UserRepository userRepository;
     private final com.testshaper.repository.QuestionOptionRepository questionOptionRepository;
+    private final com.testshaper.repository.QuestionSourceRepository questionSourceRepository;
 
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
@@ -261,14 +262,31 @@ public class ExamGenerationServiceImpl {
         Exam saved = examRepository.save(exam);
         log.info("Exam generated successfully: id={}, questions={}", saved.getId(), saved.getExamQuestions().size());
 
-        // 10. Mark used questions as favorites for the user
+        // 10. Mark used questions as favorites for the user (Batch Mode for Speed)
         userRepository.findByEmail(createdBy).ifPresent(user -> {
-            for (ExamQuestion eq : saved.getExamQuestions()) {
-                if (!favoriteRepository.existsByQuestionAndUser(eq.getQuestion(), user)) {
-                    QuestionFavorite fav = new QuestionFavorite();
-                    fav.setQuestion(eq.getQuestion());
-                    fav.setUser(user);
-                    favoriteRepository.save(fav);
+            List<Question> questionsToFavorite = saved.getExamQuestions().stream()
+                    .map(ExamQuestion::getQuestion)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+
+            if (!questionsToFavorite.isEmpty()) {
+                List<QuestionFavorite> existingFavs = favoriteRepository.findByUserAndQuestionIn(user, questionsToFavorite);
+                Set<UUID> existingFavQuestionIds = existingFavs.stream()
+                        .map(f -> f.getQuestion().getId())
+                        .collect(Collectors.toSet());
+
+                List<QuestionFavorite> newFavs = questionsToFavorite.stream()
+                        .filter(q -> !existingFavQuestionIds.contains(q.getId()))
+                        .map(q -> {
+                            QuestionFavorite fav = new QuestionFavorite();
+                            fav.setQuestion(q);
+                            fav.setUser(user);
+                            return fav;
+                        })
+                        .collect(Collectors.toList());
+
+                if (!newFavs.isEmpty()) {
+                    favoriteRepository.saveAll(newFavs);
                 }
             }
         });
@@ -277,6 +295,7 @@ public class ExamGenerationServiceImpl {
     }
 
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "exams", key = "#id")
     public ExamDTO updateExam(UUID id, ExamDTO dto) {
         Exam exam = examRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
@@ -1110,6 +1129,7 @@ public class ExamGenerationServiceImpl {
         return toDTO(exam);
     }
 
+    @org.springframework.cache.annotation.Cacheable(value = "exams", key = "#examId")
     public ExamDTO getExam(UUID examId) {
         Exam exam = examRepository.findByIdWithQuestions(examId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
@@ -1217,6 +1237,16 @@ public class ExamGenerationServiceImpl {
     // DTO MAPPER
     // =========================================================
     private ExamDTO toDTO(Exam exam) {
+        if (exam != null && exam.getExamQuestions() != null && !exam.getExamQuestions().isEmpty()) {
+            List<UUID> qIds = exam.getExamQuestions().stream()
+                    .map(eq -> eq.getQuestion() != null ? eq.getQuestion().getId() : null)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            if (!qIds.isEmpty()) {
+                questionOptionRepository.findByQuestionIdIn(qIds);
+                questionSourceRepository.findByQuestionIdIn(qIds);
+            }
+        }
         ExamDTO dto = new ExamDTO();
         dto.setId(exam.getId());
         dto.setTenantId(exam.getTenantId());

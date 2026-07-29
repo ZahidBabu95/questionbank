@@ -18,9 +18,13 @@ import SubjectSelectorModal from './components/SubjectSelectorModal';
 import QuestionPreviewModal from './components/QuestionPreviewModal';
 import QuestionFilterPanel from './components/QuestionFilterPanel';
 import SourceDocumentViewer from './components/SourceDocumentViewer';
+import AiCoPilotPanel from './components/AiCoPilotPanel';
+import SubjectBatchAuditModal from './components/SubjectBatchAuditModal';
+
 
 
 const QuestionList = () => {
+    const [showBatchModal, setShowBatchModal] = useState(false);
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : null;
     const isSuperAdmin = user?.roles?.some(r => {
@@ -278,6 +282,42 @@ const QuestionList = () => {
 
     const [overviewStats, setOverviewStats] = useState(null);
     const [dynamicTypes, setDynamicTypes] = useState([]);
+    const [activeBatchProgress, setActiveBatchProgress] = useState(null);
+
+    // Active AI Agent Background Tracker
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            const storedBatchId = localStorage.getItem('activeSubjectBatchId');
+            if (storedBatchId) {
+                try {
+                    const res = await questionService.getBatchAgentStatus(storedBatchId);
+                    if (res && res.status === 'RUNNING') {
+                        const total = res.totalCount || 0;
+                        const processed = res.processedCount || 0;
+                        const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
+                        setActiveBatchProgress({
+                            isRunning: true,
+                            percent,
+                            processed,
+                            total
+                        });
+                    } else {
+                        setActiveBatchProgress(null);
+                        if (res?.status === 'COMPLETED' || res?.status === 'CANCELLED') {
+                            localStorage.removeItem('activeSubjectBatchId');
+                        }
+                    }
+                } catch (e) {
+                    setActiveBatchProgress(null);
+                }
+            } else {
+                setActiveBatchProgress(null);
+            }
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, []);
+
 
 
 
@@ -1233,19 +1273,29 @@ const QuestionList = () => {
     const getStatusBadge = (status) => {
         switch (status) {
             case 'APPROVED':
+            case 'HUMAN_APPROVED':
                 return <span className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><CheckCircle size={14} /> Approved</span>;
+            case 'HUMAN_REVIEWED':
+                return <span className="px-2.5 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><CheckCircle size={14} /> Reviewed</span>;
             case 'REJECTED':
+
                 return <span className="px-2.5 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><XCircle size={14} /> Rejected</span>;
             case 'PENDING':
                 return <span className="px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><Clock size={14} /> Pending</span>;
             case 'REVISED':
+            case 'HUMAN_REVISED':
                 return <span className="px-2.5 py-1.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><Edit size={14} /> Revised</span>;
+            case 'AI_AUDITED':
+                return <span className="px-2.5 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><Clock size={14} /> AI Audited</span>;
+            case 'NEEDS_REVISION':
+                return <span className="px-2.5 py-1.5 bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><Clock size={14} /> Needs Revision</span>;
             case 'DRAFT':
                 return <span className="px-2.5 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center gap-1.5 w-max"><FileText size={14} /> Draft</span>;
             default:
                 return <span className="px-2.5 py-1.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-[11px] font-bold tracking-wide uppercase flex items-center justify-center w-max">Draft</span>;
         }
     };
+
 
     const resetFilters = () => {
         if (levels.length > 1) {
@@ -2266,7 +2316,25 @@ const QuestionList = () => {
                 uniqueInstituteMediums={uniqueInstituteMediums}
                 user={user}
                 portalTarget={portalTarget}
+                onOpenBatchAgentModal={() => setShowBatchModal(true)}
+                activeBatchProgress={activeBatchProgress}
             />
+
+
+            <SubjectBatchAuditModal
+                isOpen={showBatchModal}
+                onClose={() => setShowBatchModal(false)}
+                onBatchFinished={() => fetchQuestions()}
+                initialLevelId={selectedLevelId}
+                initialStreamId={selectedStreamId}
+                initialClassId={selectedClassId}
+                initialSubjectId={selectedSubjectId}
+                initialChapterId={selectedChapterId}
+            />
+
+
+
+
 
             <div className={`flex gap-2 sm:gap-3 px-1 sm:px-3 md:px-6 py-1.5 sm:py-3 ${splitScreenMode ? 'flex-col md:flex-row h-[65vh] overflow-hidden' : 'flex-col'}`}>
                 {/* List Side */}
@@ -2350,7 +2418,7 @@ const QuestionList = () => {
                     )}
                 </div>
 
-                {/* Split Screen Preview Side */}
+{/* Split Screen Preview Side */}
                 {splitScreenMode && hasFullLangAccess && (
                     <div className="w-full md:w-1/2 hidden md:flex flex-col bg-slate-50 border border-slate-200 rounded-2xl shadow-inner overflow-hidden h-full relative" style={{ backgroundImage: 'radial-gradient(#e2e8f0 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
                         {selectedQuestion ? (
@@ -2362,7 +2430,13 @@ const QuestionList = () => {
                                             onClick={() => setRightPanelTab('EDIT')}
                                             className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${rightPanelTab === 'EDIT' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60' : 'text-slate-600 hover:bg-slate-50'}`}
                                         >
-                                            📝 প্রশ্ন সম্পাদনা (Edit)
+                                            📝 সম্পাদনা (Edit)
+                                        </button>
+                                        <button
+                                            onClick={() => setRightPanelTab('AI_AUDIT')}
+                                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${rightPanelTab === 'AI_AUDIT' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60' : 'text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            🤖 AI Co-Pilot (অডিট)
                                         </button>
                                         <button
                                             onClick={() => setRightPanelTab('SOURCE')}

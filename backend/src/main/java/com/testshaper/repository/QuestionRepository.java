@@ -17,6 +17,9 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
 
         List<Question> findByClassSubjectId(UUID classSubjectId);
 
+        List<Question> findByChapterId(UUID chapterId);
+
+
         @Query("SELECT q FROM Question q " +
                "LEFT JOIN FETCH q.classSubject cs " +
                "LEFT JOIN FETCH cs.academicClass " +

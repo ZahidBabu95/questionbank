@@ -558,44 +558,61 @@ public class QuestionServiceImpl implements QuestionService {
     @Override
     @org.springframework.cache.annotation.Cacheable(value = "sourceTags", key = "#filters != null ? #filters.hashCode() : 0")
     public java.util.Map<String, Object> getSourceTags(java.util.Map<String, String> filters) {
-        List<UUID> ids = getAllQuestionIds(filters);
-        if (ids == null || ids.isEmpty()) {
+        String classSubjectIdStr = filters != null ? filters.get("classSubjectId") : null;
+        if (classSubjectIdStr == null || classSubjectIdStr.isEmpty()) {
+            classSubjectIdStr = filters != null ? filters.get("subjectId") : null;
+        }
+        if (classSubjectIdStr == null || classSubjectIdStr.isEmpty()) {
             return java.util.Collections.emptyMap();
         }
+        UUID csId;
+        try {
+            csId = UUID.fromString(classSubjectIdStr);
+        } catch (Exception e) {
+            return java.util.Collections.emptyMap();
+        }
+
+        String jpql = "SELECT qs.organizationName, qs.examYear, qs.sourceType, COUNT(DISTINCT q.id) " +
+                      "FROM Question q JOIN q.sources qs " +
+                      "WHERE q.classSubject.id = :csId AND q.deleted = false AND q.status = :status ";
+
+        String language = filters != null ? filters.get("language") : null;
+        if (org.springframework.util.StringUtils.hasText(language) && !"ALL".equalsIgnoreCase(language)) {
+            jpql += "AND (q.language = :lang OR q.language = 'Bilingual' OR :lang = 'Bilingual' OR q.language IS NULL OR q.language = '') ";
+        }
+
+        jpql += "GROUP BY qs.organizationName, qs.examYear, qs.sourceType";
+
+        var query = entityManager.createQuery(jpql, Object[].class)
+                .setParameter("csId", csId)
+                .setParameter("status", Question.QuestionStatus.APPROVED);
+
+        if (org.springframework.util.StringUtils.hasText(language) && !"ALL".equalsIgnoreCase(language)) {
+            query.setParameter("lang", language);
+        }
+
+        List<Object[]> rows = query.getResultList();
 
         java.util.Map<String, Integer> boardCounts = new java.util.HashMap<>();
         java.util.Map<String, Integer> yearCounts = new java.util.HashMap<>();
         java.util.Map<String, Integer> schoolCounts = new java.util.HashMap<>();
 
-        int batchSize = 1000;
-        for (int i = 0; i < ids.size(); i += batchSize) {
-            List<UUID> batch = ids.subList(i, Math.min(i + batchSize, ids.size()));
+        for (Object[] row : rows) {
+            String orgName = (String) row[0];
+            Integer year = (Integer) row[1];
+            com.testshaper.entity.QuestionSource.SourceType type = (com.testshaper.entity.QuestionSource.SourceType) row[2];
+            Long count = (Long) row[3];
+            int c = count != null ? count.intValue() : 0;
 
-            String jpql = "SELECT qs.organizationName, qs.examYear, qs.sourceType, COUNT(DISTINCT qs.question.id) " +
-                          "FROM QuestionSource qs WHERE qs.question.id IN :batch " +
-                          "GROUP BY qs.organizationName, qs.examYear, qs.sourceType";
-            
-            List<Object[]> rows = entityManager.createQuery(jpql, Object[].class)
-                    .setParameter("batch", batch)
-                    .getResultList();
-
-            for (Object[] row : rows) {
-                String orgName = (String) row[0];
-                Integer year = (Integer) row[1];
-                com.testshaper.entity.QuestionSource.SourceType type = (com.testshaper.entity.QuestionSource.SourceType) row[2];
-                Long count = (Long) row[3];
-                int c = count != null ? count.intValue() : 0;
-
-                if (orgName != null && !orgName.isEmpty()) {
-                    if (type == com.testshaper.entity.QuestionSource.SourceType.BOARD_EXAM || type == com.testshaper.entity.QuestionSource.SourceType.UNIVERSITY_ADMISSION) {
-                        boardCounts.put(orgName, boardCounts.getOrDefault(orgName, 0) + c);
-                    } else {
-                        schoolCounts.put(orgName, schoolCounts.getOrDefault(orgName, 0) + c);
-                    }
+            if (orgName != null && !orgName.isEmpty()) {
+                if (type == com.testshaper.entity.QuestionSource.SourceType.BOARD_EXAM || type == com.testshaper.entity.QuestionSource.SourceType.UNIVERSITY_ADMISSION) {
+                    boardCounts.put(orgName, boardCounts.getOrDefault(orgName, 0) + c);
+                } else {
+                    schoolCounts.put(orgName, schoolCounts.getOrDefault(orgName, 0) + c);
                 }
-                if (year != null) {
-                    yearCounts.put(String.valueOf(year), yearCounts.getOrDefault(String.valueOf(year), 0) + c);
-                }
+            }
+            if (year != null) {
+                yearCounts.put(String.valueOf(year), yearCounts.getOrDefault(String.valueOf(year), 0) + c);
             }
         }
 
@@ -889,31 +906,25 @@ public class QuestionServiceImpl implements QuestionService {
         question.setBloomLevel(questionDetails.getBloomLevel());
         if (questionDetails.getClassSubject() != null && questionDetails.getClassSubject().getId() != null) {
             question.setClassSubject(entityManager.getReference(com.testshaper.entity.ClassSubject.class, questionDetails.getClassSubject().getId()));
-        } else {
-            question.setClassSubject(null);
         }
         if (questionDetails.getChapter() != null && questionDetails.getChapter().getId() != null) {
             question.setChapter(entityManager.getReference(com.testshaper.entity.Chapter.class, questionDetails.getChapter().getId()));
-        } else {
-            question.setChapter(null);
         }
         if (questionDetails.getTopic() != null && questionDetails.getTopic().getId() != null) {
             question.setTopic(entityManager.getReference(com.testshaper.entity.Topic.class, questionDetails.getTopic().getId()));
-        } else {
-            question.setTopic(null);
         }
-        question.setMcqType(questionDetails.getMcqType());
+        if (questionDetails.getMcqType() != null) {
+            question.setMcqType(questionDetails.getMcqType());
+        }
         if (questionDetails.getStatements() != null) {
             question.setStatements(new java.util.ArrayList<>(questionDetails.getStatements()));
-        } else {
-            question.setStatements(new java.util.ArrayList<>());
         }
-        // if (question.getType() != Question.QuestionType.MCQ) {
-        // question.setCorrectAnswer(questionDetails.getCorrectAnswer());
-        // }
 
-        // Return status to PENDING on edit
-        question.setStatus(Question.QuestionStatus.PENDING);
+        // Return status to PENDING on edit only if it was DRAFT
+        if (question.getStatus() == Question.QuestionStatus.DRAFT) {
+            question.setStatus(Question.QuestionStatus.PENDING);
+        }
+
 
         // Handle Sources
         if (questionDetails.getSources() != null) {
@@ -1252,6 +1263,7 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
+    @org.springframework.cache.annotation.Cacheable(value = "questionsAvailability", key = "#params != null ? #params.hashCode() : 0")
     public java.util.Map<String, Object> getQuestionAvailability(com.testshaper.dto.QuestionSearchParams params) {
         StringBuilder jpql = new StringBuilder(
                 "SELECT q.chapter.id, q.topic.id, q.type, q.difficulty, COUNT(DISTINCT q.id) " +

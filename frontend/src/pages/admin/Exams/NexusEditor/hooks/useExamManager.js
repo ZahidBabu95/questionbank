@@ -32,15 +32,29 @@ const examCacheTimes = new Map();
 
 const deduplicatedGetExam = (id) => {
     const now = Date.now();
-    if (examCache.has(id) && (now - (examCacheTimes.get(id) || 0) < 3000)) {
+    if (examCache.has(id) && (now - (examCacheTimes.get(id) || 0) < 300000)) {
         return Promise.resolve(examCache.get(id));
     }
+    // Check sessionStorage fallback for instant 0ms page reloads
+    try {
+        const stored = sessionStorage.getItem('exam_cache_' + id);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            examCache.set(id, parsed);
+            examCacheTimes.set(id, now);
+            return Promise.resolve(parsed);
+        }
+    } catch (e) {}
+
     if (examPromises.has(id)) {
         return examPromises.get(id);
     }
     const promise = examService.getExam(id).then(res => {
         examCache.set(id, res);
         examCacheTimes.set(id, Date.now());
+        try {
+            sessionStorage.setItem('exam_cache_' + id, JSON.stringify(res));
+        } catch (e) {}
         examPromises.delete(id);
         return res;
     }).catch(err => {
@@ -49,6 +63,17 @@ const deduplicatedGetExam = (id) => {
     });
     examPromises.set(id, promise);
     return promise;
+};
+
+export const setExamCache = (id, data) => {
+    if (id && data) {
+        const payload = data.data ? data : { data };
+        examCache.set(id, payload);
+        examCacheTimes.set(id, Date.now());
+        try {
+            sessionStorage.setItem('exam_cache_' + id, JSON.stringify(payload));
+        } catch (e) {}
+    }
 };
 
 const invalidateExamCache = (id) => {
@@ -65,7 +90,7 @@ const settingsCacheTimes = new Map();
 const deduplicatedGetSettings = (type, isGlobal = false) => {
     const key = `${type}_${isGlobal ? 'global' : 'institute'}`;
     const now = Date.now();
-    if (settingsCache.has(key) && (now - (settingsCacheTimes.get(key) || 0) < 3000)) {
+    if (settingsCache.has(key) && (now - (settingsCacheTimes.get(key) || 0) < 300000)) {
         return Promise.resolve(settingsCache.get(key));
     }
     if (settingsPromises.has(key)) {
@@ -100,7 +125,7 @@ let templatesCacheTime = 0;
 
 const deduplicatedGetTemplates = () => {
     const now = Date.now();
-    if (templatesCache && (now - templatesCacheTime < 3000)) {
+    if (templatesCache && (now - templatesCacheTime < 300000)) {
         return Promise.resolve(templatesCache);
     }
     if (templatesPromise) {
@@ -129,7 +154,7 @@ let knowledgeCacheTime = 0;
 
 const deduplicatedGetKnowledge = () => {
     const now = Date.now();
-    if (knowledgeCache && (now - knowledgeCacheTime < 3000)) {
+    if (knowledgeCache && (now - knowledgeCacheTime < 300000)) {
         return Promise.resolve(knowledgeCache);
     }
     if (knowledgePromise) {

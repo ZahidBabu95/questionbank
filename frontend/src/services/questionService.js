@@ -293,10 +293,24 @@ const getMyFavoriteIds = async () => {
     return response.data;
 };
 
+const runAiAudit = async (id) => {
+    return await axios.post(`${API_URL}/${id}/ai-audit`);
+};
+
+const submitReviewerDecision = async (id, payload) => {
+    clearQuestionCache();
+    return await axios.post(`${API_URL}/${id}/reviewer-decision`, payload);
+};
+
+const getReviewerStats = async () => {
+    return await axios.get(`${API_URL}/reviewer/stats`);
+};
+
 export default {
     createMCQ,
     createMCQBulk,
     createShortQuestion,
+
     createCQ,
     getAllQuestions,
     getAllQuestionsPaginated,
@@ -333,4 +347,22 @@ export default {
     getMyFavoriteIds,
     getQuestionAvailability,
     getQuestionAvailabilityBulk,
+    runAiAudit,
+    submitReviewerDecision,
+    getReviewerStats,
+    startSubjectBatchAgent: async (data) => {
+        const response = await axios.post(`${API_URL}/ai-audit/batch-agent`, data);
+        return response.data;
+    },
+    getBatchAgentStatus: async (batchId) => {
+        const response = await axios.get(`${API_URL}/ai-audit/batch-agent/status/${batchId}`);
+        return response.data;
+    },
+    stopSubjectBatchAgent: async (batchId) => {
+        const response = await axios.post(`${API_URL}/ai-audit/batch-agent/cancel/${batchId}`);
+        return response.data;
+    },
 };
+
+
+

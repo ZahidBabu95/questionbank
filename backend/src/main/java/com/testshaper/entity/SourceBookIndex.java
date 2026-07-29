@@ -12,6 +12,7 @@ public class SourceBookIndex extends BaseTenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_book_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"pages", "indices", "extractionJobs", "questionGenerationJobs", "topicExtractionJobs", "documentChunks"})
     private SourceBookMaster sourceBook;
 
     @Column(name = "index_name", nullable = false)

@@ -10,6 +10,7 @@ import java.util.UUID;
 @Repository
 public interface QuestionSourceRepository extends JpaRepository<QuestionSource, UUID> {
     List<QuestionSource> findByQuestionId(UUID questionId);
+    List<QuestionSource> findByQuestionIdIn(java.util.Collection<UUID> questionIds);
     void deleteByQuestionId(UUID questionId);
 
     interface SourceSummaryProjection {

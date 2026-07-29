@@ -2213,6 +2213,10 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
                             q.setAiGenerated(true);
                             q.setAiModelName(model);
                             q.setSourceReference("chunk_" + chunkId.toString());
+                            q.setSourceBook(book);
+                            if (chunk.getPageNumber() != null) {
+                                q.setPageNumber(chunk.getPageNumber());
+                            }
 
                             // কাস্টম উত্তর ভ্যালু ইনডেক্স ম্যাপিং লজিক
                             String correctAnswerVal = q.getCorrectAnswer() != null ? q.getCorrectAnswer().trim() : "";

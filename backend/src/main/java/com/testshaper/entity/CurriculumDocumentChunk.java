@@ -21,10 +21,12 @@ public class CurriculumDocumentChunk extends BaseTenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_book_id")
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"pages", "indices", "extractionJobs", "questionGenerationJobs", "topicExtractionJobs", "documentChunks"})
     private SourceBookMaster sourceBook; // Optional: If chunk comes from Textbook/Guidebook
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_book_index_id")
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"sourceBook"})
     private SourceBookIndex sourceBookIndex; // Maps back to the book's specific TOC element
 
     @ManyToOne(fetch = FetchType.LAZY)

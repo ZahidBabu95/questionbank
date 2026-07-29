@@ -21,12 +21,24 @@ public class RoleServiceImpl implements RoleService {
     private final com.testshaper.repository.PermissionRepository permissionRepository;
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<RoleDTO> getAllRoles() {
+        ensureDefaultRolesExist();
         return roleRepository.findAll().stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
     }
+
+    private void ensureDefaultRolesExist() {
+        if (roleRepository.findByName("REVIEWER").isEmpty()) {
+            Role reviewer = new Role();
+            reviewer.setName("REVIEWER");
+            reviewer.setDescription("Subject Reviewer & Quality Auditor");
+            reviewer.setAllowSelfRegistration(true);
+            roleRepository.save(reviewer);
+        }
+    }
+
 
     @Override
     @Transactional(readOnly = true)

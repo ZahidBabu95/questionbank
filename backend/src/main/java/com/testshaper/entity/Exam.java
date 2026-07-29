@@ -108,14 +108,17 @@ public class Exam extends BaseTenantEntity {
     @Column(name = "ai_confidence_score")
     private Double aiConfidenceScore;
 
+    @org.hibernate.annotations.BatchSize(size = 100)
     @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("questionOrder ASC")
     private List<ExamQuestion> examQuestions = new ArrayList<>();
 
+    @org.hibernate.annotations.BatchSize(size = 100)
     @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sectionOrder ASC")
     private List<ExamSection> examSections = new ArrayList<>();
 
+    @org.hibernate.annotations.BatchSize(size = 100)
     @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ExamGenerationRule> generationRules = new ArrayList<>();
 

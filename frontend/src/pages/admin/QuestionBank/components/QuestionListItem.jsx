@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Edit, Trash2, CheckCircle, FileText, ThumbsUp, Bookmark, BookmarkCheck, GitCompare, MoreHorizontal, Layers } from 'lucide-react';
+import { Eye, Edit, Trash2, CheckCircle, FileText, ThumbsUp, Bookmark, BookmarkCheck, GitCompare, MoreHorizontal, Layers, Bot } from 'lucide-react';
 import MarkdownRenderer from '../../../../components/MarkdownRenderer';
 import CQCombinedRenderer from './CQCombinedRenderer';
 import DynamicQuestionViewer from './DynamicQuestionViewer';
@@ -11,6 +11,15 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
     const [showExplanation, setShowExplanation] = useState(false);
     const [isLiked, setIsLiked] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+    const userStr = localStorage.getItem('user');
+    const currentUser = userStr ? JSON.parse(userStr) : null;
+    const isReviewerOrAdmin = isSuperAdmin || currentUser?.roles?.some(r => {
+        const roleName = typeof r === 'string' ? r : (r.name || '');
+        return roleName === 'SUPER_ADMIN' || roleName === 'ROLE_SUPER_ADMIN' || roleName === 'REVIEWER' || roleName === 'ROLE_REVIEWER';
+    }) || currentUser?.email === 'admin' || currentUser?.email?.includes('admin@') || currentUser?.email?.includes('reviewer');
+
+    const isAudited = q.aiAuditScore != null || q.status === 'AI_AUDITED' || q.aiAuditSuggestions != null;
 
     const menuRef = useRef(null);
 
@@ -84,6 +93,21 @@ const QuestionListItem = React.memo(({ q, index, isSelected, onSelect, onSave, i
                     {q.status === 'PENDING' && <span className="px-1 sm:px-1.5 py-px bg-amber-50 text-amber-700 rounded text-[8.5px] sm:text-[9.5px] font-bold uppercase whitespace-nowrap border border-amber-100">Pending</span>}
                     {q.status === 'REVISED' && <span className="px-1 sm:px-1.5 py-px bg-rose-100 text-rose-800 rounded text-[8.5px] sm:text-[9.5px] font-bold uppercase whitespace-nowrap animate-pulse border border-rose-200">Revised</span>}
                     {q.aiGenerated && isDefaultOrSuperAdmin && <span className="px-1 sm:px-1.5 py-px bg-violet-50 text-violet-700 rounded text-[8.5px] sm:text-[9.5px] font-bold uppercase whitespace-nowrap border border-violet-100">AI Synced</span>}
+
+                    {/* AI Audited Badge - Only visible to Reviewers & Super Admins */}
+                    {isAudited && isReviewerOrAdmin && (
+                        <span 
+                            className={`px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9.5px] font-black uppercase whitespace-nowrap border flex items-center gap-1 shadow-sm ${
+                                q.aiFlagged || (q.aiAuditScore != null && q.aiAuditScore < 80)
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                            }`}
+                            title={`AI Co-Pilot Audit Score: ${q.aiAuditScore ?? 85}% ${q.aiFlagged ? '- Needs Review' : '- Passed Checklist'}`}
+                        >
+                            <Bot size={11} className={q.aiFlagged ? 'text-rose-600' : 'text-indigo-600'} />
+                            <span>AI Audited {q.aiAuditScore != null ? `(${q.aiAuditScore}%)` : ''}</span>
+                        </span>
+                    )}
                     
                     <span className={`px-1 sm:px-1.5 py-px rounded text-[8.5px] sm:text-[9.5px] font-bold uppercase whitespace-nowrap border ${difficultyStyle[q.difficulty] ? difficultyStyle[q.difficulty] + ' border-slate-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
                         {q.difficulty}

@@ -376,12 +376,16 @@ public class AIQuestionServiceImpl implements AIQuestionService {
         // For raw completion, we just want the raw markdown response,
         // but we might want to strip code blocks like ```markdown if present.
         String cleaned = responseJson.trim();
-        if (cleaned.startsWith("```markdown")) cleaned = cleaned.substring(11);
+        if (cleaned.startsWith("```json")) cleaned = cleaned.substring(7);
+        else if (cleaned.startsWith("```markdown")) cleaned = cleaned.substring(11);
+        else if (cleaned.startsWith("```text")) cleaned = cleaned.substring(7);
         else if (cleaned.startsWith("```")) cleaned = cleaned.substring(3);
+
         if (cleaned.endsWith("```")) cleaned = cleaned.substring(0, cleaned.length() - 3);
-        
+
         return cleaned.trim();
     }
+
 
     // ═══════════════════ Provider Check ═══════════════════
 

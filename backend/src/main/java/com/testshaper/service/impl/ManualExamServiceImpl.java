@@ -30,6 +30,8 @@ public class ManualExamServiceImpl {
     private final ClassSubjectRepository classSubjectRepository;
     private final QuestionFavoriteRepository favoriteRepository;
     private final UserRepository userRepository;
+    private final QuestionOptionRepository questionOptionRepository;
+    private final QuestionSourceRepository questionSourceRepository;
 
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
@@ -458,6 +460,7 @@ public class ManualExamServiceImpl {
 
     // ── Get Exam ──────────────────────────────────────────────────────────────
     @Transactional(readOnly = true)
+    @org.springframework.cache.annotation.Cacheable(value = "exams", key = "#examId")
     public ExamDTO getExam(UUID examId) {
         Exam exam = examRepository.findByIdWithQuestions(examId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
@@ -483,6 +486,7 @@ public class ManualExamServiceImpl {
 
     // ── Delete Exam ───────────────────────────────────────────────────────────
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "exams", key = "#examId")
     public void deleteExam(UUID examId) {
         Exam exam = getExamOrThrow(examId);
         exam.setDeleted(true);
@@ -535,6 +539,16 @@ public class ManualExamServiceImpl {
     }
 
     private ExamDTO toDTO(Exam exam) {
+        if (exam != null && exam.getExamQuestions() != null && !exam.getExamQuestions().isEmpty()) {
+            List<UUID> qIds = exam.getExamQuestions().stream()
+                    .map(eq -> eq.getQuestion() != null ? eq.getQuestion().getId() : null)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            if (!qIds.isEmpty()) {
+                questionOptionRepository.findByQuestionIdIn(qIds);
+                questionSourceRepository.findByQuestionIdIn(qIds);
+            }
+        }
         ExamDTO dto = new ExamDTO();
         dto.setId(exam.getId());
         dto.setTenantId(exam.getTenantId());

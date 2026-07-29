@@ -361,6 +361,22 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
 
         if (chapterContext.length() < 10) return;
 
+        List<String> existingTopicNames = new ArrayList<>();
+        if (mappedChapterId != null) {
+            List<Topic> topics = topicRepository.findByChapterId(mappedChapterId);
+            for (Topic t : topics) {
+                if (t.getName() != null && !t.getName().isBlank()) {
+                    existingTopicNames.add(t.getName());
+                }
+            }
+        }
+
+        String existingTopicsInfo = "";
+        if (!existingTopicNames.isEmpty()) {
+            existingTopicsInfo = "EXISTING TOPICS IN THIS CHAPTER: " + existingTopicNames.toString() + "\n" +
+                "CRITICAL: If the content matches any of these existing topics, you MUST use that exact topic name in `topicName`.\n\n";
+        }
+
         String prompt;
         if (isTextbook) {
             prompt = "You are an expert curriculum structuring assistant. Your task is to process the following Golden Markdown text of a chapter from a textbook. " +
@@ -371,6 +387,7 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 "3. Make sure NO meaningful text is thrown away. Your output chunks combined should theoretically contain 100% of the context.\n" +
                 "4. CRITICAL JSON ESCAPING: You MUST properly escape all double quotes (\\\") inside the `markdownContent` string values.\n" +
                 "5. LANGUAGE MATCH: The `topicName` MUST be in the SAME language as the source text (e.g., if the text is Bengali, `topicName` MUST be Bengali).\n\n" +
+                existingTopicsInfo +
                 "SCHEMA FORMAT:\n[\n" +
                 "  {\n" +
                 "    \"topicName\": \"Heading or Name of the Sub-topic (Max 10 words)\",\n" +
@@ -387,6 +404,7 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 "4. Make sure NO meaningful text is thrown away.\n" +
                 "5. CRITICAL JSON ESCAPING: You MUST properly escape all double quotes (\\\") inside the `markdownContent` string values.\n" +
                 "6. LANGUAGE MATCH: The `topicName` MUST be in the SAME language as the source text (e.g., if the text is Bengali, `topicName` MUST be Bengali).\n\n" +
+                existingTopicsInfo +
                 "SCHEMA FORMAT:\n[\n" +
                 "  {\n" +
                 "    \"topicName\": \"Suggested Topic Name (Max 10 words, should relate to standard syllabus. Do NOT include board/year in this name)\",\n" +
@@ -444,6 +462,8 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
         List<KnowledgePage> allPages = knowledgePageRepository.findBySourceBookIndexId(sourceBookIndexId);
         int chunkIndex = batchIndex * 100;
 
+        List<Topic> existingChapterTopics = mappedChapter != null ? topicRepository.findByChapterId(mappedChapter.getId()) : Collections.emptyList();
+
         for (JsonNode node : rootArray) {
             String topicName = node.path("topicName").asText("Unknown Topic");
             String content = node.path("markdownContent").asText("");
@@ -457,13 +477,9 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 java.util.Optional<Topic> existing = topicRepository.findByChapterIdAndNameIgnoreCase(mappedChapter.getId(), normalizedTopicName);
                 if (existing.isPresent()) {
                     topic = existing.get();
-                } else if (!isTextbook) {
-                    // For non-textbooks, try to find a semantic match or just pick the first topic to avoid creating thousands of duplicate topics
-                    List<Topic> chapterTopics = topicRepository.findByChapterId(mappedChapter.getId());
-                    if (!chapterTopics.isEmpty()) {
-                        // In a real app we'd do semantic similarity. Here we just fallback to the first topic or null.
-                        topic = chapterTopics.get(0); 
-                    }
+                } else {
+                    // Try Fuzzy matching against existing chapter topics before falling back
+                    topic = findBestFuzzyMatch(existingChapterTopics, normalizedTopicName);
                 }
             }
             
@@ -476,7 +492,21 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
                 topic.setName(normalizedTopicName);
                 topic.setChapter(mappedChapter);
                 topic = topicRepository.save(topic);
+                existingChapterTopics = topicRepository.findByChapterId(mappedChapter.getId());
+            } else if (topic == null && !isTextbook && mappedChapter != null) {
+                // Fallback for guidebooks: Assign to a dedicated "General / Unassigned Practice Questions" topic
+                String fallbackName = "বিবিধ / সাধারণ অনুশীলন";
+                topic = topicRepository.findByChapterIdAndNameIgnoreCase(mappedChapter.getId(), fallbackName)
+                        .orElseGet(() -> {
+                            Topic fallbackTopic = new Topic();
+                            fallbackTopic.setName(fallbackName);
+                            fallbackTopic.setChapter(mappedChapter);
+                            return topicRepository.save(fallbackTopic);
+                        });
+                existingChapterTopics = topicRepository.findByChapterId(mappedChapter.getId());
             }
+
+
 
             CurriculumDocumentChunk chunk = new CurriculumDocumentChunk();
             chunk.setMappedTopic(topic);
@@ -967,4 +997,48 @@ public class TopicExtractorServiceImpl implements TopicExtractorService {
         
         return pushedCount;
     }
+
+    private Topic findBestFuzzyMatch(List<Topic> chapterTopics, String targetName) {
+        if (chapterTopics == null || chapterTopics.isEmpty() || targetName == null || targetName.isBlank()) return null;
+        String cleanTarget = targetName.replaceAll("[^a-zA-Z0-9\\u0980-\\u09FF]", "").toLowerCase();
+
+        Topic bestMatch = null;
+        double maxSimilarity = 0.0;
+
+        for (Topic t : chapterTopics) {
+            if (t.getName() == null) continue;
+            String cleanName = t.getName().replaceAll("[^a-zA-Z0-9\\u0980-\\u09FF]", "").toLowerCase();
+            if (cleanName.equalsIgnoreCase(cleanTarget) || cleanName.contains(cleanTarget) || cleanTarget.contains(cleanName)) {
+                return t;
+            }
+            double sim = calculateSimilarity(cleanName, cleanTarget);
+            if (sim > maxSimilarity && sim >= 0.70) {
+                maxSimilarity = sim;
+                bestMatch = t;
+            }
+        }
+        return bestMatch;
+    }
+
+    private double calculateSimilarity(String s1, String s2) {
+        if (s1.equals(s2)) return 1.0;
+        int maxLen = Math.max(s1.length(), s2.length());
+        if (maxLen == 0) return 1.0;
+        int distance = levenshteinDistance(s1, s2);
+        return 1.0 - ((double) distance / maxLen);
+    }
+
+    private int levenshteinDistance(String s1, String s2) {
+        int[][] dp = new int[s1.length() + 1][s2.length() + 1];
+        for (int i = 0; i <= s1.length(); i++) dp[i][0] = i;
+        for (int j = 0; j <= s2.length(); j++) dp[0][j] = j;
+        for (int i = 1; i <= s1.length(); i++) {
+            for (int j = 1; j <= s2.length(); j++) {
+                int cost = (s1.charAt(i - 1) == s2.charAt(j - 1)) ? 0 : 1;
+                dp[i][j] = Math.min(Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1), dp[i - 1][j - 1] + cost);
+            }
+        }
+        return dp[s1.length()][s2.length()];
+    }
 }
+

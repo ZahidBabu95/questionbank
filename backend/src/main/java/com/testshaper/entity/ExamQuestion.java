@@ -29,6 +29,7 @@ public class ExamQuestion {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "exam_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private Exam exam;
 
     @ManyToOne(fetch = FetchType.EAGER)
@@ -37,6 +38,7 @@ public class ExamQuestion {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "section_id")
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"exam", "questions"})
     private ExamSection section;
 
     @Column(name = "marks", nullable = false)

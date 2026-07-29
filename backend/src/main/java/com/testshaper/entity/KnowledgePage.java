@@ -12,10 +12,12 @@ public class KnowledgePage extends BaseTenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_book_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"pages", "indices", "extractionJobs", "questionGenerationJobs", "topicExtractionJobs", "documentChunks"})
     private SourceBookMaster sourceBook;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_book_index_id")
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"sourceBook"})
     private SourceBookIndex sourceBookIndex; // Can be null until AI categorizes it
 
     @Column(name = "page_number", nullable = false)

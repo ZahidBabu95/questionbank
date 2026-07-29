@@ -40,19 +40,22 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) throws Exception {
         log.info("Starting Data Initialization...");
 
-        try {
-            jdbcTemplate.execute("ALTER TABLE questions MODIFY COLUMN status VARCHAR(50)");
-            log.info("Successfully altered 'questions.status' column to VARCHAR(50) to support new enum values.");
-        } catch (Exception e) {
-            log.warn("Failed to alter questions.status column, might already be correct or table doesn't exist yet: {}", e.getMessage());
-        }
+        // Run DDL alterations in background thread so startup completes instantly without blocking Hikari pool or Cloudflare
+        new Thread(() -> {
+            try {
+                jdbcTemplate.execute("ALTER TABLE questions MODIFY COLUMN status VARCHAR(50)");
+                log.info("Background DDL: 'questions.status' column checked/altered.");
+            } catch (Exception e) {
+                log.debug("Background DDL questions check skipped: {}", e.getMessage());
+            }
 
-        try {
-            jdbcTemplate.execute("ALTER TABLE exams MODIFY COLUMN status VARCHAR(50)");
-            log.info("Successfully altered 'exams.status' column to VARCHAR(50) to support ONLINE_EXAM and other values.");
-        } catch (Exception e) {
-            log.warn("Failed to alter exams.status column, might already be correct or table doesn't exist yet: {}", e.getMessage());
-        }
+            try {
+                jdbcTemplate.execute("ALTER TABLE exams MODIFY COLUMN status VARCHAR(50)");
+                log.info("Background DDL: 'exams.status' column checked/altered.");
+            } catch (Exception e) {
+                log.debug("Background DDL exams check skipped: {}", e.getMessage());
+            }
+        }).start();
 
 
             // 1. Create Default Institute
@@ -111,9 +114,11 @@ public class DataInitializer implements CommandLineRunner {
             // 3. Create Roles
             Role superAdminRole = createRoleIfNotFound("SUPER_ADMIN", allPermissions, true, false);
             Role instituteAdminRole = createRoleIfNotFound("INSTITUTE_ADMIN", Set.of(userRead, userWrite), false, false);
+            Role reviewerRole = createRoleIfNotFound("REVIEWER", Set.of(userRead, userWrite), false, true);
             Role teacherRole = createRoleIfNotFound("TEACHER", Set.of(userRead), false, true);
             Role studentRole = createRoleIfNotFound("STUDENT", Set.of(userRead), false, true);
             Role betaUserRole = createRoleIfNotFound("BETA USER", Set.of(userRead, userWrite), false, false);
+
 
             // 4. Create Users
             createUserIfNotFound("zahid@questionshaper.com", "Zahid", "Z@hid95", superAdminRole, institute);

@@ -21,4 +21,6 @@ public interface QuestionFavoriteRepository extends JpaRepository<QuestionFavori
     
     @org.springframework.data.jpa.repository.Query("SELECT f.question.id FROM QuestionFavorite f WHERE f.user.id = :userId")
     java.util.List<UUID> findQuestionIdsByUserId(@org.springframework.data.repository.query.Param("userId") UUID userId);
+
+    java.util.List<QuestionFavorite> findByUserAndQuestionIn(User user, java.util.Collection<Question> questions);
 }

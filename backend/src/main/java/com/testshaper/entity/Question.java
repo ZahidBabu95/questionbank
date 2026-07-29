@@ -10,6 +10,7 @@ import java.util.UUID;
 @Table(name = "questions", indexes = {
     @Index(name = "idx_q_tenant_status", columnList = "tenant_id, status"),
     @Index(name = "idx_q_academic", columnList = "class_subject_id, chapter_id, topic_id"),
+    @Index(name = "idx_q_avail_cover", columnList = "class_subject_id, deleted, status, type, difficulty, chapter_id, topic_id"),
     @Index(name = "idx_q_type_diff", columnList = "type, difficulty"),
     @Index(name = "idx_q_created_at", columnList = "created_at"),
     @Index(name = "idx_q_parent_question", columnList = "parent_question_id, status"),
@@ -116,7 +117,27 @@ public class Question extends BaseTenantEntity {
     @Column(name = "revision_count")
     private Integer revisionCount = 0;
 
+    // AI Audit & HITL Reviewer Co-Pilot Fields
+    @Column(name = "ai_audit_score")
+    private Integer aiAuditScore;
+
+    @Column(name = "ai_audit_suggestions", columnDefinition = "LONGTEXT")
+    private String aiAuditSuggestions;
+
+    @Column(name = "ai_flagged")
+    private Boolean aiFlagged = false;
+
+    @Column(name = "reviewer_notes", columnDefinition = "LONGTEXT")
+    private String reviewerNotes;
+
+    @Column(name = "reviewed_by")
+    private String reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
     // Community Feedback Counters (Denormalized for Speed)
+
     @Column(name = "likes_count")
     private Integer likesCount = 0;
 
@@ -133,12 +154,20 @@ public class Question extends BaseTenantEntity {
 
     // Academic Mapping
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_book_id")
+    private SourceBookMaster sourceBook;
+
+    @Column(name = "page_number")
+    private Integer pageNumber;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_subject_id")
     private ClassSubject classSubject;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chapter_id")
     private Chapter chapter;
+
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "topic_id")
@@ -178,6 +207,8 @@ public class Question extends BaseTenantEntity {
     }
 
     public enum QuestionStatus {
-        DRAFT, PENDING, APPROVED, REJECTED, REVISED
+        DRAFT, PENDING, APPROVED, REJECTED, REVISED, AI_AUDITED, HUMAN_APPROVED, HUMAN_REVISED, HUMAN_REVIEWED, NEEDS_REVISION
     }
+
 }
+

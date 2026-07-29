@@ -54,21 +54,27 @@ public class SourceBookMaster extends BaseTenantEntity {
     private ClassSubject classSubject;
 
     @OneToMany(mappedBy = "sourceBook", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private List<KnowledgePage> pages = new ArrayList<>();
 
     @OneToMany(mappedBy = "sourceBook", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private List<SourceBookIndex> indices = new ArrayList<>();
 
     @OneToMany(mappedBy = "sourceBook", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private List<AiBulkExtractionJob> extractionJobs = new ArrayList<>();
 
     @OneToMany(mappedBy = "sourceBook", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private List<AiQuestionGenerationJob> questionGenerationJobs = new ArrayList<>();
 
     @OneToMany(mappedBy = "sourceBook", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private List<AiTopicExtractionJob> topicExtractionJobs = new ArrayList<>();
 
     @OneToMany(mappedBy = "sourceBook", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private List<CurriculumDocumentChunk> documentChunks = new ArrayList<>();
 
     public enum BookType {

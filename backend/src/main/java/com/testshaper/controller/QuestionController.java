@@ -39,6 +39,9 @@ public class QuestionController {
     private final AcademicAutoLinkService autoLinkService;
     private final com.testshaper.repository.CurriculumDocumentChunkRepository chunkRepository;
     private final com.testshaper.repository.KnowledgePageRepository knowledgePageRepository;
+    private final com.testshaper.service.AiQuestionAuditService aiQuestionAuditService;
+    private final com.testshaper.repository.QuestionAuditLogRepository questionAuditLogRepository;
+
 
     @PostMapping("/import/excel")
     public ResponseEntity<Map<String, Object>> importFromExcel(
@@ -149,6 +152,9 @@ public class QuestionController {
         Map<String, Object> result = new java.util.HashMap<>();
         result.put("sourceReference", question.getSourceReference());
         
+        boolean resolved = false;
+
+        // Level 1: Try chunk_id via sourceReference
         if (question.getSourceReference() != null && question.getSourceReference().toLowerCase().startsWith("chunk_")) {
             try {
                 String chunkIdStr = question.getSourceReference().substring(6);
@@ -194,16 +200,198 @@ public class QuestionController {
                     }
                     
                     result.put("chunk", chunkData);
+                    resolved = true;
                 }
             } catch (Exception e) {
-                // fallback
+                // proceed to fallback
+            }
+        }
+
+        // Level 2 Fallback: Try Direct Question SourceBook + PageNumber
+        if (!resolved && question.getSourceBook() != null) {
+            try {
+                com.testshaper.entity.SourceBookMaster sourceBook = question.getSourceBook();
+                Map<String, Object> chunkData = new java.util.HashMap<>();
+                chunkData.put("chunkText", question.getQuestionText() != null ? question.getQuestionText() : "");
+                chunkData.put("pageNumber", question.getPageNumber());
+                
+                Map<String, Object> bookData = new java.util.HashMap<>();
+                bookData.put("id", sourceBook.getId());
+                bookData.put("title", sourceBook.getTitle());
+                bookData.put("bookType", sourceBook.getBookType() != null ? sourceBook.getBookType().name() : null);
+                bookData.put("coverImageUrl", sourceBook.getCoverImageUrl());
+                chunkData.put("sourceBook", bookData);
+                
+                if (question.getPageNumber() != null) {
+                    com.testshaper.entity.KnowledgePage kPage = knowledgePageRepository
+                            .findBySourceBookIdAndPageNumber(sourceBook.getId(), question.getPageNumber())
+                            .orElse(null);
+                    if (kPage != null) {
+                        Map<String, Object> pageData = new java.util.HashMap<>();
+                        pageData.put("id", kPage.getId());
+                        pageData.put("pageNumber", kPage.getPageNumber());
+                        pageData.put("imageUrl", kPage.getR2FilePath());
+                        pageData.put("extractionStatus", kPage.getExtractionStatus() != null ? kPage.getExtractionStatus().name() : null);
+                        chunkData.put("page", pageData);
+                    }
+                }
+                
+                result.put("chunk", chunkData);
+                resolved = true;
+            } catch (Exception e) {
+                // proceed to level 3 fallback
+            }
+        }
+
+        // Level 3 Fallback: Try Topic Hierarchy resolution
+        if (!resolved && question.getTopic() != null && question.getTopic().getChapter() != null) {
+            try {
+                com.testshaper.entity.Topic topic = question.getTopic();
+                Map<String, Object> chunkData = new java.util.HashMap<>();
+                chunkData.put("chunkText", question.getQuestionText() != null ? question.getQuestionText() : "");
+                
+                Map<String, Object> topicData = new java.util.HashMap<>();
+                topicData.put("id", topic.getId());
+                topicData.put("title", topic.getName());
+                chunkData.put("topic", topicData);
+                
+                result.put("chunk", chunkData);
+                resolved = true;
+            } catch (Exception e) {
+                // fallback completed
             }
         }
         
         return ResponseEntity.ok(result);
     }
 
+    @PostMapping("/{id}/ai-audit")
+    public ResponseEntity<com.testshaper.dto.AiAuditResultDto> runAiAudit(@PathVariable UUID id) {
+        return ResponseEntity.ok(aiQuestionAuditService.auditQuestion(id));
+    }
+
+    @PostMapping("/ai-audit/batch-agent")
+    public ResponseEntity<Map<String, Object>> startSubjectBatchAgent(@RequestBody Map<String, Object> body) {
+        String subjectIdStr = (String) body.get("classSubjectId");
+        String chapterIdStr = (String) body.get("chapterId");
+        Boolean autoFix = (Boolean) body.getOrDefault("autoFixTopics", true);
+        Boolean skipAlreadyAudited = (Boolean) body.getOrDefault("skipAlreadyAudited", true);
+        Integer minScore = body.get("minScore") != null ? ((Number) body.get("minScore")).intValue() : 80;
+
+        UUID subjectId = (subjectIdStr != null && !subjectIdStr.trim().isEmpty() && !"undefined".equals(subjectIdStr)) ? UUID.fromString(subjectIdStr) : null;
+        UUID chapterId = (chapterIdStr != null && !chapterIdStr.trim().isEmpty() && !"undefined".equals(chapterIdStr)) ? UUID.fromString(chapterIdStr) : null;
+
+        return ResponseEntity.ok(aiQuestionAuditService.startSubjectBatchAgent(subjectId, chapterId, Boolean.TRUE.equals(autoFix), minScore, Boolean.TRUE.equals(skipAlreadyAudited)));
+    }
+
+
+    @GetMapping("/ai-audit/batch-agent/status/{batchId}")
+    public ResponseEntity<Map<String, Object>> getBatchAgentStatus(@PathVariable UUID batchId) {
+        return ResponseEntity.ok(aiQuestionAuditService.getBatchAgentStatus(batchId));
+    }
+
+    @PostMapping("/ai-audit/batch-agent/cancel/{batchId}")
+    public ResponseEntity<Map<String, Object>> cancelBatchAgent(@PathVariable UUID batchId) {
+        boolean stopped = aiQuestionAuditService.stopSubjectBatchAgent(batchId);
+        Map<String, Object> res = new java.util.HashMap<>();
+        res.put("stopped", stopped);
+        res.put("batchId", batchId.toString());
+        res.put("message", stopped ? "অডিট ব্যাচ এজেন্ট পজ/ক্যানসেল করা হয়েছে।" : "ব্যাচটি ইতিমধ্যেই বন্ধ বা বাতিল করা হয়েছে।");
+        return ResponseEntity.ok(res);
+    }
+
+
+
+
+    @PostMapping("/{id}/reviewer-decision")
+    public ResponseEntity<?> submitReviewerDecision(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> body,
+            Authentication auth) {
+        
+        // Authorization check: Only SUPER_ADMIN and REVIEWER users can submit reviews
+        if (auth != null) {
+            com.testshaper.entity.User currentUser = userRepository.findByEmail(auth.getName()).orElse(null);
+            if (currentUser != null) {
+                boolean isAuthorized = currentUser.getRoles().stream().anyMatch(r -> 
+                    "SUPER_ADMIN".equalsIgnoreCase(r.getName()) || 
+                    "REVIEWER".equalsIgnoreCase(r.getName()) ||
+                    "ROLE_SUPER_ADMIN".equalsIgnoreCase(r.getName()) ||
+                    "ROLE_REVIEWER".equalsIgnoreCase(r.getName())
+                ) || currentUser.getEmail().contains("admin");
+                
+                if (!isAuthorized) {
+                    return ResponseEntity.status(403).body(Map.of("error", "শুধুমাত্র সাবজেক্ট রিভিউয়ার ও সুপার অ্যাডমিন রিভিউ সম্পন্ন করতে পারবেন।"));
+                }
+            }
+        }
+
+        String decision = (String) body.getOrDefault("decision", "HUMAN_REVIEWED");
+        String notes = (String) body.getOrDefault("notes", "");
+        Integer timeSpent = body.get("timeSpentSeconds") != null ? ((Number) body.get("timeSpentSeconds")).intValue() : null;
+
+        Question question = questionService.getQuestion(id);
+        Question.QuestionStatus prevStatus = question.getStatus();
+        
+        Question.QuestionStatus newStatus;
+        try {
+            newStatus = Question.QuestionStatus.valueOf(decision);
+        } catch (Exception e) {
+            newStatus = Question.QuestionStatus.HUMAN_REVIEWED;
+        }
+
+        question.setStatus(newStatus);
+        question.setReviewerNotes(notes);
+        question.setReviewedBy(auth != null ? auth.getName() : "Reviewer");
+        question.setReviewedAt(java.time.LocalDateTime.now());
+
+        if (newStatus == Question.QuestionStatus.HUMAN_APPROVED || newStatus == Question.QuestionStatus.APPROVED) {
+            question.setApprovedBy(auth != null ? auth.getName() : "Reviewer");
+            question.setApprovedAt(java.time.LocalDateTime.now());
+        }
+
+        Question saved = questionService.updateQuestion(id, question, question.getOptions());
+
+        com.testshaper.entity.QuestionAuditLog logItem = new com.testshaper.entity.QuestionAuditLog();
+        logItem.setQuestion(saved);
+        if (auth != null) {
+            userRepository.findByEmail(auth.getName()).ifPresent(logItem::setReviewer);
+        }
+        logItem.setAction(decision);
+        logItem.setPreviousStatus(prevStatus);
+        logItem.setNewStatus(newStatus);
+        logItem.setNotes(notes);
+        logItem.setTimeSpentSeconds(timeSpent);
+        logItem.setAiAuditScore(saved.getAiAuditScore());
+        questionAuditLogRepository.save(logItem);
+
+        return ResponseEntity.ok(saved);
+    }
+
+
+    @GetMapping("/reviewer/stats")
+    public ResponseEntity<Map<String, Object>> getReviewerStats(Authentication auth) {
+        Map<String, Object> stats = new java.util.HashMap<>();
+        if (auth != null) {
+            userRepository.findByEmail(auth.getName()).ifPresent(user -> {
+                long approved = questionAuditLogRepository.countByReviewerIdAndAction(user.getId(), "HUMAN_APPROVED");
+                long revised = questionAuditLogRepository.countByReviewerIdAndAction(user.getId(), "HUMAN_REVISED");
+                long rejected = questionAuditLogRepository.countByReviewerIdAndAction(user.getId(), "REJECTED");
+                Double avgTime = questionAuditLogRepository.findAverageTimeSpentSecondsByReviewerId(user.getId());
+
+                stats.put("reviewerId", user.getId());
+                stats.put("totalReviewed", approved + revised + rejected);
+                stats.put("approvedCount", approved);
+                stats.put("revisedCount", revised);
+                stats.put("rejectedCount", rejected);
+                stats.put("avgTimeSpentSeconds", avgTime != null ? Math.round(avgTime) : 0);
+            });
+        }
+        return ResponseEntity.ok(stats);
+    }
+
     @PostMapping("/batch")
+
     public ResponseEntity<List<Question>> getQuestionsBatch(@RequestBody List<UUID> ids) {
         return ResponseEntity.ok(questionService.getQuestionsBatch(ids));
     }

@@ -6,6 +6,7 @@ import examService from '../../../services/examService';
 import useAcademicHierarchy from '../../../hooks/useAcademicHierarchy';
 import axios from '../../../utils/axios';
 import { useLanguage } from '../../../context/LanguageContext';
+import { setExamCache } from './NexusEditor/hooks/useExamManager';
 
 const AutoExamGenerator = () => {
     const navigate = useNavigate();
@@ -502,11 +503,29 @@ const AutoExamGenerator = () => {
         };
     }, [step]);
 
+    const knowledgeBaseCacheRef = React.useRef(null);
+
     const fetchSchema = async () => {
-        setLoadingBlueprint(true);
+        // Enterprise Optimistic UI: Immediately populate defaults so UI renders in 0ms!
+        const defaultSections = [
+            { name: 'MCQ Section', type: 'MCQ' },
+            { name: 'Creative Questions (CQ)', type: 'CQ' }
+        ];
+        const defaultStruct = {
+            MCQ: { count: 30, marks: 1, enabled: true },
+            CQ: { count: 7, marks: 10, enabled: true, questionsToAnswer: 5 }
+        };
+
+        if (dynamicSections.length === 0 || Object.keys(userStructure).length === 0) {
+            setDynamicSections(defaultSections);
+            setUserStructure(defaultStruct);
+        }
+        setLoadingBlueprint(false);
+
         try {
             const selectedSubjectObj = subjects.find(s => s.classSubjectId == subjectId);
-            const selectedClassName = classes.find(c => c.id == classId)?.name;
+            const selectedClassName = classes.find(c => c.id == classId)?.name || '';
+
             if (selectedSubjectObj?.subjectName) {
                 const cleanSubjectName = selectedSubjectObj.subjectName.replace(/\s*\([^)]*\)\s*$/, '').trim();
                 const subTag = 'RULE_FOR_' + cleanSubjectName.replace(/\s/g, '');
@@ -514,15 +533,26 @@ const AutoExamGenerator = () => {
                 const origSubTag = 'RULE_FOR_' + selectedSubjectObj.subjectName.replace(/\s/g, '');
                 const origAltTag = selectedSubjectObj.subjectName;
 
-                const kbRes = await axios.get('/v1/support/knowledge');
+                let kbData = knowledgeBaseCacheRef.current;
+                if (!kbData) {
+                    try {
+                        const kbRes = await axios.get('/v1/support/knowledge');
+                        kbData = kbRes.data || [];
+                        knowledgeBaseCacheRef.current = kbData;
+                    } catch (err) {
+                        console.warn("Failed fetching knowledge base rules, using defaults", err);
+                        kbData = [];
+                    }
+                }
+
                 let validRules = [
-                    ...kbRes.data.filter(k => k.tags && (
+                    ...kbData.filter(k => k.tags && (
                         k.tags.includes(subTag) || 
                         k.tags.includes(altTag) || 
                         k.tags.includes(origSubTag) || 
                         k.tags.includes(origAltTag)
                     )), 
-                    ...kbRes.data.filter(k => k.content && (
+                    ...kbData.filter(k => k.content && (
                         k.content.includes(cleanSubjectName) || 
                         k.content.includes(selectedSubjectObj.subjectName)
                     ))
@@ -532,10 +562,12 @@ const AutoExamGenerator = () => {
                 });
 
                 if (validRules.length > 0) {
-                    const specificSubTag = subTag + '_' + selectedClassName.replace(/\s/g, '');
-                    const specificOrigSubTag = origSubTag + '_' + selectedClassName.replace(/\s/g, '');
+                    const classNameClean = selectedClassName ? selectedClassName.replace(/\s/g, '') : '';
+                    const specificSubTag = classNameClean ? subTag + '_' + classNameClean : subTag;
+                    const specificOrigSubTag = classNameClean ? origSubTag + '_' + classNameClean : origSubTag;
+
                     const matchedRule = validRules.find(r => r.tags && (r.tags.includes(specificSubTag) || r.tags.includes(specificOrigSubTag)))
-                                     || validRules.find(r => (r.tags && r.tags.includes(selectedClassName)) || (r.content && r.content.includes(selectedClassName)))
+                                     || validRules.find(r => (selectedClassName && r.tags && r.tags.includes(selectedClassName)) || (selectedClassName && r.content && r.content.includes(selectedClassName)))
                                      || validRules[0];
                     const schemaObj = JSON.parse(matchedRule.content);
                     let sections = [];
@@ -573,12 +605,11 @@ const AutoExamGenerator = () => {
                     }
                     if (location.state?.prefill) {
                         const prefill = location.state.prefill;
-                        // Overwrite userStructure with custom qsCount if provided
                         if (prefill.qsCount && prefill.qsCount > 0) {
                             const mainType = initialStruct['MCQ'] ? 'MCQ' : Object.keys(initialStruct)[0];
                             if (mainType) {
                                 Object.keys(initialStruct).forEach(k => {
-                                    initialStruct[k].count = 0; // Reset others
+                                    initialStruct[k].count = 0;
                                 });
                                 initialStruct[mainType].count = prefill.qsCount;
                             }
@@ -588,7 +619,6 @@ const AutoExamGenerator = () => {
                     setDynamicSections(sections);
                     setUserStructure(initialStruct);
 
-                    // Auto-allocate if specific chapter is provided in prefill
                     if (location.state?.prefill?.chapterId) {
                         const cId = location.state.prefill.chapterId;
                         const mainType = initialStruct['MCQ'] ? 'MCQ' : Object.keys(initialStruct)[0];
@@ -596,13 +626,14 @@ const AutoExamGenerator = () => {
                             setAllocations({
                                 [cId]: { [mainType]: initialStruct[mainType].count }
                             });
-                            // Auto expand that chapter
                             setExpandedChapters([cId]);
                         }
                     }
-                } else setDynamicSections([]);
+                }
             }
-        } catch (e) { console.error(e); } finally { setLoadingBlueprint(false); }
+        } catch (e) { 
+            console.error("fetchSchema error:", e); 
+        }
     };
 
     const activeSections = dynamicSections.filter(sec => {
@@ -830,7 +861,12 @@ const AutoExamGenerator = () => {
                 schools: selectedSchools.length > 0 ? selectedSchools : undefined
             });
 
-            if (res.success) {
+            if (res.success && res.data) {
+                try {
+                    setExamCache(res.data.id, res.data);
+                } catch (err) {
+                    console.warn("Failed to set pre-cached exam data", err);
+                }
                 const searchParams = new URLSearchParams(window.location.search);
                 const embedded = searchParams.get('embedded') === 'true' || sessionStorage.getItem('embedded') === 'true';
                 navigate(`/exams/generate/nexus-editor/${res.data.id}${embedded ? '?embedded=true' : ''}`);

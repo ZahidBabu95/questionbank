@@ -2,8 +2,9 @@ import React from 'react';
 import { 
     Layers, Search, GitCompare, Filter, X, ChevronDown, 
     CheckCircle, XCircle, FileText, ThumbsUp, ThumbsDown, 
-    Clock, Edit, Trash2 
+    Clock, Edit, Trash2, Bot 
 } from 'lucide-react';
+
 
 export default function QuestionFilterPanel({
     viewMode,
@@ -70,8 +71,12 @@ export default function QuestionFilterPanel({
     hasFullLangAccess,
     uniqueInstituteMediums,
     user,
-    portalTarget
+    portalTarget,
+    onOpenBatchAgentModal,
+    activeBatchProgress
 }) {
+
+
     return (
         <div className="sticky top-0 z-30 bg-white border-b border-slate-200 px-1.5 sm:px-4 pt-1 pb-1 sm:pt-2 sm:pb-2 shadow-sm space-y-1 sm:space-y-2">
             
@@ -123,6 +128,23 @@ export default function QuestionFilterPanel({
                     </div>
 
                     <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                        {onOpenBatchAgentModal && (
+                            <button
+                                type="button"
+                                onClick={onOpenBatchAgentModal}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 text-white rounded-lg text-[11px] font-black transition-all border shadow-sm active:scale-95 shrink-0 ${activeBatchProgress?.isRunning ? 'bg-gradient-to-r from-indigo-700 via-purple-700 to-emerald-600 border-emerald-400/60 ring-2 ring-emerald-400/30' : 'bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 border-indigo-400/40'}`}
+                                title="Run Subject-Wide Background AI Audit & Auto-Fix Agent"
+                            >
+                                <Bot size={13} className={activeBatchProgress?.isRunning ? "text-emerald-300 animate-spin" : "text-amber-300 animate-pulse"} />
+                                <span>
+                                    {activeBatchProgress?.isRunning 
+                                        ? `🤖 অডিট প্রসেসিং: ${activeBatchProgress.percent}% (${activeBatchProgress.processed}/${activeBatchProgress.total})`
+                                        : '🤖 এআই এজেন্ট'}
+                                </span>
+                            </button>
+                        )}
+
+
                         {hasFullLangAccess && (
                             <button
                                 onClick={() => setSplitScreenMode(!splitScreenMode)}
@@ -132,6 +154,7 @@ export default function QuestionFilterPanel({
                                 <GitCompare size={12} /> Review Mode
                             </button>
                         )}
+
 
                         <button
                             onClick={() => setShowSourceFilters(!showSourceFilters)}

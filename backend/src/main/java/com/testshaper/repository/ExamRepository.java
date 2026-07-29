@@ -84,7 +84,10 @@ public interface ExamRepository extends JpaRepository<Exam, UUID> {
         @Query("SELECT e FROM Exam e WHERE e.classSubject.academicClass.id = :classId AND e.status = com.testshaper.entity.Exam$ExamStatus.ONLINE_EXAM AND e.deleted = false")
         java.util.List<Exam> findActiveExamsByClassId(@Param("classId") UUID classId);
 
-        @Query("SELECT e FROM Exam e " +
+        @Query("SELECT DISTINCT e FROM Exam e " +
+               "LEFT JOIN FETCH e.classSubject cs " +
+               "LEFT JOIN FETCH cs.subject s " +
+               "LEFT JOIN FETCH cs.academicClass ac " +
                "LEFT JOIN FETCH e.examQuestions eq " +
                "LEFT JOIN FETCH eq.question q " +
                "WHERE e.id = :id")
