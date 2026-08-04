@@ -108,6 +108,25 @@ public class Exam extends BaseTenantEntity {
     @Column(name = "ai_confidence_score")
     private Double aiConfidenceScore;
 
+    // Mobile App Sharing fields
+    @Column(name = "share_code", unique = true)
+    private String shareCode;
+
+    @Column(name = "is_public_shared")
+    private Boolean isPublicShared = false;
+
+    public boolean isPublicShared() {
+        return isPublicShared != null && isPublicShared;
+    }
+
+    public Boolean getIsPublicShared() {
+        return isPublicShared != null && isPublicShared;
+    }
+
+    public void setPublicShared(Boolean publicShared) {
+        this.isPublicShared = publicShared != null ? publicShared : false;
+    }
+
     @org.hibernate.annotations.BatchSize(size = 100)
     @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("questionOrder ASC")

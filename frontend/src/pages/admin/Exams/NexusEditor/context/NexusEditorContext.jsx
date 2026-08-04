@@ -47,6 +47,7 @@ export const NexusEditorProvider = ({ children }) => {
     const [pageCount, setPageCount] = useState(1);
     const [examData, setExamData] = useState(null);
     const [isSavingDocument, setIsSavingDocument] = useState(false);
+    const [autoSaveStatus, setAutoSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'error'
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(0);
     const [downloadStatus, setDownloadStatus] = useState('');
@@ -384,6 +385,7 @@ export const NexusEditorProvider = ({ children }) => {
         pageCount, setPageCount,
         examData, setExamData,
         isSavingDocument, setIsSavingDocument,
+        autoSaveStatus, setAutoSaveStatus,
         isDownloadingPdf, setIsDownloadingPdf,
         downloadProgress, setDownloadProgress,
         downloadStatus, setDownloadStatus,
@@ -418,7 +420,7 @@ export const NexusEditorProvider = ({ children }) => {
         documentQuestions, setDocumentQuestions
     }), [
         editorMode, rawContent, isEditorLoaded, docSettings, updateSetting, updateMultiSettings,
-        zoom, pageCount, examData, isSavingDocument, editor,
+        zoom, pageCount, examData, isSavingDocument, autoSaveStatus, editor,
         isDownloadingPdf, downloadProgress, downloadStatus, showFilenameModal,
         editorConfig, generationBlueprint,
         uiLang, t, isMobileApp, isTablet, workspaceTools, toasts, addToast, removeToast, canvasTheme,

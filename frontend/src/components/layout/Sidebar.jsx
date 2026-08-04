@@ -14,7 +14,7 @@ import {
     AlignLeft, Grid, FileSpreadsheet, DollarSign, History,
     Zap, Save, Cpu, Edit2, Play, FileDown, Paperclip,
     PieChart, LineChart, ShieldAlert, Sliders, Bot, LifeBuoy, FileEdit,
-    QrCode, Scan, GitCompare
+    QrCode, Scan, GitCompare, Code
 } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -234,6 +234,7 @@ export const MENU_ITEMS = [
         icon: <Settings size={20} strokeWidth={1.8} />,
         roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'],
         submenu: [
+            { id: 'SETTINGS_API_MANAGER', title: 'API Manager', path: '/settings/api-manager', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'], icon: <Code size={20} strokeWidth={1.8} /> },
             { id: 'SETTINGS_SECURITY', title: 'Security', path: '/settings/security', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'], icon: <Shield size={20} strokeWidth={1.8} /> },
             { id: 'SETTINGS_GENERAL', title: 'General', path: '/settings/general', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'], icon: <Sliders size={20} strokeWidth={1.8} /> },
             { id: 'SETTINGS_QUESTION_TYPES', title: 'Question Types', path: '/settings/question-types', roles: ['SUPER_ADMIN'], icon: <List size={20} strokeWidth={1.8} /> },

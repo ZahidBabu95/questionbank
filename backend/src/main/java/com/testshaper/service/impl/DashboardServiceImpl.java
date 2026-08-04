@@ -11,6 +11,7 @@ import com.testshaper.repository.QuestionRepository;
 import com.testshaper.repository.UserRepository;
 import com.testshaper.service.DashboardService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -83,6 +84,7 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         @Override
+        @Cacheable(value = "questionStats", key = "'admin_dashboard_stats'")
         public DashboardStatsDTO getAdminDashboardStats() {
                 User currentUser = getCurrentUser();
                 long totalUsers = userRepository.count();
@@ -97,6 +99,7 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         @Override
+        @Cacheable(value = "questionStats", key = "'institute_dashboard_stats_' + (#root.target.getCurrentUser() != null && #root.target.getCurrentUser().getInstitute() != null ? #root.target.getCurrentUser().getInstitute().getCode() : 'default')")
         public DashboardStatsDTO getInstituteDashboardStats() {
                 User currentUser = getCurrentUser();
                 if (currentUser == null || currentUser.getInstitute() == null) {
@@ -116,6 +119,7 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         @Override
+        @Cacheable(value = "questionStats", key = "'teacher_dashboard_stats_' + (#root.target.getCurrentUser() != null ? #root.target.getCurrentUser().getEmail() : 'default')")
         public DashboardStatsDTO getTeacherDashboardStats() {
                 User currentUser = getCurrentUser();
                 if (currentUser == null) {
@@ -133,6 +137,7 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         @Override
+        @Cacheable(value = "questionStats", key = "'student_dashboard_stats_' + (#root.target.getCurrentUser() != null ? #root.target.getCurrentUser().getEmail() : 'default')")
         public DashboardStatsDTO getStudentDashboardStats() {
                 User currentUser = getCurrentUser();
                 long approvedQuestionsCount = getApprovedQuestionsCountForUser(currentUser);
@@ -140,7 +145,7 @@ public class DashboardServiceImpl implements DashboardService {
                 return buildFullStats(0, 0, 0, 0, null, null, approvedQuestionsCount, globalQuestionsCount);
         }
 
-        private User getCurrentUser() {
+        public User getCurrentUser() {
                 String email = SecurityContextHolder.getContext().getAuthentication().getName();
                 return userRepository.findByEmail(email).orElse(null);
         }

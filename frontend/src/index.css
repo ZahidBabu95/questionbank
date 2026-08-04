@@ -459,3 +459,42 @@
 .professional-review-image img:hover {
   transform: scale(1.03);
 }
+
+/* Universal Table Styles for Questions */
+.nexus-question-content table,
+.question-content table,
+.cq-stimulus-block table,
+[data-type="question-block"] table {
+  border-collapse: collapse !important;
+  width: 100% !important;
+  margin: 8px 0 !important;
+}
+
+.nexus-question-content table td,
+.nexus-question-content table th,
+.question-content table td,
+.question-content table th,
+.cq-stimulus-block table td,
+.cq-stimulus-block table th,
+[data-type="question-block"] table td,
+[data-type="question-block"] table th {
+  border: 1px solid #000000 !important;
+  padding: 5px 8px !important;
+  line-height: 1.25 !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  box-sizing: border-box !important;
+}
+
+.nexus-question-content table td *,
+.nexus-question-content table th *,
+.question-content table td *,
+.question-content table th *,
+.cq-stimulus-block table td *,
+.cq-stimulus-block table th *,
+[data-type="question-block"] table td *,
+[data-type="question-block"] table th * {
+  line-height: 1.25 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}

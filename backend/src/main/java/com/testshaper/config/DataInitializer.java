@@ -55,6 +55,13 @@ public class DataInitializer implements CommandLineRunner {
             } catch (Exception e) {
                 log.debug("Background DDL exams check skipped: {}", e.getMessage());
             }
+
+            try {
+                jdbcTemplate.execute("UPDATE exams SET is_public_shared = false WHERE is_public_shared IS NULL");
+                log.info("Background DDL: 'exams.is_public_shared' NULL values updated to false.");
+            } catch (Exception e) {
+                log.debug("Background DDL exams is_public_shared update skipped: {}", e.getMessage());
+            }
         }).start();
 
 

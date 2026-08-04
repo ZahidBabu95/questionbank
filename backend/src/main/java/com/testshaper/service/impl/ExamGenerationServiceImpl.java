@@ -1269,6 +1269,8 @@ public class ExamGenerationServiceImpl {
         dto.setCreatedBy(exam.getCreatedBy());
         dto.setInstructions(exam.getInstructions());
         dto.setCreatedAt(exam.getCreatedAt());
+        dto.setShareCode(exam.getShareCode());
+        dto.setPublicShared(exam.isPublicShared());
 
         dto.setEditorMode(exam.getEditorMode());
         dto.setRawContent(exam.getRawContent());

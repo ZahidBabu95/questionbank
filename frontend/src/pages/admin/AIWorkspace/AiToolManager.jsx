@@ -89,7 +89,19 @@ const AiToolManager = () => {
 
     useEffect(() => {
         fetchTools();
+        fetchEndpoints();
     }, []);
+
+    const fetchEndpoints = async () => {
+        try {
+            const { data } = await axios.get('/v1/ai/tools/endpoints');
+            if (data.success && Array.isArray(data.data)) {
+                setAvailableEndpoints(data.data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch available endpoints", error);
+        }
+    };
 
     const fetchTools = async () => {
         try {

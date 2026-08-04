@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, LogOut, ShieldAlert, RefreshCw } from 'lucide-react';
-import axios from '../../utils/axios';
+import axios, { isTokenExpiringSoon, silentRefreshToken } from '../../utils/axios';
 
 const IdleSessionTimeout = () => {
     const [isWarningOpen, setIsWarningOpen] = useState(false);
@@ -41,10 +41,16 @@ const IdleSessionTimeout = () => {
         // If this reset came from a storage event of another tab, do not write back to storage (prevent loop)
         if (!isFromStorageEvent) {
             const now = Date.now();
-            // Throttle localStorage writes to once every 10 seconds to protect performance
+            // Throttle localStorage writes & silent refresh checks to once every 10 seconds
             if (now - lastWriteRef.current > 10000) {
                 localStorage.setItem('lastActivity', now.toString());
                 lastWriteRef.current = now;
+
+                // Check if active user's token is expiring soon; if so, trigger silent refresh
+                const token = localStorage.getItem('token');
+                if (token && isTokenExpiringSoon(token, 15)) {
+                    silentRefreshToken(token);
+                }
             }
         }
     };

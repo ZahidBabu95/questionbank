@@ -558,6 +558,56 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             .theme-dark [data-type="question-block"]::before {
                 color: #cbd5e1 !important;
             }
+            /* Universal Table Styling for Question Paper & Canvas */
+            .ProseMirror table,
+            .paper-canvas-container table,
+            [data-type="question-block"] table,
+            .nexus-question-content table {
+                border-collapse: collapse !important;
+                width: 100% !important;
+                margin: 8px 0 !important;
+                table-layout: auto;
+            }
+            .ProseMirror table td,
+            .ProseMirror table th,
+            .paper-canvas-container table td,
+            .paper-canvas-container table th,
+            [data-type="question-block"] table td,
+            [data-type="question-block"] table th,
+            .nexus-question-content table td,
+            .nexus-question-content table th {
+                border: 1px solid #000000 !important;
+                padding: 6px 8px !important;
+                line-height: 1.25 !important;
+                vertical-align: middle !important;
+                text-align: center !important;
+                box-sizing: border-box !important;
+                word-break: break-word !important;
+            }
+            .ProseMirror table td *,
+            .ProseMirror table th *,
+            .paper-canvas-container table td *,
+            .paper-canvas-container table th *,
+            [data-type="question-block"] table td *,
+            [data-type="question-block"] table th *,
+            .nexus-question-content table td *,
+            .nexus-question-content table th * {
+                line-height: 1.25 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .ProseMirror table th,
+            .paper-canvas-container table th,
+            [data-type="question-block"] table th,
+            .nexus-question-content table th {
+                font-weight: bold !important;
+                background-color: rgba(0, 0, 0, 0.03) !important;
+            }
+            .nexus-tabular-grid {
+                border: 1px solid #000000 !important;
+                border-radius: 4px;
+            }
+
             .theme-dark table, .theme-dark td, .theme-dark th {
                 border-color: #475569 !important;
             }
@@ -686,6 +736,24 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             }
             .pdf-export-active .ProseMirror * {
                 color: #000000 !important;
+            }
+            .pdf-export-active table,
+            .pdf-export-active td,
+            .pdf-export-active th {
+                box-sizing: border-box !important;
+            }
+            .pdf-export-active td,
+            .pdf-export-active th {
+                border: 1px solid #000000 !important;
+                padding: 6px 8px !important;
+                line-height: 1.25 !important;
+                vertical-align: middle !important;
+            }
+            .pdf-export-active td *,
+            .pdf-export-active th * {
+                line-height: 1.25 !important;
+                margin: 0 !important;
+                padding: 0 !important;
             }
             .show-answers-highlighted.pdf-export-active .nexus-correct-option,
             .show-answers-highlighted.pdf-export-active .nexus-correct-option * {

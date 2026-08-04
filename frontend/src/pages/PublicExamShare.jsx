@@ -125,173 +125,12 @@ const PublicExamShare = () => {
         );
     }
 
-    // ─── ONLINE EXAM: Auth Gate ───
-    // If the exam is an online exam and user is NOT a student → show login/register screen or warning
-    if (exam && exam.status === 'ONLINE_EXAM' && (!isLoggedIn || !isStudent)) {
-        const returnUrl = encodeURIComponent(window.location.pathname);
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 flex flex-col items-center justify-center p-4 font-outfit relative overflow-hidden">
-                {/* Background blobs */}
-                <div className="absolute -top-32 -left-32 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-
-                {/* Card */}
-                <div className="relative w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl text-center space-y-6">
-
-                    {/* Lock Icon */}
-                    <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-xl shadow-blue-500/30 ring-4 ring-white/10">
-                        <Lock size={36} className="text-white" />
-                    </div>
-
-                    {/* Exam Info */}
-                    <div className="space-y-2">
-                        <p className="text-blue-300 text-xs font-black uppercase tracking-widest">অনলাইন পরীক্ষা</p>
-                        <h1 className="text-white text-xl font-extrabold leading-snug">{exam.title}</h1>
-                        {(exam.className || exam.subjectName) && (
-                            <p className="text-slate-400 text-sm font-medium">
-                                {exam.className && `শ্রেণি: ${exam.className}`}
-                                {exam.className && exam.subjectName && ' • '}
-                                {exam.subjectName && `বিষয়: ${exam.subjectName}`}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Exam Meta badges */}
-                    <div className="flex justify-center gap-3 flex-wrap">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 text-blue-200 rounded-xl text-xs font-bold border border-white/10">
-                            <Award size={13} />
-                            মোট নম্বর: {exam.totalMarks}
-                        </div>
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 text-blue-200 rounded-xl text-xs font-bold border border-white/10">
-                            <Clock size={13} />
-                            সময়: {exam.durationMinutes} মিনিট
-                        </div>
-                    </div>
-
-                    {/* Divider */}
-                    <div className="border-t border-white/10" />
-
-                    {/* Auth Required Notice */}
-                    {isLoggedIn && !isStudent ? (
-                        <div className="space-y-4">
-                            <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-400/20 rounded-2xl p-4 text-left">
-                                <AlertCircle size={20} className="text-amber-400 shrink-0 mt-0.5" />
-                                <div className="space-y-1">
-                                    <p className="text-amber-200 text-xs font-extrabold">সতর্কতা:</p>
-                                    <p className="text-amber-100 text-xs font-semibold leading-relaxed">
-                                        আপনি বর্তমানে একজন <strong>{currentUser?.roles?.map(r => typeof r === 'string' ? r : r.name).join(', ')}</strong> হিসেবে লগইন করে আছেন। এই পরীক্ষাটি শুধুমাত্র শিক্ষার্থীরা অনলাইনে দিতে পারবে।
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => handleLogoutAndRedirect(`/signup?redirect=${returnUrl}&role=STUDENT&instituteId=${exam.tenantId || ''}&classId=${exam.classId || ''}`)}
-                                className="w-full flex items-center justify-center gap-2.5 px-6 py-3.5 bg-white/10 hover:bg-white/15 text-white font-extrabold rounded-2xl border border-white/15 transition-all active:scale-[0.98] text-sm"
-                            >
-                                <UserPlus size={18} />
-                                লগআউট করে শিক্ষার্থী হিসেবে রেজিস্ট্রেশন করুন
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-400/20 rounded-2xl p-4 text-left">
-                                <ShieldCheck size={20} className="text-amber-400 shrink-0 mt-0.5" />
-                                <p className="text-amber-200 text-xs font-semibold leading-relaxed">
-                                    এই অনলাইন পরীক্ষায় অংশগ্রহণ করতে আপনাকে অবশ্যই লগইন করতে হবে।
-                                </p>
-                            </div>
-                            <Link
-                                to={`/login?redirect=${returnUrl}`}
-                                className="w-full flex items-center justify-center gap-2.5 px-6 py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white font-extrabold rounded-2xl shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] text-sm"
-                            >
-                                <LogIn size={18} />
-                                লগইন করুন এবং পরীক্ষা দিন
-                            </Link>
-                            <Link
-                                to={`/signup?redirect=${returnUrl}&role=STUDENT&instituteId=${exam.tenantId || ''}&classId=${exam.classId || ''}`}
-                                className="w-full flex items-center justify-center gap-2.5 px-6 py-3.5 bg-white/10 hover:bg-white/15 text-white font-extrabold rounded-2xl border border-white/15 transition-all active:scale-[0.98] text-sm"
-                            >
-                                <UserPlus size={18} />
-                                নতুন একাউন্ট তৈরি করুন (রেজিস্ট্রেশন)
-                            </Link>
-                        </div>
-                    )}
-
-                    {/* Footer note */}
-                    <p className="text-slate-500 text-[11px] font-medium">
-                        <GraduationCap size={12} className="inline mr-1" />
-                        রেজিস্ট্রেশনের সময় সঠিক শ্রেণি ও রোল নম্বর দিন।
-                    </p>
-                </div>
-            </div>
-        );
-    }
-
-    // ─── ONLINE EXAM: Logged-in student → redirect to exam taker ───
-    // Show a CTA to take the exam (instead of showing the question paper)
-    if (exam && exam.status === 'ONLINE_EXAM' && isLoggedIn) {
-        const isStudent = currentUser?.roles?.some(r => (typeof r === 'string' ? r : r.name || '')
-            .toUpperCase().includes('STUDENT'));
-
-        if (isStudent) {
-            return (
-                <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 flex flex-col items-center justify-center p-4 font-outfit relative overflow-hidden">
-                    <div className="absolute -top-32 -left-32 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-                    <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-
-                    <div className="relative w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl text-center space-y-6">
-                        <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-xl shadow-emerald-500/30 ring-4 ring-white/10">
-                            <GraduationCap size={36} className="text-white" />
-                        </div>
-
-                        <div className="space-y-2">
-                            <p className="text-emerald-300 text-xs font-black uppercase tracking-widest">স্বাগতম, {currentUser?.name || 'শিক্ষার্থী'}!</p>
-                            <h1 className="text-white text-xl font-extrabold leading-snug">{exam.title}</h1>
-                            {(exam.className || exam.subjectName) && (
-                                <p className="text-slate-400 text-sm font-medium">
-                                    {exam.className && `শ্রেণি: ${exam.className}`}
-                                    {exam.className && exam.subjectName && ' • '}
-                                    {exam.subjectName && `বিষয়: ${exam.subjectName}`}
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="flex justify-center gap-3 flex-wrap">
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 text-emerald-200 rounded-xl text-xs font-bold border border-white/10">
-                                <Award size={13} />
-                                মোট নম্বর: {exam.totalMarks}
-                            </div>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 text-emerald-200 rounded-xl text-xs font-bold border border-white/10">
-                                <Clock size={13} />
-                                সময়: {exam.durationMinutes} মিনিট
-                            </div>
-                        </div>
-
-                        <div className="border-t border-white/10" />
-
-                        <div className="flex flex-col gap-3">
-                            <button
-                                onClick={() => navigate(`/student/exams/take/${id}`)}
-                                className="w-full flex items-center justify-center gap-2.5 px-6 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold rounded-2xl shadow-lg shadow-emerald-500/25 transition-all active:scale-[0.98] text-base"
-                            >
-                                <GraduationCap size={20} />
-                                পরীক্ষা শুরু করুন
-                            </button>
-                            <Link
-                                to="/dashboard"
-                                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/15 text-white font-bold rounded-2xl border border-white/15 transition-all text-sm"
-                            >
-                                <ArrowLeft size={16} />
-                                ড্যাশবোর্ডে ফিরে যান
-                            </Link>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-    }
+    const handleTakeOnlineExam = () => {
+        navigate(`/student/exams/take/${id}`);
+    };
 
     // Sort questions by order
-    const sortedQuestions = exam.questions ? [...exam.questions].sort((a, b) => a.order - b.order) : [];
+    const sortedQuestions = exam ? (exam.questions ? [...exam.questions].sort((a, b) => a.order - b.order) : []) : [];
 
     const formatBanglaDigits = (num) => {
         if (num === null || num === undefined) return '';
@@ -300,7 +139,6 @@ const PublicExamShare = () => {
     };
 
     return (
-
         <div className="min-h-screen bg-slate-50 font-outfit text-slate-800 pb-20 print:bg-white print:pb-0">
             {/* Header / Toolbar (Hidden during print) */}
             <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm print:hidden">
@@ -310,12 +148,21 @@ const PublicExamShare = () => {
                             <ArrowLeft size={18} />
                         </Link>
                         <div>
-                            <h1 className="font-extrabold text-slate-900 text-sm line-clamp-1">{exam.title}</h1>
+                            <h1 className="font-extrabold text-slate-900 text-sm line-clamp-1">{exam?.title}</h1>
                             <p className="text-xs text-slate-400 font-medium">প্রশ্নপত্র শেয়ার করা লিংক</p>
                         </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                        {/* Take Online Exam Button */}
+                        <button
+                            onClick={handleTakeOnlineExam}
+                            className="flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white transition-all shadow-md shadow-indigo-500/20 active:scale-95"
+                        >
+                            <GraduationCap size={16} />
+                            অনলাইনে পরীক্ষা দিন
+                        </button>
+
                         {/* Toggle Answer Key */}
                         <button
                             onClick={() => setShowAnswers(!showAnswers)}
@@ -362,6 +209,21 @@ const PublicExamShare = () => {
                         </button>
                     </div>
                 </div>
+            </div>
+
+            {/* Top Banner Alert for Online Exam */}
+            <div className="bg-gradient-to-r from-indigo-900 via-blue-900 to-slate-900 text-white py-2.5 px-4 text-center text-xs font-bold flex items-center justify-center gap-3 print:hidden border-b border-indigo-700/50">
+                <span className="flex items-center gap-1.5 text-blue-200">
+                    <Award size={15} className="text-amber-400" />
+                    এই প্রশ্নপত্রটির উপর সরাসরি অনলাইনে টাইমড কুইজ পরীক্ষা দেওয়ার অপশন সক্রিয় রয়েছে!
+                </span>
+                <button
+                    onClick={handleTakeOnlineExam}
+                    className="px-3.5 py-1 bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 rounded-lg text-xs font-black hover:from-amber-300 hover:to-amber-400 transition-all shadow-sm flex items-center gap-1 shrink-0"
+                >
+                    <GraduationCap size={14} />
+                    পরীক্ষা দিন →
+                </button>
             </div>
 
             {/* Notification Banner */}

@@ -33,6 +33,8 @@ public class ExamDTO {
     private String createdBy;
     private LocalDateTime createdAt;
     private String tenantId;
+    private String shareCode;
+    private boolean isPublicShared;
 
     // Nexus Engine fields
     private ExamEditorMode editorMode;

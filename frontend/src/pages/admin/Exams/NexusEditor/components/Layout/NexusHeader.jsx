@@ -25,7 +25,7 @@ const NexusHeader = () => {
         editorMode, setEditorMode,
         pageCount, zoom,
         activeTab, setActiveTab,
-        isSavingDocument, addToast,
+        isSavingDocument, addToast, autoSaveStatus,
         setShowFilenameModal,
         docSettings, updateSetting
     } = useNexusEditor();
@@ -136,12 +136,27 @@ const NexusHeader = () => {
                         )}
                         
                         {/* Auto-save/status indicator (Cloud) */}
-                        <div className="hidden md:flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50/50 border border-emerald-100/50 rounded-lg text-[9px] text-emerald-700 font-bold shadow-sm shrink-0">
+                        <div className={`hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-sm shrink-0 border transition-all ${
+                            autoSaveStatus === 'saving' || isSavingDocument
+                                ? 'bg-amber-50 border-amber-200 text-amber-700 animate-pulse'
+                                : autoSaveStatus === 'error'
+                                ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                : 'bg-emerald-50/70 border-emerald-200/60 text-emerald-700'
+                        }`}>
                             <div className="relative flex items-center justify-center">
-                                <Cloud size={11} className="text-emerald-500" />
-                                <span className="absolute -top-0.5 -right-0.5 w-1 h-1 bg-emerald-400 rounded-full border border-white animate-pulse"></span>
+                                {autoSaveStatus === 'saving' || isSavingDocument ? (
+                                    <Loader2 size={11} className="animate-spin text-amber-600" />
+                                ) : (
+                                    <Cloud size={11} className={autoSaveStatus === 'error' ? 'text-rose-500' : 'text-emerald-500'} />
+                                )}
                             </div>
-                            <span>Auto Sync</span>
+                            <span>
+                                {autoSaveStatus === 'saving' || isSavingDocument
+                                    ? (uiLang === 'bn' ? 'সংরক্ষণ হচ্ছে...' : 'Saving...')
+                                    : autoSaveStatus === 'error'
+                                    ? (uiLang === 'bn' ? 'সংরক্ষণ ব্যর্থ' : 'Save Error')
+                                    : (uiLang === 'bn' ? 'সংরক্ষিত' : 'Auto Sync')}
+                            </span>
                         </div>
                     </div>
 

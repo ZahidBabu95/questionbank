@@ -5,7 +5,10 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Table(name = "question_options")
+@Table(name = "question_options", indexes = {
+    @Index(name = "idx_qopt_question_id", columnList = "question_id"),
+    @Index(name = "idx_qopt_correct", columnList = "question_id, is_correct")
+})
 @Getter
 @Setter
 public class QuestionOption extends BaseTenantEntity {

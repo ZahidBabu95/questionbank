@@ -31,6 +31,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitingFilter rateLimitingFilter;
 
     /**
      * CORS allowed origins — comma-separated list read from properties.
@@ -62,8 +63,8 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         // ── Public API endpoints ──────────────────────────────────
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/ws-live-updates/**", "/api/v1/exams/download/pdf/**", "/api/v1/exams/download/word/**", "/api/v1/exams/download/upload-temp/**").permitAll()
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/api/v1/student/exams/**", "/ws-live-updates/**", "/api/v1/exams/download/pdf/**", "/api/v1/exams/download/word/**", "/api/v1/exams/download/upload-temp/**").permitAll()
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health").permitAll()
 
                         // ── All other /api/** must be authenticated ───────────────
                         .requestMatchers("/api/**").authenticated()
@@ -78,6 +79,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
 
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

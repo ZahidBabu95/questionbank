@@ -1,5 +1,61 @@
 import axios from 'axios';
 
+// Helper: Safely parse JWT payload
+export const parseJwt = (token) => {
+    try {
+        if (!token) return null;
+        const base64Url = token.split('.')[1];
+        if (!base64Url) return null;
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+            atob(base64)
+                .split('')
+                .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join('')
+        );
+        return JSON.parse(jsonPayload);
+    } catch (e) {
+        return null;
+    }
+};
+
+// Helper: Check if token expires within the buffer window (default 15 mins)
+export const isTokenExpiringSoon = (token, bufferMinutes = 15) => {
+    const decoded = parseJwt(token);
+    if (!decoded || !decoded.exp) return false;
+    const expirationTimeMs = decoded.exp * 1000;
+    const now = Date.now();
+    return expirationTimeMs - now < bufferMinutes * 60 * 1000;
+};
+
+// Global promise to prevent duplicate parallel token refresh calls
+let refreshPromise = null;
+
+export const silentRefreshToken = async (currentToken) => {
+    if (refreshPromise) return refreshPromise;
+
+    refreshPromise = (async () => {
+        try {
+            // Using clean raw axios instance to prevent recursive interceptor loops
+            const response = await axios.post('/api/v1/auth/refresh-token', { token: currentToken });
+            if (response.data && response.data.success && response.data.data) {
+                const newToken = response.data.data;
+                localStorage.setItem('token', newToken);
+                // Trigger storage event so other tabs and components learn about the new token
+                window.dispatchEvent(new Event('storage'));
+                return newToken;
+            }
+        } catch (err) {
+            console.warn('Silent token refresh failed:', err?.message || err);
+        } finally {
+            refreshPromise = null;
+        }
+        return currentToken;
+    })();
+
+    return refreshPromise;
+};
+
 const instance = axios.create({
     baseURL: '/api', // Proxy in Vite handles this locally; in prod, it's relative to root
     headers: {
@@ -23,13 +79,17 @@ const instance = axios.create({
     }
 });
 
-// Auto-attach Authorization header
+// Auto-attach Authorization header & proactively refresh token if expiring soon
 instance.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('token');
-        // Do not attach token for public endpoints
-        const isPublicEndpoint = config.url && config.url.includes('/public/');
-        if (token && !isPublicEndpoint) {
+    async (config) => {
+        let token = localStorage.getItem('token');
+        const isAuthOrPublic = config.url && (config.url.includes('/public/') || config.url.includes('/auth/'));
+
+        if (token && !isAuthOrPublic) {
+            // Proactively refresh token if it expires in less than 15 minutes
+            if (isTokenExpiringSoon(token, 15)) {
+                token = await silentRefreshToken(token);
+            }
             config.headers['Authorization'] = `Bearer ${token}`;
         }
         return config;
@@ -62,3 +122,4 @@ instance.interceptors.response.use(
 );
 
 export default instance;
+

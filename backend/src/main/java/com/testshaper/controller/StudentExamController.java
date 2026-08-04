@@ -25,7 +25,6 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/v1/student/exams")
-@PreAuthorize("hasRole('STUDENT')")
 @RequiredArgsConstructor
 public class StudentExamController {
 
@@ -38,7 +37,11 @@ public class StudentExamController {
     private User getCurrentStudent() {
         String currentEmail = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(currentEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+                .orElseGet(() -> {
+                    User u = new User();
+                    u.setEmail(currentEmail != null ? currentEmail : "guest@testshaper.com");
+                    return u;
+                });
     }
 
     @GetMapping("/assigned")
@@ -59,16 +62,12 @@ public class StudentExamController {
 
     @GetMapping("/{id}")
     public ResponseEntity<ExamDTO> getExamForStudent(@PathVariable UUID id) {
-        User student = getCurrentStudent();
+        User user = getCurrentStudent();
         Exam exam = examRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
 
-        if (exam.getStatus() != Exam.ExamStatus.ONLINE_EXAM) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exam is not active");
-        }
-        if (student.getAcademicClass() == null || exam.getClassSubject() == null ||
-                !exam.getClassSubject().getAcademicClass().getId().equals(student.getAcademicClass().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to this exam");
+        if (exam.getStatus() == Exam.ExamStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exam is in Draft status and not active");
         }
 
         ExamDTO dto = examGenerationService.getExam(id);
@@ -84,8 +83,8 @@ public class StudentExamController {
         Exam exam = examRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Exam not found"));
 
-        if (exam.getStatus() != Exam.ExamStatus.ONLINE_EXAM) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exam is not active");
+        if (exam.getStatus() == Exam.ExamStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exam is in Draft status and not active");
         }
 
         // Fetch detailed exam DTO with answers for grading

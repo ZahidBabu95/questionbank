@@ -31,6 +31,9 @@ public interface ExamRepository extends JpaRepository<Exam, UUID> {
                         @Param("classSubjectId") java.util.UUID classSubjectId,
                         Pageable pageable);
 
+        java.util.Optional<Exam> findByShareCode(String shareCode);
+        boolean existsByShareCode(String shareCode);
+
         long countByTenantId(String tenantId);
 
         long countByCreatedBy(String createdBy);

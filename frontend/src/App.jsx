@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/admin/Dashboard';
 import LandingPage from './pages/LandingPage';
+import PublicExamShare from './pages/PublicExamShare';
 import UserList from './pages/admin/Users/UserList';
 import UserProfilePage from './pages/admin/Users/UserProfilePage';
 import MyProfile from './pages/admin/Users/MyProfile';
@@ -16,6 +17,7 @@ import GeneralSettings from './pages/admin/Settings/GeneralSettings';
 import SecuritySettings from './pages/admin/Settings/SecuritySettings';
 import BackupSettings from './pages/admin/Settings/BackupSettings';
 import QuestionTypes from './pages/admin/Settings/QuestionTypes';
+import ApiManager from './pages/admin/Settings/ApiManager';
 import AcademicStructure from './pages/admin/Academic/AcademicStructure';
 import AcademicLayout from './pages/admin/Academic/AcademicLayout';
 import MCQCreate from './pages/admin/QuestionBank/MCQCreate';
@@ -129,6 +131,7 @@ function App() {
                     <Route path="/signup" element={<Signup />} />
                     <Route path="/terms" element={<TermsOfService />} />
                     <Route path="/privacy" element={<PrivacyPolicy />} />
+                    <Route path="/exams/share/:id" element={<PublicExamShare />} />
 
                     {/* Public Blog Routes */}
                     <Route path="/blog" element={<BlogListing />} />
@@ -199,6 +202,7 @@ function App() {
                         <Route path="/billing/*" element={<UnderDevelopment featureName="Billing" />} />
 
                         {/* Settings */}
+                        <Route path="/settings/api-manager" element={<ApiManager />} />
                         <Route path="/settings/general" element={<GeneralSettings />} />
                         <Route path="/settings/security" element={<SecuritySettings />} />
                         <Route path="/settings/backup" element={<BackupSettings />} />

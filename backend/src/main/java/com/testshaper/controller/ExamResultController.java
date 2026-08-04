@@ -27,7 +27,7 @@ public class ExamResultController {
     }
 
     @GetMapping("/student/results")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'SUPER_ADMIN', 'ADMIN', 'INSTITUTE_ADMIN', 'TEACHER')")
     public ResponseEntity<List<Map<String, Object>>> getStudentResults() {
         String email = getCurrentUserEmail();
         List<ExamResult> results = examResultRepository.findByStudentUsername(email);

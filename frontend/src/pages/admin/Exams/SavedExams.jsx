@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Save, Search, Loader2, Eye, Trash2, Filter, FileText, CheckCircle2, Archive, RefreshCw, AlertTriangle, ShieldAlert, Download, Share2, Copy, Check, BarChart3 } from 'lucide-react';
+import { Save, Search, Loader2, Eye, Trash2, Filter, FileText, CheckCircle2, Archive, RefreshCw, AlertTriangle, ShieldAlert, Download, Share2, Copy, Check, BarChart3, Smartphone } from 'lucide-react';
 import examService from '../../../services/examService';
 import axiosInstance from '../../../utils/axios';
 import { downloadExamPdf } from '../../../services/pdfService';
@@ -36,6 +36,12 @@ const SavedExams = () => {
     const [shareExamId, setShareExamId] = useState(null);
     const [shareExamTitle, setShareExamTitle] = useState('');
     const [copiedId, setCopiedId] = useState(null);
+
+    // For mobile app sharing
+    const [mobileShareCode, setMobileShareCode] = useState('');
+    const [isMobileShared, setIsMobileShared] = useState(true);
+    const [copiedPin, setCopiedPin] = useState(false);
+    const [copiedApiUrl, setCopiedApiUrl] = useState(false);
 
     // For sharing draft check
     const [draftWarningOpen, setDraftWarningOpen] = useState(false);
@@ -86,13 +92,42 @@ const SavedExams = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, debouncedSearch, size, examType, status, activeTab]);
 
-    const openShareModal = (exam) => {
+    const openShareModal = async (exam) => {
         setShareExamId(exam.id);
         setShareExamTitle(exam.title);
+        setMobileShareCode(exam.shareCode || '');
+        setIsMobileShared(exam.isPublicShared ?? true);
+
         if (exam.status === 'DRAFT') {
             setDraftWarningOpen(true);
         } else {
             setShareModalOpen(true);
+            try {
+                const res = await axiosInstance.post(`/v1/exams/generate/${exam.id}/mobile-share`, {
+                    isPublicShared: true
+                });
+                if (res.data && res.data.success) {
+                    setMobileShareCode(res.data.data.shareCode);
+                    setIsMobileShared(res.data.data.isPublicShared);
+                }
+            } catch (e) {
+                console.error("Failed to sync mobile share info", e);
+            }
+        }
+    };
+
+    const handleToggleMobileShare = async () => {
+        if (!shareExamId) return;
+        try {
+            const res = await axiosInstance.post(`/v1/exams/generate/${shareExamId}/mobile-share`, {
+                isPublicShared: !isMobileShared
+            });
+            if (res.data && res.data.success) {
+                setIsMobileShared(res.data.data.isPublicShared);
+                setMobileShareCode(res.data.data.shareCode);
+            }
+        } catch (e) {
+            console.error("Failed to toggle mobile share", e);
         }
     };
 
@@ -111,6 +146,17 @@ const SavedExams = () => {
                 const updatedExam = exams.find(e => e.id === examId) || res.data.data;
                 if (updatedExam) {
                     setShareExamTitle(updatedExam.title);
+                }
+                try {
+                    const mobileRes = await axiosInstance.post(`/v1/exams/generate/${examId}/mobile-share`, {
+                        isPublicShared: true
+                    });
+                    if (mobileRes.data && mobileRes.data.success) {
+                        setMobileShareCode(mobileRes.data.data.shareCode);
+                        setIsMobileShared(mobileRes.data.data.isPublicShared);
+                    }
+                } catch (e) {
+                    console.error("Failed to sync mobile share info after status update", e);
                 }
                 setShareModalOpen(true);
             } else {
@@ -843,6 +889,62 @@ const SavedExams = () => {
                                 </a>
                             </div>
                         </div>
+
+                        {/* Mobile App Share Section */}
+                        <div className="space-y-3 pt-3 border-t border-slate-100">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-black uppercase tracking-wider text-indigo-600 flex items-center gap-1.5">
+                                    <Smartphone size={15} /> মোবাইল অ্যাপে শেয়ার (Share to Mobile App)
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={handleToggleMobileShare}
+                                    className={`px-3 py-1 text-[11px] font-bold rounded-full border transition-all ${
+                                        isMobileShared 
+                                            ? 'bg-emerald-100 text-emerald-700 border-emerald-300' 
+                                            : 'bg-slate-100 text-slate-600 border-slate-300'
+                                    }`}
+                                >
+                                    {isMobileShared ? '✓ Mobile Access ON' : 'Mobile Access OFF'}
+                                </button>
+                            </div>
+
+                            {/* Mobile PIN Display & Copy */}
+                            <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <span className="text-[10px] uppercase font-bold text-slate-400">পরীক্ষার শেয়ারিং কোড (MOBILE EXAM PIN)</span>
+                                        <div className="text-2xl font-black font-mono text-indigo-700 tracking-wider mt-0.5">
+                                            {mobileShareCode || (shareExamId ? `EX-${shareExamId.substring(0, 6).toUpperCase()}` : 'EX-849201')}
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const pinToCopy = mobileShareCode || (shareExamId ? `EX-${shareExamId.substring(0, 6).toUpperCase()}` : 'EX-849201');
+                                            if (pinToCopy) {
+                                                if (navigator.clipboard && navigator.clipboard.writeText) {
+                                                    navigator.clipboard.writeText(pinToCopy);
+                                                } else {
+                                                    const textArea = document.createElement("textarea");
+                                                    textArea.value = pinToCopy;
+                                                    document.body.appendChild(textArea);
+                                                    textArea.select();
+                                                    document.execCommand("copy");
+                                                    document.body.removeChild(textArea);
+                                                }
+                                                setCopiedPin(true);
+                                                setTimeout(() => setCopiedPin(false), 2000);
+                                            }
+                                        }}
+                                        className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20 flex items-center gap-1.5"
+                                    >
+                                        {copiedPin ? <Check size={14} className="text-emerald-300" /> : <Copy size={14} />}
+                                        {copiedPin ? 'PIN কপি হয়েছে' : 'PIN কপি করুন'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -880,42 +982,21 @@ const SavedExams = () => {
                             <button
                                 onClick={() => handleUpdateStatus(shareExamId, 'PUBLISHED')}
                                 disabled={updatingStatusId !== null}
-                                className="w-full flex items-center justify-between p-3.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 hover:border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold transition-all shadow-sm group active:scale-[0.99]"
+                                className="w-full flex items-center justify-between p-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 group active:scale-[0.99]"
                             >
-                                <div className="flex items-center gap-2">
-                                    <span className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center group-hover:scale-105 transition-transform font-black">
+                                <div className="flex items-center gap-3">
+                                    <span className="w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center font-black text-sm">
                                         ✓
                                     </span>
                                     <span className="text-left">
-                                        <span className="block font-black">পাবলিশ করুন (PUBLISHED)</span>
-                                        <span className="block text-[10px] text-emerald-600 font-medium mt-0.5">সবাই প্রশ্নপত্রটি দেখতে ও ডাউনলোড করতে পারবে</span>
+                                        <span className="block text-sm font-black">পরীক্ষাটি পাবলিশ ও শেয়ার সক্রিয় করুন</span>
+                                        <span className="block text-[11px] text-emerald-100 font-medium mt-0.5">অনলাইন শেয়ার লিঙ্ক ও মোবাইল অ্যাপের জন্য প্রশ্নপত্রটি লাইভ করা হবে</span>
                                     </span>
                                 </div>
                                 {updatingStatusId === shareExamId ? (
-                                    <Loader2 size={16} className="animate-spin text-emerald-600" />
+                                    <Loader2 size={18} className="animate-spin text-white" />
                                 ) : (
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500 group-hover:translate-x-0.5 transition-transform"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                                )}
-                            </button>
-
-                            <button
-                                onClick={() => handleUpdateStatus(shareExamId, 'ONLINE_EXAM')}
-                                disabled={updatingStatusId !== null}
-                                className="w-full flex items-center justify-between p-3.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-800 rounded-2xl text-xs font-bold transition-all shadow-sm group active:scale-[0.99]"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span className="w-6 h-6 rounded-lg bg-indigo-500 text-white flex items-center justify-center group-hover:scale-105 transition-transform font-black">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                                    </span>
-                                    <span className="text-left">
-                                        <span className="block font-black">অনলাইন পরীক্ষা (ONLINE EXAM)</span>
-                                        <span className="block text-[10px] text-indigo-600 font-medium mt-0.5">অনলাইনে সরাসরি পরীক্ষা দেওয়ার জন্য প্রস্তুত করুন</span>
-                                    </span>
-                                </div>
-                                {updatingStatusId === shareExamId ? (
-                                    <Loader2 size={16} className="animate-spin text-indigo-600" />
-                                ) : (
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-500 group-hover:translate-x-0.5 transition-transform"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white group-hover:translate-x-0.5 transition-transform"><polyline points="9 18 15 12 9 6"></polyline></svg>
                                 )}
                             </button>
                         </div>

@@ -100,16 +100,19 @@ public class AiToolScannerService {
                     .flatMap(entry -> {
                         String methods = entry.getKey().getMethodsCondition().getMethods().toString();
                         String beanName = entry.getValue().getBeanType().getSimpleName();
+                        String category = getCategoryFromController(beanName);
                         return entry.getKey().getPatternValues().stream().map(pattern -> {
                             Map<String, String> map = new HashMap<>();
-                            map.put("method", methods.replaceAll("\\[|\\]", ""));
-                            // strip /api prefix for the UI
+                            String cleanMethod = methods.replaceAll("\\[|\\]", "");
+                            if (cleanMethod.isBlank()) cleanMethod = "GET";
+                            map.put("method", cleanMethod);
                             map.put("path", pattern.replaceFirst("^/api", ""));
+                            map.put("fullPath", pattern);
                             map.put("controller", beanName);
+                            map.put("category", category);
                             return map;
                         });
                     })
-                    // Filter out non-api endpoints or internal ones if desired, keeping it simple for now
                     .filter(m -> m.get("path").startsWith("/v1/"))
                     .sorted((a, b) -> a.get("path").compareTo(b.get("path")))
                     .collect(Collectors.toList());
@@ -117,6 +120,22 @@ public class AiToolScannerService {
             log.error("Failed to extract endpoints list", e);
             return new ArrayList<>();
         }
+    }
+
+    private String getCategoryFromController(String beanName) {
+        if (beanName.contains("PublicExamShare") || beanName.contains("CustomShare")) return "⭐ কাস্টম এপিআই ফর শেয়ার";
+        if (beanName.contains("Auth") || beanName.contains("Role") || beanName.contains("User") || beanName.contains("Permission") || beanName.contains("Security")) return "Authentication & Security";
+        if (beanName.contains("Question")) return "Question Bank & Engine";
+        if (beanName.contains("Exam") || beanName.contains("Omr") || beanName.contains("ManualExam")) return "Exam & Assessment Engine";
+        if (beanName.contains("Knowledge") || beanName.contains("Topic")) return "Knowledge Hub & RAG";
+        if (beanName.contains("Ai") || beanName.contains("AI")) return "AI Workspace & Tools";
+        if (beanName.contains("Lecture")) return "Lecture & Study Sheets";
+        if (beanName.contains("Academic") || beanName.contains("Curriculum")) return "Academic & Curriculum Structure";
+        if (beanName.contains("Billing") || beanName.contains("Invoice")) return "Billing & Subscriptions";
+        if (beanName.contains("Setting") || beanName.contains("Backup")) return "System Settings & Backup";
+        if (beanName.contains("Dashboard") || beanName.contains("Report")) return "Dashboard & Analytics";
+        if (beanName.contains("Public") || beanName.contains("Cms") || beanName.contains("Blog")) return "Public & Content CMS";
+        return "Core Operations";
     }
 
     private String callGeminiApi(String prompt) {
