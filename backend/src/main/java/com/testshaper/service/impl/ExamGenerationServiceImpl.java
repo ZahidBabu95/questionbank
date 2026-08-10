@@ -963,7 +963,7 @@ public class ExamGenerationServiceImpl {
         List<UUID> selectedIds = eligibleIds.stream().limit(Math.max(needed * 5, 50)).collect(Collectors.toList());
 
         // Fetch actual question entities
-        List<Question> candidates = questionRepository.findByIdIn(selectedIds);
+        List<Question> candidates = questionRepository.findAllById(selectedIds);
         Collections.shuffle(candidates, new Random());
 
         List<Question> selectedQuestions = new ArrayList<>();

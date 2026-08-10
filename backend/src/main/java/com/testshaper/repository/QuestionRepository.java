@@ -12,19 +12,8 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.UUID;
 
-import com.testshaper.entity.QuestionId;
-import java.util.Optional;
-
 @Repository
-public interface QuestionRepository extends JpaRepository<Question, QuestionId>, JpaSpecificationExecutor<Question> {
-
-        Optional<Question> findById(UUID id);
-
-        List<Question> findByIdIn(Iterable<UUID> ids);
-
-        @org.springframework.data.jpa.repository.Modifying
-        @Query("DELETE FROM Question q WHERE q.id = :id")
-        void deleteById(@Param("id") UUID id);
+public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSpecificationExecutor<Question> {
 
         List<Question> findByClassSubjectId(UUID classSubjectId);
 

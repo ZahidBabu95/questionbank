@@ -290,7 +290,7 @@ public class ManualExamServiceImpl {
                         }
                     }
                     if (!qIds.isEmpty()) {
-                        List<Question> msQuestions = questionRepository.findByIdIn(qIds);
+                        List<Question> msQuestions = questionRepository.findAllById(qIds);
                         Map<UUID, Question> qMap = msQuestions.stream().collect(Collectors.toMap(Question::getId, q -> q, (a, b) -> a));
                         List<ExamDTO.ExamQuestionDTO> dtos = new ArrayList<>();
                         for (UUID id : qIds) {

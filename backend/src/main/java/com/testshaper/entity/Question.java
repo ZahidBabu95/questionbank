@@ -16,7 +16,6 @@ import java.util.UUID;
     @Index(name = "idx_q_parent_question", columnList = "parent_question_id, status"),
     @Index(name = "idx_q_creator", columnList = "created_by")
 })
-@IdClass(QuestionId.class)
 @Getter
 @Setter
 public class Question extends BaseTenantEntity {
@@ -161,7 +160,6 @@ public class Question extends BaseTenantEntity {
     @Column(name = "page_number")
     private Integer pageNumber;
 
-    @Id
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_subject_id")
     private ClassSubject classSubject;
