@@ -742,8 +742,13 @@ const ManualExamBuilder = () => {
     }, { qs: 0, marks: 0 });
 
     useEffect(() => {
-        if (subjectId) fetchSchema();
-        else { setDynamicSections([]); setUserStructure({}); }
+        if (subjectId) {
+            applyDefaultFallbackBlueprint();
+            fetchSchema();
+        } else { 
+            setDynamicSections([]); 
+            setUserStructure({}); 
+        }
     }, [subjectId]);
 
     const applyDefaultFallbackBlueprint = () => {
@@ -760,7 +765,6 @@ const ManualExamBuilder = () => {
     };
 
     const fetchSchema = async () => {
-        setLoadingBlueprint(true);
         try {
             const selectedSubjectObj = subjects.find(s => s.classSubjectId == subjectId);
             const selectedClassName = classes.find(c => c.id == classId)?.name || '';
@@ -771,15 +775,26 @@ const ManualExamBuilder = () => {
                 const origSubTag = 'RULE_FOR_' + selectedSubjectObj.subjectName.replace(/\s/g, '');
                 const origAltTag = selectedSubjectObj.subjectName;
 
-                const kbRes = await axios.get('/v1/support/knowledge');
+                let kbData = null;
+                try {
+                    const storedKb = sessionStorage.getItem('qs_kb_rules');
+                    if (storedKb) kbData = JSON.parse(storedKb);
+                } catch (e) {}
+
+                if (!kbData) {
+                    const kbRes = await axios.get('/v1/support/knowledge');
+                    kbData = kbRes.data || [];
+                    try { sessionStorage.setItem('qs_kb_rules', JSON.stringify(kbData)); } catch (e) {}
+                }
+
                 let validRules = [
-                    ...(kbRes.data || []).filter(k => k.tags && (
+                    ...kbData.filter(k => k.tags && (
                         k.tags.includes(subTag) || 
                         k.tags.includes(altTag) || 
                         k.tags.includes(origSubTag) || 
                         k.tags.includes(origAltTag)
                     )), 
-                    ...(kbRes.data || []).filter(k => k.content && (
+                    ...kbData.filter(k => k.content && (
                         k.content.includes(cleanSubjectName) || 
                         k.content.includes(selectedSubjectObj.subjectName)
                     ))
@@ -2142,9 +2157,7 @@ const ManualExamBuilder = () => {
                                         )}
                                         <p className="text-sm text-slate-500 mb-6 font-medium">Define your target question counts for manual picking.</p>
 
-                                        {loadingBlueprint ? (
-                                            <div className="py-12 flex flex-col items-center justify-center text-emerald-500"><Loader2 size={32} className="animate-spin mb-3" /><span className="font-bold">Loading Structure...</span></div>
-                                        ) : !subjectId ? (
+                                        {!subjectId ? (
                                             <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">Select a subject to load the blueprint.</div>
                                         ) : (
                                             <div className="space-y-4">
