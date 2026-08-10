@@ -1425,7 +1425,7 @@ public class QuestionServiceImpl implements QuestionService {
         if (ids == null || ids.isEmpty()) {
             return new java.util.ArrayList<>();
         }
-        return questionRepository.findAllById(ids);
+        return questionRepository.findByIdIn(ids);
     }
 }
 

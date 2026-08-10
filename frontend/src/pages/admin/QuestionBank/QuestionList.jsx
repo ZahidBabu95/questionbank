@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal, ShoppingCart, ArrowLeft } from 'lucide-react';
@@ -74,6 +75,14 @@ const QuestionList = () => {
     const [loadingMore, setLoadingMore] = useState(false);
     const observerTarget = useRef(null);
     const pendingSelectionRef = useRef(null);
+    const listParentRef = useRef(null);
+
+    const rowVirtualizer = useVirtualizer({
+        count: questions.length,
+        getScrollElement: () => listParentRef.current || (typeof window !== 'undefined' ? window : null),
+        estimateSize: () => 140,
+        overscan: 5,
+    });
     const getInitialStatus = (path) => {
         if (path.includes('/drafts')) return 'DRAFT';
         if (path.includes('/pending')) return 'PENDING';
@@ -2367,7 +2376,16 @@ const QuestionList = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-1 sm:gap-1.5 pb-1 relative" style={{ overflowAnchor: 'none' }}>
+                        <div 
+                            ref={listParentRef}
+                            className="flex flex-col gap-1 sm:gap-1.5 pb-1 relative min-h-[300px]" 
+                            style={{ 
+                                height: `${rowVirtualizer.getTotalSize()}px`, 
+                                width: '100%', 
+                                position: 'relative',
+                                overflowAnchor: 'none' 
+                            }}
+                        >
                             {/* Foolproof Observer Target: 2500px tall invisible div at the bottom.
                                 2500px height ensures it triggers 2-3 screens early to beat network latency!
                                 overflowAnchor: 'none' on parent ensures the browser NEVER jumps scroll position. */}
@@ -2376,26 +2394,42 @@ const QuestionList = () => {
                                 style={{ position: 'absolute', bottom: 0, height: '2500px', width: '100%', pointerEvents: 'none', zIndex: -1 }} 
                             />
                             
-                            {questions.map((q, index) => (
-                                <QuestionListItem 
-                                    key={q.id}
-                                    q={q}
-                                    index={index + 1}
-                                    isSelected={selectedIds.includes(q.id)}
-                                    onSelect={handleSelectItem}
-                                    onSave={handleSaveToggle}
-                                    isSaved={savedIds.includes(q.id)}
-                                    onView={handleViewQuestion}
-                                    onDelete={handleDelete}
-                                    onRevise={setReviseItem}
-                                    onReview={setReviewItem}
-                                    isSuperAdmin={isSuperAdmin}
-                                    hasPerm={hasPerm}
-                                    splitScreenMode={splitScreenMode}
-                                    isViewing={selectedQuestion?.id === q.id}
-                                    isDefaultOrSuperAdmin={isDefaultOrSuperAdmin}
-                                />
-                            ))}
+                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                const q = questions[virtualRow.index];
+                                if (!q) return null;
+                                return (
+                                    <div
+                                        key={q.id || virtualRow.key}
+                                        ref={rowVirtualizer.measureElement}
+                                        data-index={virtualRow.index}
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            transform: `translateY(${virtualRow.start}px)`,
+                                        }}
+                                    >
+                                        <QuestionListItem 
+                                            q={q}
+                                            index={virtualRow.index + 1}
+                                            isSelected={selectedIds.includes(q.id)}
+                                            onSelect={handleSelectItem}
+                                            onSave={handleSaveToggle}
+                                            isSaved={savedIds.includes(q.id)}
+                                            onView={handleViewQuestion}
+                                            onDelete={handleDelete}
+                                            onRevise={setReviseItem}
+                                            onReview={setReviewItem}
+                                            isSuperAdmin={isSuperAdmin}
+                                            hasPerm={hasPerm}
+                                            splitScreenMode={splitScreenMode}
+                                            isViewing={selectedQuestion?.id === q.id}
+                                            isDefaultOrSuperAdmin={isDefaultOrSuperAdmin}
+                                        />
+                                    </div>
+                                );
+                            })}
                             
                             {currentPage < totalPages && (
                                 <div className="py-8 flex flex-col items-center justify-center relative z-10">
