@@ -1626,15 +1626,24 @@ const ManualExamBuilder = () => {
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 xs:p-4 sm:p-5 space-y-4 bg-slate-50/30" style={{ overflowAnchor: 'none', position: 'relative' }}>
-                            {searching ? (
-                                <div className="flex items-center justify-center h-full text-slate-400"><Loader2 size={32} className="animate-spin" /></div>
+                            {searching && searchResults.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-3">
+                                    <Loader2 size={32} className="animate-spin text-emerald-600" />
+                                    <span className="text-xs font-bold text-slate-500">Searching & loading questions...</span>
+                                </div>
                             ) : searchResults.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                <div className="flex flex-col items-center justify-center h-64 text-slate-400">
                                     <Search size={48} className="text-slate-200 mb-4" />
-                                    <p className="font-bold">No questions found.</p>
+                                    <p className="font-bold text-slate-600">No questions found matching your filters.</p>
                                 </div>
                             ) : (
                                 <div className="flex flex-col gap-4 relative" style={{ overflowAnchor: 'none' }}>
+                                    {searching && (
+                                        <div className="sticky top-0 z-20 bg-emerald-600 text-white px-3.5 py-1.5 rounded-full text-[11px] font-bold flex items-center justify-center gap-2 shadow-lg mb-2 animate-in fade-in slide-in-from-top-1 duration-200 w-fit mx-auto">
+                                            <Loader2 size={12} className="animate-spin text-white" />
+                                            <span>Updating results...</span>
+                                        </div>
+                                    )}
                                     <div 
                                         ref={observerTarget} 
                                         style={{ position: 'absolute', bottom: 0, height: '2500px', width: '100%', pointerEvents: 'none', zIndex: -1 }} 
@@ -2264,35 +2273,10 @@ const ManualExamBuilder = () => {
                         )}
                         {!loading && <ChevronRight size={12} />}
                     </button>
-            {/* Full-Screen Premium Manual Exam Setup Overlay Modal */}
-            {loading && (
-                <div className="fixed inset-0 z-[100] backdrop-blur-md bg-slate-900/80 flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
-                    <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 text-center space-y-6 animate-in zoom-in-95 duration-300">
-                        <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
-                            <div className="absolute inset-0 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin"></div>
-                            <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/40">
-                                <Loader2 size={28} className="animate-spin" />
-                            </div>
-                        </div>
-
-                        <div>
-                            <h3 className="text-xl font-black text-slate-800 tracking-tight">ম্যানুয়াল এক্সাম বিল্ডার লোড হচ্ছে...</h3>
-                            <p className="text-xs text-slate-500 font-medium mt-1 pl-2 pr-2">
-                                আপনার সিলেবাস ব্লুপ্রিন্ট ও প্রশ্নব্যাংক ফিল্টারসমূহ লোড করা হচ্ছে।
-                            </p>
-                        </div>
-
-                        <div className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50/80 py-2.5 px-4 rounded-full border border-emerald-100">
-                            <Loader2 size={14} className="animate-spin" />
-                            <span>দয়া করে কিছু মুহূর্ত অপেক্ষা করুন</span>
-                        </div>
-                    </div>
                 </div>
-            )}
+            </div>
         </div>
-    </div>
-</div>
-);
+    );
 };
 
 export default ManualExamBuilder;
