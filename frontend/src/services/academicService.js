@@ -120,6 +120,7 @@ const getHierarchyKey = () => {
 
 // --- Batch Hierarchy (single call for entire structure — replaces 20+ individual calls) ---
 const getHierarchy = async (bypass = false) => {
+    preloadKnowledgeRules().catch(() => {});
     const key = getHierarchyKey();
     if (bypass) {
         if (cachedHierarchyBypass) return cachedHierarchyBypass;
@@ -162,6 +163,20 @@ const getHierarchy = async (bypass = false) => {
 };
 
 // --- Session ---
+const preloadKnowledgeRules = async () => {
+    try {
+        const stored = sessionStorage.getItem('qs_kb_rules');
+        if (stored) return JSON.parse(stored);
+        const res = await axios.get('/v1/support/knowledge');
+        if (res.data) {
+            try { sessionStorage.setItem('qs_kb_rules', JSON.stringify(res.data)); } catch (e) {}
+        }
+        return res.data;
+    } catch (e) {
+        return [];
+    }
+};
+
 const getActiveSession = async () => axios.get(`/v1/sessions/active`).then(res => res.data);
 
 export default {
@@ -173,5 +188,5 @@ export default {
     createClassSubject, assignSubjectToClass, getSubjectsByClass, updateClassSubject, deleteClassSubject,
     createChapter, updateChapter, getChaptersByClassSubject, deleteChapter,
     createTopic, updateTopic, getTopicsByChapter, deleteTopic,
-    getHierarchy, getActiveSession, clearHierarchyCache
+    getHierarchy, getActiveSession, clearHierarchyCache, preloadKnowledgeRules
 };
