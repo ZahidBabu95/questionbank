@@ -926,8 +926,21 @@ const ManualExamBuilder = () => {
             if (res.success) {
                 setExamId(res.data.id);
                 setCart(res.data.questions || []);
+                
+                // Instant pre-population from sessionStorage cache if available
+                try {
+                    const cacheKey = `qs_initial_q_${subjectId}_${examInfo.language}`;
+                    const cached = sessionStorage.getItem(cacheKey);
+                    if (cached) {
+                        const parsed = JSON.parse(cached);
+                        if (parsed && parsed.length > 0) {
+                            setSearchResults(parsed);
+                        }
+                    }
+                } catch (e) {}
+
                 setStep(2);
-                searchQuestions();
+                searchQuestions(null, { quiet: true });
             }
         } catch (e) {
             console.error("Create Draft Error:", e);
@@ -1089,7 +1102,8 @@ const ManualExamBuilder = () => {
     const searchQuestions = async (e, options = {}) => {
         if (e) e.preventDefault();
         const preserveScroll = options.preserveScroll || false;
-        if (!preserveScroll) {
+        const quiet = options.quiet || false;
+        if (!preserveScroll && !quiet) {
             setSearching(true);
         }
         
@@ -1214,6 +1228,10 @@ const ManualExamBuilder = () => {
             if (res.success && res.data) {
                 const content = res.data.content || [];
                 setSearchResults(content);
+                try {
+                    const cacheKey = `qs_initial_q_${subjectId}_${examInfo.language}`;
+                    sessionStorage.setItem(cacheKey, JSON.stringify(content));
+                } catch (e) {}
                 setServerPage(0); // Reset server-side pagination page count
                 setDisplayLimit(100); // Reset render limit
                 setHasMoreRemote(content.length >= 50);
