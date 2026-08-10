@@ -1264,7 +1264,10 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
-    @org.springframework.cache.annotation.Cacheable(value = "questionsAvailability", key = "#params != null ? #params.hashCode() : 0")
+    @org.springframework.cache.annotation.Cacheable(
+        value = "questionsAvailability", 
+        key = "#params != null ? (#params.classSubjectId + '_' + #params.language + '_' + #params.sourceMode + '_' + #params.lectureIds + '_' + #params.boards + '_' + #params.years + '_' + #params.schools) : '0'"
+    )
     public java.util.Map<String, Object> getQuestionAvailability(com.testshaper.dto.QuestionSearchParams params) {
         StringBuilder jpql = new StringBuilder(
                 "SELECT q.chapter.id, q.topic.id, q.type, q.difficulty, COUNT(DISTINCT q.id) " +

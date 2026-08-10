@@ -208,6 +208,16 @@ const AutoExamGenerator = () => {
     useEffect(() => {
         if (subjectId) {
             const fetchAvailability = async () => {
+                const cacheKey = `qs_avail_${subjectId}_${examInfo.language}_${sourceMode}_${(selectedLectureIds||[]).join(',')}_${(selectedBoards||[]).join(',')}_${(selectedYears||[]).join(',')}_${(selectedSchools||[]).join(',')}`;
+                try {
+                    const cached = sessionStorage.getItem(cacheKey);
+                    if (cached) {
+                        const parsed = JSON.parse(cached);
+                        setAvailableCounts({ chapters: parsed.chapters || {}, topics: parsed.topics || {} });
+                        return;
+                    }
+                } catch (e) {}
+
                 setLoadingAvailability(true);
                 try {
                     const params = {
@@ -225,6 +235,7 @@ const AutoExamGenerator = () => {
                             chapters: data.chapters || {},
                             topics: data.topics || {}
                         });
+                        try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch (e) {}
                     }
                 } catch (e) {
                     console.error("Failed to fetch question availability", e);

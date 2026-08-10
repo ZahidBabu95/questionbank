@@ -861,6 +861,15 @@ const ManualExamBuilder = () => {
 
     useEffect(() => {
         if (subjectId) {
+            const cacheKey = `qs_avail_${subjectId}_${examInfo.language}_${sourceMode}_${(selectedLectureIds||[]).join(',')}_${(selectedBoards||[]).join(',')}_${(selectedYears||[]).join(',')}_${(selectedSchools||[]).join(',')}`;
+            try {
+                const cached = sessionStorage.getItem(cacheKey);
+                if (cached) {
+                    setAvailability(JSON.parse(cached));
+                    return;
+                }
+            } catch (e) {}
+
             const availabilityFilters = {
                 sourceMode: sourceMode,
                 lectureIds: sourceMode === 'LECTURE_SHEETS' ? selectedLectureIds : undefined,
@@ -870,7 +879,9 @@ const ManualExamBuilder = () => {
             };
             questionService.getQuestionAvailability(subjectId, examInfo.language, availabilityFilters)
                 .then(data => {
-                    setAvailability(data || { chapters: {}, topics: {} });
+                    const res = data || { chapters: {}, topics: {} };
+                    setAvailability(res);
+                    try { sessionStorage.setItem(cacheKey, JSON.stringify(res)); } catch (e) {}
                 })
                 .catch(err => {
                     console.error("Failed to load availability", err);

@@ -78,16 +78,34 @@ const updateClassSubject = async (id, data) => axios.put(`${API_URL}/class-subje
 const deleteClassSubject = async (id) => axios.delete(`${API_URL}/class-subjects/${id}`).then(res => { clearHierarchyCache(); return res.data; });
 
 // --- Chapters ---
-const createChapter = async (classSubjectId, data) => axios.post(`${API_URL}/class-subjects/${classSubjectId}/chapters`, data).then(res => res.data);
-const updateChapter = async (id, data) => axios.put(`${API_URL}/chapters/${id}`, data).then(res => res.data);
-const getChaptersByClassSubject = async (classSubjectId, activeOnly = true) => axios.get(`${API_URL}/class-subjects/${classSubjectId}/chapters`, { params: { activeOnly } }).then(res => res.data);
-const deleteChapter = async (id) => axios.delete(`${API_URL}/chapters/${id}`);
+const createChapter = async (classSubjectId, data) => axios.post(`${API_URL}/class-subjects/${classSubjectId}/chapters`, data).then(res => { clearHierarchyCache(); return res.data; });
+const updateChapter = async (id, data) => axios.put(`${API_URL}/chapters/${id}`, data).then(res => { clearHierarchyCache(); return res.data; });
+const getChaptersByClassSubject = async (classSubjectId, activeOnly = true) => {
+    const key = `qs_chapters_${classSubjectId}_${activeOnly}`;
+    try {
+        const cached = sessionStorage.getItem(key);
+        if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    const data = await axios.get(`${API_URL}/class-subjects/${classSubjectId}/chapters`, { params: { activeOnly } }).then(res => res.data);
+    try { if (data) sessionStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+    return data;
+};
+const deleteChapter = async (id) => axios.delete(`${API_URL}/chapters/${id}`).then(res => { clearHierarchyCache(); return res.data; });
 
 // --- Topics ---
-const createTopic = async (chapterId, data) => axios.post(`${API_URL}/chapters/${chapterId}/topics`, data).then(res => res.data);
-const updateTopic = async (id, data) => axios.put(`${API_URL}/topics/${id}`, data).then(res => res.data);
-const getTopicsByChapter = async (chapterId) => axios.get(`${API_URL}/chapters/${chapterId}/topics`).then(res => res.data);
-const deleteTopic = async (id) => axios.delete(`${API_URL}/topics/${id}`);
+const createTopic = async (chapterId, data) => axios.post(`${API_URL}/chapters/${chapterId}/topics`, data).then(res => { clearHierarchyCache(); return res.data; });
+const updateTopic = async (id, data) => axios.put(`${API_URL}/topics/${id}`, data).then(res => { clearHierarchyCache(); return res.data; });
+const getTopicsByChapter = async (chapterId) => {
+    const key = `qs_topics_${chapterId}`;
+    try {
+        const cached = sessionStorage.getItem(key);
+        if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    const data = await axios.get(`${API_URL}/chapters/${chapterId}/topics`).then(res => res.data);
+    try { if (data) sessionStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+    return data;
+};
+const deleteTopic = async (id) => axios.delete(`${API_URL}/topics/${id}`).then(res => { clearHierarchyCache(); return res.data; });
 
 const getHierarchyKey = () => {
     try {
