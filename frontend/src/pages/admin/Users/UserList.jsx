@@ -67,7 +67,7 @@ const StatCard = ({ icon, label, value, color, sub, isCompact }) => {
 const UserDetailPanel = ({ user, onClose, onEdit, onStatusToggle, onResetPassword, onImpersonate, onUnlockUser }) => {
     if (!user) return null;
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-    const isSuperAdmin = currentUser.roles?.includes('SUPER_ADMIN');
+    const isSuperAdmin = currentUser.roles?.some(r => (typeof r === 'string' ? r : r?.name)?.replace('ROLE_', '') === 'SUPER_ADMIN');
     const initials = (user.name || '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     const joinedDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
 
@@ -191,7 +191,7 @@ const UserList = () => {
     const navigate  = useNavigate();
     const location  = useLocation();
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-    const isSuperAdmin = currentUser.roles?.includes('SUPER_ADMIN');
+    const isSuperAdmin = currentUser.roles?.some(r => (typeof r === 'string' ? r : r?.name)?.replace('ROLE_', '') === 'SUPER_ADMIN');
 
     const [users,        setUsers]        = useState([]);
     const [stats,        setStats]        = useState(null);

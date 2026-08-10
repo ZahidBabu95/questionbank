@@ -358,6 +358,7 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
+    @org.springframework.cache.annotation.Cacheable(value = "questionsBank", key = "#filters.get('subjectId') != null ? 'subject:' + #filters.get('subjectId') + ':qbank:' + #filters.hashCode() + '_' + #pageable.pageNumber : 'global:qbank:' + #filters.hashCode() + '_' + #pageable.pageNumber", unless = "#result == null")
     public org.springframework.data.domain.Page<Question> getAllQuestionsPaginated(
             java.util.Map<String, String> filters,
             org.springframework.data.domain.Pageable pageable) {

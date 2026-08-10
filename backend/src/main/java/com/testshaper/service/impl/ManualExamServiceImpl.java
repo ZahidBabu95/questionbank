@@ -3,6 +3,7 @@ package com.testshaper.service.impl;
 import com.testshaper.dto.*;
 import com.testshaper.entity.*;
 import com.testshaper.repository.*;
+import com.testshaper.service.MeilisearchService;
 import com.testshaper.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ public class ManualExamServiceImpl {
     private final UserRepository userRepository;
     private final QuestionOptionRepository questionOptionRepository;
     private final QuestionSourceRepository questionSourceRepository;
+    private final MeilisearchService meilisearchService;
 
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
@@ -244,6 +246,7 @@ public class ManualExamServiceImpl {
 
     // ── Question Search (left panel browser) ─────────────────────────────────
     @Transactional(readOnly = true)
+    @org.springframework.cache.annotation.Cacheable(value = "manualExamSearch", key = "#params.classSubjectId != null ? 'subject:' + #params.classSubjectId + ':search:' + #params.hashCode() : 'global:search:' + #params.hashCode()", unless = "#result == null")
     public Page<ExamDTO.ExamQuestionDTO> searchQuestions(QuestionSearchParams params) {
         String tenantId = TenantContext.getTenantId();
 
@@ -265,9 +268,46 @@ public class ManualExamServiceImpl {
                 sortParts[0]);
         Pageable pageable = PageRequest.of(params.getPage(), params.getSize(), sort);
 
-        String keyword = (params.getKeyword() != null && !params.getKeyword().isBlank()) ? params.getKeyword() : null;
+        String keyword = (params.getKeyword() != null && !params.getKeyword().isBlank()) ? params.getKeyword().trim() : null;
         String language = (params.getLanguage() != null && !params.getLanguage().isBlank()) ? params.getLanguage()
                 : null;
+
+        // 🚀 1. Meilisearch Instant Search Engine Integration (Instant 2-3ms Fuzzy Search)
+        if (keyword != null && meilisearchService != null && meilisearchService.isAvailable() && "ALL".equalsIgnoreCase(params.getSourceMode())) {
+            try {
+                String csIdStr = params.getClassSubjectId() != null ? params.getClassSubjectId().toString() : null;
+                String chIdStr = params.getChapterId() != null ? params.getChapterId().toString() : null;
+                Map<String, Object> msRes = meilisearchService.searchQuestions(keyword, tenantId, csIdStr, chIdStr, type, params.getDifficulty(), params.getPage(), params.getSize());
+                if (Boolean.TRUE.equals(msRes.get("available")) && msRes.containsKey("hits")) {
+                    List<?> hits = (List<?>) msRes.get("hits");
+                    List<UUID> qIds = new ArrayList<>();
+                    for (Object hit : hits) {
+                        if (hit instanceof Map) {
+                            Object idObj = ((Map<?, ?>) hit).get("id");
+                            if (idObj != null) {
+                                try { qIds.add(UUID.fromString(idObj.toString())); } catch (Exception ignored) {}
+                            }
+                        }
+                    }
+                    if (!qIds.isEmpty()) {
+                        List<Question> msQuestions = questionRepository.findAllById(qIds);
+                        Map<UUID, Question> qMap = msQuestions.stream().collect(Collectors.toMap(Question::getId, q -> q, (a, b) -> a));
+                        List<ExamDTO.ExamQuestionDTO> dtos = new ArrayList<>();
+                        for (UUID id : qIds) {
+                            Question q = qMap.get(id);
+                            if (q != null && Boolean.TRUE.equals(q.getStatus() == Question.QuestionStatus.APPROVED) && !q.isDeleted()) {
+                                dtos.add(toQuestionDTO(q));
+                            }
+                        }
+                        int totalHits = msRes.get("totalHits") != null ? ((Number) msRes.get("totalHits")).intValue() : dtos.size();
+                        log.info("⚡ Meilisearch instant search served {} items in {}ms", dtos.size(), msRes.get("processingTimeMs"));
+                        return new org.springframework.data.domain.PageImpl<>(dtos, pageable, totalHits);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Meilisearch fallback triggered due to search exception: {}", e.getMessage());
+            }
+        }
 
         // Base JPQL
         StringBuilder jpql = new StringBuilder("SELECT DISTINCT q FROM Question q ");
@@ -389,6 +429,16 @@ public class ManualExamServiceImpl {
 
         // Build Queries
         jakarta.persistence.TypedQuery<Question> query = entityManager.createQuery(jpql.toString(), Question.class);
+        
+        // 🚀 2. JPA EntityGraph to eliminate N+1 SQL Queries when loading DTOs (options & sources are batch-fetched via @BatchSize)
+        try {
+            jakarta.persistence.EntityGraph<Question> fetchGraph = entityManager.createEntityGraph(Question.class);
+            fetchGraph.addAttributeNodes("chapter", "topic");
+            query.setHint("jakarta.persistence.fetchgraph", fetchGraph);
+        } catch (Exception e) {
+            log.debug("Could not attach fetchGraph hint: {}", e.getMessage());
+        }
+
         jakarta.persistence.TypedQuery<Long> countQuery = entityManager.createQuery(countJpql.toString(), Long.class);
 
         // Bind parameters

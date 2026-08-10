@@ -13,6 +13,7 @@ const clearHierarchyCache = () => {
     cachedHierarchyBypass = null;
     activeHierarchyReq = null;
     activeHierarchyBypassReq = null;
+    try { sessionStorage.removeItem(getHierarchyKey()); } catch (e) {}
 };
 
 // --- Levels ---
@@ -88,8 +89,20 @@ const updateTopic = async (id, data) => axios.put(`${API_URL}/topics/${id}`, dat
 const getTopicsByChapter = async (chapterId) => axios.get(`${API_URL}/chapters/${chapterId}/topics`).then(res => res.data);
 const deleteTopic = async (id) => axios.delete(`${API_URL}/topics/${id}`);
 
+const getHierarchyKey = () => {
+    try {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+            const u = JSON.parse(userStr);
+            return `qs_academic_hierarchy_${u.instituteId || u.tenantId || u.email || 'def'}`;
+        }
+    } catch (e) {}
+    return 'qs_academic_hierarchy_def';
+};
+
 // --- Batch Hierarchy (single call for entire structure — replaces 20+ individual calls) ---
 const getHierarchy = async (bypass = false) => {
+    const key = getHierarchyKey();
     if (bypass) {
         if (cachedHierarchyBypass) return cachedHierarchyBypass;
         if (activeHierarchyBypassReq) return activeHierarchyBypassReq;
@@ -105,11 +118,20 @@ const getHierarchy = async (bypass = false) => {
             });
         return activeHierarchyBypassReq;
     } else {
+        if (!cachedHierarchy) {
+            try {
+                const s = sessionStorage.getItem(key);
+                if (s) cachedHierarchy = JSON.parse(s);
+            } catch (e) {}
+        }
         if (cachedHierarchy) return cachedHierarchy;
         if (activeHierarchyReq) return activeHierarchyReq;
         activeHierarchyReq = axios.get(`${API_URL}/hierarchy`, { params: { bypass } })
             .then(res => {
                 cachedHierarchy = res.data;
+                try {
+                    sessionStorage.setItem(key, JSON.stringify(res.data));
+                } catch (e) {}
                 activeHierarchyReq = null;
                 return res.data;
             })

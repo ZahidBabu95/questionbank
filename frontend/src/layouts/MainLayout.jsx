@@ -237,7 +237,8 @@ const MainLayout = () => {
     // Sidebar, Header, and Bottom Bar can be hidden dynamically
     const hideSidebar = dynamicTitle?.hideLayoutBars === true || 
                         location.pathname === '/ai-workspace' ||
-                        location.pathname.includes('/lectures/editor');
+                        location.pathname.includes('/lectures/editor') ||
+                        location.pathname.includes('/nexus-editor');
 
     const isAiWorkspace = location.pathname.startsWith('/ai-workspace');
     const isFullscreenWorkspace = location.pathname.includes('editor') || 

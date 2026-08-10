@@ -10,4 +10,5 @@ import java.util.UUID;
 public interface ExamResultRepository extends JpaRepository<ExamResult, UUID> {
     java.util.List<ExamResult> findByStudentUsername(String studentUsername);
     java.util.List<ExamResult> findByExamId(UUID examId);
+    long countByExamId(UUID examId);
 }

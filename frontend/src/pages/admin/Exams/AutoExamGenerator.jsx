@@ -506,6 +506,22 @@ const AutoExamGenerator = () => {
     const knowledgeBaseCacheRef = React.useRef(null);
 
     const fetchSchema = async () => {
+        if (!subjectId) return;
+
+        // 🚀 0ms Per-Subject Target Blueprint Session Cache
+        try {
+            const cachedSchemaStr = sessionStorage.getItem('qs_schema_cache_' + subjectId);
+            if (cachedSchemaStr) {
+                const parsed = JSON.parse(cachedSchemaStr);
+                if (parsed.sections && parsed.struct) {
+                    setDynamicSections(parsed.sections);
+                    setUserStructure(parsed.struct);
+                    setLoadingBlueprint(false);
+                    return;
+                }
+            }
+        } catch (e) {}
+
         // Enterprise Optimistic UI: Immediately populate defaults so UI renders in 0ms!
         const defaultSections = [
             { name: 'MCQ Section', type: 'MCQ' },
@@ -618,6 +634,9 @@ const AutoExamGenerator = () => {
 
                     setDynamicSections(sections);
                     setUserStructure(initialStruct);
+                    try {
+                        sessionStorage.setItem('qs_schema_cache_' + subjectId, JSON.stringify({ sections, struct: initialStruct }));
+                    } catch (e) {}
 
                     if (location.state?.prefill?.chapterId) {
                         const cId = location.state.prefill.chapterId;
@@ -863,7 +882,7 @@ const AutoExamGenerator = () => {
 
             if (res.success && res.data) {
                 try {
-                    setExamCache(res.data.id, res.data);
+                    setExamCache(res.data.id, { success: true, data: res.data });
                 } catch (err) {
                     console.warn("Failed to set pre-cached exam data", err);
                 }

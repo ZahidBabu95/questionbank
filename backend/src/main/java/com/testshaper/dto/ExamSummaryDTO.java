@@ -20,4 +20,5 @@ public class ExamSummaryDTO {
     private String className;
     private String createdBy;
     private LocalDateTime createdAt;
+    private Integer submissionCount;
 }

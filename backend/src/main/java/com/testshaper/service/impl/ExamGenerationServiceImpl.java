@@ -40,6 +40,7 @@ public class ExamGenerationServiceImpl {
     private final com.testshaper.repository.UserRepository userRepository;
     private final com.testshaper.repository.QuestionOptionRepository questionOptionRepository;
     private final com.testshaper.repository.QuestionSourceRepository questionSourceRepository;
+    private final com.testshaper.repository.ExamResultRepository examResultRepository;
 
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
@@ -1178,6 +1179,11 @@ public class ExamGenerationServiceImpl {
                 dto.setSubjectName(exam.getClassSubject().getSubject().getName());
             if (exam.getClassSubject().getAcademicClass() != null)
                 dto.setClassName(exam.getClassSubject().getAcademicClass().getName());
+        }
+        try {
+            dto.setSubmissionCount((int) examResultRepository.countByExamId(exam.getId()));
+        } catch (Exception e) {
+            dto.setSubmissionCount(0);
         }
         return dto;
     }

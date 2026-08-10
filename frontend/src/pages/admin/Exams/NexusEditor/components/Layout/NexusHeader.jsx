@@ -105,10 +105,11 @@ const NexusHeader = () => {
                     {/* Exit/Back Button */}
                     <button 
                         onClick={() => navigate('/exams/generate/saved')}
-                        className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-500 hover:text-slate-700 transition-all active:scale-95 border border-slate-200/50 flex items-center justify-center bg-white shadow-sm shrink-0"
+                        className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-md shadow-rose-500/25 rounded-xl text-xs font-bold transition-all active:scale-95 border border-rose-500/40 flex items-center gap-1.5 shrink-0"
                         title={uiLang === 'bn' ? 'ফিরে যান' : 'Back to Saved'}
                     >
-                        <ArrowLeft size={16} className="stroke-[2.5]" />
+                        <ArrowLeft size={16} className="stroke-[3]" />
+                        <span className="hidden xs:inline font-semibold">{uiLang === 'bn' ? 'ফিরে যান' : 'Back'}</span>
                     </button>
                     
                     <div className="h-5 w-[1px] bg-slate-200 hidden xs:block shrink-0"></div>

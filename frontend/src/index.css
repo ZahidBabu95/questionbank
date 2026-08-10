@@ -1,4 +1,69 @@
-@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Noto+Sans+Bengali:wght@100;400;700;900&family=Tiro+Bangla:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700;800&family=Baloo+Da+2:wght@400;500;600;700;800&family=Hind+Siliguri:wght@300;400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800;900&family=Noto+Serif+Bengali:wght@400;500;600;700;800&family=Tiro+Bangla:ital@0;1&display=swap');
+@import url('https://fonts.maateen.me/kalpurush/font.css');
+@import url('https://fonts.maateen.me/solaiman-lipi/font.css');
+
+@font-face {
+    font-family: 'Kalpurush';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/Kalpurush.woff2') format('woff2'),
+         url('/fonts/Kalpurush.ttf') format('truetype'),
+         url('https://fonts.maateen.me/kalpurush/Kalpurush-v0.258.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'SolaimanLipi';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/SolaimanLipi.woff2') format('woff2'),
+         url('/fonts/SolaimanLipi.ttf') format('truetype'),
+         url('https://fonts.maateen.me/solaiman-lipi/solaimanlipi-normal-v1.0.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Hind Siliguri';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/HindSiliguri.ttf') format('truetype'),
+         url('/fonts/HindSiliguri.woff2') format('woff2'),
+         url('https://fonts.gstatic.com/s/hindsiliguri/v12/ijw645juG1yv1d49voc9-163MNO94w.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Noto Serif Bengali';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/NotoSerifBengali.woff2') format('woff2'),
+         url('https://fonts.gstatic.com/s/notoserifbengali/v21/0FlvVP22Y7Wv0bg7937dYMRiO1T0vMxsXoZk.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Tiro Bangla';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/TiroBangla.woff2') format('woff2'),
+         url('https://fonts.gstatic.com/s/tirobangla/v5/3qv_2707-Ntht2-nJ_1B01z1YvY.woff2') format('woff2');
+}
+
+/* Universal Print & PDF Mode Helper Element & Pseudo-Element Purge */
+.print-mode .nexus-editor-page-divider-badge,
+.print-mode [data-html2canvas-ignore="true"],
+.print-mode .page-break::after,
+.print-mode .page-break::before,
+[data-print-ready="true"] .page-break::after,
+[data-print-ready="true"] .page-break::before,
+[data-print-ready="true"] .nexus-editor-page-divider-badge {
+    display: none !important;
+    content: "" !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
 
 @tailwind base;
 @tailwind components;

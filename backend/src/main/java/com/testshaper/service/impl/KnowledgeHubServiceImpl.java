@@ -969,6 +969,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     }
 
     @Override
+    @org.springframework.cache.annotation.CacheEvict(value = "resourceLibraryBooks", allEntries = true)
     public SourceBookMasterDto createSourceBook(SourceBookMasterDto dto) {
         SourceBookMaster entity = new SourceBookMaster();
         entity.setTitle(dto.getTitle());
@@ -1007,6 +1008,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     }
 
     @Override
+    @org.springframework.cache.annotation.Cacheable(value = "resourceLibraryBooks", key = "'tenant_' + T(com.testshaper.security.TenantContext).getTenantId()", unless = "#result == null")
     public List<SourceBookMasterDto> getAllSourceBooks() {
         List<SourceBookMaster> books = sourceBookMasterRepository.findByTenantIdOrderByCreatedAtDesc(TenantContext.getTenantId(), getGlobalTenantId());
         return mapToDtos(books);
@@ -1022,6 +1024,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
     }
 
     @Override
+    @org.springframework.cache.annotation.CacheEvict(value = "resourceLibraryBooks", allEntries = true)
     public void deleteSourceBook(UUID id) {
         sourceBookMasterRepository.deleteById(id);
     }
@@ -1042,6 +1045,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "resourceLibraryBooks", allEntries = true)
     public SourceBookMasterDto updateSourceBook(UUID id, SourceBookMasterDto dto) {
         SourceBookMaster entity = sourceBookMasterRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Source Book not found"));

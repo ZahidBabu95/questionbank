@@ -3,7 +3,7 @@ export const CLASSES  = ["তৃতীয়","চতুর্থ","পঞ্চ
 export const EXAMS    = ["প্রথম সাময়িক","দ্বিতীয় সাময়িক","অর্ধবার্ষিক","বার্ষিক পরীক্ষা","নির্বাচনী পরীক্ষা","মডেল টেস্ট","পূর্ব-নির্বাচনী","টেস্ট পেপার"];
 export const GROUPS   = ["বিজ্ঞান","মানবিক","বাণিজ্য","সাধারণ"];
 export const BOARDS   = ["ঢাকা","চট্টগ্রাম","রাজশাহী","কুমিল্লা","যশোর","বরিশাল","সিলেট","দিনাজপুর","ময়মনসিংহ"];
-export const BN_FONTS = ["Noto Serif Bengali","Hind Siliguri","Tiro Bangla","Baloo Da 2"];
+export const BN_FONTS = ["Noto Serif Bengali", "Kalpurush", "Hind Siliguri", "Tiro Bangla", "SolaimanLipi", "Baloo Da 2", "Anek Bangla"];
 export const EN_FONTS = ["Times New Roman","Georgia","Arial","Helvetica","Courier New"];
 export const PAGE_SIZES = {
   A4:{w:210,h:297,label:"A4 (210×297 মিমি)"},A3:{w:297,h:420,label:"A3 (297×420 মিমি)"},

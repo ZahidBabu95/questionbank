@@ -35,6 +35,7 @@ public class AcademicServiceImpl implements AcademicService {
     private final TopicRepository topicRepository;
     private final AcademicSessionRepository sessionRepository;
     private final com.testshaper.repository.InstituteRepository instituteRepository;
+    private final com.testshaper.repository.QuestionRepository questionRepository;
     private final jakarta.persistence.EntityManager entityManager;
 
     private String getTenant() {
@@ -624,6 +625,7 @@ public class AcademicServiceImpl implements AcademicService {
             for (java.util.Map<String, Object> streamMap : allStreams) {
                 UUID streamId = (UUID) streamMap.get("id");
                 String streamName = (String) streamMap.get("name");
+                UUID levelId = (UUID) streamMap.get("_levelId");
                 String levelName = (String) streamMap.get("_levelName");
 
                 List<AcademicClass> classes = getClassesByStream(streamId);
@@ -634,6 +636,7 @@ public class AcademicServiceImpl implements AcademicService {
                     classMap.put("order", cls.getOrder());
                     classMap.put("_streamId", streamId);
                     classMap.put("_streamName", streamName);
+                    classMap.put("_levelId", levelId);
                     classMap.put("_levelName", levelName);
                     allClasses.add(classMap);
                 }
@@ -661,6 +664,25 @@ public class AcademicServiceImpl implements AcademicService {
                 }
             }
 
+            // Pre-fetch question counts grouped by classSubject and type
+            java.util.Map<UUID, java.util.Map<String, Long>> typeStatsMap = new java.util.HashMap<>();
+            java.util.Map<UUID, Long> totalStatsMap = new java.util.HashMap<>();
+
+            try {
+                List<Object[]> typeRows = questionRepository.countApprovedQuestionsGroupedByClassSubjectIdAndType();
+                for (Object[] row : typeRows) {
+                    UUID csId = (UUID) row[0];
+                    Object typeObj = row[1];
+                    String typeName = typeObj != null ? typeObj.toString() : "OTHER";
+                    Long count = (Long) row[2];
+
+                    totalStatsMap.put(csId, totalStatsMap.getOrDefault(csId, 0L) + count);
+                    typeStatsMap.computeIfAbsent(csId, k -> new java.util.HashMap<>()).put(typeName, count);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to compute question stats grouped by classSubject: {}", e.getMessage());
+            }
+
             // Build classSubjects
             List<java.util.Map<String, Object>> allClassSubjects = new java.util.ArrayList<>();
             for (AcademicClass cls : getAllClasses()) {
@@ -672,11 +694,15 @@ public class AcademicServiceImpl implements AcademicService {
                     }
                     
                     java.util.Map<String, Object> csMap = new java.util.LinkedHashMap<>();
-                    csMap.put("id", csDTO.getClassSubjectId());
+                    UUID csId = csDTO.getClassSubjectId();
+                    csMap.put("id", csId);
                     csMap.put("name", csDTO.getSubjectName());
                     csMap.put("_classId", cls.getId());
                     csMap.put("_subjectId", csDTO.getSubjectId());
                     csMap.put("order", csDTO.getOrder());
+                    csMap.put("approvedQuestionCount", totalStatsMap.getOrDefault(csId, 0L));
+                    csMap.put("questionTypeCounts", typeStatsMap.getOrDefault(csId, java.util.Collections.emptyMap()));
+                    
                     // optional ones
                     if(csDTO.getGroupId() != null) csMap.put("_groupId", csDTO.getGroupId());
                     if(csDTO.getSessionId() != null) csMap.put("_sessionId", csDTO.getSessionId());

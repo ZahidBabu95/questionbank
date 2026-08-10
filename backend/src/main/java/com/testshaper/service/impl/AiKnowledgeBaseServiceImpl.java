@@ -22,6 +22,7 @@ public class AiKnowledgeBaseServiceImpl implements AiKnowledgeBaseService {
     private final UserRepository userRepository;
 
     @Override
+    @org.springframework.cache.annotation.Cacheable(value = "curriculumRules", key = "'all_knowledge'", unless = "#result == null")
     public List<AiKnowledgeBaseDTO> getAllKnowledge() {
         return knowledgeRepository.findAll().stream()
                 .map(this::mapToDTO)
@@ -29,6 +30,7 @@ public class AiKnowledgeBaseServiceImpl implements AiKnowledgeBaseService {
     }
 
     @Override
+    @org.springframework.cache.annotation.Cacheable(value = "curriculumRules", key = "'active_knowledge'", unless = "#result == null")
     public List<AiKnowledgeBaseDTO> getActiveKnowledge() {
         return knowledgeRepository.findByIsActiveTrue().stream()
                 .map(this::mapToDTO)
@@ -37,6 +39,7 @@ public class AiKnowledgeBaseServiceImpl implements AiKnowledgeBaseService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "curriculumRules", allEntries = true)
     public AiKnowledgeBaseDTO createKnowledge(AiKnowledgeBaseDTO dto, String userEmail) {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -53,6 +56,7 @@ public class AiKnowledgeBaseServiceImpl implements AiKnowledgeBaseService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "curriculumRules", allEntries = true)
     public AiKnowledgeBaseDTO updateKnowledge(UUID id, AiKnowledgeBaseDTO dto) {
         AiKnowledgeBase kb = knowledgeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Knowledge Base not found"));
@@ -67,12 +71,14 @@ public class AiKnowledgeBaseServiceImpl implements AiKnowledgeBaseService {
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "curriculumRules", allEntries = true)
     public void deleteKnowledge(UUID id) {
         knowledgeRepository.deleteById(id);
     }
 
     @Override
     @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "curriculumRules", allEntries = true)
     public AiKnowledgeBaseDTO toggleStatus(UUID id) {
         AiKnowledgeBase kb = knowledgeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Knowledge Base not found"));

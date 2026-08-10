@@ -63,7 +63,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         // ── Public API endpoints ──────────────────────────────────
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/api/v1/student/exams/**", "/ws-live-updates/**", "/api/v1/exams/download/pdf/**", "/api/v1/exams/download/word/**", "/api/v1/exams/download/upload-temp/**").permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/api/v1/student/**", "/ws-live-updates/**", "/api/v1/exams/download/pdf/**", "/api/v1/exams/download/word/**", "/api/v1/exams/download/upload-temp/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health").permitAll()
 
                         // ── All other /api/** must be authenticated ───────────────

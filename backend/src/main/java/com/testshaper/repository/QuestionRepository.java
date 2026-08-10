@@ -152,6 +152,9 @@ public interface QuestionRepository extends JpaRepository<Question, UUID>, JpaSp
         @Query("SELECT q.classSubject.id, COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false GROUP BY q.classSubject.id")
         List<Object[]> countApprovedQuestionsGroupedByClassSubjectId();
 
+        @Query("SELECT q.classSubject.id, q.type, COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false AND q.classSubject.id IS NOT NULL GROUP BY q.classSubject.id, q.type")
+        List<Object[]> countApprovedQuestionsGroupedByClassSubjectIdAndType();
+
         @Query("SELECT q.chapter.id, COUNT(q) FROM Question q WHERE q.status = 'APPROVED' AND q.deleted = false AND q.chapter.id IS NOT NULL GROUP BY q.chapter.id")
         List<Object[]> countApprovedQuestionsGroupedByChapterId();
 }

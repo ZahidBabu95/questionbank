@@ -1,12 +1,16 @@
 import React, { memo } from 'react';
 
 const getFontFallback = (fontName) => {
-    if (!fontName) return 'serif';
+    if (!fontName) return "'Noto Serif Bengali', 'Kalpurush', serif";
     const name = fontName.toLowerCase();
-    if (name.includes('serif') || name.includes('tiro') || name.includes('times')) {
-        return 'serif';
-    }
-    return 'sans-serif';
+    if (name.includes('kalpurush')) return "'Kalpurush', 'Noto Serif Bengali', serif";
+    if (name.includes('solaiman')) return "'SolaimanLipi', 'Noto Serif Bengali', serif";
+    if (name.includes('hind')) return "'Hind Siliguri', 'Noto Sans Bengali', sans-serif";
+    if (name.includes('tiro')) return "'Tiro Bangla', 'Noto Serif Bengali', serif";
+    if (name.includes('baloo')) return "'Baloo Da 2', 'Noto Sans Bengali', sans-serif";
+    if (name.includes('anek')) return "'Anek Bangla', 'Noto Sans Bengali', sans-serif";
+    if (name.includes('serif') || name.includes('times')) return "'Noto Serif Bengali', serif";
+    return "'Noto Serif Bengali', 'Kalpurush', sans-serif";
 };
 
 const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
@@ -41,6 +45,54 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
 
     return (
         <style dangerouslySetInnerHTML={{ __html: `
+            @import url('https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700;800&family=Baloo+Da+2:wght@400;500;600;700;800&family=Hind+Siliguri:wght@300;400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800;900&family=Noto+Serif+Bengali:wght@400;500;600;700;800&family=Tiro+Bangla:ital@0;1&display=swap');
+            @import url('https://fonts.maateen.me/kalpurush/font.css');
+            @import url('https://fonts.maateen.me/solaiman-lipi/font.css');
+
+            @font-face {
+                font-family: 'Kalpurush';
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                src: url('/fonts/Kalpurush.woff2') format('woff2'),
+                     url('/fonts/Kalpurush.ttf') format('truetype'),
+                     url('https://fonts.maateen.me/kalpurush/Kalpurush-v0.258.woff2') format('woff2');
+            }
+            @font-face {
+                font-family: 'SolaimanLipi';
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                src: url('/fonts/SolaimanLipi.woff2') format('woff2'),
+                     url('/fonts/SolaimanLipi.ttf') format('truetype'),
+                     url('https://fonts.maateen.me/solaiman-lipi/solaimanlipi-normal-v1.0.woff2') format('woff2');
+            }
+            @font-face {
+                font-family: 'Hind Siliguri';
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                src: url('/fonts/HindSiliguri.ttf') format('truetype'),
+                     url('/fonts/HindSiliguri.woff2') format('woff2'),
+                     url('https://fonts.gstatic.com/s/hindsiliguri/v12/ijw645juG1yv1d49voc9-163MNO94w.woff2') format('woff2');
+            }
+            @font-face {
+                font-family: 'Noto Serif Bengali';
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                src: url('/fonts/NotoSerifBengali.woff2') format('woff2'),
+                     url('https://fonts.gstatic.com/s/notoserifbengali/v21/0FlvVP22Y7Wv0bg7937dYMRiO1T0vMxsXoZk.woff2') format('woff2');
+            }
+            @font-face {
+                font-family: 'Tiro Bangla';
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                src: url('/fonts/TiroBangla.woff2') format('woff2'),
+                     url('https://fonts.gstatic.com/s/tirobangla/v5/3qv_2707-Ntht2-nJ_1B01z1YvY.woff2') format('woff2');
+            }
+
             .strict-analytics-mode {
                 caret-color: transparent !important;
                 user-select: none !important;
@@ -55,8 +107,13 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             .ProseMirror,
             .ProseMirror *,
             .paper-canvas-container,
-            .paper-canvas-container * {
-                font-family: '${s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali')}', ${bodyFallback};
+            .paper-canvas-container *,
+            .nexus-native-header,
+            .nexus-native-header *,
+            .nexus-native-header-portal-container,
+            .nexus-native-header-portal-container *,
+            table, td, th, tr, p, span, div, h1, h2, h3, h4, h5, h6 {
+                font-family: '${s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali')}', ${bodyFallback} !important;
             }
             
             .ProseMirror {
@@ -122,6 +179,26 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 outline: none;
             }
             
+            /* Strictly Hide Editor UI Helper Badges & Dividers in Print/PDF Mode */
+            .print-mode .nexus-editor-page-divider-badge,
+            .print-mode [data-html2canvas-ignore="true"],
+            .print-mode .nexus-header-set-code-helper,
+            .print-mode .nexus-drag-handle,
+            @media print {
+                .nexus-editor-page-divider-badge,
+                [data-html2canvas-ignore="true"],
+                .nexus-header-set-code-helper,
+                .nexus-drag-handle,
+                .print\:hidden {
+                    display: none !important;
+                    visibility: hidden !important;
+                    height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    opacity: 0 !important;
+                }
+            }
+
             /* Inline Answer Sheet Marking */
             .show-answers-highlighted .nexus-correct-option {
                 background-color: #f0fdf4 !important;
@@ -642,25 +719,55 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 font-weight: bold;
                 padding: 2px 8px;
                 border-radius: 4px;
-                text-transform: uppercase;
-                font-family: sans-serif !important;
             }
-            
+
+            .print-mode .page-break {
+                height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                background: none !important;
+                break-before: page !important;
+                page-break-before: always !important;
+                column-span: all !important;
+                -webkit-column-span: all !important;
+            }
+            .print-mode .page-break::after,
+            .print-mode .page-break::before {
+                display: none !important;
+                content: "" !important;
+                opacity: 0 !important;
+                visibility: hidden !important;
+            }
+
+            body, .paper-canvas-container, [data-type="question-block"], .ProseMirror {
+                text-rendering: optimizeLegibility !important;
+                -webkit-font-smoothing: antialiased !important;
+                font-variant-ligatures: normal !important;
+                font-feature-settings: "liga" 1, "clig" 1 !important;
+            }
+
             @media print {
                 body {
-                    zoom: ${s.printScale ? s.printScale / 100 : 0.96} !important;
+                    zoom: 1 !important;
                 }
                 .page-break {
                     height: 0 !important;
                     margin: 0 !important;
+                    padding: 0 !important;
                     border: none !important;
+                    background: none !important;
                     break-before: page !important;
                     page-break-before: always !important;
                     column-span: all !important;
                     -webkit-column-span: all !important;
                 }
-                .page-break::after {
+                .page-break::after,
+                .page-break::before {
                     display: none !important;
+                    content: "" !important;
+                    opacity: 0 !important;
+                    visibility: hidden !important;
                 }
                 .paper-canvas-container,
                 .paper-content-wrapper,

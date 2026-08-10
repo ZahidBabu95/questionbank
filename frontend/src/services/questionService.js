@@ -151,12 +151,16 @@ const seedQuestionCache = (questions) => {
         if (q) {
             const id = q.questionId || q.id;
             if (id) {
-                questionDetailCache.set(id, {
+                const item = {
                     ...q,
                     id: id,
                     syncedFromDb: true,
                     dynamicDataSynced: true
-                });
+                };
+                questionDetailCache.set(id, item);
+                try {
+                    sessionStorage.setItem('qs_question_detail_' + id, JSON.stringify(item));
+                } catch (e) {}
             }
         }
     });
@@ -164,16 +168,32 @@ const seedQuestionCache = (questions) => {
 
 const getQuestionFromCache = (id) => {
     if (!id) return null;
-    return questionDetailCache.get(id);
+    if (questionDetailCache.has(id)) {
+        return questionDetailCache.get(id);
+    }
+    try {
+        const stored = sessionStorage.getItem('qs_question_detail_' + id);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            questionDetailCache.set(id, parsed);
+            return parsed;
+        }
+    } catch (e) {}
+    return null;
 };
 
 const getQuestionById = async (id) => {
-    if (questionDetailCache.has(id)) {
-        return questionDetailCache.get(id);
+    if (!id) return null;
+    const cached = getQuestionFromCache(id);
+    if (cached) {
+        return cached;
     }
     const response = await axios.get(`${API_URL}/${id}`);
     if (response.data) {
         questionDetailCache.set(id, response.data);
+        try {
+            sessionStorage.setItem('qs_question_detail_' + id, JSON.stringify(response.data));
+        } catch (e) {}
     }
     return response.data;
 };
@@ -181,7 +201,19 @@ const getQuestionById = async (id) => {
 const getQuestionsBatch = async (ids) => {
     if (!ids || ids.length === 0) return [];
     
-    const uncachedIds = ids.filter(id => !questionDetailCache.has(id));
+    // Check cache and sessionStorage for each ID first
+    const result = [];
+    const uncachedIds = [];
+
+    ids.forEach(id => {
+        const cached = getQuestionFromCache(id);
+        if (cached) {
+            result.push(cached);
+        } else {
+            uncachedIds.push(id);
+        }
+    });
+
     if (uncachedIds.length > 0) {
         try {
             const response = await axios.post(`${API_URL}/batch`, uncachedIds);
@@ -189,14 +221,17 @@ const getQuestionsBatch = async (ids) => {
             fetchedQuestions.forEach(q => {
                 if (q && q.id) {
                     questionDetailCache.set(q.id, q);
+                    try {
+                        sessionStorage.setItem('qs_question_detail_' + q.id, JSON.stringify(q));
+                    } catch (e) {}
+                    result.push(q);
                 }
             });
         } catch (e) {
             console.error("Failed to batch fetch questions", e);
         }
     }
-    
-    return ids.map(id => questionDetailCache.get(id)).filter(Boolean);
+    return result;
 };
 
 

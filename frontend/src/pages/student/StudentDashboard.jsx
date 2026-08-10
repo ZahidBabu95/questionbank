@@ -17,8 +17,18 @@ import {
 
 const StudentDashboard = ({ user }) => {
     const { t, currentLang } = useLanguage();
-    const [exams, setExams] = useState([]);
-    const [completedExams, setCompletedExams] = useState([]);
+    const [exams, setExams] = useState(() => {
+        try {
+            const cached = sessionStorage.getItem('student_assigned_exams_cache');
+            return cached ? JSON.parse(cached) : [];
+        } catch(e) { return []; }
+    });
+    const [completedExams, setCompletedExams] = useState(() => {
+        try {
+            const cached = sessionStorage.getItem('student_completed_exams_cache');
+            return cached ? JSON.parse(cached) : [];
+        } catch(e) { return []; }
+    });
     const [questions, setQuestions] = useState([]);
     const [subjects, setSubjects] = useState([]);
     
@@ -32,7 +42,7 @@ const StudentDashboard = ({ user }) => {
     const [loadingOptions, setLoadingOptions] = useState(false);
 
     // General States
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!exams.length && !completedExams.length);
     const [topicAccuracy, setTopicAccuracy] = useState({});
     const [loadingTopicAnalytics, setLoadingTopicAnalytics] = useState(false);
     const [error, setError] = useState('');
@@ -46,12 +56,14 @@ const StudentDashboard = ({ user }) => {
                 const resExams = await axios.get('/v1/student/exams/assigned');
                 if (resExams.data) {
                     setExams(resExams.data);
+                    sessionStorage.setItem('student_assigned_exams_cache', JSON.stringify(resExams.data));
                 }
 
                 // Fetch completed exams results
                 const resResults = await axios.get('/v1/student/results');
                 if (resResults.data) {
                     setCompletedExams(resResults.data);
+                    sessionStorage.setItem('student_completed_exams_cache', JSON.stringify(resResults.data));
                 }
 
                 // Fetch subjects for filters

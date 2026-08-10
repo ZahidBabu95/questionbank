@@ -49,6 +49,7 @@ import ExamList from './pages/admin/Exams/ExamList';
 import SavedExams from './pages/admin/Exams/SavedExams';
 import ExamEditor from './pages/admin/Exams/ExamEditor';
 import NexusEditor from './pages/admin/Exams/NexusEditor/NexusEditor';
+import ExamPrintView from './pages/admin/Exams/NexusEditor/components/ExamPrintView';
 import AiWorkspace from './pages/admin/AIWorkspace/AiWorkspace';
 import AiCommandSettings from './pages/admin/AIWorkspace/AiCommandSettings';
 import AiPromptRules from './pages/admin/AIWorkspace/AiPromptRules';
@@ -132,6 +133,7 @@ function App() {
                     <Route path="/terms" element={<TermsOfService />} />
                     <Route path="/privacy" element={<PrivacyPolicy />} />
                     <Route path="/exams/share/:id" element={<PublicExamShare />} />
+                    <Route path="/exams/print-view/:id" element={<ExamPrintView />} />
 
                     {/* Public Blog Routes */}
                     <Route path="/blog" element={<BlogListing />} />

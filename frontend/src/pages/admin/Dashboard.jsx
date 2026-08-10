@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Users, BookOpen, FileQuestion, Activity,
     TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Calendar,
     Zap, Target, Clock, Plus, ExternalLink, Loader2, FileText, Layers, Sparkles, X,
-    Award, CheckCircle, XCircle, AlertCircle, ChevronRight, Search
+    Award, CheckCircle, XCircle, AlertCircle, ChevronRight, ChevronDown, Search
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -87,9 +87,22 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 const Dashboard = ({ view = 'overview' }) => {
     const { currentLang, t } = useLanguage();
-    const [stats, setStats] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem('user') || 'null');
+        } catch (e) {
+            return null;
+        }
+    });
+    const [stats, setStats] = useState(() => {
+        try {
+            const cached = sessionStorage.getItem('dashboard_stats_cache');
+            return cached ? JSON.parse(cached) : null;
+        } catch (e) {
+            return null;
+        }
+    });
+    const [loading, setLoading] = useState(!stats);
     const [showSubjectsModal, setShowSubjectsModal] = useState(false);
     const [modalTab, setModalTab] = useState('subject'); // 'subject' or 'class'
     const navigate = useNavigate();
@@ -112,13 +125,33 @@ const Dashboard = ({ view = 'overview' }) => {
     const [activeStream, setActiveStream] = useState('');
     const [selectedClassDetail, setSelectedClassDetail] = useState(null);
 
+    // Level-wise filter state for Class-wise progress section (null = collapsed by default)
+    const [selectedProgressLevel, setSelectedProgressLevel] = useState(null);
+
+    const classStatsList = stats?.classStats || [];
+
+    const progressLevelsList = useMemo(() => {
+        if (!classStatsList.length) return [];
+        return [...new Set(classStatsList.map(c => c.levelName || 'General'))].filter(Boolean).sort();
+    }, [classStatsList]);
+
+    const filteredClassStats = useMemo(() => {
+        if (!classStatsList.length || !selectedProgressLevel) return [];
+        if (selectedProgressLevel === 'ALL') return classStatsList;
+        return classStatsList.filter(c => (c.levelName || 'General') === selectedProgressLevel);
+    }, [classStatsList, selectedProgressLevel]);
+
+    const handleProgressLevelToggle = (lvl) => {
+        setSelectedProgressLevel(prev => prev === lvl ? null : lvl);
+    };
+
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
-            const parsedUser = JSON.parse(storedUser);
-            
-            setUser(parsedUser);
+            try {
+                setUser(JSON.parse(storedUser));
+            } catch (e) {}
         }
     }, [navigate]);
 
@@ -153,16 +186,16 @@ const Dashboard = ({ view = 'overview' }) => {
         if (!user) return;
 
         const fetchStats = async () => {
-            setLoading(true);
+            if (!stats) setLoading(true);
             try {
                 let data;
                 let activeRoleViewLoc = view;
                 if (view === 'overview') {
-                    if (user.roles.includes('SUPER_ADMIN') || user.permissions?.includes('ROLES_PERMISSIONS_VIEW') || user.permissions?.includes('SUBSCRIPTION_PACKAGE_VIEW')) {
+                    if (user.roles?.includes('SUPER_ADMIN') || user.permissions?.includes('ROLES_PERMISSIONS_VIEW') || user.permissions?.includes('SUBSCRIPTION_PACKAGE_VIEW')) {
                         activeRoleViewLoc = 'admin';
-                    } else if (user.roles.includes('INSTITUTE_ADMIN') || user.permissions?.includes('ALL_INSTITUTES_VIEW')) {
+                    } else if (user.roles?.includes('INSTITUTE_ADMIN') || user.permissions?.includes('ALL_INSTITUTES_VIEW')) {
                         activeRoleViewLoc = 'institute';
-                    } else if (user.roles.includes('TEACHER') || user.permissions?.includes('ADD_QUESTION_VIEW')) {
+                    } else if (user.roles?.includes('TEACHER') || user.permissions?.includes('ADD_QUESTION_VIEW')) {
                         activeRoleViewLoc = 'teacher';
                     } else {
                         activeRoleViewLoc = 'student';
@@ -178,7 +211,10 @@ const Dashboard = ({ view = 'overview' }) => {
                 } else {
                     data = await dashboardService.getStudentStats();
                 }
-                setStats(data);
+                if (data) {
+                    setStats(data);
+                    sessionStorage.setItem('dashboard_stats_cache', JSON.stringify(data));
+                }
             } catch (error) {
                 console.error("Failed to fetch dashboard stats", error);
             } finally {
@@ -212,17 +248,8 @@ const Dashboard = ({ view = 'overview' }) => {
             try {
                 const res = await examService.listExams({ size: 5 });
                 if (res.success && res.data && res.data.content) {
-                    const mapped = await Promise.all(res.data.content.map(async (exam) => {
-                        let submissionsCount = 0;
-                        try {
-                            const subRes = await axios.get(`/v1/teacher/exams/${exam.id}/submissions`);
-                            if (subRes.data) {
-                                submissionsCount = subRes.data.length;
-                            }
-                        } catch (e) {
-                            console.error("Failed to fetch submissions count for exam: " + exam.id, e);
-                        }
-
+                    const mapped = res.data.content.map((exam) => {
+                        const submissionsCount = exam.submissionCount || 0;
                         // Estimate total class size as 40.
                         const totalStudents = 40;
                         const progressPercent = Math.min(100, Math.round((submissionsCount / totalStudents) * 100)) || 0;
@@ -237,7 +264,7 @@ const Dashboard = ({ view = 'overview' }) => {
                             count: `${submissionsCount}/${totalStudents}`,
                             status: exam.status
                         };
-                    }));
+                    });
                     setRecentExams(mapped);
                 }
             } catch (err) {
@@ -408,11 +435,29 @@ const Dashboard = ({ view = 'overview' }) => {
         return t(key) || typeName;
     };
 
-    if (loading) {
+    if (loading && !stats) {
         return (
-            <div className="flex flex-col items-center justify-center h-[60vh]">
-                <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                <p className="mt-4 text-slate-500 font-medium">{t('loading_dashboard')}</p>
+            <div className="p-6 space-y-6 animate-pulse">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-200/60">
+                    <div className="h-8 bg-slate-200 rounded-lg w-48"></div>
+                    <div className="h-9 bg-slate-200 rounded-xl w-32"></div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="h-32 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200/50 p-5 space-y-3">
+                            <div className="flex justify-between items-center">
+                                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24"></div>
+                                <div className="w-10 h-10 bg-slate-200 dark:bg-slate-700 rounded-xl"></div>
+                            </div>
+                            <div className="h-7 bg-slate-200 dark:bg-slate-700 rounded w-16"></div>
+                            <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-32"></div>
+                        </div>
+                    ))}
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 h-72 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200/50"></div>
+                    <div className="h-72 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-slate-200/50"></div>
+                </div>
             </div>
         );
     }
@@ -689,90 +734,196 @@ const Dashboard = ({ view = 'overview' }) => {
 
             {/* ─── Class-wise Books & Questions Progress ─── */}
             {activeRoleView !== 'student' && classStats && classStats.length > 0 && (
-                <motion.div variants={itemVariants} className="space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div>
-                            <h3 className="text-sm font-extrabold text-slate-500 uppercase tracking-[0.2em] mb-1 pl-1">
-                                {currentLang === 'bn' ? 'শ্রেণিভিত্তিক বই ও প্রশ্ন অগ্রগতি' : 'Class-wise Books & Questions Progress'}
-                            </h3>
-                            <p className="text-[11px] md:text-xs text-slate-400 pl-1">
-                                {currentLang === 'bn' 
-                                    ? 'প্রতিটি শ্রেণিতে মোট কতটি বই এবং কতটি বইয়ের প্রশ্ন তৈরি করা বাকি আছে তার লাইভ অগ্রগতি।' 
-                                    : 'Live progress tracking of total books and remaining book questions per class.'}
-                            </p>
+                <motion.div variants={itemVariants} className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-5 md:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_25px_-4px_rgba(0,0,0,0.03)] space-y-5">
+                    {/* Header Row */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-800/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs">
+                                <Layers size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                                    {currentLang === 'bn' ? 'শ্রেণিভিত্তিক বই ও প্রশ্ন অগ্রগতি' : 'Class-wise Books & Questions Progress'}
+                                </h3>
+                                <p className="text-xs text-slate-400 font-medium mt-0.5">
+                                    {currentLang === 'bn' 
+                                        ? 'প্রতিটি শ্রেণি ও স্তরের লাইভ বই এবং প্রশ্ন কভারেজ অগ্রগতি।' 
+                                        : 'Live book and question coverage metrics by academic level.'}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                            <span className="px-3 py-1 bg-gradient-to-r from-indigo-500/10 to-violet-500/10 text-indigo-600 dark:text-indigo-400 rounded-full text-xs font-extrabold border border-indigo-200/50 dark:border-indigo-800/50 flex items-center gap-1.5 shadow-xs">
+                                <BookOpen size={13} />
+                                <span>{classStats.length} {currentLang === 'bn' ? 'টি শ্রেণি' : 'Classes'}</span>
+                            </span>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {classStats.map((cls) => (
-                            <motion.div 
-                                key={cls.classId}
-                                whileHover={{ y: -4, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)' }}
-                                className="bg-white/80 backdrop-blur-xl p-5 rounded-2xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-slate-100 hover:border-slate-200 transition-all duration-300 flex flex-col justify-between"
-                            >
-                                <div className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <h4 className="text-sm font-extrabold text-slate-800">{cls.className}</h4>
-                                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold border border-blue-100/50">
-                                            {cls.totalBooks.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} {currentLang === 'bn' ? 'টি বই' : 'Books'}
+                    {/* Level Filter Selector Bar */}
+                    {progressLevelsList.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
+                                {currentLang === 'bn' ? 'স্তর নির্বাচন:' : 'Select Level:'}
+                            </span>
+
+                            {progressLevelsList.map(lvl => {
+                                const count = classStats.filter(c => (c.levelName || 'General') === lvl).length;
+                                const isSelected = selectedProgressLevel === lvl;
+                                return (
+                                    <button
+                                        key={lvl}
+                                        onClick={() => handleProgressLevelToggle(lvl)}
+                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center gap-2 active:scale-95 ${
+                                            isSelected
+                                                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-400/30'
+                                                : 'bg-slate-100/80 hover:bg-slate-200/70 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60'
+                                        }`}
+                                    >
+                                        <span>{lvl}</span>
+                                        <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
+                                            isSelected ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                        }`}>
+                                            {count}
                                         </span>
-                                    </div>
+                                        <ChevronDown size={14} className={`transition-transform duration-300 ${isSelected ? 'rotate-180' : ''}`} />
+                                    </button>
+                                );
+                            })}
 
-                                    {/* Stats grid */}
-                                    <div className="grid grid-cols-3 gap-2 py-2">
-                                        <div className="bg-emerald-50/50 rounded-xl p-2 text-center border border-emerald-100/30">
-                                            <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'bn' ? 'প্রশ্ন সম্পন্ন' : 'Done'}</span>
-                                            <span className="text-xs font-extrabold text-emerald-600 block mt-0.5">
-                                                {cls.booksWithQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
-                                            </span>
-                                        </div>
-                                        <div className="bg-rose-50/50 rounded-xl p-2 text-center border border-rose-100/30">
-                                            <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'bn' ? 'প্রশ্ন বাকি' : 'Pending'}</span>
-                                            <span className="text-xs font-extrabold text-rose-500 block mt-0.5">
-                                                {cls.booksWithoutQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
-                                            </span>
-                                        </div>
-                                        <div className="bg-slate-50 rounded-xl p-2 text-center border border-slate-100/50">
-                                            <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'bn' ? 'মোট প্রশ্ন' : 'Questions'}</span>
-                                            <span className="text-xs font-extrabold text-slate-800 block mt-0.5">
-                                                {cls.totalQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
-                                            </span>
-                                        </div>
-                                    </div>
+                            <button
+                                onClick={() => handleProgressLevelToggle('ALL')}
+                                className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center gap-2 active:scale-95 ${
+                                    selectedProgressLevel === 'ALL'
+                                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-400/30'
+                                        : 'bg-slate-100/80 hover:bg-slate-200/70 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60'
+                                }`}
+                            >
+                                <span>{currentLang === 'bn' ? 'সব দেখান' : 'Show All'}</span>
+                                <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
+                                    selectedProgressLevel === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                }`}>
+                                    {classStats.length}
+                                </span>
+                                <ChevronDown size={14} className={`transition-transform duration-300 ${selectedProgressLevel === 'ALL' ? 'rotate-180' : ''}`} />
+                            </button>
+                        </div>
+                    )}
 
-                                    {/* Status progress bar */}
-                                    <div className="space-y-1">
-                                        <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                                            <span>{currentLang === 'bn' ? 'প্রশ্ন কভারেজ' : 'Question Coverage'}</span>
-                                            <span>
-                                                {cls.totalBooks > 0 
-                                                    ? Math.round((cls.booksWithQuestions / cls.totalBooks) * 100) 
-                                                    : 0}%
-                                            </span>
+                    {/* Animated Cards or Collapsed Banner */}
+                    <AnimatePresence mode="wait">
+                        {selectedProgressLevel ? (
+                            <motion.div 
+                                key={selectedProgressLevel}
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.25 }}
+                                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2"
+                            >
+                                {filteredClassStats.map((cls) => (
+                                    <motion.div 
+                                        key={cls.classId}
+                                        whileHover={{ y: -4, boxShadow: '0 12px 30px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04)' }}
+                                        className="bg-white dark:bg-slate-800/90 p-5 rounded-2xl shadow-xs border border-slate-200/70 dark:border-slate-700/60 hover:border-indigo-200 transition-all duration-300 flex flex-col justify-between"
+                                    >
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="text-sm font-black text-slate-800 dark:text-slate-100">{cls.className}</h4>
+                                                <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-lg text-[10px] font-extrabold border border-blue-100 dark:border-blue-800/50">
+                                                    {cls.totalBooks.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} {currentLang === 'bn' ? 'টি বই' : 'Books'}
+                                                </span>
+                                            </div>
+
+                                            {/* Stats grid */}
+                                            <div className="grid grid-cols-3 gap-2 py-1">
+                                                <div className="bg-emerald-50/60 dark:bg-emerald-950/30 rounded-xl p-2 text-center border border-emerald-100/50 dark:border-emerald-900/30">
+                                                    <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'bn' ? 'প্রশ্ন সম্পন্ন' : 'Done'}</span>
+                                                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                                                        {cls.booksWithQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
+                                                    </span>
+                                                </div>
+                                                <div className="bg-rose-50/60 dark:bg-rose-950/30 rounded-xl p-2 text-center border border-rose-100/50 dark:border-rose-900/30">
+                                                    <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'bn' ? 'প্রশ্ন বাকি' : 'Pending'}</span>
+                                                    <span className="text-xs font-black text-rose-500 dark:text-rose-400 block mt-0.5">
+                                                        {cls.booksWithoutQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
+                                                    </span>
+                                                </div>
+                                                <div className="bg-slate-50 dark:bg-slate-700/40 rounded-xl p-2 text-center border border-slate-100 dark:border-slate-700/50">
+                                                    <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'bn' ? 'মোট প্রশ্ন' : 'Questions'}</span>
+                                                    <span className="text-xs font-black text-slate-800 dark:text-slate-200 block mt-0.5">
+                                                        {cls.totalQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Status progress bar */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-500">
+                                                    <span>{currentLang === 'bn' ? 'প্রশ্ন কভারেজ' : 'Question Coverage'}</span>
+                                                    <span className="text-indigo-600 dark:text-indigo-400">
+                                                        {cls.totalBooks > 0 
+                                                            ? Math.round((cls.booksWithQuestions / cls.totalBooks) * 100) 
+                                                            : 0}%
+                                                    </span>
+                                                </div>
+                                                <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                    <div 
+                                                        className={`h-full rounded-full transition-all duration-500 ${
+                                                            cls.booksWithoutQuestions === 0 
+                                                                ? 'bg-gradient-to-r from-emerald-500 to-teal-400' 
+                                                                : 'bg-gradient-to-r from-indigo-500 to-violet-500'
+                                                        }`}
+                                                        style={{ 
+                                                            width: `${cls.totalBooks > 0 ? (cls.booksWithQuestions / cls.totalBooks) * 100 : 0}%` 
+                                                        }}
+                                                    ></div>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                            <div 
-                                                className={`h-full rounded-full transition-all duration-500 ${
-                                                    cls.booksWithoutQuestions === 0 ? 'bg-emerald-500' : 'bg-blue-500'
-                                                }`}
-                                                style={{ 
-                                                    width: `${cls.totalBooks > 0 ? (cls.booksWithQuestions / cls.totalBooks) * 100 : 0}%` 
-                                                }}
-                                            ></div>
-                                        </div>
+
+                                        <button
+                                            onClick={() => setSelectedClassStats(cls)}
+                                            className="mt-4 w-full py-2.5 bg-slate-50 hover:bg-indigo-50/50 hover:text-indigo-600 dark:bg-slate-700/50 dark:hover:bg-slate-700 active:scale-[0.98] border border-slate-200/60 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                                        >
+                                            <ExternalLink size={13} />
+                                            <span>{currentLang === 'bn' ? 'বইয়ের তালিকা ও অগ্রগতি' : 'Books List & Progress'}</span>
+                                        </button>
+                                    </motion.div>
+                                ))}
+                            </motion.div>
+                        ) : (
+                            <motion.div 
+                                initial={{ opacity: 0, y: 5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="p-5 rounded-2xl bg-gradient-to-r from-indigo-50/50 via-purple-50/30 to-slate-50/50 dark:from-slate-800/40 dark:to-slate-800/20 border border-indigo-100/60 dark:border-indigo-900/30 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                                        <Sparkles size={18} className="animate-pulse" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                            {currentLang === 'bn' ? 'শ্রেণিভিত্তিক বিস্তারিত তথ্য দেখতে যেকোনো স্তর সিলেক্ট করুন' : 'Select an academic level above to view progress'}
+                                        </h4>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">
+                                            {currentLang === 'bn' 
+                                                ? 'যেকোনো স্তরের বোতামে ক্লিক করলে প্রশ্ন সম্পন্ন ও বাকি থাকা বইয়ের তালিকা দেখা যাবে।' 
+                                                : 'Click any level tab above to expand total books & question metrics.'}
+                                        </p>
                                     </div>
                                 </div>
 
                                 <button
-                                    onClick={() => setSelectedClassStats(cls)}
-                                    className="mt-4 w-full py-2 bg-slate-50 hover:bg-slate-100 active:scale-[0.98] border border-slate-200/50 hover:border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
+                                    onClick={() => handleProgressLevelToggle(progressLevelsList[0] || 'ALL')}
+                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-sm shadow-indigo-600/20 shrink-0 active:scale-95"
                                 >
-                                    <ExternalLink size={12} />
-                                    <span>{currentLang === 'bn' ? 'বইয়ের তালিকা ও অগ্রগতি' : 'Books List & Progress'}</span>
+                                    {currentLang === 'bn' ? 'প্রথম স্তর দেখুন' : 'Explore Level'}
                                 </button>
                             </motion.div>
-                        ))}
-                    </div>
+                        )}
+                    </AnimatePresence>
                 </motion.div>
             )}
 

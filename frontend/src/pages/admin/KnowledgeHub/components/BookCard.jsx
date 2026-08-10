@@ -63,7 +63,7 @@ export default function BookCard({
                     <div className="w-[110px] sm:w-[130px] flex-shrink-0 relative group/cover">
                         <div className="aspect-[3/4.2] rounded-xl overflow-hidden shadow-sm bg-slate-100 border border-slate-200 hover:shadow-md transition-all duration-300">
                             {book.coverImageUrl ? (
-                                <img src={book.coverImageUrl} className="w-full h-full object-cover" alt={book.title} />
+                                <img src={book.coverImageUrl} className="w-full h-full object-cover" alt={book.title} loading="lazy" decoding="async" />
                             ) : (
                                 <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
                                     <Book size={40} strokeWidth={1} />

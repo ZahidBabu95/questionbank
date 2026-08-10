@@ -5,9 +5,10 @@ import { X, FileText, DownloadCloud } from 'lucide-react';
 
 const FilenameModal = () => {
     const { showFilenameModal, setShowFilenameModal, docSettings, uiLang } = useNexusEditor();
-    const { handleDownloadPdf } = useExamManager();
+    const { handleDownloadPdf, handleDownloadVectorPdf, handleNativeVectorPdf } = useExamManager();
     const [fileName, setFileName] = useState('');
     const [selectedSet, setSelectedSet] = useState('');
+    const [pdfEngine, setPdfEngine] = useState('native'); // 'native' | 'vector' | 'canvas'
     const [animationClass, setAnimationClass] = useState('opacity-0 scale-95');
     const inputRef = useRef(null);
 
@@ -43,9 +44,14 @@ const FilenameModal = () => {
     const handleConfirm = () => {
         const cleanName = fileName.trim() || (uiLang === 'bn' ? 'প্রশ্নপত্র' : 'Exam_Paper');
         setShowFilenameModal(false);
-        // Start PDF generation with custom filename and the active set!
         const downloadSet = docSettings.multipleSetsEnabled ? (docSettings.activeSet || 'ক') : '';
-        handleDownloadPdf(false, cleanName, downloadSet);
+        if (pdfEngine === 'native') {
+            handleNativeVectorPdf();
+        } else if (pdfEngine === 'vector') {
+            handleDownloadVectorPdf();
+        } else {
+            handleDownloadPdf(false, cleanName, downloadSet);
+        }
     };
 
     const handleKeyDown = (e) => {
@@ -59,7 +65,7 @@ const FilenameModal = () => {
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/40 backdrop-blur-md animate-in fade-in duration-300">
             {/* Modal Box */}
-            <div className={`w-[92%] max-w-md bg-white/80 dark:bg-slate-900/85 border border-white/40 dark:border-slate-800/40 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden backdrop-blur-xl transition-all duration-300 ease-out transform ${animationClass}`}>
+            <div className={`w-[92%] max-w-lg bg-white/80 dark:bg-slate-900/85 border border-white/40 dark:border-slate-800/40 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden backdrop-blur-xl transition-all duration-300 ease-out transform ${animationClass}`}>
                 
                 {/* Decorative Blur Background bubbles */}
                 <div className="absolute -top-12 -left-12 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
@@ -84,7 +90,7 @@ const FilenameModal = () => {
                                 {uiLang === 'bn' ? 'পিডিএফ ফাইল ডাউনলোড' : 'Download PDF File'}
                             </h3>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                                {uiLang === 'bn' ? 'ডাউনলোড করার আগে ফাইলের একটি নাম সেট করুন' : 'Enter a filename for your exam paper'}
+                                {uiLang === 'bn' ? 'ডাউনলোড করার আগে ফাইলের নাম ও রেন্ডারিং মোড নির্বাচন করুন' : 'Select filename and PDF engine mode'}
                             </p>
                         </div>
                     </div>
@@ -107,6 +113,65 @@ const FilenameModal = () => {
                             <span className="absolute right-3 text-[10px] font-bold text-slate-400/80">
                                 .pdf
                             </span>
+                        </div>
+                    </div>
+
+                    {/* PDF Engine Selection */}
+                    <div className="text-left space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1">
+                            {uiLang === 'bn' ? 'রেন্ডারিং ইঞ্জিন নির্বাচন করুন' : 'PDF Engine Option'}
+                        </label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setPdfEngine('native')}
+                                className={`p-2.5 rounded-xl border text-left transition-all relative ${
+                                    pdfEngine === 'native'
+                                        ? 'bg-indigo-50/90 border-indigo-600 text-indigo-950 shadow-md ring-2 ring-indigo-500/30'
+                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                }`}
+                            >
+                                <div className="text-[11px] font-extrabold flex items-center gap-1 text-indigo-700">
+                                    <span>🖨️ {uiLang === 'bn' ? 'ক্রোম নেটিভ (1:1)' : 'Chrome Native (1:1)'}</span>
+                                </div>
+                                <div className="text-[9.5px] text-slate-600 mt-1 leading-tight font-medium">
+                                    {uiLang === 'bn' ? 'শতভাগ আসল ফন্ট, অবিকল ১ পেজ ও ১px বর্ডার (প্রস্তাবিত)' : '100% exact fonts, exact 1-page layout & crisp 1px lines (Recommended)'}
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setPdfEngine('vector')}
+                                className={`p-2.5 rounded-xl border text-left transition-all relative ${
+                                    pdfEngine === 'vector'
+                                        ? 'bg-indigo-50/90 border-indigo-600 text-indigo-950 shadow-md ring-2 ring-indigo-500/30'
+                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                }`}
+                            >
+                                <div className="text-[11px] font-extrabold flex items-center gap-1 text-purple-700">
+                                    <span>🤖 {uiLang === 'bn' ? 'সার্ভার ভেক্টর (Puppeteer)' : 'Server Vector (Puppeteer)'}</span>
+                                </div>
+                                <div className="text-[9.5px] text-slate-600 mt-1 leading-tight font-medium">
+                                    {uiLang === 'bn' ? 'ব্যাকগ্রাউন্ড সারভার ভেক্টর PDF এক্সপোর্ট' : 'Background automated Puppeteer vector PDF export'}
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setPdfEngine('canvas')}
+                                className={`p-2.5 rounded-xl border text-left transition-all relative ${
+                                    pdfEngine === 'canvas'
+                                        ? 'bg-indigo-50/90 border-indigo-600 text-indigo-950 shadow-md ring-2 ring-indigo-500/30'
+                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                }`}
+                            >
+                                <div className="text-[11px] font-extrabold flex items-center gap-1 text-slate-700">
+                                    <span>⚡ {uiLang === 'bn' ? 'দ্রুত এইচডি (Canvas HD)' : 'Quick HD (Canvas)'}</span>
+                                </div>
+                                <div className="text-[9.5px] text-slate-600 mt-1 leading-tight font-medium">
+                                    {uiLang === 'bn' ? 'তাত্ক্ষণিক ফ্রন্টএন্ড ৩-৫ সেকেন্ডে ক্যানভাস ডাউনলোড' : 'Instant client-side 300 DPI canvas PDF download'}
+                                </div>
+                            </button>
                         </div>
                     </div>
 

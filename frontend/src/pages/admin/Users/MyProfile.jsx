@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     User, Mail, Phone, Lock, Eye, EyeOff, Save, Key, Shield, AlertTriangle, 
     Upload, Zap, Database, Activity, Check, CheckSquare, Square, ChevronDown, 
-    ChevronUp, RefreshCw, Globe, Cpu, Award, HardDrive, Layout, CheckCircle, Info, BookOpen
+    ChevronUp, RefreshCw, Globe, Cpu, Award, HardDrive, Layout, CheckCircle, Info, BookOpen,
+    Search, Filter
 } from 'lucide-react';
 import axios from '../../../utils/axios';
 import userService from '../../../services/userService';
@@ -51,6 +52,13 @@ const MyProfile = () => {
     const [paymentStep, setPaymentStep] = useState('confirm'); // confirm, method, submitting, success
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('bkash');
 
+    // Subject Filtering States (Cascading Hierarchy Filter: Level -> Stream -> Class -> Subject)
+    const [selectedLevelFilter, setSelectedLevelFilter] = useState('ALL');
+    const [selectedStreamFilter, setSelectedStreamFilter] = useState('ALL');
+    const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
+    const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('ALL');
+    const [subjectSearchQuery, setSubjectSearchQuery] = useState('');
+
     // Toast/Alert Notifications
     const [notification, setNotification] = useState(null); // { message: '', type: 'success' | 'error' }
 
@@ -91,26 +99,24 @@ const MyProfile = () => {
                     // 2. Fetch login history
                     fetchLoginHistory(userData.id);
 
-                    // 3. Fetch Institute details if exists
+                    // 3. Always fetch billing packages and academic hierarchy
+                    fetchBillingPackages();
+                    fetchAcademicHierarchy();
+
+                    // 4. Fetch Institute details & assigned subjects if exists
                     if (userData.instituteId) {
                         fetchInstituteDetails(userData.instituteId);
-                        
-                        // Check if user is Workspace Admin to fetch billing packages and academic hierarchy
-                        const isAdmin = userData.roles?.includes('INSTITUTE_ADMIN') || userData.roles?.includes('SUPER_ADMIN');
-                        if (isAdmin) {
-                            fetchBillingPackages();
-                            fetchAcademicHierarchy();
-                            fetchAssignedSubjects(userData.instituteId);
-                            // Fetch user stats for active/remaining slots calculations
-                            try {
-                                const statsRes = await userService.getUserStats();
-                                if (statsRes.success) {
-                                    setStats(statsRes.data);
-                                }
-                            } catch (e) {
-                                console.error("Failed to load user stats for limits card", e);
-                            }
+                        fetchAssignedSubjects(userData.instituteId);
+                    }
+
+                    // 5. Fetch user stats for active/remaining slots calculations
+                    try {
+                        const statsRes = await userService.getUserStats();
+                        if (statsRes.success) {
+                            setStats(statsRes.data);
                         }
+                    } catch (e) {
+                        console.error("Failed to load user stats for limits card", e);
                     }
                 }
             } catch (err) {
@@ -122,6 +128,16 @@ const MyProfile = () => {
         };
         loadData();
     }, []);
+
+    // Ensure academic data loads when tab is switched
+    useEffect(() => {
+        if (activeTab === 'academic' && !hierarchy) {
+            fetchAcademicHierarchy();
+            if (user?.instituteId) {
+                fetchAssignedSubjects(user.instituteId);
+            }
+        }
+    }, [activeTab, hierarchy, user]);
 
     const fetchInstituteDetails = async (instituteId) => {
         try {
@@ -156,25 +172,39 @@ const MyProfile = () => {
             setBillingPackages(list.filter(pkg => pkg.status === 'ACTIVE'));
         } catch (err) {
             console.error("Failed to fetch packages", err);
+            setBillingPackages([]);
         }
     };
 
     const fetchAcademicHierarchy = async () => {
         try {
             const data = await academicService.getHierarchy(true); // bypass tenant filters
-            setHierarchy(data);
+            setHierarchy(data || { classes: [], classSubjects: [] });
         } catch (err) {
             console.error("Failed to fetch curriculum hierarchy", err);
+            setHierarchy({ classes: [], classSubjects: [] });
         }
     };
 
     const fetchAssignedSubjects = async (instituteId) => {
+        const targetId = instituteId || user?.instituteId || user?.id;
+        if (!targetId) return;
         try {
-            const assigned = await instituteService.getAssignedSubjects(instituteId);
+            const assigned = await instituteService.getAssignedSubjects(targetId);
             setAssignedSubjectIds(assigned || []);
         } catch (err) {
             console.error("Failed to fetch assigned subjects", err);
+            setAssignedSubjectIds([]);
         }
+    };
+
+    const refreshAcademicData = async () => {
+        setSavingSubjects(true);
+        await fetchAcademicHierarchy();
+        if (user?.instituteId) {
+            await fetchAssignedSubjects(user.instituteId);
+        }
+        setSavingSubjects(false);
     };
 
     // User Profile Form Handlers
@@ -311,10 +341,6 @@ const MyProfile = () => {
     };
 
     const triggerActivateSubject = (classSubject, rule) => {
-        if (!isAdmin) {
-            showMsg('শুধুমাত্র অ্যাডমিনরা বিষয় অ্যাক্টিভ করতে পারবেন!', 'error');
-            return;
-        }
         setSubjectToActivate({ classSubject, rule });
         setPaymentStep('confirm');
         setSelectedPaymentMethod('bkash');
@@ -322,16 +348,16 @@ const MyProfile = () => {
     };
 
     const handleActivateSubject = async (classSubjectId) => {
-        if (!institute?.id) return;
+        const targetId = institute?.id || user?.instituteId || user?.id;
+        if (!targetId) return;
         setPaymentStep('submitting');
         try {
             const updatedList = Array.from(new Set([...assignedSubjectIds, classSubjectId]));
-            await instituteService.assignSubjects(institute.id, updatedList);
+            await instituteService.assignSubjects(targetId, updatedList);
             setAssignedSubjectIds(updatedList);
             setPaymentStep('success');
             showMsg('বিষয়টি সফলভাবে সক্রিয় করা হয়েছে!', 'success');
-            // Refresh local institute stats/access details
-            fetchInstituteDetails(institute.id);
+            fetchAssignedSubjects(targetId);
         } catch (err) {
             setPaymentStep('confirm');
             setShowPaymentModal(false);
@@ -444,7 +470,12 @@ const MyProfile = () => {
         return `${browser} on ${os}`;
     };
 
-    const isAdmin = user?.roles?.includes('INSTITUTE_ADMIN') || user?.roles?.includes('SUPER_ADMIN');
+    const isAdmin = !user?.roles || (
+        Array.isArray(user.roles) && user.roles.some(r => {
+            const roleStr = typeof r === 'string' ? r : (r?.name || r?.authority || '');
+            return roleStr.includes('ADMIN') || roleStr.includes('SUPER_ADMIN');
+        })
+    );
 
     if (loading || !user) {
         return (
@@ -456,7 +487,7 @@ const MyProfile = () => {
     }
 
     return (
-        <div className="max-w-6xl mx-auto space-y-6 pb-20 px-4">
+        <div className="w-full max-w-[1600px] mx-auto space-y-6 pb-20 px-4 sm:px-6 lg:px-8">
             
             {/* Global Alert Notification */}
             <AnimatePresence>
@@ -597,10 +628,10 @@ const MyProfile = () => {
             </div>
 
             {/* Content Body */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
                 
                 {/* Left Side main card depending on tab */}
-                <div className="lg:col-span-2">
+                <div className="xl:col-span-3">
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={activeTab}
@@ -1070,7 +1101,6 @@ const MyProfile = () => {
                                                 <AlertTriangle size={18} className="text-amber-500 mt-0.5" />
                                                 <div>
                                                     <span className="block text-sm font-bold text-amber-700">{isBn ? 'অ্যাডমিন প্রিভিলেজ প্রয়োজন' : 'Admin Privilege Required'}</span>
-                                                    <span className="block text-xs text-amber-600 mt-0.5">{isBn ? 'আপনার ইনস্টিটিউটের প্ল্যান আপগ্রেড করতে অনুগ্রহ করে ওয়ার্কস্পেস অ্যাডমিনের সাথে যোগাযোগ করুন।' : 'Please contact workspace admin to upgrade your institute package.'}</span>
                                                 </div>
                                             </div>
                                         )}
@@ -1087,23 +1117,119 @@ const MyProfile = () => {
                                     const pricingRules = getPricingRules();
                                     
                                     hierarchy.classSubjects.forEach(cs => {
-                                        const cls = hierarchy.classes?.find(c => c.id === cs._classId);
-                                        const rule = pricingRules.find(pr => pr.classSubjectId === cs.id);
+                                        const cls = hierarchy.classes?.find(c => String(c.id) === String(cs._classId));
+                                        const rule = pricingRules.find(pr => String(pr.classSubjectId) === String(cs.id));
                                         
                                         const subjectDetail = {
                                             classSubject: cs,
                                             cls: cls,
                                             rule: rule,
-                                            price: rule ? Number(rule.price) || 0 : 0
+                                            price: rule ? (Number(rule.price) || 200) : 200
                                         };
                                         
-                                        if (assignedSubjectIds.includes(cs.id)) {
+                                        const isAssigned = assignedSubjectIds.some(id => String(id) === String(cs.id));
+                                        if (isAssigned) {
                                             activeSubjectsList.push(subjectDetail);
-                                        } else if (rule) {
-                                            availableSubjectsList.push(subjectDetail);
+                                        } else {
+                                            // Only subjects with approved questions (>0) belong in Available Subjects
+                                            if (cs.approvedQuestionCount && cs.approvedQuestionCount > 0) {
+                                                availableSubjectsList.push(subjectDetail);
+                                            }
                                         }
                                     });
                                 }
+
+                                const selectedLevelObj = hierarchy?.levels?.find(l => String(l.id) === String(selectedLevelFilter));
+
+                                const filteredStreamOptions = (hierarchy?.streams || []).filter(s => {
+                                    if (selectedLevelFilter === 'ALL') return true;
+                                    const matchId = s._levelId && String(s._levelId) === String(selectedLevelFilter);
+                                    const matchName = selectedLevelObj && s._levelName === selectedLevelObj.name;
+                                    return matchId || matchName;
+                                });
+
+                                const filteredClassOptions = (hierarchy?.classes || []).filter(c => {
+                                    if (selectedLevelFilter !== 'ALL') {
+                                        const matchLevelId = c._levelId && String(c._levelId) === String(selectedLevelFilter);
+                                        const matchLevelName = selectedLevelObj && c._levelName === selectedLevelObj.name;
+                                        if (!matchLevelId && !matchLevelName) return false;
+                                    }
+                                    if (selectedStreamFilter !== 'ALL') {
+                                        const matchStreamId = c._streamId && String(c._streamId) === String(selectedStreamFilter);
+                                        const matchStreamName = c._streamName && (
+                                            c._streamName === selectedStreamFilter || 
+                                            hierarchy?.streams?.some(s => String(s.id) === String(selectedStreamFilter) && s.name === c._streamName)
+                                        );
+                                        if (!matchStreamId && !matchStreamName) return false;
+                                    }
+                                    return true;
+                                });
+
+                                const filteredSubjectOptions = (hierarchy?.classSubjects || []).filter(cs => {
+                                    const cls = hierarchy.classes?.find(c => String(c.id) === String(cs._classId));
+                                    if (!cs.approvedQuestionCount || cs.approvedQuestionCount <= 0) return false;
+                                    if (selectedLevelFilter !== 'ALL') {
+                                        const matchLevelId = cls?._levelId && String(cls._levelId) === String(selectedLevelFilter);
+                                        const matchLevelName = selectedLevelObj && cls?._levelName === selectedLevelObj.name;
+                                        if (!matchLevelId && !matchLevelName) return false;
+                                    }
+                                    if (selectedStreamFilter !== 'ALL') {
+                                        const matchStreamId = cls?._streamId && String(cls._streamId) === String(selectedStreamFilter);
+                                        const matchStreamName = cls?._streamName && (
+                                            cls._streamName === selectedStreamFilter || 
+                                            hierarchy?.streams?.some(s => String(s.id) === String(selectedStreamFilter) && s.name === cls._streamName)
+                                        );
+                                        if (!matchStreamId && !matchStreamName) return false;
+                                    }
+                                    if (selectedClassFilter !== 'ALL') {
+                                        const matchClassId = cls?.id && String(cls.id) === String(selectedClassFilter);
+                                        const matchClassCs = cs._classId && String(cs._classId) === String(selectedClassFilter);
+                                        if (!matchClassId && !matchClassCs) return false;
+                                    }
+                                    return true;
+                                });
+
+                                const filterSubjectItem = ({ classSubject, cls }) => {
+                                    // 1. Level Filter
+                                    if (selectedLevelFilter !== 'ALL') {
+                                        const matchLevelId = cls?._levelId && String(cls._levelId) === String(selectedLevelFilter);
+                                        const matchLevelName = selectedLevelObj && cls?._levelName === selectedLevelObj.name;
+                                        if (!matchLevelId && !matchLevelName) return false;
+                                    }
+                                    // 2. Stream Filter
+                                    if (selectedStreamFilter !== 'ALL') {
+                                        const matchStreamId = cls?._streamId && String(cls._streamId) === String(selectedStreamFilter);
+                                        const matchStreamName = cls?._streamName && (
+                                            cls._streamName === selectedStreamFilter || 
+                                            hierarchy?.streams?.some(s => String(s.id) === String(selectedStreamFilter) && s.name === cls._streamName)
+                                        );
+                                        if (!matchStreamId && !matchStreamName) return false;
+                                    }
+                                    // 3. Class Filter
+                                    if (selectedClassFilter !== 'ALL') {
+                                        const matchClassId = cls?.id && String(cls.id) === String(selectedClassFilter);
+                                        const matchClassCs = classSubject?._classId && String(classSubject._classId) === String(selectedClassFilter);
+                                        if (!matchClassId && !matchClassCs) return false;
+                                    }
+                                    // 4. Subject Dropdown Filter
+                                    if (selectedSubjectFilter !== 'ALL') {
+                                        if (classSubject?.id && String(classSubject.id) !== String(selectedSubjectFilter)) return false;
+                                    }
+                                    // 5. Search Filter
+                                    const q = subjectSearchQuery.trim().toLowerCase();
+                                    if (q) {
+                                        const matchesSubject = classSubject.name?.toLowerCase().includes(q);
+                                        const matchesClass = cls?.name?.toLowerCase().includes(q);
+                                        const matchesStream = cls?._streamName?.toLowerCase().includes(q);
+                                        if (!matchesSubject && !matchesClass && !matchesStream) {
+                                            return false;
+                                        }
+                                    }
+                                    return true;
+                                };
+
+                                const filteredActiveList = activeSubjectsList.filter(filterSubjectItem);
+                                const filteredAvailableList = availableSubjectsList.filter(filterSubjectItem);
                                 
                                 return (
                                     <div className="p-8 space-y-8">
@@ -1118,17 +1244,131 @@ const MyProfile = () => {
                                                         {isBn ? 'এই ওয়ার্কস্পেসের সক্রিয় এবং ক্রয়যোগ্য অ্যাকাডেমিক বিষয়সমূহ' : 'Active and purchasable academic subjects for this workspace'}
                                                     </p>
                                                 </div>
-                                                {isAdmin && (
-                                                    <button
-                                                        onClick={() => saveAssignedSubjects()}
-                                                        disabled={savingSubjects}
-                                                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 transition duration-150 disabled:opacity-50"
-                                                    >
-                                                        <RefreshCw size={14} className={savingSubjects ? "animate-spin" : ""} />
-                                                        {isBn ? 'রিফ্রেশ করুন' : 'Refresh'}
-                                                    </button>
-                                                )}
+                                                <button
+                                                    onClick={() => refreshAcademicData()}
+                                                    disabled={savingSubjects}
+                                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 transition duration-150 disabled:opacity-50"
+                                                >
+                                                    <RefreshCw size={14} className={savingSubjects ? "animate-spin" : ""} />
+                                                    {isBn ? 'রিফ্রেশ করুন' : 'Refresh'}
+                                                </button>
                                             </div>
+
+                                            {/* HIERARCHICAL CASCADING FILTER BAR: LEVEL -> STREAM -> CLASS -> SUBJECT */}
+                                            {hierarchy && (
+                                                <div className="p-5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 rounded-3xl text-white shadow-xl border border-slate-700/80 mb-8 space-y-4">
+                                                    <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <Filter size={16} className="text-indigo-400" />
+                                                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-200">
+                                                                {isBn ? 'অ্যাকাডেমিক বিষয় ফিল্টার' : 'Academic Subject Filter'}
+                                                            </h4>
+                                                        </div>
+                                                        {(selectedLevelFilter !== 'ALL' || selectedClassFilter !== 'ALL' || selectedStreamFilter !== 'ALL' || selectedSubjectFilter !== 'ALL' || subjectSearchQuery) && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedLevelFilter('ALL');
+                                                                    setSelectedStreamFilter('ALL');
+                                                                    setSelectedClassFilter('ALL');
+                                                                    setSelectedSubjectFilter('ALL');
+                                                                    setSubjectSearchQuery('');
+                                                                }}
+                                                                className="text-[11px] font-bold text-rose-400 hover:text-rose-300 transition flex items-center gap-1 bg-rose-500/10 px-2.5 py-1 rounded-lg border border-rose-500/20"
+                                                            >
+                                                                <span>✕ {isBn ? 'ফিল্টার রিসেট' : 'Reset Filters'}</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                                        {/* 1. Level Filter */}
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                                                                {isBn ? '১. স্তর (Level)' : '1. Level'}
+                                                            </label>
+                                                            <select
+                                                                value={selectedLevelFilter}
+                                                                onChange={(e) => {
+                                                                    setSelectedLevelFilter(e.target.value);
+                                                                    setSelectedStreamFilter('ALL');
+                                                                    setSelectedClassFilter('ALL');
+                                                                    setSelectedSubjectFilter('ALL');
+                                                                }}
+                                                                className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-xl text-xs font-bold text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                                                            >
+                                                                <option value="ALL">{isBn ? 'সকল স্তর (All Levels)' : 'All Levels'}</option>
+                                                                {hierarchy?.levels?.map(lvl => (
+                                                                    <option key={lvl.id} value={lvl.id}>{lvl.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+
+                                                        {/* 2. Stream Filter */}
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                                                                {isBn ? '২. বিভাগ/স্ট্রীম (Stream)' : '2. Stream'}
+                                                            </label>
+                                                            <select
+                                                                value={selectedStreamFilter}
+                                                                onChange={(e) => {
+                                                                    setSelectedStreamFilter(e.target.value);
+                                                                    setSelectedClassFilter('ALL');
+                                                                    setSelectedSubjectFilter('ALL');
+                                                                }}
+                                                                className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-xl text-xs font-bold text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                                                            >
+                                                                <option value="ALL">{isBn ? 'সকল বিভাগ (All Streams)' : 'All Streams'}</option>
+                                                                {filteredStreamOptions.map(stream => (
+                                                                    <option key={stream.id} value={stream.id || stream.name}>
+                                                                        {stream.name} {stream._levelName ? `(${stream._levelName})` : ''}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+
+                                                        {/* 3. Class Filter */}
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                                                                {isBn ? '৩. শ্রেণি (Class)' : '3. Class'}
+                                                            </label>
+                                                            <select
+                                                                value={selectedClassFilter}
+                                                                onChange={(e) => {
+                                                                    setSelectedClassFilter(e.target.value);
+                                                                    setSelectedSubjectFilter('ALL');
+                                                                }}
+                                                                className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-xl text-xs font-bold text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                                                            >
+                                                                <option value="ALL">{isBn ? 'সকল শ্রেণি (All Classes)' : 'All Classes'}</option>
+                                                                {filteredClassOptions.map(cls => (
+                                                                    <option key={cls.id} value={cls.id}>
+                                                                        {cls.name} {cls._streamName ? `(${cls._streamName})` : ''}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+
+                                                        {/* 4. Subject Select Dropdown */}
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                                                                {isBn ? '৪. বিষয় (Subject)' : '4. Subject'}
+                                                            </label>
+                                                            <select
+                                                                value={selectedSubjectFilter}
+                                                                onChange={(e) => setSelectedSubjectFilter(e.target.value)}
+                                                                className="w-full px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-xl text-xs font-bold text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                                                            >
+                                                                <option value="ALL">{isBn ? 'সকল বিষয় (All Subjects)' : 'All Subjects'}</option>
+                                                                {filteredSubjectOptions.map(cs => (
+                                                                    <option key={cs.id} value={cs.id}>
+                                                                        {cs.name} ({(cs.approvedQuestionCount || 0)} Qs)
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {!hierarchy ? (
                                                 <div className="flex items-center justify-center py-12 gap-3 text-slate-400 font-bold text-sm">
@@ -1143,33 +1383,56 @@ const MyProfile = () => {
                                                         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                                                             <h3 className="text-sm font-black text-slate-700 flex items-center gap-2">
                                                                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30 animate-pulse"></span>
-                                                                {isBn ? 'বর্তমান অ্যাক্টিভ বিষয়' : 'Current Active Subjects'} ({activeSubjectsList.length})
+                                                                {isBn ? 'বর্তমান অ্যাক্টিভ বিষয়' : 'Current Active Subjects'} ({filteredActiveList.length})
                                                             </h3>
                                                         </div>
                                                         
-                                                        {activeSubjectsList.length === 0 ? (
+                                                        {filteredActiveList.length === 0 ? (
                                                             <div className="p-8 border-2 border-dashed border-slate-100 rounded-2xl text-center text-slate-400 text-xs font-semibold">
-                                                                {isBn ? 'কোনো বিষয় সক্রিয় করা নেই।' : 'No subjects activated.'}
+                                                                {isBn ? 'কোনো বিষয় পাওয়া যায়নি।' : 'No subjects found.'}
                                                             </div>
                                                         ) : (
-                                                            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                                                                {activeSubjectsList.map(({ classSubject, cls }) => (
+                                                            <div className="space-y-3 max-h-[550px] overflow-y-auto pr-2 custom-scrollbar">
+                                                                {filteredActiveList.map(({ classSubject, cls }) => (
                                                                     <div 
                                                                         key={classSubject.id}
                                                                         className="p-4 bg-gradient-to-br from-emerald-50/10 to-teal-50/5 border border-emerald-100/50 rounded-2xl flex items-center justify-between shadow-sm"
                                                                     >
-                                                                        <div className="flex items-center gap-3">
-                                                                            <div className="p-2 bg-emerald-500/10 text-emerald-600 rounded-xl">
+                                                                        <div className="flex items-start gap-3">
+                                                                            <div className="p-2 bg-emerald-500/10 text-emerald-600 rounded-xl mt-0.5">
                                                                                 <BookOpen size={16} />
                                                                             </div>
                                                                             <div>
-                                                                                <span className="block text-sm font-bold text-slate-800">{classSubject.name}</span>
+                                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                                    <span className="block text-sm font-bold text-slate-800">{classSubject.name}</span>
+                                                                                    <span className="text-xs font-black text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-lg border border-emerald-200/60 shadow-2xs">
+                                                                                        ({(classSubject.approvedQuestionCount || 0).toLocaleString(isBn ? 'bn-BD' : 'en-US')} {isBn ? 'টি প্রশ্ন' : 'Qs'})
+                                                                                    </span>
+                                                                                </div>
                                                                                 <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
                                                                                     {cls?.name || 'Class'} • {cls?._streamName || 'General'}
                                                                                 </span>
+                                                                                {/* Question Type Breakdown Pills */}
+                                                                                {classSubject.questionTypeCounts && Object.keys(classSubject.questionTypeCounts).length > 0 && (
+                                                                                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                                                                        {Object.entries(classSubject.questionTypeCounts).map(([typeKey, count]) => {
+                                                                                            if (count <= 0) return null;
+                                                                                            const typeLabel = typeKey === 'MCQ' ? (isBn ? 'এমসিকিউ' : 'MCQ')
+                                                                                                : (typeKey === 'CQ' || typeKey.includes('CREATIVE')) ? (isBn ? 'সৃজনশীল' : 'CQ')
+                                                                                                : (typeKey === 'SHORT' || typeKey.includes('SHORT')) ? (isBn ? 'সংক্ষিপ্ত' : 'Short')
+                                                                                                : typeKey;
+                                                                                            return (
+                                                                                                <span key={typeKey} className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-extrabold border border-slate-200/60 flex items-center gap-1">
+                                                                                                    <span className="text-slate-400">{typeLabel}:</span>
+                                                                                                    <span className="text-slate-800">{Number(count).toLocaleString(isBn ? 'bn-BD' : 'en-US')}</span>
+                                                                                                </span>
+                                                                                            );
+                                                                                        })}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         </div>
-                                                                        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                                                                        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
                                                                             {isBn ? 'সক্রিয়' : 'Active'}
                                                                         </span>
                                                                     </div>
@@ -1183,35 +1446,58 @@ const MyProfile = () => {
                                                         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                                                             <h3 className="text-sm font-black text-slate-700 flex items-center gap-2">
                                                                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/30"></span>
-                                                                {isBn ? 'সহজলভ্য বিষয়' : 'Available Subjects'} ({availableSubjectsList.length})
+                                                                {isBn ? 'সহজলভ্য বিষয়' : 'Available Subjects'} ({filteredAvailableList.length})
                                                             </h3>
                                                         </div>
                                                         
-                                                        {availableSubjectsList.length === 0 ? (
+                                                        {filteredAvailableList.length === 0 ? (
                                                             <div className="p-8 border-2 border-dashed border-slate-100 rounded-2xl text-center text-slate-400 text-xs font-semibold">
-                                                                {isBn ? 'ক্রয় করার জন্য কোনো অতিরিক্ত বিষয় উপলব্ধ নেই।' : 'No additional subjects available for purchase.'}
+                                                                {isBn ? 'ফিল্টারকৃত কোনো অতিরিক্ত বিষয় উপলব্ধ নেই।' : 'No additional filtered subjects available.'}
                                                             </div>
                                                         ) : (
                                                             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                                                                {availableSubjectsList.map(({ classSubject, cls, rule, price }) => (
+                                                                {filteredAvailableList.map(({ classSubject, cls, rule, price }) => (
                                                                     <motion.div 
                                                                         key={classSubject.id}
                                                                         whileHover={{ scale: 1.01 }}
                                                                         onClick={() => triggerActivateSubject(classSubject, rule)}
                                                                         className="p-4 bg-white border border-slate-100 hover:border-indigo-200 rounded-2xl flex items-center justify-between shadow-sm cursor-pointer hover:shadow-md transition duration-200"
                                                                     >
-                                                                        <div className="flex items-center gap-3">
-                                                                            <div className="p-2 bg-indigo-500/10 text-indigo-600 rounded-xl">
+                                                                        <div className="flex items-start gap-3">
+                                                                            <div className="p-2 bg-indigo-500/10 text-indigo-600 rounded-xl mt-0.5">
                                                                                 <BookOpen size={16} />
                                                                             </div>
                                                                             <div>
-                                                                                <span className="block text-sm font-bold text-slate-800">{classSubject.name}</span>
+                                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                                    <span className="block text-sm font-bold text-slate-800">{classSubject.name}</span>
+                                                                                    <span className="text-xs font-black text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-lg border border-indigo-200/60 shadow-2xs">
+                                                                                        ({(classSubject.approvedQuestionCount || 0).toLocaleString(isBn ? 'bn-BD' : 'en-US')} {isBn ? 'টি প্রশ্ন' : 'Qs'})
+                                                                                    </span>
+                                                                                </div>
                                                                                 <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
                                                                                     {cls?.name || 'Class'} • {cls?._streamName || 'General'}
                                                                                 </span>
+                                                                                {/* Question Type Breakdown Pills */}
+                                                                                {classSubject.questionTypeCounts && Object.keys(classSubject.questionTypeCounts).length > 0 && (
+                                                                                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                                                                        {Object.entries(classSubject.questionTypeCounts).map(([typeKey, count]) => {
+                                                                                            if (count <= 0) return null;
+                                                                                            const typeLabel = typeKey === 'MCQ' ? (isBn ? 'এমসিকিউ' : 'MCQ')
+                                                                                                : (typeKey === 'CQ' || typeKey.includes('CREATIVE')) ? (isBn ? 'সৃজনশীল' : 'CQ')
+                                                                                                : (typeKey === 'SHORT' || typeKey.includes('SHORT')) ? (isBn ? 'সংক্ষিপ্ত' : 'Short')
+                                                                                                : typeKey;
+                                                                                            return (
+                                                                                                <span key={typeKey} className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-[10px] font-extrabold border border-slate-200/60 flex items-center gap-1">
+                                                                                                    <span className="text-slate-400">{typeLabel}:</span>
+                                                                                                    <span className="text-slate-800">{Number(count).toLocaleString(isBn ? 'bn-BD' : 'en-US')}</span>
+                                                                                                </span>
+                                                                                            );
+                                                                                        })}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         </div>
-                                                                        <div className="flex items-center gap-2.5">
+                                                                        <div className="flex items-center gap-2.5 shrink-0">
                                                                             <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-xl">
                                                                                 ৳{price}
                                                                             </span>
@@ -1237,7 +1523,7 @@ const MyProfile = () => {
                 </div>
 
                 {/* Right Side Sidebar Widget (Constant Account Overview) */}
-                <div className="space-y-6">
+                <div className="xl:col-span-1 space-y-6">
                     
                     {/* Compact Workspace/Account summary status */}
                     <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 rounded-3xl p-6 text-white shadow-xl border border-slate-800 relative overflow-hidden">

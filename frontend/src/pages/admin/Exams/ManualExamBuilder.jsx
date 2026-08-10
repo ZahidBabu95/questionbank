@@ -9,7 +9,7 @@ import axios from '../../../utils/axios';
 import { useLanguage } from '../../../context/LanguageContext';
 import MarkdownRenderer from '../../../components/MarkdownRenderer';
 import CQCombinedRenderer from '../QuestionBank/components/CQCombinedRenderer';
-import DynamicQuestionViewer from '../QuestionBank/components/DynamicQuestionViewer';
+import { setExamCache } from './NexusEditor/hooks/useExamManager';
 
 const formatBanglaNumbers = (text) => {
     if (!text) return text;
@@ -36,7 +36,7 @@ const parseMarkdownImages = (text) => {
         if (url.includes('r2.dev') && !url.includes('proxy-image')) {
             finalUrl = `/api/v1/public/proxy-image?url=${encodeURIComponent(url)}`;
         }
-        return `<img src="${finalUrl}" alt="${alt}" referrerPolicy="no-referrer" style="max-width: 100%; max-height: 300px; border-radius: 0.5rem; margin: 0.5rem 0; display: block;" />`;
+        return `<img src="${finalUrl}" alt="${alt}" loading="lazy" decoding="async" referrerPolicy="no-referrer" style="max-width: 100%; max-height: 300px; border-radius: 0.5rem; margin: 0.5rem 0; display: block;" />`;
     });
 };
 
@@ -377,6 +377,15 @@ const QuestionCard = React.memo(({
             </div>
         </div>
     );
+}, (prev, next) => {
+    return prev.q.id === next.q.id &&
+           prev.idx === next.idx &&
+           prev.inCart === next.inCart &&
+           prev.isSaved === next.isSaved &&
+           prev.addLoading === next.addLoading &&
+           prev.cartLength === next.cartLength &&
+           prev.targetQs === next.targetQs &&
+           prev.examInfo?.language === next.examInfo?.language;
 });
 
 
@@ -737,11 +746,24 @@ const ManualExamBuilder = () => {
         else { setDynamicSections([]); setUserStructure({}); }
     }, [subjectId]);
 
+    const applyDefaultFallbackBlueprint = () => {
+        const defaultSections = [
+            { name: 'ক বিভাগ: বহুনির্বাচনী প্রশ্ন (MCQ)', type: 'MCQ' },
+            { name: 'খ বিভাগ: সৃজনশীল প্রশ্ন (CQ)', type: 'CQ' }
+        ];
+        const defaultStruct = {
+            'MCQ': { count: 30, marks: 1, enabled: true },
+            'CQ': { count: 7, marks: 10, enabled: true, questionsToAnswer: 7 }
+        };
+        setDynamicSections(defaultSections);
+        setUserStructure(defaultStruct);
+    };
+
     const fetchSchema = async () => {
         setLoadingBlueprint(true);
         try {
             const selectedSubjectObj = subjects.find(s => s.classSubjectId == subjectId);
-            const selectedClassName = classes.find(c => c.id == classId)?.name;
+            const selectedClassName = classes.find(c => c.id == classId)?.name || '';
             if (selectedSubjectObj?.subjectName) {
                 const cleanSubjectName = selectedSubjectObj.subjectName.replace(/\s*\([^)]*\)\s*$/, '').trim();
                 const subTag = 'RULE_FOR_' + cleanSubjectName.replace(/\s/g, '');
@@ -751,13 +773,13 @@ const ManualExamBuilder = () => {
 
                 const kbRes = await axios.get('/v1/support/knowledge');
                 let validRules = [
-                    ...kbRes.data.filter(k => k.tags && (
+                    ...(kbRes.data || []).filter(k => k.tags && (
                         k.tags.includes(subTag) || 
                         k.tags.includes(altTag) || 
                         k.tags.includes(origSubTag) || 
                         k.tags.includes(origAltTag)
                     )), 
-                    ...kbRes.data.filter(k => k.content && (
+                    ...(kbRes.data || []).filter(k => k.content && (
                         k.content.includes(cleanSubjectName) || 
                         k.content.includes(selectedSubjectObj.subjectName)
                     ))
@@ -808,9 +830,18 @@ const ManualExamBuilder = () => {
                     }
                     setDynamicSections(sections);
                     setUserStructure(initialStruct);
-                } else setDynamicSections([]);
+                } else {
+                    applyDefaultFallbackBlueprint();
+                }
+            } else {
+                applyDefaultFallbackBlueprint();
             }
-        } catch (e) { console.error(e); } finally { setLoadingBlueprint(false); }
+        } catch (e) {
+            console.error("fetchSchema error:", e);
+            applyDefaultFallbackBlueprint();
+        } finally { 
+            setLoadingBlueprint(false); 
+        }
     };
 
     // Initialize chapters for Step 2
@@ -1341,23 +1372,41 @@ const ManualExamBuilder = () => {
 
     const handleAddQuestion = async (q, marks) => {
         if (cart.length >= targetTotals.qs) return alert("Maximum question limit reached for this exam!");
-        setAddLoading(q.id);
+        if (cart.some(item => item.id === q.id || item.questionId === q.id)) return;
+
+        // 🚀 0ms Optimistic UI Update (Instant screen update without network delay)
+        const targetMarks = marks || defaultMarksMap[q.type] || 1;
+        const optimisticItem = { ...q, marks: targetMarks };
+        const prevCart = [...cart];
+        setCart(prev => [...prev, optimisticItem]);
+
         try {
-            const payload = { questionId: q.id, marks: marks || defaultMarksMap[q.type] || 1, sectionId: null };
+            const payload = { questionId: q.id, marks: targetMarks, sectionId: null };
             const res = await examService.addQuestionToManualExam(examId, payload);
-            if (res.success) setCart(res.data.questions);
+            if (res.success && res.data && res.data.questions) {
+                setCart(res.data.questions);
+            }
         } catch (e) {
+            console.error("Optimistic add error:", e);
+            setCart(prevCart); // Rollback on failure
             alert("Error adding question");
-        } finally {
-            setAddLoading(null);
         }
     };
 
     const handleRemoveQuestion = async (questionId) => {
+        // 🚀 0ms Optimistic UI Update (Instant item removal without network delay)
+        const prevCart = [...cart];
+        setCart(prev => prev.filter(q => q.id !== questionId && q.questionId !== questionId));
+
         try {
             const res = await examService.removeQuestionFromManualExam(examId, questionId);
-            if (res.success) setCart(res.data.questions);
-        } catch (e) {}
+            if (res.success && res.data && res.data.questions) {
+                setCart(res.data.questions);
+            }
+        } catch (e) {
+            console.error("Optimistic remove error:", e);
+            setCart(prevCart); // Rollback on failure
+        }
     };
 
     const handlePublish = async () => {
@@ -1365,7 +1414,10 @@ const ManualExamBuilder = () => {
         try {
             setLoading(true);
             const res = await examService.publishManualExam(examId);
-            if (res.success) navigate(`/exams/generate/nexus-editor/${examId}`);
+            if (res.success) {
+                try { setExamCache(examId, res); } catch (err) {}
+                navigate(`/exams/generate/nexus-editor/${examId}`);
+            }
         } catch (e) {
             alert("Failed to publish exam.");
         } finally {

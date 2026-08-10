@@ -1,0 +1,12 @@
+{
+  "name": "questionshaper-backend-scripts",
+  "version": "1.0.0",
+  "description": "Puppeteer Vector PDF generator script bridge for Spring Boot",
+  "main": "scripts/pdf-generator.js",
+  "scripts": {
+    "generate-pdf": "node scripts/pdf-generator.js"
+  },
+  "dependencies": {
+    "puppeteer": "^22.0.0"
+  }
+}

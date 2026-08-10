@@ -12,22 +12,13 @@ export default defineConfig({
             output: {
                 manualChunks(id) {
                     if (id.includes('node_modules')) {
-                        if (id.includes('katex')) {
+                        const normalizedId = id.replace(/\\/g, '/');
+                        if (normalizedId.includes('/katex/')) {
                             return 'vendor-katex';
                         }
-                        if (id.includes('pdfjs-dist')) {
+                        if (normalizedId.includes('/pdfjs-dist/')) {
                             return 'vendor-pdfjs';
                         }
-                        if (id.includes('lucide-react')) {
-                            return 'vendor-icons';
-                        }
-                        if (id.includes('react-dom') || id.includes('react-router-dom') || (id.includes('/react/') && !id.includes('lucide'))) {
-                            return 'vendor-react';
-                        }
-                        if (id.includes('chart.js') || id.includes('react-chartjs-2')) {
-                            return 'vendor-charts';
-                        }
-                        return 'vendor-core';
                     }
                 }
             }

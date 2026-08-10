@@ -872,7 +872,7 @@ const PaperCanvasV2 = React.memo(({
                         height: `${h}px`,
                         backgroundColor: canvasTheme === 'cream' ? '#fbf0d9' : canvasTheme === 'dark' ? '#1e293b' : '#ffffff',
                         border: s.outerBorder ? `double ${s.outerBorderWidth + 2}px ${canvasBorderColor}` : 'none',
-                        borderBottom: gap === 0 && i < pageCount - 1 ? (canvasTheme === 'dark' ? '1px dashed #475569' : '1px dashed #cbd5e1') : undefined,
+                        borderBottom: editorMode !== 'PRINT_VIEW' && gap === 0 && i < pageCount - 1 ? (canvasTheme === 'dark' ? '1px dashed #475569' : '1px dashed #cbd5e1') : undefined,
                         boxSizing: 'border-box',
                         boxShadow: gap > 0 ? '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)' : (i === 0 ? '0 4px 6px -1px rgb(0 0 0 / 0.1)' : 'none')
                     }}>
@@ -885,11 +885,11 @@ const PaperCanvasV2 = React.memo(({
                             </div>
                         )}
                         
-                        {/* Page Break / Page Number indicator inside editor */}
-                        {i < pageCount - 1 && (
+                        {/* Page Break / Page Number indicator inside editor - strictly omitted from DOM in PRINT_VIEW mode */}
+                        {editorMode !== 'PRINT_VIEW' && i < pageCount - 1 && (
                             <div 
                                 data-html2canvas-ignore="true"
-                                className="absolute bottom-0 left-0 w-full flex items-center justify-between px-6 py-2 select-none pointer-events-none print:hidden z-20" 
+                                className="nexus-editor-page-divider-badge absolute bottom-0 left-0 w-full flex items-center justify-between px-6 py-2 select-none pointer-events-none print:hidden z-20" 
                                 style={{
                                     borderBottom: canvasTheme === 'dark' ? '2px dashed #475569' : '2px dashed #cbd5e1',
                                     opacity: 0.85

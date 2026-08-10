@@ -25,9 +25,22 @@ const useAcademicHierarchy = (options = {}) => {
 
     const isRestoring = useRef(false);
 
-    // Load top-level: levels
+    const [fullHierarchy, setFullHierarchy] = useState(null);
+
+    // Load top-level: levels & full hierarchy
     useEffect(() => {
-        academicService.getAllLevels().then(setLevels).catch(console.error);
+        academicService.getHierarchy().then(h => {
+            if (h) {
+                setFullHierarchy(h);
+                if (h.levels && h.levels.length > 0) {
+                    setLevels(h.levels);
+                } else {
+                    academicService.getAllLevels().then(setLevels).catch(console.error);
+                }
+            }
+        }).catch(() => {
+            academicService.getAllLevels().then(setLevels).catch(console.error);
+        });
     }, []);
 
     // Auto-select Level if there's only one option
@@ -53,8 +66,8 @@ const useAcademicHierarchy = (options = {}) => {
 
     // Auto-select Subject if there's only one option
     useEffect(() => {
-        if (classId && subjects.length === 1 && subjectId !== subjects[0].classSubjectId) {
-            setSubjectId(subjects[0].classSubjectId);
+        if (classId && subjects.length === 1 && subjectId !== (subjects[0].classSubjectId || subjects[0].id)) {
+            setSubjectId(subjects[0].classSubjectId || subjects[0].id);
         }
     }, [subjects, classId, subjectId]);
 
@@ -63,24 +76,79 @@ const useAcademicHierarchy = (options = {}) => {
         if (isRestoring.current) return;
         setStreamId(''); setClassId(''); setSubjectId(''); setChapterId(''); setTopicId('');
         setStreams([]); setClasses([]); setSubjects([]); setChapters([]); setTopics([]);
-        if (levelId) academicService.getStreamsByLevel(levelId).then(setStreams).catch(console.error);
-    }, [levelId]);
+        
+        if (levelId) {
+            if (fullHierarchy && fullHierarchy.streams) {
+                const filtered = fullHierarchy.streams.filter(s => 
+                    s._levelId === levelId || s.levelId === levelId || (s.level && s.level.id === levelId)
+                );
+                setStreams(filtered);
+                if (filtered.length === 1) {
+                    setStreamId(filtered[0].id);
+                }
+            } else {
+                academicService.getStreamsByLevel(levelId).then(data => {
+                    setStreams(data);
+                    if (data.length === 1) setStreamId(data[0].id);
+                }).catch(console.error);
+            }
+        }
+    }, [levelId, fullHierarchy]);
 
     // Stream → Classes
     useEffect(() => {
         if (isRestoring.current) return;
         setClassId(''); setSubjectId(''); setChapterId(''); setTopicId('');
         setClasses([]); setSubjects([]); setChapters([]); setTopics([]);
-        if (streamId) academicService.getClassesByStream(streamId).then(setClasses).catch(console.error);
-    }, [streamId]);
+
+        if (streamId) {
+            if (fullHierarchy && fullHierarchy.classes) {
+                const filtered = fullHierarchy.classes.filter(c => 
+                    c._streamId === streamId || c.streamId === streamId || (c.stream && c.stream.id === streamId)
+                );
+                setClasses(filtered);
+                if (filtered.length === 1) {
+                    setClassId(filtered[0].id);
+                }
+            } else {
+                academicService.getClassesByStream(streamId).then(data => {
+                    setClasses(data);
+                    if (data.length === 1) setClassId(data[0].id);
+                }).catch(console.error);
+            }
+        }
+    }, [streamId, fullHierarchy]);
 
     // Class → Subjects
     useEffect(() => {
         if (isRestoring.current) return;
         setSubjectId(''); setChapterId(''); setTopicId('');
         setSubjects([]); setChapters([]); setTopics([]);
-        if (classId) academicService.getSubjectsByClass(classId).then(setSubjects).catch(console.error);
-    }, [classId]);
+
+        if (classId) {
+            if (fullHierarchy && fullHierarchy.classSubjects && fullHierarchy.subjects) {
+                const filteredCs = fullHierarchy.classSubjects.filter(cs => cs._classId === classId || cs.classId === classId);
+                const mappedSubs = filteredCs.map(cs => {
+                    const subObj = fullHierarchy.subjects.find(s => s.id === (cs._subjectId || cs.subjectId));
+                    return {
+                        classSubjectId: cs.id,
+                        id: cs.id,
+                        subjectName: cs.subjectName || subObj?.name || 'Subject',
+                        code: subObj?.code || ''
+                    };
+                });
+                setSubjects(mappedSubs);
+                if (mappedSubs.length === 1) {
+                    setSubjectId(mappedSubs[0].classSubjectId);
+                }
+            } else {
+                academicService.getSubjectsByClass(classId).then(data => {
+                    setSubjects(data);
+                    if (data.length === 1) setSubjectId(data[0].classSubjectId);
+                }).catch(console.error);
+            }
+        }
+    }, [classId, fullHierarchy]);
 
     // Subject → Chapters
     useEffect(() => {

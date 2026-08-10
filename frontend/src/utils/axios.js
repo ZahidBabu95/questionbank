@@ -83,11 +83,23 @@ const instance = axios.create({
 instance.interceptors.request.use(
     async (config) => {
         let token = localStorage.getItem('token');
-        const isAuthOrPublic = config.url && (config.url.includes('/public/') || config.url.includes('/auth/'));
+        if (!token && typeof window !== 'undefined' && window.location.search) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const tokenFromUrl = urlParams.get('token');
+            if (tokenFromUrl) {
+                token = tokenFromUrl;
+                try { localStorage.setItem('token', tokenFromUrl); } catch (e) {}
+            }
+        }
+        const isExemptFromAuthHeader = config.url && (
+            config.url.includes('/auth/login') ||
+            config.url.includes('/auth/signup')
+        );
 
-        if (token && !isAuthOrPublic) {
-            // Proactively refresh token if it expires in less than 15 minutes
-            if (isTokenExpiringSoon(token, 15)) {
+        if (token && !isExemptFromAuthHeader) {
+            // Proactively refresh token if it expires in less than 15 minutes (except auth entry endpoints)
+            const isRefreshExempt = config.url && config.url.includes('/auth/');
+            if (!isRefreshExempt && isTokenExpiringSoon(token, 15)) {
                 token = await silentRefreshToken(token);
             }
             config.headers['Authorization'] = `Bearer ${token}`;
@@ -103,11 +115,12 @@ instance.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response && error.response.status === 401) {
-            // Do not redirect if the request was a login attempt or a public endpoint
+            const isPrintView = typeof window !== 'undefined' && window.location.pathname.includes('/print-view/');
+            // Do not redirect if the request was a login attempt, signup, a public endpoint, or print-view
             const isAuthOrPublic = error.config && error.config.url && 
-                (error.config.url.includes('/auth/') || error.config.url.includes('/public/'));
+                (error.config.url.includes('/auth/login') || error.config.url.includes('/auth/signup') || error.config.url.includes('/public/'));
             
-            if (isAuthOrPublic) {
+            if (isAuthOrPublic || isPrintView) {
                 return Promise.reject(error);
             }
             

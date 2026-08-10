@@ -1,11 +1,14 @@
 package com.testshaper.controller;
 
 import com.testshaper.dto.*;
+import com.testshaper.service.VectorPdfExportService;
 import com.testshaper.service.impl.ManualExamServiceImpl;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -21,6 +24,7 @@ import java.util.UUID;
 public class ManualExamController {
 
     private final ManualExamServiceImpl manualExamService;
+    private final VectorPdfExportService vectorPdfExportService;
 
     @PostMapping("/create")
     @PreAuthorize("isAuthenticated()")
@@ -146,5 +150,24 @@ public class ManualExamController {
 
         Page<ExamDTO.ExamQuestionDTO> result = manualExamService.searchQuestions(params);
         return ResponseEntity.ok(Map.of("success", true, "data", result));
+    }
+
+    @GetMapping("/{examId}/pdf/vector")
+    public ResponseEntity<byte[]> downloadVectorPdf(
+            @PathVariable UUID examId,
+            @RequestParam(required = false, defaultValue = "A4") String pageSize,
+            @RequestParam(required = false, defaultValue = "portrait") String orientation,
+            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+        try {
+            byte[] pdfBytes = vectorPdfExportService.generateVectorPdf(examId, pageSize, orientation, authHeader);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", "exam_vector_" + examId + ".pdf");
+            headers.setCacheControl("must-revalidate, post-check=0, pre-check=0");
+            return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+        } catch (Exception e) {
+            System.err.println("Error generating vector PDF: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 }

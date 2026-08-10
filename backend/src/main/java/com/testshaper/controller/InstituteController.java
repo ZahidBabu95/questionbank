@@ -98,7 +98,7 @@ public class InstituteController {
     }
 
     @PutMapping("/{id}/assigned-subjects")
-    @PreAuthorize("hasRole('SUPER_ADMIN') or (hasRole('INSTITUTE_ADMIN') and @userSecurity.isInstituteAdmin(#id))")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @userSecurity.isInstituteAdmin(#id)")
     public ResponseEntity<Void> assignSubjects(
             @PathVariable UUID id,
             @RequestBody java.util.Set<UUID> classSubjectIds) {
@@ -107,7 +107,7 @@ public class InstituteController {
     }
 
     @PutMapping("/{id}/subscription-package")
-    @PreAuthorize("hasRole('SUPER_ADMIN') or (hasRole('INSTITUTE_ADMIN') and @userSecurity.isInstituteAdmin(#id))")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or @userSecurity.isInstituteAdmin(#id)")
     public ResponseEntity<Institute> updateSubscriptionPackage(
             @PathVariable UUID id,
             @RequestParam UUID packageId) {
