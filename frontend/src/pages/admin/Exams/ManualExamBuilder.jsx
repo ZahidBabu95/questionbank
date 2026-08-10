@@ -765,6 +765,22 @@ const ManualExamBuilder = () => {
     };
 
     const fetchSchema = async () => {
+        if (!subjectId) return;
+
+        // 🚀 0ms Per-Subject Target Blueprint Session Cache (Matching Auto Generator)
+        try {
+            const cachedSchemaStr = sessionStorage.getItem('qs_schema_cache_' + subjectId);
+            if (cachedSchemaStr) {
+                const parsed = JSON.parse(cachedSchemaStr);
+                if (parsed.sections && parsed.struct) {
+                    setDynamicSections(parsed.sections);
+                    setUserStructure(parsed.struct);
+                    setLoadingBlueprint(false);
+                    return;
+                }
+            }
+        } catch (e) {}
+
         try {
             const selectedSubjectObj = subjects.find(s => s.classSubjectId == subjectId);
             const selectedClassName = classes.find(c => c.id == classId)?.name || '';
@@ -845,6 +861,9 @@ const ManualExamBuilder = () => {
                     }
                     setDynamicSections(sections);
                     setUserStructure(initialStruct);
+                    try {
+                        sessionStorage.setItem('qs_schema_cache_' + subjectId, JSON.stringify({ sections, struct: initialStruct }));
+                    } catch (e) {}
                 } else {
                     applyDefaultFallbackBlueprint();
                 }
