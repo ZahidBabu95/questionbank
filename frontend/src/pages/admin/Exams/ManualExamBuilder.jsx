@@ -2264,10 +2264,35 @@ const ManualExamBuilder = () => {
                         )}
                         {!loading && <ChevronRight size={12} />}
                     </button>
+            {/* Full-Screen Premium Manual Exam Setup Overlay Modal */}
+            {loading && (
+                <div className="fixed inset-0 z-[100] backdrop-blur-md bg-slate-900/80 flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 text-center space-y-6 animate-in zoom-in-95 duration-300">
+                        <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
+                            <div className="absolute inset-0 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin"></div>
+                            <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/40">
+                                <Loader2 size={28} className="animate-spin" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-xl font-black text-slate-800 tracking-tight">ম্যানুয়াল এক্সাম বিল্ডার লোড হচ্ছে...</h3>
+                            <p className="text-xs text-slate-500 font-medium mt-1 pl-2 pr-2">
+                                আপনার সিলেবাস ব্লুপ্রিন্ট ও প্রশ্নব্যাংক ফিল্টারসমূহ লোড করা হচ্ছে।
+                            </p>
+                        </div>
+
+                        <div className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50/80 py-2.5 px-4 rounded-full border border-emerald-100">
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>দয়া করে কিছু মুহূর্ত অপেক্ষা করুন</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
-    );
+    </div>
+</div>
+);
 };
 
 export default ManualExamBuilder;

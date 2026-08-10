@@ -2001,7 +2001,31 @@ const AutoExamGenerator = () => {
                         </div>
                     </div>
                 )}
-            </div>
+            {/* Full-Screen Premium AI Exam Generation Overlay Modal */}
+            {loading && (
+                <div className="fixed inset-0 z-[100] backdrop-blur-md bg-slate-900/80 flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 text-center space-y-6 animate-in zoom-in-95 duration-300">
+                        <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
+                            <div className="absolute inset-0 rounded-full border-4 border-violet-100 border-t-violet-600 animate-spin"></div>
+                            <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/40">
+                                <BrainCircuit size={28} className="animate-pulse" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-xl font-black text-slate-800 tracking-tight">অটোমেটিক প্রশ্নপত্র তৈরি হচ্ছে...</h3>
+                            <p className="text-xs text-slate-500 font-medium mt-1 pl-2 pr-2">
+                                AI আপনার সিলেবাস অ্যালকোরিদম, ব্লুমস ট্যাক্সোনমি এবং ডিফিকাল্টি রুলস অনুযায়ী সেরা প্রশ্নগুলো নির্বাচন করছে।
+                            </p>
+                        </div>
+
+                        <div className="flex items-center justify-center gap-2 text-xs font-bold text-violet-600 bg-violet-50/80 py-2.5 px-4 rounded-full border border-violet-100">
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>দয়া করে কিছু মুহূর্ত অপেক্ষা করুন</span>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Floating Action Bar */}
             <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/90 border-t border-slate-200 p-3 sm:p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
@@ -2077,7 +2101,8 @@ const AutoExamGenerator = () => {
                 </div>
             </div>
         </div>
-    );
+    </div>
+);
 };
 
 export default AutoExamGenerator;
