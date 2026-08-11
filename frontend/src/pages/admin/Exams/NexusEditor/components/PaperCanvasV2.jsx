@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
@@ -313,8 +314,10 @@ const PaperCanvasV2 = React.memo(({
     pendingInsertQuestion, onQuestionInserted,
     pendingSwapQuestion, onQuestionSwapped,
     setDocumentQuestions, documentQuestions = [],
-    canvasTheme = 'white', uiLang = 'bn', setEditor, setIsEditorLoaded
+    canvasTheme = 'white', uiLang = 'bn', setEditor, setIsEditorLoaded,
+    setLoadingProgress, setLoadingStatusText
 }) => {
+    const { id } = useParams();
     const s = docSettings || {};
     const lastEditorContentRef = useRef(rawContent);
     const editorUpdateTimeoutRef = useRef(null);
@@ -332,6 +335,7 @@ const PaperCanvasV2 = React.memo(({
             StarterKit.configure({
                 heading: false,
                 paragraph: false,
+                underline: false,
             }),
             CustomHeading,
             CustomParagraph,
@@ -417,11 +421,143 @@ const PaperCanvasV2 = React.memo(({
         }
     });
 
+    // Helper to ensure loading overlay hides ONLY after ALL question nodes are mounted in DOM and styled
+    const triggerLoadedState = React.useCallback(() => {
+        if (!setIsEditorLoaded || !editor) return;
+
+        // If editing an existing exam and rawContent hasn't arrived from backend yet, DO NOT hide loading screen
+        if (id && (!rawContent || rawContent.trim() === '')) {
+            return;
+        }
+
+        let pollInterval = null;
+        let pollCount = 0;
+
+        const checkAndComplete = () => {
+            if (!editor || editor.isDestroyed) {
+                if (pollInterval) clearInterval(pollInterval);
+                return;
+            }
+
+            const pm = editor.view?.dom;
+            if (!pm) {
+                if (pollCount > 30) {
+                    if (pollInterval) clearInterval(pollInterval);
+                    setIsEditorLoaded(true);
+                }
+                return;
+            }
+
+            // 1. Calculate expected question count from rawContent HTML/JSON if available
+            let expectedTotalCount = 0;
+            if (typeof rawContent === 'string' && rawContent.length > 0) {
+                const qBlockMatches = rawContent.match(/data-type=["']question-block["']/g);
+                const qIdMatches = rawContent.match(/data-question-id/g);
+                const qJsonMatches = rawContent.match(/"questionId"/g);
+                expectedTotalCount = Math.max(
+                    qBlockMatches ? qBlockMatches.length : 0,
+                    qIdMatches ? qIdMatches.length : 0,
+                    qJsonMatches ? qJsonMatches.length : 0
+                );
+            }
+
+            // 2. Count question blocks currently parsed in editor document model
+            let docTargetCount = 0;
+            try {
+                editor.state.doc.descendants(node => {
+                    if (node.type.name === 'questionBlock') docTargetCount++;
+                });
+            } catch (e) {
+                console.error("Error reading doc descendants:", e);
+            }
+
+            const targetQuestionCount = Math.max(expectedTotalCount, docTargetCount);
+            // Dynamic max safety polls: 100ms * (target * 12), minimum 25 seconds (250 polls)
+            const maxPolls = Math.max(250, targetQuestionCount * 12);
+
+            // 3. Count actual mounted & content-rendered DOM cards inside ProseMirror container
+            const mountedCards = Array.from(pm.querySelectorAll('div[data-type="question-block"]'));
+            const contentRenderedCards = mountedCards.filter(card => {
+                const hasOptions = card.querySelector('.mcq-options-grid') || card.querySelector('div[class*="option"]');
+                const hasQuestionText = card.querySelector('.question-text-wrapper') || card.querySelector('.question-text') || card.querySelector('p');
+                const textLen = (card.textContent || '').trim().length;
+                return (hasOptions || hasQuestionText || card.children.length > 1) && textLen > 3;
+            });
+            const mountedCount = contentRenderedCards.length;
+
+            // 4. Calculate real mounting progress (between 70% and 98%)
+            if (targetQuestionCount > 0) {
+                const ratio = Math.min(1, mountedCount / targetQuestionCount);
+                const currentPct = 70 + Math.floor(ratio * 28); // 70% -> 98%
+                if (setLoadingProgress) setLoadingProgress(currentPct);
+                if (setLoadingStatusText) {
+                    setLoadingStatusText(
+                        uiLang === 'bn' 
+                            ? `প্রশ্ন ক্যানভাসে লোড হচ্ছে... (${mountedCount}/${targetQuestionCount})` 
+                            : `Loading questions onto canvas... (${mountedCount}/${targetQuestionCount})`
+                    );
+                }
+            }
+
+            // 5. Check if all expected cards have finished mounting in the DOM
+            // NOTE: Must NEVER complete when targetQuestionCount is 0 unless pollCount > 30 (3s wait)
+            const isReadyToComplete = targetQuestionCount > 0 
+                ? (mountedCount >= targetQuestionCount) 
+                : (pollCount > 30);
+
+            if (isReadyToComplete || pollCount >= maxPolls) {
+                if (pollInterval) clearInterval(pollInterval);
+
+                // Now check images inside the mounted DOM cards
+                const imgs = Array.from(pm.querySelectorAll('img'));
+                const unLoadedImgs = imgs.filter(img => !img.complete && img.src);
+
+                const finishLoading = () => {
+                    if (setLoadingProgress) setLoadingProgress(100);
+                    if (setLoadingStatusText) setLoadingStatusText(uiLang === 'bn' ? 'সম্পূর্ণ প্রস্তুত! ক্যানভাস সাজানো হচ্ছে...' : 'Ready! Finalizing paper view...');
+                    
+                    // Buffer guarantees fonts, KaTeX formulas, and page breaks settle 100% behind the overlay
+                    setTimeout(() => {
+                        window.requestAnimationFrame(() => {
+                            window.requestAnimationFrame(() => {
+                                setIsEditorLoaded(true);
+                            });
+                        });
+                    }, 1000);
+                };
+
+                if (unLoadedImgs.length > 0) {
+                    let count = 0;
+                    const onDone = () => {
+                        count++;
+                        if (count >= unLoadedImgs.length) finishLoading();
+                    };
+                    unLoadedImgs.forEach(img => {
+                        img.addEventListener('load', onDone, { once: true });
+                        img.addEventListener('error', onDone, { once: true });
+                    });
+                    setTimeout(finishLoading, 1000); // Safety fallback timer for slow network images
+                } else {
+                    setTimeout(finishLoading, 600);
+                }
+            }
+        };
+
+        // Start polling DOM every 100ms until mountedCount === targetQuestionCount
+        pollInterval = setInterval(() => {
+            pollCount++;
+            checkAndComplete();
+        }, 100);
+
+        // Initial immediate check
+        checkAndComplete();
+    }, [editor, id, rawContent, setIsEditorLoaded, setLoadingProgress, setLoadingStatusText, uiLang]);
+
     useEffect(() => {
         if (editor && setEditor) {
             setEditor(editor);
-            if (rawContent && setIsEditorLoaded) {
-                setIsEditorLoaded(true);
+            if (rawContent) {
+                triggerLoadedState();
             }
         }
         return () => {
@@ -429,7 +565,7 @@ const PaperCanvasV2 = React.memo(({
                 setEditor(null);
             }
         };
-    }, [editor, setEditor, rawContent, setIsEditorLoaded]);
+    }, [editor, setEditor, rawContent, triggerLoadedState]);
 
     // Handle Mode Switching visually
     useEffect(() => {
@@ -522,15 +658,13 @@ const PaperCanvasV2 = React.memo(({
             const timer = setTimeout(() => {
                 if (editor && !editor.isDestroyed) {
                     editor.commands.setContent(rawContent);
-                    if (setIsEditorLoaded) {
-                        setIsEditorLoaded(true);
-                    }
+                    triggerLoadedState();
                 }
             }, 0);
             lastEditorContentRef.current = rawContent;
             return () => clearTimeout(timer);
         }
-    }, [rawContent, editor, setIsEditorLoaded]);
+    }, [rawContent, editor, triggerLoadedState]);
 
     // Handle programmatic insertion of questions from parent (Add to Canvas button)
     useEffect(() => {
@@ -550,6 +684,7 @@ const PaperCanvasV2 = React.memo(({
             setRawContent(editor.getHTML());
             
             if (onQuestionInserted) onQuestionInserted();
+            window.dispatchEvent(new CustomEvent('nexus-editor-rerender'));
         }
     }, [pendingInsertQuestion, editor, onQuestionInserted, setRawContent]);
 
@@ -569,6 +704,7 @@ const PaperCanvasV2 = React.memo(({
             setRawContent(editor.getHTML());
             
             if (onQuestionSwapped) onQuestionSwapped();
+            window.dispatchEvent(new CustomEvent('nexus-editor-rerender'));
         }
     }, [pendingSwapQuestion, editor, onQuestionSwapped, setRawContent]);
 
@@ -796,9 +932,10 @@ const PaperCanvasV2 = React.memo(({
     const paddingBottom = mmToPx(s.marginBottom || 20) + borderOffset;
     const paddingLeft = mmToPx(s.marginLeft || 25) + borderOffset;
     const paddingRight = mmToPx(s.marginRight || 20) + borderOffset;
+    const contentWidth = Math.max(100, w - paddingLeft - paddingRight);
 
     const containerRef = useRef(null);
-    const pageCount = usePageCountObserver(containerRef, editor, totalH, paddingTop, paddingBottom, onPageCountChange);
+    const pageCount = usePageCountObserver(containerRef, editor, totalH, paddingTop, paddingBottom, onPageCountChange, s);
 
     const [isDragActive, setIsDragActive] = useState(false);
     useEffect(() => {
@@ -835,6 +972,117 @@ const PaperCanvasV2 = React.memo(({
         return str;
     };
 
+    const [sectionLines, setSectionLines] = useState([]);
+
+    useEffect(() => {
+        if (!containerRef.current || !editor) return;
+
+        const updateLines = () => {
+            const pm = containerRef.current?.querySelector('.ProseMirror');
+            if (!pm || editor.isDestroyed) return;
+
+            const newLines = [];
+            const globalColCount = Number(s.columns || 1);
+            const isGlobalCols = globalColCount > 1;
+            const hasMixedSections = (s.sections || []).some(sec => Number(sec.columns || 1) !== globalColCount);
+
+            if (isGlobalCols && !hasMixedSections && s.columnBorder !== false) {
+                const totalCols = Number(s.columns) || 2;
+                const cGapPx = mmToPx(s.colGap || 10);
+                const cWidth = (contentWidth - (totalCols - 1) * cGapPx) / totalCols;
+
+                for (let pageIdx = 0; pageIdx < pageCount; pageIdx++) {
+                    const headerH = (pageIdx === 0 && headerPortalContainer) ? (headerPortalContainer.offsetHeight || 0) + 10 : 0;
+                    const topPx = pageIdx * (h + gap) + paddingTop + headerH;
+                    const bottomPx = pageIdx * (h + gap) + h - paddingBottom;
+
+                    for (let c = 1; c < totalCols; c++) {
+                        const posX = paddingLeft + c * cWidth + (c - 0.5) * cGapPx;
+                        newLines.push({
+                            id: `global-${pageIdx}-${c}`,
+                            x: posX,
+                            top: topPx,
+                            height: Math.max(0, bottomPx - topPx)
+                        });
+                    }
+                }
+            } else {
+                const sections = s.sections || [];
+                const containerRect = containerRef.current?.getBoundingClientRect();
+
+                sections.forEach(sec => {
+                    const secCols = Number(sec.columns) || 1;
+                    const secBorder = sec.columnBorder !== false && s.columnBorder !== false;
+                    if (secCols > 1 && secBorder) {
+                        const secGapPx = mmToPx(sec.colGap || s.colGap || 10);
+                        const secColWidth = (contentWidth - (secCols - 1) * secGapPx) / secCols;
+
+                        const qBlocks = Array.from(pm.querySelectorAll(`[data-section-id="${sec.id}"][data-type="question-block"]`));
+                        if (qBlocks.length > 0 && containerRect) {
+                            const zoomFactor = (zoom / 100) || 1;
+                            for (let pageIdx = 0; pageIdx < pageCount; pageIdx++) {
+                                const pageTopInContainer = pageIdx * (h + gap);
+                                const pageBottomInContainer = pageTopInContainer + h;
+
+                                let secMinTop = Infinity;
+                                let secMaxBottom = -Infinity;
+
+                                qBlocks.forEach(block => {
+                                    const bRect = block.getBoundingClientRect();
+                                    const bTopInContainer = (bRect.top - containerRect.top) / zoomFactor;
+                                    const bBottomInContainer = (bRect.bottom - containerRect.top) / zoomFactor;
+
+                                    if (bBottomInContainer > pageTopInContainer && bTopInContainer < pageBottomInContainer) {
+                                        const clampedTop = Math.max(pageTopInContainer + paddingTop, bTopInContainer);
+                                        const clampedBottom = Math.min(pageTopInContainer + h - paddingBottom, bBottomInContainer);
+
+                                        if (clampedTop < secMinTop) secMinTop = clampedTop;
+                                        if (clampedBottom > secMaxBottom) secMaxBottom = clampedBottom;
+                                    }
+                                });
+
+                                if (secMinTop !== Infinity && secMaxBottom !== -Infinity && secMaxBottom > secMinTop + 10) {
+                                    for (let c = 1; c < secCols; c++) {
+                                        const posX = paddingLeft + c * secColWidth + (c - 0.5) * secGapPx;
+                                        newLines.push({
+                                            id: `sec-${sec.id}-${pageIdx}-${c}`,
+                                            x: posX,
+                                            top: secMinTop,
+                                            height: secMaxBottom - secMinTop
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            setSectionLines(newLines);
+        };
+
+        updateLines();
+        const timer1 = setTimeout(updateLines, 150);
+        const timer2 = setTimeout(updateLines, 500);
+
+        let observer;
+        if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+            observer = new ResizeObserver(updateLines);
+            observer.observe(containerRef.current);
+        }
+
+        window.addEventListener('nexus-editor-rerender', updateLines);
+        window.addEventListener('resize', updateLines);
+
+        return () => {
+            clearTimeout(timer1);
+            clearTimeout(timer2);
+            if (observer) observer.disconnect();
+            window.removeEventListener('nexus-editor-rerender', updateLines);
+            window.removeEventListener('resize', updateLines);
+        };
+    }, [containerRef, editor, pageCount, s, h, gap, paddingTop, paddingBottom, paddingLeft, paddingRight, contentWidth, headerPortalContainer, zoom]);
+
     return (
         <div id="nexus-editor-root" data-page-cols={s.columns || 1} className="w-full h-full relative flex flex-col items-center">
             
@@ -847,24 +1095,47 @@ const PaperCanvasV2 = React.memo(({
                 hasImage={hasImage} 
             />
 
-
-
             {/* Canvas Container */}
             <div 
                 className="flex justify-center transition-all duration-300 relative print-canvas-wrapper print:block print:w-full print:m-0 print:p-0" 
-                style={{ width: `${w * (zoom / 100)}px`, minHeight: `${(pageCount * totalH) * (zoom / 100)}px` }}
+                style={{ minHeight: `${(pageCount * totalH) * (zoom / 100)}px` }}
             >
             <div 
                 ref={containerRef}
-                className={`paper-canvas-container shrink-0 relative origin-top print:block print:m-0 print:p-0 theme-${canvasTheme}`}
+                className={`paper-canvas-container shrink-0 relative print:block print:m-0 print:p-0 theme-${canvasTheme}`}
                 data-outer-border={s.outerBorder ? "true" : "false"}
                 style={{ 
-                    transform: `scale(${zoom / 100})`, 
+                    zoom: zoom / 100,
                     width: `${w}px`, 
                     height: `${pageCount * totalH}px` 
                 }}
             >
             
+            {/* Dynamic Section-Scoped Column Divider Lines (SVG for guaranteed browser print preview rendering) */}
+            {sectionLines.length > 0 && (
+                <svg 
+                    className="print-column-divider-svg absolute top-0 left-0 w-full h-full pointer-events-none z-20 overflow-visible"
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 20 }}
+                >
+                    {sectionLines.map(line => (
+                        <line
+                            key={line.id}
+                            x1={line.x}
+                            y1={line.top}
+                            x2={line.x}
+                            y2={line.top + line.height}
+                            stroke={canvasTheme === 'dark' ? '#64748b' : '#000000'}
+                            strokeWidth="1.5"
+                            style={{
+                                stroke: canvasTheme === 'dark' ? '#64748b' : '#000000',
+                                strokeWidth: 1.5,
+                                vectorEffect: 'non-scaling-stroke'
+                            }}
+                        />
+                    ))}
+                </svg>
+            )}
+
             {/* Background Pages Array */}
             <div className="absolute top-0 left-0 w-full h-full z-0 pointer-events-none flex flex-col" style={{ gap: `${gap}px` }}>
                 {Array.from({ length: pageCount }).map((_, i) => (
@@ -884,6 +1155,8 @@ const PaperCanvasV2 = React.memo(({
                                 </div>
                             </div>
                         )}
+                        
+
                         
                         {/* Page Break / Page Number indicator inside editor - strictly omitted from DOM in PRINT_VIEW mode */}
                         {editorMode !== 'PRINT_VIEW' && i < pageCount - 1 && (

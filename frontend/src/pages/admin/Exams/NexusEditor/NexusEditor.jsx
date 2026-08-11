@@ -19,6 +19,7 @@ const NexusEditorContent = () => {
     const { 
         docSettings, editorMode, rawContent, setRawContent, 
         isEditorLoaded, setIsEditorLoaded,
+        loadingProgress, setLoadingProgress, loadingStatusText, setLoadingStatusText,
         zoom, workspaceTools, editorConfig, setPageCount,
         pendingInsertQuestion, setPendingInsertQuestion,
         pendingSwapQuestion, setPendingSwapQuestion,
@@ -163,6 +164,8 @@ const NexusEditorContent = () => {
                             uiLang={uiLang}
                             setEditor={setEditor}
                             setIsEditorLoaded={setIsEditorLoaded}
+                            setLoadingProgress={setLoadingProgress}
+                            setLoadingStatusText={setLoadingStatusText}
                         />
                     </div>
                 </div>
@@ -237,27 +240,56 @@ const NexusEditorContent = () => {
             {/* Premium Custom Filename Input Modal */}
             <FilenameModal />
 
-            {/* Glassmorphic Loading Overlay */}
-            {isLoading && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9999] flex flex-col items-center justify-center animate-in fade-in duration-300">
-                    <div className="bg-white/90 dark:bg-slate-900/90 p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-4 max-w-sm text-center border border-white/20">
-                        <div className="relative flex items-center justify-center">
-                            {/* Ring Spinner */}
-                            <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-                            {/* Inner Logo/Icon */}
-                            <div className="absolute text-indigo-600 animate-pulse font-bold text-lg">N</div>
+            {/* Glassmorphic Loading Overlay with SVG Percentage Circle & Progress Bar */}
+            <div className={`fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[9999] flex flex-col items-center justify-center transition-all duration-500 ease-in-out ${isLoading ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                <div className="bg-white/95 dark:bg-slate-900/95 p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-5 max-w-sm w-full mx-4 text-center border border-white/40 dark:border-slate-800">
+                    
+                    {/* Ring Spinner + Center Percentage Number */}
+                    <div className="relative w-20 h-20 flex items-center justify-center">
+                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                            <path
+                                className="text-indigo-100 dark:text-slate-800"
+                                strokeWidth="3.5"
+                                stroke="currentColor"
+                                fill="none"
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                            <path
+                                className="text-indigo-600 transition-all duration-300 ease-out"
+                                strokeDasharray={`${Math.min(100, Math.max(5, loadingProgress))}, 100`}
+                                strokeWidth="3.5"
+                                strokeLinecap="round"
+                                stroke="currentColor"
+                                fill="none"
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                        </svg>
+                        <div className="absolute flex flex-col items-center justify-center">
+                            <span className="text-base font-black text-indigo-700 dark:text-indigo-400 font-mono">
+                                {Math.min(100, Math.max(0, loadingProgress))}%
+                            </span>
                         </div>
-                        <h3 className="text-lg font-bold text-slate-800 mt-2">
+                    </div>
+
+                    {/* Status Text & Message */}
+                    <div className="space-y-1">
+                        <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
                             {uiLang === 'bn' ? 'পরীক্ষা লোড হচ্ছে...' : 'Loading Exam...'}
                         </h3>
-                        <p className="text-xs text-slate-500 max-w-[250px]">
-                            {uiLang === 'bn' 
-                                ? 'প্রশ্নপত্র এবং সেটিংস ডেটাবেজ থেকে প্রস্তুত করা হচ্ছে, দয়া করে অপেক্ষা করুন।' 
-                                : 'Preparing questions and settings from database, please wait.'}
+                        <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 min-h-[36px] flex items-center justify-center px-2">
+                            {loadingStatusText || (uiLang === 'bn' ? 'প্রশ্নপত্র এবং সেটিংস প্রস্তুত করা হচ্ছে...' : 'Preparing questions and settings...')}
                         </p>
                     </div>
+
+                    {/* Progress Bar Track */}
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden shadow-inner border border-slate-200/50">
+                        <div 
+                            className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 h-full rounded-full transition-all duration-300 ease-out shadow-sm"
+                            style={{ width: `${Math.min(100, Math.max(5, loadingProgress))}%` }}
+                        />
+                    </div>
                 </div>
-            )}
+            </div>
         </div>
     );
 };

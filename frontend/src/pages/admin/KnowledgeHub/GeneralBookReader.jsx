@@ -208,7 +208,9 @@ const GeneralBookReader = () => {
     const fetchBooks = async () => {
         setIsLoadingBooks(true);
         try {
-            const data = await knowledgeHubService.getSourceBooks();
+            const data = await knowledgeHubService.getSourceBooks(false, (updatedBooks) => {
+                setBooks(updatedBooks || []);
+            });
             setBooks(data || []);
         } catch (err) {
             console.error('Failed to load books for bookshelf:', err);

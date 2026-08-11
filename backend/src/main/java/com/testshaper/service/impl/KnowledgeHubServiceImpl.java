@@ -980,6 +980,7 @@ public class KnowledgeHubServiceImpl implements KnowledgeHubService {
         entity.setLatestEdition(dto.getLatestEdition());
         entity.setBookType(dto.getBookType());
         entity.setLanguage(dto.getLanguage());
+        entity.setTenantId(getGlobalTenantId());
         
         if (dto.getClassSubjectId() != null) {
             entity.setClassSubject(classSubjectRepository.findById(dto.getClassSubjectId()).orElse(null));

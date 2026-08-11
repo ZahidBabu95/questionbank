@@ -28,7 +28,8 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
 
     if (isGlobalColActive) {
         totalColumns = globalColCount;
-        hasColumnBorder = s.columnBorder !== false;
+        const hasAnySecBorder = (s.sections || []).some(sec => sec.columnBorder === true);
+        hasColumnBorder = s.columnBorder !== false || hasAnySecBorder;
     } else {
         const maxSectionCol = Math.max(1, ...(s.sections || []).map(sec => Number(sec.columns) || 1));
         totalColumns = maxSectionCol;
@@ -38,7 +39,7 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             colGap = sectionWithGap.colGap;
         }
         
-        hasColumnBorder = (s.sections || []).some(sec => (Number(sec.columns) || 1) > 1 && sec.columnBorder);
+        hasColumnBorder = (s.sections || []).some(sec => (Number(sec.columns) || 1) > 1 && sec.columnBorder !== false) || (s.columnBorder !== false && totalColumns > 1);
     }
 
     const headerSpanVal = isGlobalColActive ? 'none' : 'all';
@@ -116,22 +117,44 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 font-family: '${s.language === 'ENGLISH' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali')}', ${bodyFallback} !important;
             }
             
+            .paper-canvas-container {
+                box-sizing: border-box !important;
+                max-width: 100% !important;
+            }
+
+            .paper-page-background {
+                box-sizing: border-box !important;
+                overflow: hidden !important;
+            }
+
+            [data-type="question-block"] {
+                break-inside: avoid-column !important;
+                break-inside: avoid-page !important;
+                page-break-inside: avoid !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
             .ProseMirror {
                 font-size: ${ptToPx(s.bodyFontSize)}px;
                 line-height: ${s.lineHeight};
                 width: 100% !important;
+                max-width: 100% !important;
+                overflow-x: hidden !important;
                 background-color: transparent !important;
-                box-sizing: border-box;
+                box-sizing: border-box !important;
                 outline: none;
                 margin: 0 !important;
                 padding: 0 !important;
                 
                 /* Column Support */
                 ${totalColumns > 1 ? `
-                column-count: ${totalColumns};
-                column-gap: ${mmToPx(colGap)}px;
-                ${hasColumnBorder ? 'column-rule: 1.5px solid #000000;' : ''}
-                column-fill: balance !important;
+                column-count: ${totalColumns} !important;
+                column-gap: ${hasColumnBorder ? Math.max(14, mmToPx(colGap)) : mmToPx(colGap)}px !important;
+                column-rule: none !important;
+                -webkit-column-rule: none !important;
+                column-fill: auto !important;
+                -webkit-column-fill: auto !important;
                 ` : ''}
                 
                 counter-reset: question-counter;
@@ -179,6 +202,19 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 outline: none;
             }
             
+            .print-column-divider,
+            .print-column-divider-svg,
+            .print-column-divider-svg line {
+                display: block !important;
+                visibility: visible !important;
+                border-left-color: #000000 !important;
+                stroke: #000000 !important;
+                stroke-width: 1.5px !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                box-sizing: border-box !important;
+            }
+
             /* Strictly Hide Editor UI Helper Badges & Dividers in Print/PDF Mode */
             .print-mode .nexus-editor-page-divider-badge,
             .print-mode [data-html2canvas-ignore="true"],
@@ -196,6 +232,19 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                     margin: 0 !important;
                     padding: 0 !important;
                     opacity: 0 !important;
+                }
+                .print-column-divider,
+                .print-column-divider-svg,
+                .print-column-divider-svg line {
+                    display: block !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    stroke: #000000 !important;
+                    stroke-width: 1.5px !important;
+                    border-left-color: #000000 !important;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                    z-index: 99999 !important;
                 }
             }
 
@@ -321,6 +370,9 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 const secFont = sec.fontFamily || (s.language === 'ENGLISH' || sec.numberingStyle === 'en' ? (s.enFont || 'Times New Roman') : (s.bnFont || 'Noto Serif Bengali'));
                 const secFallback = getFontFallback(secFont);
 
+                const secCols = Number(sec.columns) || 1;
+                const secColGap = sec.colGap || 10;
+
                 return `
                 ${sec.showName === false ? `
                     [data-section-id="${sec.id}"].section-name {
@@ -409,8 +461,8 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                     margin-top: 0.15em !important;
                     margin-bottom: 0.15em !important;
                     padding-left: 1.5em !important;
-                    column-span: all !important;
-                    -webkit-column-span: all !important;
+                    column-span: none !important;
+                    -webkit-column-span: none !important;
                 }
                 [data-section-id="${sec.id}"][data-type="question-block"] .cq-statements-list {
                     display: flex !important;

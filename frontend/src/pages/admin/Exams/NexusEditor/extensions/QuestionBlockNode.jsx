@@ -811,13 +811,18 @@ const syncedQuestionIds = new Set();
             const cGap = mmToPx(node.attrs.colGap !== undefined ? node.attrs.colGap : (docSettings?.colGap !== undefined ? docSettings.colGap : 10));
             
             const contentWidth = Math.max(200, pageW - mL - mR);
-            let pageCols = Number(docSettings?.columns) || 1;
+            let pageCols = Number(node.attrs.pageCols) || Number(docSettings?.columns) || 1;
             const colWidth = pageCols > 1 ? Math.max(100, (contentWidth - (pageCols - 1) * cGap) / pageCols) : contentWidth;
             
             const scale = (fSize || 14.66) / 14.66;
             const threshold2Col = Math.max(3, Math.floor((colWidth / 28) / scale));
             const threshold1Col = Math.max(6, Math.floor((colWidth / 13) / scale));
             
+            if (pageCols >= 2) {
+                // In multi-column paper, maximum option columns is 2 (col2) to avoid text squishing and border overflow
+                return maxLen >= threshold2Col ? 'col1' : 'col2';
+            }
+
             if (maxLen >= threshold1Col) {
                 return 'col1';
             } else if (maxLen >= threshold2Col) {

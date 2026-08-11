@@ -267,6 +267,7 @@ public class AcademicServiceImpl implements AcademicService {
     }
     @Override
     @Transactional
+    @CacheEvict(value = {"academicHierarchy", "questionStats", "sourceTags"}, allEntries = true)
     public void deleteGroup(UUID id) {
         groupRepository.deleteById(id);
     }

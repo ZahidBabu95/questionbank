@@ -5,35 +5,62 @@ let cachedBooks = null;
 let activeRequests = null;
 
 export const knowledgeHubService = {
-    // Fetch all books for the resource library with caching
-    getSourceBooks: async (bypassCache = false) => {
+    // Fetch all books for the resource library using Stale-While-Revalidate (SWR)
+    getSourceBooks: async (bypassCache = false, onRevalidate = null) => {
+        let cachedData = null;
         if (!bypassCache) {
-            const sessionData = sessionStorage.getItem(CACHE_KEY);
-            if (sessionData) {
-                try {
-                    cachedBooks = JSON.parse(sessionData);
-                } catch (e) {}
+            if (!cachedBooks) {
+                const sessionData = sessionStorage.getItem(CACHE_KEY);
+                if (sessionData) {
+                    try {
+                        cachedBooks = JSON.parse(sessionData);
+                    } catch (e) {}
+                }
             }
+            cachedData = cachedBooks;
         }
-        if (!bypassCache && cachedBooks) {
-            return cachedBooks;
+
+        // Stale-While-Revalidate Strategy:
+        // If cached data exists and we are not explicitly bypassing cache,
+        // return cached data immediately for instant UI load, and revalidate in background.
+        if (!bypassCache && cachedData) {
+            knowledgeHubService.revalidateSourceBooks(onRevalidate);
+            return cachedData;
         }
+
+        return knowledgeHubService.revalidateSourceBooks(onRevalidate);
+    },
+
+    revalidateSourceBooks: async (onRevalidate = null) => {
         if (activeRequests) {
             return activeRequests;
         }
+
+        const prevCacheStr = JSON.stringify(cachedBooks || []);
+
         activeRequests = axios.get('/v1/knowledge-hub/source-books')
             .then(res => {
-                cachedBooks = res.data;
+                const freshBooks = res.data || [];
+                const freshCacheStr = JSON.stringify(freshBooks);
+
+                cachedBooks = freshBooks;
                 try {
-                    sessionStorage.setItem(CACHE_KEY, JSON.stringify(res.data));
+                    sessionStorage.setItem(CACHE_KEY, freshCacheStr);
                 } catch (e) {}
                 activeRequests = null;
-                return res.data;
+
+                // Auto-notify UI if data has changed (e.g. new book added)
+                if (typeof onRevalidate === 'function' && prevCacheStr !== freshCacheStr) {
+                    onRevalidate(freshBooks);
+                }
+
+                return freshBooks;
             })
             .catch(err => {
                 activeRequests = null;
                 throw err;
             });
+
         return activeRequests;
     },
 
@@ -55,3 +82,4 @@ export const knowledgeHubService = {
         } catch (e) {}
     }
 };
+

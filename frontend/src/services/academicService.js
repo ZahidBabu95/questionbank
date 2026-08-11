@@ -14,6 +14,13 @@ const clearHierarchyCache = () => {
     activeHierarchyReq = null;
     activeHierarchyBypassReq = null;
     try { sessionStorage.removeItem(getHierarchyKey()); } catch (e) {}
+    try {
+        Object.keys(sessionStorage).forEach(k => {
+            if (k.startsWith('qs_chapters_') || k.startsWith('qs_topics_') || k.startsWith('qs_schema_cache_')) {
+                sessionStorage.removeItem(k);
+            }
+        });
+    } catch (e) {}
 };
 
 // --- Levels ---
@@ -118,8 +125,37 @@ const getHierarchyKey = () => {
     return 'qs_academic_hierarchy_def';
 };
 
-// --- Batch Hierarchy (single call for entire structure — replaces 20+ individual calls) ---
-const getHierarchy = async (bypass = false) => {
+const revalidateHierarchy = async (key, bypass = false, onRevalidate = null) => {
+    if (activeHierarchyReq) return activeHierarchyReq;
+
+    const prevStr = JSON.stringify(cachedHierarchy || {});
+
+    activeHierarchyReq = axios.get(`${API_URL}/hierarchy`, { params: { bypass } })
+        .then(res => {
+            const freshData = res.data;
+            const freshStr = JSON.stringify(freshData);
+            cachedHierarchy = freshData;
+            try {
+                sessionStorage.setItem(key, freshStr);
+            } catch (e) {}
+            activeHierarchyReq = null;
+
+            if (typeof onRevalidate === 'function' && prevStr !== freshStr) {
+                onRevalidate(freshData);
+            }
+
+            return freshData;
+        })
+        .catch(err => {
+            activeHierarchyReq = null;
+            throw err;
+        });
+
+    return activeHierarchyReq;
+};
+
+// --- Batch Hierarchy with SWR Support ---
+const getHierarchy = async (bypass = false, onRevalidate = null) => {
     preloadKnowledgeRules().catch(() => {});
     const key = getHierarchyKey();
     if (bypass) {
@@ -143,22 +179,11 @@ const getHierarchy = async (bypass = false) => {
                 if (s) cachedHierarchy = JSON.parse(s);
             } catch (e) {}
         }
-        if (cachedHierarchy) return cachedHierarchy;
-        if (activeHierarchyReq) return activeHierarchyReq;
-        activeHierarchyReq = axios.get(`${API_URL}/hierarchy`, { params: { bypass } })
-            .then(res => {
-                cachedHierarchy = res.data;
-                try {
-                    sessionStorage.setItem(key, JSON.stringify(res.data));
-                } catch (e) {}
-                activeHierarchyReq = null;
-                return res.data;
-            })
-            .catch(err => {
-                activeHierarchyReq = null;
-                throw err;
-            });
-        return activeHierarchyReq;
+        if (cachedHierarchy) {
+            revalidateHierarchy(key, bypass, onRevalidate);
+            return cachedHierarchy;
+        }
+        return revalidateHierarchy(key, bypass, onRevalidate);
     }
 };
 

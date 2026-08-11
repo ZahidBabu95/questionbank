@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
     Settings2, PanelRightClose, ImageIcon, 
-    AlignLeft, AlignCenter, AlignRight, Globe, Loader2, Crop
+    AlignLeft, AlignCenter, AlignRight, Globe, Loader2, Crop, Save, LayoutTemplate
 } from 'lucide-react';
 import SettingsPanel from '../SettingsPanel';
 import { useNexusEditor } from '../../context/NexusEditorContext';
@@ -202,7 +202,7 @@ const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
     }, [rightPanelWidth]);
 
     const { 
-        examData, templates, loadingTemplates, applyTemplate, 
+        examData, templates, loadingTemplates, applyTemplate, handleSaveTemplate, isSavingTemplate,
         savedSubjectsList, savedClassSubjectsList, saveSubjectDefaults, loadSubjectDefaults, deleteSubjectDefault,
         getNormalizedSubjectKey, getNormalizedClassKey
     } = useExamManager();
@@ -688,6 +688,33 @@ const RightSidebar = ({ isDraggingRight, setIsDraggingRight }) => {
 
                     {activeTab === 'templates' && (
                         <div className="p-4 space-y-4">
+                            {/* Save Custom Template Action Card */}
+                            <div className="bg-gradient-to-br from-indigo-50/90 to-purple-50/90 p-4 rounded-xl border border-indigo-100 shadow-sm">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                    <LayoutTemplate size={16} className="text-indigo-600" />
+                                    <h3 className="text-sm font-extrabold text-slate-800">
+                                        {uiLang === 'bn' ? 'কাস্টম টেমপ্লেট সেভ' : 'Save Custom Template'}
+                                    </h3>
+                                </div>
+                                <p className="text-xs text-slate-500 mb-3 leading-relaxed font-medium">
+                                    {uiLang === 'bn' 
+                                        ? 'বর্তমান পেপার মার্জিন, ফন্ট, বর্ডার ও লেআউট ফরম্যাট কাস্টম টেমপ্লেট হিসেবে সংরক্ষণ করুন।' 
+                                        : 'Save the current margins, fonts, borders, and layout structure as a reusable template.'}
+                                </p>
+                                <button
+                                    onClick={handleSaveTemplate}
+                                    disabled={isSavingTemplate}
+                                    className={`w-full py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md ${
+                                        isSavingTemplate
+                                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
+                                            : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20 active:scale-95'
+                                    }`}
+                                >
+                                    {isSavingTemplate ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                    <span>{uiLang === 'bn' ? 'টেমপ্লেট সেভ করুন' : 'Save as Template'}</span>
+                                </button>
+                            </div>
+
                             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4">
                                 <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
                                     <Settings2 size={14} className="text-indigo-500" /> {t.wsTools}

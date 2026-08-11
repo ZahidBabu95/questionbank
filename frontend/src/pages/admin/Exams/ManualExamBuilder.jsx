@@ -47,12 +47,14 @@ const QuestionCard = React.memo(({
     idx,
     inCart,
     onAdd,
+    onRemove,
     addLoading,
     cartLength,
     targetQs,
     isSaved,
     onToggleSave,
-    examInfo
+    examInfo,
+    showDetailedBadges
 }) => {
     const [showAnswer, setShowAnswer] = useState(false);
     const [showExplanation, setShowExplanation] = useState(false);
@@ -83,92 +85,124 @@ const QuestionCard = React.memo(({
         HARD: 'bg-rose-50 text-rose-700 border-rose-100',
     };
 
+    const handleCardClick = (e) => {
+        if (e.target.closest('button, a, input, select, textarea, label, [data-no-card-click="true"]')) {
+            return;
+        }
+        if (inCart) {
+            onRemove(q.id);
+        } else {
+            if (cartLength < targetQs && addLoading !== q.id) {
+                onAdd(q);
+            }
+        }
+    };
+
     return (
         <div 
             id={`question-item-${q.id}`}
-            className={`rounded-xl border transition-all duration-300 shadow-sm p-2.5 sm:p-3 ${
+            onClick={handleCardClick}
+            className={`rounded-xl border transition-all duration-300 shadow-sm p-2.5 sm:p-3 cursor-pointer group relative ${
                 inCart 
-                    ? 'bg-emerald-50/15 border-emerald-250 ring-1 ring-emerald-100/20 shadow-md' 
-                    : 'bg-white border-slate-100 hover:border-indigo-150 hover:shadow-md'
+                    ? 'bg-emerald-50/25 border-emerald-500 ring-2 ring-emerald-500/20 shadow-md' 
+                    : 'bg-white border-slate-150 hover:border-indigo-300 hover:shadow-md hover:-translate-y-0.5'
             }`}
         >
-            {/* ── Header Row (Ultra-Compact labels) ── */}
+            {/* ── Header Row (Ultra-Compact labels & Selection Indicator) ── */}
             <div className="flex flex-wrap items-center gap-1 mb-1">
                 <span className="text-[9px] font-black text-slate-700 bg-slate-100 px-1 py-px rounded border border-slate-200">Q #{idx + 1}</span>
                 <span className="text-[8px] font-extrabold bg-slate-100 text-slate-600 px-1 py-px rounded border border-slate-200">{typeLabel}</span>
                 
-                {q.status === 'APPROVED' && <span className="px-1 py-px bg-emerald-50 text-emerald-700 rounded text-[7.5px] font-bold uppercase border border-emerald-100">Approved</span>}
-                {q.status === 'PENDING' && <span className="px-1 py-px bg-amber-50 text-amber-700 rounded text-[7.5px] font-bold uppercase border border-amber-100">Pending</span>}
-                {q.status === 'REVISED' && <span className="px-1 py-px bg-rose-100 text-rose-850 rounded text-[7.5px] font-bold uppercase border border-rose-200 animate-pulse">Revised</span>}
-                {q.aiGenerated && <span className="px-1 py-px bg-violet-50 text-violet-700 rounded text-[7.5px] font-bold uppercase border border-violet-100">AI Synced</span>}
-                
-                <span className={`px-1 py-px rounded text-[7.5px] font-bold uppercase border ${difficultyStyle[q.difficulty] || 'bg-slate-50 text-slate-600 border-slate-200'}`}>
-                    {q.difficulty}
-                </span>
-                {q.bloomLevel && (
-                    <span className="px-1 py-px bg-indigo-50 text-indigo-700 rounded text-[7.5px] font-bold border border-indigo-100 uppercase">
-                        {q.bloomLevel}
-                    </span>
-                )}
-                {/* Render Rich Source Tags dynamically */}
-                {q.sources && q.sources.length > 0 ? (
-                    q.sources.map((src, sIdx) => {
-                        const type = src.sourceType || 'OTHER';
-                        const org = src.organizationName || '';
-                        const year = src.examYear ? ` ${src.examYear}` : '';
-                        const exam = src.examName ? ` - ${src.examName}` : '';
-                        const displayName = `${org}${exam}${year}`;
-
-                        if (type === 'BOARD_EXAM') {
-                            return (
-                                <span key={sIdx} className="px-1 py-px bg-purple-50 text-purple-700 rounded text-[7.5px] font-bold border border-purple-100 uppercase">
-                                    🏛️ {displayName}
-                                </span>
-                            );
-                        }
-                        if (type === 'UNIVERSITY_ADMISSION') {
-                            return (
-                                <span key={sIdx} className="px-1 py-px bg-indigo-50 text-indigo-700 rounded text-[7.5px] font-bold border border-indigo-100 uppercase">
-                                    🎓 {displayName}
-                                </span>
-                            );
-                        }
-                        if (type === 'INSTITUTION_TEST') {
-                            return (
-                                <span key={sIdx} className="px-1 py-px bg-emerald-50 text-emerald-700 rounded text-[7.5px] font-bold border border-emerald-100 uppercase">
-                                    🏫 {displayName}
-                                </span>
-                            );
-                        }
-                        if (type === 'JOB_EXAM') {
-                            return (
-                                <span key={sIdx} className="px-1 py-px bg-amber-50 text-amber-700 rounded text-[7.5px] font-bold border border-amber-100 uppercase">
-                                    💼 {displayName}
-                                </span>
-                            );
-                        }
-                        return (
-                            <span key={sIdx} className="px-1 py-px bg-slate-100 text-slate-600 rounded text-[7.5px] font-bold border border-slate-200 uppercase">
-                                🏛️ {displayName}
-                            </span>
-                        );
-                    })
-                ) : (
-                    q.sourceReference && (
-                        q.sourceReference === 'Textbook Content' ? (
-                            <span className="px-1 py-px bg-slate-100 text-slate-600 rounded text-[7.5px] font-bold border border-slate-200 uppercase">
-                                📖 Textbook
-                            </span>
-                        ) : (
-                            <span className="px-1 py-px bg-purple-50 text-purple-700 rounded text-[7.5px] font-bold border border-purple-100 uppercase">
-                                🏛️ {q.sourceReference}
-                            </span>
-                        )
-                    )
-                )}
                 <span className="px-1 py-px bg-slate-50 text-slate-600 rounded text-[7.5px] font-bold border border-slate-200">
                     {examInfo.language === 'Bangla' ? `${toBnNum(defaultMarksMap[q.type] || 1)} মার্কস` : `${defaultMarksMap[q.type] || 1} M`}
                 </span>
+
+                {showDetailedBadges && (
+                    <>
+                        {q.status === 'APPROVED' && <span className="px-1 py-px bg-emerald-50 text-emerald-700 rounded text-[7.5px] font-bold uppercase border border-emerald-100">Approved</span>}
+                        {q.status === 'PENDING' && <span className="px-1 py-px bg-amber-50 text-amber-700 rounded text-[7.5px] font-bold uppercase border border-amber-100">Pending</span>}
+                        {q.status === 'REVISED' && <span className="px-1 py-px bg-rose-100 text-rose-850 rounded text-[7.5px] font-bold uppercase border border-rose-200 animate-pulse">Revised</span>}
+                        {q.aiGenerated && <span className="px-1 py-px bg-violet-50 text-violet-700 rounded text-[7.5px] font-bold uppercase border border-violet-100">AI Synced</span>}
+                        
+                        <span className={`px-1 py-px rounded text-[7.5px] font-bold uppercase border ${difficultyStyle[q.difficulty] || 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                            {q.difficulty}
+                        </span>
+                        {q.bloomLevel && (
+                            <span className="px-1 py-px bg-indigo-50 text-indigo-700 rounded text-[7.5px] font-bold border border-indigo-100 uppercase">
+                                {q.bloomLevel}
+                            </span>
+                        )}
+                        {/* Render Rich Source Tags dynamically */}
+                        {q.sources && q.sources.length > 0 ? (
+                            q.sources.map((src, sIdx) => {
+                                const type = src.sourceType || 'OTHER';
+                                const org = src.organizationName || '';
+                                const year = src.examYear ? ` ${src.examYear}` : '';
+                                const exam = src.examName ? ` - ${src.examName}` : '';
+                                const displayName = `${org}${exam}${year}`;
+
+                                if (type === 'BOARD_EXAM') {
+                                    return (
+                                        <span key={sIdx} className="px-1 py-px bg-purple-50 text-purple-700 rounded text-[7.5px] font-bold border border-purple-100 uppercase">
+                                            🏛️ {displayName}
+                                        </span>
+                                    );
+                                }
+                                if (type === 'UNIVERSITY_ADMISSION') {
+                                    return (
+                                        <span key={sIdx} className="px-1 py-px bg-indigo-50 text-indigo-700 rounded text-[7.5px] font-bold border border-indigo-100 uppercase">
+                                            🎓 {displayName}
+                                        </span>
+                                    );
+                                }
+                                if (type === 'INSTITUTION_TEST') {
+                                    return (
+                                        <span key={sIdx} className="px-1 py-px bg-emerald-50 text-emerald-700 rounded text-[7.5px] font-bold border border-emerald-100 uppercase">
+                                            🏫 {displayName}
+                                        </span>
+                                    );
+                                }
+                                if (type === 'JOB_EXAM') {
+                                    return (
+                                        <span key={sIdx} className="px-1 py-px bg-amber-50 text-amber-700 rounded text-[7.5px] font-bold border border-amber-100 uppercase">
+                                            💼 {displayName}
+                                        </span>
+                                    );
+                                }
+                                return (
+                                    <span key={sIdx} className="px-1 py-px bg-slate-100 text-slate-600 rounded text-[7.5px] font-bold border border-slate-200 uppercase">
+                                        🏛️ {displayName}
+                                    </span>
+                                );
+                            })
+                        ) : (
+                            q.sourceReference && (
+                                q.sourceReference === 'Textbook Content' ? (
+                                    <span className="px-1 py-px bg-slate-100 text-slate-600 rounded text-[7.5px] font-bold border border-slate-200 uppercase">
+                                        📖 Textbook
+                                    </span>
+                                ) : (
+                                    <span className="px-1 py-px bg-purple-50 text-purple-700 rounded text-[7.5px] font-bold border border-purple-100 uppercase">
+                                        🏛️ {q.sourceReference}
+                                    </span>
+                                )
+                            )
+                        )}
+                    </>
+                )}
+
+                {/* Top-Right Selection Indicator Badge */}
+                <div className="ml-auto flex items-center gap-1 shrink-0">
+                    {inCart ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-600 text-white rounded-full text-[9px] font-black shadow-sm border border-emerald-500 animate-in zoom-in-75 duration-150">
+                            <Check size={11} strokeWidth={3} /> Selected
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 group-hover:bg-indigo-50 text-slate-500 group-hover:text-indigo-600 rounded-full text-[8.5px] font-bold border border-slate-200/80 transition-colors">
+                            <Plus size={10} strokeWidth={2.5} /> Select
+                        </span>
+                    )}
+                </div>
             </div>
 
             {/* ── Stimulus (Left accent line banner - Ultra-Slim layout) ── */}
@@ -273,7 +307,8 @@ const QuestionCard = React.memo(({
             {/* ── Toggles Grid ── */}
             <div className="w-full mb-2 grid grid-cols-2 gap-1.5">
                 <button
-                    onClick={() => setShowAnswer(!showAnswer)}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setShowAnswer(!showAnswer); }}
                     className="flex items-center justify-center gap-1 py-1 px-2.5 text-[10px] font-extrabold text-white rounded-lg transition-all duration-300 active:scale-[0.97] border border-white/10"
                     style={{ 
                         background: showAnswer
@@ -288,7 +323,8 @@ const QuestionCard = React.memo(({
                 </button>
 
                 <button
-                    onClick={() => setShowExplanation(!showExplanation)}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setShowExplanation(!showExplanation); }}
                     className="flex items-center justify-center gap-1 py-1 px-2.5 text-[10px] font-extrabold rounded-lg transition-all duration-300 active:scale-[0.97] border"
                     style={{ 
                         background: showExplanation
@@ -343,7 +379,8 @@ const QuestionCard = React.memo(({
                 {/* Action Buttons */}
                 <div className="flex items-center justify-between sm:justify-end gap-1.5 w-full sm:w-auto shrink-0 pt-1 sm:pt-0">
                     <button 
-                        onClick={() => onToggleSave(q)}
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onToggleSave(q); }}
                         className={`flex-1 sm:flex-none flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[9.5px] font-black transition-all duration-300 border ${
                             isSaved 
                                 ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent shadow-sm active:scale-[0.97]' 
@@ -354,25 +391,32 @@ const QuestionCard = React.memo(({
                         <span>{isSaved ? 'Saved' : 'Save'}</span>
                     </button>
 
-                    <button
-                        onClick={() => onAdd(q)}
-                        disabled={inCart || addLoading === q.id || cartLength >= targetQs}
-                        className={`flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[9.5px] font-black transition-all duration-300 border active:scale-[0.97] ${
-                            inCart 
-                                ? 'bg-emerald-100 border-emerald-300 text-emerald-700 cursor-not-allowed shadow-sm' 
-                                : (cartLength >= targetQs)
-                                ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                : 'bg-gradient-to-r from-indigo-500 to-violet-600 text-white border-transparent shadow-sm hover:-translate-y-px'
-                        }`}
-                    >
-                        {addLoading === q.id ? (
-                            <Loader2 size={10} className="animate-spin" />
-                        ) : inCart ? (
-                            <><Check size={10} strokeWidth={3} /> Added</>
-                        ) : (
-                            <><Plus size={10} strokeWidth={3} /> Add to Exam</>
-                        )}
-                    </button>
+                    {inCart ? (
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onRemove(q.id); }}
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[9.5px] font-black transition-all duration-300 border bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-600 active:scale-[0.97]"
+                        >
+                            <Trash2 size={10} /> Remove
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onAdd(q); }}
+                            disabled={addLoading === q.id || cartLength >= targetQs}
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[9.5px] font-black transition-all duration-300 border active:scale-[0.97] ${
+                                (cartLength >= targetQs)
+                                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'bg-gradient-to-r from-indigo-500 to-violet-600 text-white border-transparent shadow-sm hover:-translate-y-px'
+                            }`}
+                        >
+                            {addLoading === q.id ? (
+                                <Loader2 size={10} className="animate-spin" />
+                            ) : (
+                                <><Plus size={10} strokeWidth={3} /> Add to Exam</>
+                            )}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
@@ -385,6 +429,7 @@ const QuestionCard = React.memo(({
            prev.addLoading === next.addLoading &&
            prev.cartLength === next.cartLength &&
            prev.targetQs === next.targetQs &&
+           prev.showDetailedBadges === next.showDetailedBadges &&
            prev.examInfo?.language === next.examInfo?.language;
 });
 
@@ -576,6 +621,7 @@ const ManualExamBuilder = () => {
     const [savedQuestionIds, setSavedQuestionIds] = useState([]);
     const [visibleAnswers, setVisibleAnswers] = useState({});
     const [visibleExplanations, setVisibleExplanations] = useState({}); 
+    const [showDetailedBadges, setShowDetailedBadges] = useState(false);
 
     const displayLimitRef = useRef(displayLimit);
     useEffect(() => {
@@ -1000,15 +1046,33 @@ const ManualExamBuilder = () => {
         fetchFavoriteIds();
     }, []);
 
-    // Trigger background cache loading
+    // High-Speed Background Cache loading with Session Storage Persistence
     const triggerBackgroundCache = async (subId, lang) => {
         if (backgroundLoading || cacheLoadedSubjectId === subId) return;
+
+        const sessionCacheKey = `qs_subject_q_cache_${subId}_${lang}_${sourceMode}_${(selectedLectureIds||[]).join(',')}_${(selectedBoards||[]).join(',')}_${(selectedYears||[]).join(',')}_${(selectedSchools||[]).join(',')}`;
+        
+        // 🚀 0ms Instant Load from sessionStorage if cached
+        try {
+            const stored = sessionStorage.getItem(sessionCacheKey);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+                    setQuestionsCache(parsed);
+                    setCacheLoadedSubjectId(subId);
+                    setBackgroundLoading(false);
+                    return;
+                }
+            }
+        } catch (e) {}
+
         setBackgroundLoading(true);
-        setQuestionsCache([]);
         try {
             let currentPage = 0;
             let hasMore = true;
             let accumulated = [];
+            const pageSize = 200; // 🚀 Increased from 80 to 200 for 2.5x fewer roundtrips
+
             while (hasMore) {
                 const params = { 
                     classSubjectId: subId, 
@@ -1018,7 +1082,7 @@ const ManualExamBuilder = () => {
                     boards: selectedBoards.length > 0 ? selectedBoards : undefined,
                     years: selectedYears.length > 0 ? selectedYears : undefined,
                     schools: selectedSchools.length > 0 ? selectedSchools : undefined,
-                    size: 80, 
+                    size: pageSize, 
                     page: currentPage 
                 };
                 const res = await examService.searchQuestionsForManualExam(params);
@@ -1028,17 +1092,16 @@ const ManualExamBuilder = () => {
                         hasMore = false;
                     } else {
                         accumulated = [...accumulated, ...fetched];
-                        // Ensure unique items
                         const uniqueMap = new Map();
                         accumulated.forEach(q => uniqueMap.set(q.id, q));
                         const uniqueList = Array.from(uniqueMap.values());
                         
-                        // Throttled state updates every 5 pages to prevent React render-freezes
-                        if (currentPage % 5 === 0 || fetched.length < 80) {
+                        // Instant update on first page so user sees Page 0 questions immediately
+                        if (currentPage === 0 || fetched.length < pageSize) {
                             setQuestionsCache(uniqueList);
                         }
                         
-                        if (fetched.length < 80) {
+                        if (fetched.length < pageSize) {
                             hasMore = false;
                         } else {
                             currentPage++;
@@ -1047,16 +1110,22 @@ const ManualExamBuilder = () => {
                 } else {
                     hasMore = false;
                 }
-                // Delay to protect server load
-                await new Promise(r => setTimeout(r, 250));
+                // Reduced delay from 250ms to 10ms for 25x faster background loading
+                await new Promise(r => setTimeout(r, 10));
             }
             
             // Ensure final full list is successfully cached once complete
             const finalUniqueMap = new Map();
             accumulated.forEach(q => finalUniqueMap.set(q.id, q));
-            setQuestionsCache(Array.from(finalUniqueMap.values()));
-            
+            const finalUniqueList = Array.from(finalUniqueMap.values());
+            setQuestionsCache(finalUniqueList);
             setCacheLoadedSubjectId(subId);
+
+            // Save to sessionStorage for 0ms instant reload next time
+            try {
+                sessionStorage.setItem(sessionCacheKey, JSON.stringify(finalUniqueList));
+            } catch (e) {}
+            
         } catch (e) {
             console.error("Background caching error:", e);
         } finally {
@@ -1515,13 +1584,29 @@ const ManualExamBuilder = () => {
                         </p>
                     </div>
 
-                    <button
-                        onClick={handleExitBuilder}
-                        className="flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-black text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 hover:border-rose-300 rounded-lg transition-all duration-300 active:scale-95"
-                    >
-                        <Trash2 size={11} />
-                        <span>বাতিল করে ফিরে যান</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={handlePublish}
+                            disabled={loading || cart.length === 0}
+                            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all shadow-md active:scale-95 ${
+                                cart.length > 0 && !loading
+                                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700 shadow-emerald-500/20'
+                                    : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                            }`}
+                        >
+                            {loading ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                            <span>Publish Paper ({cart.length})</span>
+                        </button>
+
+                        <button
+                            onClick={handleExitBuilder}
+                            className="flex items-center justify-center gap-1 px-2.5 py-1.5 text-[10px] font-black text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 hover:border-rose-300 rounded-xl transition-all duration-300 active:scale-95"
+                        >
+                            <Trash2 size={11} />
+                            <span>বাতিল করে ফিরে যান</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Mobile Tab Swapper Bar */}
@@ -1611,36 +1696,70 @@ const ManualExamBuilder = () => {
                                         </select>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="space-y-2">
+                                    {/* Type Filter Pills */}
                                     <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Type</label>
-                                        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} className="w-full bg-white/50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all hover:border-slate-300">
-                                            <option value="">Any</option>
+                                        <div className="flex items-center justify-between mb-1 pl-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Question Type</label>
+                                            {filters.type && (
+                                                <button type="button" onClick={() => setFilters({ ...filters, type: '' })} className="text-[9px] font-extrabold text-emerald-600 hover:underline">Reset</button>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-wrap gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setFilters({ ...filters, type: '' })}
+                                                className={`px-2 py-1 text-[10.5px] font-extrabold rounded-lg border transition-all ${
+                                                    filters.type === ''
+                                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                                        : 'bg-white/80 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                                }`}
+                                            >
+                                                Any
+                                            </button>
                                             {dynamicOptions.types.map(t => {
                                                 const label = t === 'MCQ' ? 'MCQ' : t === 'CQ' ? 'CQ' : t === 'SHORT' ? 'Short' : t;
-                                                return <option key={t} value={t}>{label}</option>;
+                                                const isSelected = filters.type === t;
+                                                return (
+                                                    <button
+                                                        key={t}
+                                                        type="button"
+                                                        onClick={() => setFilters({ ...filters, type: isSelected ? '' : t })}
+                                                        className={`px-2.5 py-1 text-[10.5px] font-extrabold rounded-lg border transition-all ${
+                                                            isSelected
+                                                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                                                : 'bg-white/80 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                                        }`}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                );
                                             })}
-                                        </select>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Diff</label>
-                                        <select value={filters.difficulty} onChange={(e) => setFilters({ ...filters, difficulty: e.target.value })} className="w-full bg-white/50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all hover:border-slate-300">
-                                            <option value="">Any</option>
-                                            {dynamicOptions.difficulties.map(d => {
-                                                const label = d === 'EASY' ? 'Easy' : d === 'MEDIUM' ? 'Med' : d === 'HARD' ? 'Hard' : d;
-                                                return <option key={d} value={d}>{label}</option>;
-                                            })}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block pl-1">Bloom</label>
-                                        <select value={filters.bloomLevel} onChange={(e) => setFilters({ ...filters, bloomLevel: e.target.value })} className="w-full bg-white/50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all hover:border-slate-300">
-                                            <option value="">Any</option>
-                                            {dynamicOptions.blooms.map(b => {
-                                                const label = b === 'KNOWLEDGE' ? 'Know' : b === 'COMPREHENSION' ? 'Comp' : b === 'APPLICATION' ? 'Appl' : b === 'HIGHER_ORDER' ? 'High' : b;
-                                                return <option key={b} value={b}>{label}</option>;
-                                            })}
-                                        </select>
+
+                                    {/* Diff & Bloom Grid */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block pl-1">Diff</label>
+                                            <select value={filters.difficulty} onChange={(e) => setFilters({ ...filters, difficulty: e.target.value })} className="w-full bg-white/50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all hover:border-slate-300">
+                                                <option value="">Any</option>
+                                                {dynamicOptions.difficulties.map(d => {
+                                                    const label = d === 'EASY' ? 'Easy' : d === 'MEDIUM' ? 'Med' : d === 'HARD' ? 'Hard' : d;
+                                                    return <option key={d} value={d}>{label}</option>;
+                                                })}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block pl-1">Bloom</label>
+                                            <select value={filters.bloomLevel} onChange={(e) => setFilters({ ...filters, bloomLevel: e.target.value })} className="w-full bg-white/50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all hover:border-slate-300">
+                                                <option value="">Any</option>
+                                                {dynamicOptions.blooms.map(b => {
+                                                    const label = b === 'KNOWLEDGE' ? 'Know' : b === 'COMPREHENSION' ? 'Comp' : b === 'APPLICATION' ? 'Appl' : b === 'HIGHER_ORDER' ? 'High' : b;
+                                                    return <option key={b} value={b}>{label}</option>;
+                                                })}
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
                                 <div>
@@ -1658,13 +1777,26 @@ const ManualExamBuilder = () => {
                     <div className={`flex-1 bg-white rounded-2xl lg:rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col min-w-0 overflow-hidden ${activeTab === 'results' ? 'flex' : 'hidden lg:flex'}`}>
                         <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center gap-3 flex-wrap">
                             <h2 className="font-black text-slate-800 flex items-center gap-2"><Target size={18} className="text-violet-500" /> Results</h2>
-                            <div className="flex items-center gap-2.5 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
                                 {backgroundLoading && (
                                     <span className="text-[10px] bg-indigo-50 border border-indigo-200 text-indigo-700 px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1.5 animate-pulse shrink-0">
                                         <Loader2 size={11} className="animate-spin text-indigo-500" />
                                         সব প্রশ্ন লোড হচ্ছে ({questionsCache.length} টি ক্যাশড)
                                     </span>
                                 )}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDetailedBadges(prev => !prev)}
+                                    className={`text-[10.5px] font-black px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 ${
+                                        showDetailedBadges
+                                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-sm'
+                                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                    title="Toggle difficulty, bloom level, and status badges"
+                                >
+                                    <Eye size={12} className={showDetailedBadges ? 'text-indigo-600' : 'text-slate-400'} />
+                                    <span>{showDetailedBadges ? 'Clean View' : 'Show Badges'}</span>
+                                </button>
                                 {searchResults.length > 0 && (
                                     <button 
                                         onClick={handleSelectAll} 
@@ -1707,12 +1839,14 @@ const ManualExamBuilder = () => {
                                             idx={idx}
                                             inCart={isInCart(q.id)}
                                             onAdd={handleAddQuestion}
+                                            onRemove={handleRemoveQuestion}
                                             addLoading={addLoading}
                                             cartLength={cart.length}
                                             targetQs={targetTotals.qs}
                                             isSaved={isQuestionSaved(q.id)}
                                             onToggleSave={handleToggleSaveQuestion}
                                             examInfo={examInfo}
+                                            showDetailedBadges={showDetailedBadges}
                                         />
                                     ))}
                                 </div>
@@ -1847,58 +1981,23 @@ const ManualExamBuilder = () => {
                                 ))
                             )}
                         </div>
-                    </div>
-                </div>
 
-                {/* Floating Action Bar for Step 2 */}
-                <div className="fixed bottom-0 left-0 lg:left-64 right-0 backdrop-blur-md bg-white/90 border-t border-slate-200 p-3 sm:p-4 z-50 flex justify-between items-center shadow-[0_-10px_30px_rgb(0,0,0,0.05)]">
-                    <div className="max-w-[1600px] w-full mx-auto flex flex-row justify-between items-center gap-3">
-                        <div className="flex flex-col items-start gap-1 min-w-0 flex-1">
-                            <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Cart Target & Progress</div>
-                            <div 
-                                className="flex flex-row items-center gap-1.5 overflow-x-auto w-full whitespace-nowrap"
-                                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                        {/* Exam Cart Footer Action */}
+                        <div className="p-4 border-t border-slate-200 bg-white shrink-0 shadow-md">
+                            <button 
+                                type="button"
+                                onClick={handlePublish} 
+                                disabled={loading || cart.length === 0} 
+                                className={`w-full py-3.5 rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg active:scale-98 ${
+                                    cart.length > 0 && !loading 
+                                        ? 'bg-slate-900 hover:bg-black text-white shadow-slate-900/20 hover:shadow-xl' 
+                                        : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                }`}
                             >
-                                {Object.entries(userStructure)
-                                    .filter(([_, struct]) => struct.enabled !== false && (parseInt(struct.count) || 0) > 0)
-                                    .map(([type, struct]) => {
-                                        const target = parseInt(struct.count) || 0;
-                                        const current = cartCounts[type] || 0;
-                                        const isFulfilled = current === target;
-                                        const isOver = current > target;
-
-                                        let badgeColor = "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100";
-                                        if (isFulfilled) {
-                                            badgeColor = "bg-emerald-500 text-white border-transparent shadow-[0_2px_8px_rgba(16,185,129,0.3)]";
-                                        } else if (isOver) {
-                                            badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
-                                        } else if (current > 0) {
-                                            badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
-                                        }
-
-                                        return (
-                                            <span 
-                                                key={type} 
-                                                className={`text-[9px] sm:text-[10px] font-extrabold px-1.5 sm:px-2 py-0.5 rounded-md border transition-all duration-300 shrink-0 shadow-sm ${badgeColor}`}
-                                            >
-                                                {type}: {current}/{target}
-                                            </span>
-                                        );
-                                    })
-                                }
-                            </div>
+                                {loading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
+                                <span>Publish Paper ({cart.length} Qs)</span>
+                            </button>
                         </div>
-                        <button 
-                            onClick={handlePublish} 
-                            disabled={loading || cart.length === 0} 
-                            className={`px-2.5 sm:px-8 py-1.5 sm:py-3.5 rounded-xl font-black text-[10px] sm:text-sm flex items-center gap-1 sm:gap-2 transition-all shadow-xl hover:-translate-y-0.5 shrink-0 ${cart.length > 0 && !loading ? 'bg-slate-800 hover:bg-slate-900 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-                        >
-                            {loading ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} 
-                            <span className="whitespace-nowrap font-black tracking-tight">
-                                <span className="hidden sm:inline">Publish Paper</span>
-                                <span className="inline sm:hidden">Publish</span>
-                            </span>
-                        </button>
                     </div>
                 </div>
             </div>

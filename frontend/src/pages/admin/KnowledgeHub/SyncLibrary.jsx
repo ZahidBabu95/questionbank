@@ -94,8 +94,10 @@ const SyncLibrary = () => {
     const fetchSourceBooks = async (isSilent = false) => {
         try {
             if (!isSilent) setIsLoading(true);
-            const data = await knowledgeHubService.getSourceBooks(isSilent);
-            setBooks(data);
+            const data = await knowledgeHubService.getSourceBooks(false, (updatedBooks) => {
+                setBooks(updatedBooks || []);
+            });
+            setBooks(data || []);
         } catch (error) {
             console.error('Failed to fetch source books:', error);
         } finally {

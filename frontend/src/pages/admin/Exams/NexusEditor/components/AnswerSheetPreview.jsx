@@ -365,8 +365,7 @@ const AnswerSheetPreview = () => {
                 style={{
                     width: widthMm ? `${widthMm}mm` : '210mm',
                     minHeight: heightMm ? `${heightMm}mm` : '297mm',
-                    transform: `scale(${zoom / 100})`,
-                    transformOrigin: 'top center',
+                    zoom: zoom / 100,
                 }}
             >
             <div className="paper-content-wrapper w-full h-full"

@@ -196,11 +196,12 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
     }, []);
 
     const handleAddToCanvas = (q) => {
-        const targetSec = docSettings.sections?.find(s => s.isMCQ === (q.type === 'MCQ')) || {};
+        const targetSec = docSettings.sections?.find(s => s.isMCQ === (q.type === 'MCQ')) || docSettings.sections?.[0] || {};
         setPendingInsertQuestion({
             type: 'questionBlock',
             attrs: {
                 questionId: q.id,
+                sectionId: targetSec.id || null,
                 subjectId: q.subjectId,
                 chapterId: q.chapterId,
                 type: q.type || 'MCQ',
@@ -233,6 +234,10 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
             nodeSize: swapTarget.nodeSize,
             attrs: {
                 questionId: q.id,
+                sectionId: swapTarget.attrs?.sectionId || targetSec.id || null,
+                questionNumber: swapTarget.attrs?.questionNumber,
+                firstInSection: swapTarget.attrs?.firstInSection,
+                alternativeToId: swapTarget.attrs?.alternativeToId,
                 subjectId: q.subjectId,
                 chapterId: q.chapterId,
                 type: q.type || 'MCQ',
@@ -245,16 +250,16 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                 statements: q.statements || [],
                 chapterName: q.chapterName || q.subjectName || 'General',
                 marks: q.marks || 1,
-                numberingStyle: swapTarget.attrs.numberingStyle || targetSec.numberingStyle || 'bn',
-                marksConfig: swapTarget.attrs.marksConfig || targetSec.marksConfig || 'hide',
-                optionLayout: swapTarget.attrs.optionLayout || targetSec.optionLayout || 'col1',
-                optionStyle: swapTarget.attrs.optionStyle || targetSec.optionStyle || 'bn',
-                optionDecoration: swapTarget.attrs.optionDecoration || targetSec.optionDecoration || 'rightBracket',
-                fontSize: swapTarget.attrs.fontSize,
-                lineGap: swapTarget.attrs.lineGap,
-                optionGap: swapTarget.attrs.optionGap,
-                questionGap: swapTarget.attrs.questionGap,
-                textAlign: swapTarget.attrs.textAlign,
+                numberingStyle: swapTarget.attrs?.numberingStyle || targetSec.numberingStyle || 'bn',
+                marksConfig: swapTarget.attrs?.marksConfig || targetSec.marksConfig || 'hide',
+                optionLayout: swapTarget.attrs?.optionLayout || targetSec.optionLayout || 'col1',
+                optionStyle: swapTarget.attrs?.optionStyle || targetSec.optionStyle || 'bn',
+                optionDecoration: swapTarget.attrs?.optionDecoration || targetSec.optionDecoration || 'rightBracket',
+                fontSize: swapTarget.attrs?.fontSize,
+                lineGap: swapTarget.attrs?.lineGap,
+                optionGap: swapTarget.attrs?.optionGap,
+                questionGap: swapTarget.attrs?.questionGap,
+                textAlign: swapTarget.attrs?.textAlign,
                 dynamicData: q.dynamicData || null,
                 options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : []
             }
@@ -311,6 +316,10 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                         nodeSize: nodeSize,
                         attrs: {
                             questionId: q.id,
+                            sectionId: attrs?.sectionId || targetSec.id || null,
+                            questionNumber: attrs?.questionNumber,
+                            firstInSection: attrs?.firstInSection,
+                            alternativeToId: attrs?.alternativeToId,
                             subjectId: q.subjectId,
                             chapterId: q.chapterId,
                             type: q.type || 'MCQ',
@@ -322,16 +331,16 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                             statements: q.statements || [],
                             chapterName: q.chapterName || q.subjectName || 'General',
                             marks: q.marks || 1,
-                            numberingStyle: attrs.numberingStyle || targetSec.numberingStyle || 'bn',
-                            marksConfig: attrs.marksConfig || targetSec.marksConfig || 'hide',
-                            optionLayout: attrs.optionLayout || targetSec.optionLayout || 'col1',
-                            optionStyle: attrs.optionStyle || targetSec.optionStyle || 'bn',
-                            optionDecoration: attrs.optionDecoration || targetSec.optionDecoration || 'rightBracket',
-                            fontSize: attrs.fontSize,
-                            lineGap: attrs.lineGap,
-                            optionGap: attrs.optionGap,
-                            questionGap: attrs.questionGap,
-                            textAlign: attrs.textAlign,
+                            numberingStyle: attrs?.numberingStyle || targetSec.numberingStyle || 'bn',
+                            marksConfig: attrs?.marksConfig || targetSec.marksConfig || 'hide',
+                            optionLayout: attrs?.optionLayout || targetSec.optionLayout || 'col1',
+                            optionStyle: attrs?.optionStyle || targetSec.optionStyle || 'bn',
+                            optionDecoration: attrs?.optionDecoration || targetSec.optionDecoration || 'rightBracket',
+                            fontSize: attrs?.fontSize,
+                            lineGap: attrs?.lineGap,
+                            optionGap: attrs?.optionGap,
+                            questionGap: attrs?.questionGap,
+                            textAlign: attrs?.textAlign,
                             dynamicData: q.dynamicData || null,
                             options: q.options ? q.options.map(opt => ({ ...opt, optionText: opt.optionText })) : []
                         }

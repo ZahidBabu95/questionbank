@@ -193,7 +193,7 @@ export const useExamManager = () => {
         examData, setExamData,
         editorMode, setEditorMode,
         rawContent, setRawContent,
-        isEditorLoaded,
+        isEditorLoaded, setLoadingProgress, setLoadingStatusText,
         docSettings, setDocSettings,
         setEditorConfig, setGenerationBlueprint,
         isSavingDocument, setIsSavingDocument,
@@ -302,6 +302,9 @@ export const useExamManager = () => {
         if (!id) return;
         const fetchExam = async () => {
             try {
+                if (setLoadingProgress) setLoadingProgress(20);
+                if (setLoadingStatusText) setLoadingStatusText(uiLang === 'bn' ? 'ব্যাকএন্ড থেকে ডেটাবেজ তথ্য গ্রহণ করা হচ্ছে...' : 'Fetching exam from database...');
+
                 // Fetch exam and curriculum rules in parallel
                 const [res, kbRes] = await Promise.all([
                     deduplicatedGetExam(id),
@@ -312,6 +315,17 @@ export const useExamManager = () => {
                 ]);
 
                 if (res?.data) {
+                    if (res.data.questions && Array.isArray(res.data.questions) && res.data.questions.length > 0) {
+                        try {
+                            questionService.seedQuestionCache(res.data.questions);
+                        } catch (e) {
+                            console.error("Failed to seed question cache:", e);
+                        }
+                    }
+
+                    if (setLoadingProgress) setLoadingProgress(45);
+                    if (setLoadingStatusText) setLoadingStatusText(uiLang === 'bn' ? 'প্রশ্নপত্রের লেআউট প্রসেস করা হচ্ছে...' : 'Processing layout & settings...');
+
                     setExamData(res.data);
                     if (res.data.editorMode) {
                         setEditorMode(res.data.editorMode);
@@ -577,6 +591,46 @@ export const useExamManager = () => {
                             } catch (e) { console.error("Failed to apply pending revisions", e); }
                         }
 
+                        // Pre-hydrate syncedfromdb, dynamicdatasynced, data-options and questiontext on all nodes to prevent background HTTP calls
+                        if (finalHtml) {
+                            try {
+                                const parser = new DOMParser();
+                                const doc = parser.parseFromString(finalHtml, 'text/html');
+                                const nodes = doc.querySelectorAll('div[data-type="question-block"]');
+                                nodes.forEach(node => {
+                                    node.setAttribute('syncedfromdb', 'true');
+                                    node.setAttribute('dynamicdatasynced', 'true');
+                                    const qid = node.getAttribute('questionid');
+                                    if (qid) {
+                                        const cachedQ = questionService.getQuestionFromCache(qid);
+                                        if (cachedQ) {
+                                            if (!node.getAttribute('questiontext') && cachedQ.questionText) {
+                                                node.setAttribute('questiontext', cachedQ.questionText.replace(/"/g, "&quot;"));
+                                            }
+                                            if ((!node.getAttribute('data-options') || node.getAttribute('data-options') === '[]') && cachedQ.options) {
+                                                node.setAttribute('data-options', JSON.stringify(cachedQ.options).replace(/'/g, "&#39;"));
+                                            }
+                                            if ((!node.getAttribute('data-statements') || node.getAttribute('data-statements') === '[]') && cachedQ.statements) {
+                                                node.setAttribute('data-statements', JSON.stringify(cachedQ.statements).replace(/'/g, "&#39;"));
+                                            }
+                                            if (!node.getAttribute('stimulus') && cachedQ.stimulus) {
+                                                node.setAttribute('stimulus', cachedQ.stimulus.replace(/"/g, "&quot;"));
+                                            }
+                                            if (!node.getAttribute('explanation') && cachedQ.explanation) {
+                                                node.setAttribute('explanation', cachedQ.explanation.replace(/"/g, "&quot;"));
+                                            }
+                                            if (!node.getAttribute('answer') && (cachedQ.correctAnswer || cachedQ.answer)) {
+                                                node.setAttribute('answer', (cachedQ.correctAnswer || cachedQ.answer).replace(/"/g, "&quot;"));
+                                            }
+                                        }
+                                    }
+                                });
+                                finalHtml = doc.body.innerHTML;
+                            } catch (e) { console.error("Failed to pre-hydrate syncedfromdb attributes", e); }
+                        }
+
+                        if (setLoadingProgress) setLoadingProgress(70);
+                        if (setLoadingStatusText) setLoadingStatusText(uiLang === 'bn' ? 'প্রশ্ন, চিত্র ও ফর্মুলা ক্যানভাসে রেন্ডার হচ্ছে...' : 'Rendering questions & formulas...');
                         setRawContent(finalHtml);
 
                         if (!hasNoSettings) {
@@ -666,6 +720,8 @@ export const useExamManager = () => {
                             } catch (e) { console.error("Failed to apply pending revisions", e); }
                         }
 
+                        if (setLoadingProgress) setLoadingProgress(70);
+                        if (setLoadingStatusText) setLoadingStatusText(uiLang === 'bn' ? 'প্রশ্ন, চিত্র ও ফর্মুলা ক্যানভাসে রেন্ডার হচ্ছে...' : 'Rendering questions & formulas...');
                         setRawContent(finalHtml);
                         if (!hasNoSettings) {
                             try {
@@ -1490,7 +1546,7 @@ export const useExamManager = () => {
 
               // Add vertical column rule lines to pages for html2canvas compatibility
               const isGlobalColumns = (docSettings.columns || 1) > 1;
-              const showColBorder = (docSettings.sections || []).some(sec => sec.columns > 1 && sec.columnBorder) || (docSettings.columns > 1 && docSettings.columnBorder !== false);
+              const showColBorder = (docSettings.sections || []).some(sec => (sec.columns || 1) > 1 && sec.columnBorder !== false) || ((docSettings.columns || 1) > 1 && docSettings.columnBorder !== false);
               const colCountLines = Math.max(docSettings.columns || 1, ...(docSettings.sections || []).map(sec => sec.columns || 1));
               if (colCountLines > 1 && showColBorder) {
                   const colGap = docSettings.columns > 1 ? (docSettings.colGap || 10) : ((docSettings.sections || []).find(sec => sec.columns > 1 && sec.colGap)?.colGap || docSettings.colGap || 10);
@@ -1502,25 +1558,38 @@ export const useExamManager = () => {
                       const page = pages[pageIdx];
                       const isPage1 = pageIdx === 0;
 
+                      const svgNS = "http://www.w3.org/2000/svg";
+                      const pageSvg = document.createElementNS(svgNS, "svg");
+                      pageSvg.setAttribute("class", "print-column-divider-svg");
+                      pageSvg.style.position = "absolute";
+                      pageSvg.style.top = "0px";
+                      pageSvg.style.left = "0px";
+                      pageSvg.style.width = "100%";
+                      pageSvg.style.height = "100%";
+                      pageSvg.style.pointerEvents = "none";
+                      pageSvg.style.zIndex = "20";
+                      let hasLines = false;
+
                       if (isGlobalColumns) {
                           for (let c = 1; c < colCountLines; c++) {
                               const lineX = paddingLeft + c * colWidth + (c - 0.5) * colGapPx;
-                              const dividerLine = document.createElement('div');
-                              dividerLine.className = 'print-column-divider';
-                              dividerLine.style.position = 'absolute';
-                              dividerLine.style.left = `${lineX}px`;
-                              dividerLine.style.top = `${isPage1 ? (paddingTop + headerHeight) : paddingTop}px`;
-                              dividerLine.style.bottom = `${paddingBottom}px`;
-                              dividerLine.style.width = '0px';
-                              dividerLine.style.borderLeft = '1.5px solid #000000';
-                              dividerLine.style.pointerEvents = 'none';
-                              dividerLine.style.zIndex = '5';
-                              page.appendChild(dividerLine);
+                              const topY = isPage1 ? (paddingTop + headerHeight) : paddingTop;
+                              const bottomY = h - paddingBottom;
+                              
+                              const lineEl = document.createElementNS(svgNS, "line");
+                              lineEl.setAttribute("x1", lineX);
+                              lineEl.setAttribute("y1", topY);
+                              lineEl.setAttribute("x2", lineX);
+                              lineEl.setAttribute("y2", bottomY);
+                              lineEl.setAttribute("stroke", "#000000");
+                              lineEl.setAttribute("stroke-width", "1.5");
+                              pageSvg.appendChild(lineEl);
+                              hasLines = true;
                           }
                       } else {
                           // Draw section-specific column lines
                           (docSettings.sections || []).forEach(sec => {
-                              if (sec.columns > 1 && sec.columnBorder) {
+                              if ((sec.columns || 1) > 1 && sec.columnBorder !== false) {
                                   const qBlocks = Array.from(page.querySelectorAll(`[data-section-id="${sec.id}"][data-type="question-block"]`));
                                   if (qBlocks.length > 0) {
                                       let minTop = Infinity;
@@ -1539,22 +1608,24 @@ export const useExamManager = () => {
                                       if (minTop !== Infinity && maxBottom !== -Infinity) {
                                           for (let c = 1; c < colCountLines; c++) {
                                               const lineX = paddingLeft + c * colWidth + (c - 0.5) * colGapPx;
-                                              const dividerLine = document.createElement('div');
-                                              dividerLine.className = 'print-column-divider';
-                                              dividerLine.style.position = 'absolute';
-                                              dividerLine.style.left = `${lineX}px`;
-                                              dividerLine.style.top = `${minTop}px`;
-                                              dividerLine.style.height = `${maxBottom - minTop}px`;
-                                              dividerLine.style.width = '0px';
-                                              dividerLine.style.borderLeft = '1.5px solid #000000';
-                                              dividerLine.style.pointerEvents = 'none';
-                                              dividerLine.style.zIndex = '5';
-                                              page.appendChild(dividerLine);
+                                              const lineEl = document.createElementNS(svgNS, "line");
+                                              lineEl.setAttribute("x1", lineX);
+                                              lineEl.setAttribute("y1", minTop);
+                                              lineEl.setAttribute("x2", lineX);
+                                              lineEl.setAttribute("y2", maxBottom);
+                                              lineEl.setAttribute("stroke", "#000000");
+                                              lineEl.setAttribute("stroke-width", "1.5");
+                                              pageSvg.appendChild(lineEl);
+                                              hasLines = true;
                                           }
                                       }
                                   }
                               }
                           });
+                      }
+
+                      if (hasLines) {
+                          page.appendChild(pageSvg);
                       }
                   }
               }

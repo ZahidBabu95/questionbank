@@ -8,6 +8,14 @@ const CACHE_TTL_MS = 60000; // 1 minute TTL
 
 export const clearQuestionCache = () => {
     cache.clear();
+    questionDetailCache.clear();
+    try {
+        Object.keys(sessionStorage).forEach(k => {
+            if (k.startsWith('qs_question_detail_')) {
+                sessionStorage.removeItem(k);
+            }
+        });
+    } catch (e) {}
 };
 
 const fetchWithCache = async (cacheKey, apiCall) => {

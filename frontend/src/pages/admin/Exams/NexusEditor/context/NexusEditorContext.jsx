@@ -40,6 +40,18 @@ export const NexusEditorProvider = ({ children }) => {
     // --- Core Document State ---
     const { id } = useParams();
     const [isEditorLoaded, setIsEditorLoaded] = useState(!id);
+    const [loadingProgress, _setLoadingProgress] = useState(0);
+    const setLoadingProgress = React.useCallback((val) => {
+        _setLoadingProgress(prev => {
+            if (typeof val === 'function') {
+                const nextVal = val(prev);
+                return Math.max(prev, nextVal);
+            }
+            if (val === 0) return 0;
+            return Math.max(prev, val);
+        });
+    }, []);
+    const [loadingStatusText, setLoadingStatusText] = useState('');
     const [editorMode, setEditorMode] = useState('STRICT_LINKED');
     const [rawContent, setRawContent] = useState('');
     const [docSettings, setDocSettings] = useState(DEFAULT_SETTINGS);
@@ -380,6 +392,8 @@ export const NexusEditorProvider = ({ children }) => {
         editorMode, setEditorMode,
         rawContent, setRawContent,
         isEditorLoaded, setIsEditorLoaded,
+        loadingProgress, setLoadingProgress,
+        loadingStatusText, setLoadingStatusText,
         docSettings, setDocSettings, updateSetting, updateMultiSettings,
         zoom, setZoom,
         pageCount, setPageCount,
@@ -419,7 +433,7 @@ export const NexusEditorProvider = ({ children }) => {
         selectedImageConfig, setSelectedImageConfig,
         documentQuestions, setDocumentQuestions
     }), [
-        editorMode, rawContent, isEditorLoaded, docSettings, updateSetting, updateMultiSettings,
+        editorMode, rawContent, isEditorLoaded, loadingProgress, loadingStatusText, docSettings, updateSetting, updateMultiSettings,
         zoom, pageCount, examData, isSavingDocument, autoSaveStatus, editor,
         isDownloadingPdf, downloadProgress, downloadStatus, showFilenameModal,
         editorConfig, generationBlueprint,

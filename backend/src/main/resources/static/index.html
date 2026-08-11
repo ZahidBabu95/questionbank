@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QuestionShaper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700;800&family=Baloo+Da+2:wght@400;500;600;700;800&family=Hind+Siliguri:wght@300;400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800;900&family=Noto+Serif+Bengali:wght@400;500;600;700;800&family=Tiro+Bangla:ital@0;1&display=swap" rel="stylesheet" crossorigin="anonymous">
+    <link href="https://fonts.maateen.me/kalpurush/font.css" rel="stylesheet">
+    <link href="https://fonts.maateen.me/solaiman-lipi/font.css" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const token = params.get('token');
+          const userStr = params.get('user');
+          if (token) {
+            localStorage.setItem('token', token);
+          }
+          if (userStr) {
+            try {
+              localStorage.setItem('user', decodeURIComponent(userStr));
+            } catch (e) {
+              localStorage.setItem('user', userStr);
+            }
+          }
+          if (token || userStr) {
+            params.delete('token');
+            params.delete('user');
+            const cleanSearch = params.toString();
+            const newUrl = window.location.pathname + (cleanSearch ? '?' + cleanSearch : '') + window.location.hash;
+            window.history.replaceState({}, document.title, newUrl);
+          }
+        } catch(e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-BNwcMdnf.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-pdfjs-CukKHlp8.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-katex-Byl3-JX9.js">
+    <link rel="stylesheet" crossorigin href="/assets/vendor-katex-kcikWTSf.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-B8J8G_wN.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
