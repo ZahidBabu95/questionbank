@@ -83,16 +83,16 @@ const RichTextEditor = ({
         <div className="relative">
             {/* Equation Button — appears above/right of editor */}
             {showEquation && (
-                <div className={compact ? "absolute top-1.5 right-1.5 z-10" : "flex items-center gap-1.5 mb-1.5"}>
+                <div className={compact ? "absolute top-0.5 right-1 z-10" : "flex items-center gap-1.5 mb-1.5"}>
                     <button
                         type="button"
                         onClick={() => setShowEquationModal(true)}
-                        className={`flex items-center gap-1 bg-indigo-50 text-indigo-750 border border-indigo-200 hover:bg-indigo-100 transition-all active:scale-95 shadow-sm ${
-                            compact ? 'px-1.5 py-0.5 rounded text-[10px] font-black' : 'px-2.5 py-1 text-[11px] font-bold rounded-lg'
+                        className={`flex items-center gap-1 bg-indigo-50 text-indigo-750 border border-indigo-200 hover:bg-indigo-100 transition-all active:scale-95 shadow-2xs ${
+                            compact ? 'px-1.5 py-0 rounded text-[9px] font-black' : 'px-2.5 py-1 text-[11px] font-bold rounded-lg shadow-sm'
                         }`}
                         title="সমীকরণ যোগ করুন (LaTeX)"
                     >
-                        <span className="font-serif italic text-xs">Σ</span>
+                        <span className="font-serif italic text-xs leading-none">Σ</span>
                         {!compact && <span>সমীকরণ</span>}
                     </button>
                     {!compact && (
@@ -112,7 +112,7 @@ const RichTextEditor = ({
                 modules={modules}
                 formats={formats}
                 placeholder={placeholder}
-                className={`${height} ${theme === 'snow' ? 'mb-10' : ''} ${className}`}
+                className={`${height} ${theme === 'snow' ? (compact ? 'mb-0' : 'mb-10') : ''} ${compact ? 'compact-quill' : ''} ${className}`}
             />
 
             {/* Equation Editor Modal */}

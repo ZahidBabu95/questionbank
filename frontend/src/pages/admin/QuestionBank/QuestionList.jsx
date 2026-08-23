@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Virtuoso } from 'react-virtuoso';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal, ShoppingCart, ArrowLeft } from 'lucide-react';
+import { Eye, Edit, Trash2, CheckCircle, XCircle, Clock, Search, Layers, ListFilter, X, ThumbsUp, ThumbsDown, ChevronDown, Filter, FileText, Settings2, Bookmark, BookmarkCheck, GitCompare, Loader2, MoreHorizontal, ShoppingCart, ArrowLeft, ArrowUp } from 'lucide-react';
 import questionService from '../../../services/questionService';
 import academicService from '../../../services/academicService';
 import examService from '../../../services/examService';
@@ -74,7 +73,21 @@ const QuestionList = () => {
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const observerTarget = useRef(null);
+    const prefetchTargetRef = useRef(null);
     const pendingSelectionRef = useRef(null);
+    const [showBackToTop, setShowBackToTop] = useState(false);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            if (window.scrollY > 600) {
+                setShowBackToTop(true);
+            } else {
+                setShowBackToTop(false);
+            }
+        };
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
     const getInitialStatus = (path) => {
         if (path.includes('/drafts')) return 'DRAFT';
         if (path.includes('/pending')) return 'PENDING';
@@ -1014,27 +1027,29 @@ const QuestionList = () => {
         if (currentPage === 1) fetchOverviewStats();
     }, [viewMode, currentPage, itemsPerPage, filterStatus, filterType, filterLanguage, debouncedSearchQuery, selectedLevelId, selectedStreamId, selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, selectedBoards, selectedYears, selectedSchools, filterUnanswered, showAllOverride, reviewItem]);
 
-    // Intersection Observer for Infinite Scrolling
+    // Predictive Pre-fetching: Triggers next batch fetch as soon as user reaches 20th item of current batch
     useEffect(() => {
         if (loading || loadingMore || questions.length === 0) return;
 
         const observer = new IntersectionObserver(
             entries => {
-                const entry = entries[0];
-                if (entry.isIntersecting && currentPage < totalPages) {
+                const isAnyIntersecting = entries.some(entry => entry.isIntersecting);
+                if (isAnyIntersecting && currentPage < totalPages) {
                     setCurrentPage(prev => prev + 1);
                 }
             },
-            { rootMargin: '0px' }
+            { rootMargin: '350px' }
         );
 
-        const target = observerTarget.current;
-        if (target) {
-            observer.observe(target);
-        }
+        const prefetchEl = prefetchTargetRef.current;
+        const bottomEl = observerTarget.current;
+
+        if (prefetchEl) observer.observe(prefetchEl);
+        if (bottomEl) observer.observe(bottomEl);
 
         return () => {
-            if (target) observer.unobserve(target);
+            if (prefetchEl) observer.unobserve(prefetchEl);
+            if (bottomEl) observer.unobserve(bottomEl);
             observer.disconnect();
         };
     }, [loading, loadingMore, currentPage, totalPages, questions.length]);
@@ -2368,20 +2383,18 @@ const QuestionList = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-1 sm:gap-1.5 pb-1 relative" style={{ overflowAnchor: 'none' }}>
-                            {/* Foolproof Observer Target: 2500px tall invisible div at the bottom */}
-                            <div 
-                                ref={observerTarget} 
-                                style={{ position: 'absolute', bottom: 0, height: '2500px', width: '100%', pointerEvents: 'none', zIndex: -1 }} 
-                            />
-                            
-                            <Virtuoso
-                                useWindowScroll={!splitScreenMode}
-                                customScrollParent={splitScreenMode ? (typeof document !== 'undefined' ? document.getElementById('question-list-scroll-container') : undefined) : undefined}
-                                data={questions}
-                                overscan={5}
-                                itemContent={(index, q) => (
-                                    <div key={q.id || index} className="pb-1.5">
+                        <div className="flex flex-col gap-3 pb-4">
+                            {questions.map((q, index) => {
+                                // Predictive pre-fetch trigger attached to item #20 of current batch (30 items before batch end)
+                                const prefetchTriggerIndex = Math.max(0, questions.length - 30);
+                                const isPrefetchTarget = index === prefetchTriggerIndex;
+
+                                return (
+                                    <div 
+                                        key={q.id || index} 
+                                        ref={isPrefetchTarget ? prefetchTargetRef : null} 
+                                        className="w-full"
+                                    >
                                         <QuestionListItem 
                                             q={q}
                                             index={index + 1}
@@ -2400,26 +2413,37 @@ const QuestionList = () => {
                                             isDefaultOrSuperAdmin={isDefaultOrSuperAdmin}
                                         />
                                     </div>
-                                )}
-                            />
-                            
-                            {currentPage < totalPages && (
-                                <div className="py-8 flex flex-col items-center justify-center relative z-10">
-                                    {loadingMore ? (
-                                        <div className="flex flex-col items-center gap-2 opacity-70">
-                                            <div className="w-5 h-5 border-2 border-indigo-200 border-t-primary rounded-full animate-spin"></div>
-                                            <span className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">Loading Questions...</span>
-                                        </div>
-                                    ) : (
-                                        <button 
-                                            onClick={() => setCurrentPage(prev => prev + 1)}
-                                            className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-sm rounded-full transition-all border border-slate-200 hover:border-slate-300 flex items-center shadow-sm"
-                                        >
-                                            Load More Questions
-                                        </button>
-                                    )}
+                                );
+                            })}
+
+                            {/* Shimmer Skeletons while fetching next batch in background */}
+                            {loadingMore && (
+                                <div className="space-y-3 w-full animate-pulse my-2">
+                                    <div className="h-32 bg-slate-100 dark:bg-slate-800/60 rounded-2xl border border-slate-200/50 p-4"></div>
+                                    <div className="h-32 bg-slate-100 dark:bg-slate-800/60 rounded-2xl border border-slate-200/50 p-4"></div>
                                 </div>
                             )}
+
+                            {/* Infinite Scroll Sentinel & Bottom Indicator */}
+                            <div ref={observerTarget} className="py-6 flex flex-col items-center justify-center min-h-[60px] relative z-10">
+                                {loadingMore ? (
+                                    <div className="flex flex-col items-center gap-2 py-2">
+                                        <div className="w-5 h-5 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                                        <span className="text-xs font-bold text-slate-500 tracking-wide">পরবর্তী প্রশ্নসমূহ লোড করা হচ্ছে...</span>
+                                    </div>
+                                ) : currentPage < totalPages ? (
+                                    <button 
+                                        onClick={() => setCurrentPage(prev => prev + 1)}
+                                        className="px-6 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-xs rounded-xl transition-all border border-indigo-200/60 shadow-sm flex items-center gap-2 active:scale-95"
+                                    >
+                                        <span>আরো প্রশ্ন দেখুন ({questions.length} / {totalElements.toLocaleString('bn-BD')})</span>
+                                    </button>
+                                ) : questions.length > 0 ? (
+                                    <span className="text-xs font-semibold text-slate-400 py-2">
+                                        সব প্রশ্ন লোড সম্পন্ন হয়েছে (মোট {totalElements.toLocaleString('bn-BD')}টি)
+                                    </span>
+                                ) : null}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -2644,8 +2668,26 @@ const QuestionList = () => {
                 title="Back"
             >
                 <ArrowLeft size={20} className="stroke-[2.5]" />
-                <span className="text-[8px] font-black tracking-widest mt-0.5 uppercase">Back</span>
             </button>
+        )}
+
+        {/* Floating Scroll Counter & Back To Top Button */}
+        {questions.length > 0 && (
+            <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2">
+                <div className="bg-slate-900/90 backdrop-blur-md text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-2xl border border-white/10 flex items-center gap-2.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>{questions.length} / {totalElements > 0 ? totalElements.toLocaleString('bn-BD') : questions.length} টি প্রশ্ন</span>
+                </div>
+                {showBackToTop && (
+                    <button
+                        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                        className="w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-xl active:scale-95 transition-all border border-indigo-500/50 cursor-pointer"
+                        title="উপরে যান"
+                    >
+                        <ArrowUp size={18} />
+                    </button>
+                )}
+            </div>
         )}
         </div>
     );

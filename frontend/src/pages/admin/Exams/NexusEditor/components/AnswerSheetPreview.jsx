@@ -90,7 +90,7 @@ const processTabularHTML = (html) => {
                 if (group.isTable) {
                     const tableDiv = doc.createElement('div');
                     tableDiv.className = 'nexus-tabular-grid';
-                    tableDiv.setAttribute('style', "font-family: Consolas, Monaco, 'Courier New', monospace !important; white-space: pre !important; font-size: 12.5px !important; line-height: 1.5 !important; background-color: #fafafa; border: 1px solid #d1d5db; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 10px 0; letter-spacing: 0.03em; color: #111827; display: block; width: 100%; box-sizing: border-box;");
+                    tableDiv.setAttribute('style', "font-family: inherit !important; white-space: pre-wrap !important; font-size: inherit !important; line-height: inherit !important; background-color: transparent; border: none; padding: 0; margin: 4px 0; color: inherit; display: block; width: 100%;");
                     
                     group.lines.forEach((lineNodes, lIdx) => {
                         lineNodes.forEach(node => {
@@ -444,13 +444,15 @@ const AnswerSheetPreview = () => {
                                         {[s.showExamType !== false ? s.exam : null, s.showYear !== false ? convertDigits(s.year, s.language) : null].filter(Boolean).join(' - ')}
                                     </div>
                                 )}
-                                {(s.showClass !== false || s.showSubject !== false || s.showGroup) && (
-                                    <div>
-                                        {[
-                                            s.showClass !== false ? `${s.language === 'ENGLISH' ? 'Class' : 'শ্রেণি'}: ${s.className}` : null,
-                                            s.showSubject !== false ? `${s.language === 'ENGLISH' ? 'Subject' : 'বিষয়'}: ${s.subject}` : null,
-                                            (s.showGroup && s.group !== 'সাধারণ' && s.group !== 'General') ? `${s.language === 'ENGLISH' ? 'Group' : 'বিভাগ'}: ${s.group}` : null
-                                        ].filter(Boolean).join(' | ')}
+                                {(s.showClass !== false && s.className) && (
+                                    <div style={{marginBottom: subHeaderItemMargin}}>
+                                        {s.language === 'ENGLISH' ? 'Class' : 'শ্রেণি'}: {s.className}
+                                        {(s.showGroup && s.group !== 'সাধারণ' && s.group !== 'General') ? ` | ${s.language === 'ENGLISH' ? 'Group' : 'বিভাগ'}: ${s.group}` : ''}
+                                    </div>
+                                )}
+                                {(s.showSubject !== false && s.subject) && (
+                                    <div style={{marginBottom: subHeaderItemMargin}}>
+                                        {s.language === 'ENGLISH' ? 'Subject' : 'বিষয়'}: {s.subject}
                                     </div>
                                 )}
                             </div>

@@ -99,11 +99,49 @@ public class QuestionFeedbackServiceImpl implements QuestionFeedbackService {
 
     @Override
     public Page<Question> getUserFavorites(String userEmail, Pageable pageable) {
+        return getUserFavorites(userEmail, java.util.Map.of(), pageable);
+    }
+
+    @Override
+    public Page<Question> getUserFavorites(String userEmail, java.util.Map<String, String> filters, Pageable pageable) {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         
-        Page<QuestionFavorite> favorites = favoriteRepository.findByUserId(user.getId(), pageable);
-        return favorites.map(QuestionFavorite::getQuestion);
+        java.util.List<UUID> favoriteQuestionIds = favoriteRepository.findQuestionIdsByUserId(user.getId());
+        if (favoriteQuestionIds == null || favoriteQuestionIds.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        org.springframework.data.jpa.domain.Specification<Question> favSpec = 
+                (root, query, cb) -> root.get("id").in(favoriteQuestionIds);
+
+        if (filters != null && !filters.isEmpty()) {
+            org.springframework.data.jpa.domain.Specification<Question> filterSpec = 
+                com.testshaper.specification.QuestionSpecification.filterQuestions(
+                    null,
+                    filters.get("filterStatus"),
+                    filters.get("filterType"),
+                    filters.get("search"),
+                    filters.get("language"),
+                    filters.get("levelId"),
+                    filters.get("streamId"),
+                    filters.get("classId"),
+                    filters.get("subjectId"),
+                    filters.get("chapterId"),
+                    filters.get("topicId"),
+                    filters.get("className"),
+                    filters.get("subjectName"),
+                    null,
+                    null,
+                    filters.get("sourceBoards"),
+                    filters.get("sourceYears"),
+                    filters.get("sourceSchools"),
+                    filters.get("filterUnanswered")
+                );
+            favSpec = favSpec.and(filterSpec);
+        }
+
+        return questionRepository.findAll(favSpec, pageable);
     }
 
     @Override

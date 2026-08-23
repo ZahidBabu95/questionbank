@@ -29,7 +29,7 @@ public class UserController {
 
         // ── GET /stats  (MUST be before /{id}) ───────────────────────────────
         @GetMapping("/stats")
-        @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+        @PreAuthorize("isAuthenticated()")
         public ResponseEntity<Map<String, Object>> getUserStats() {
                 return ResponseEntity.ok(Map.of(
                         "success", true,

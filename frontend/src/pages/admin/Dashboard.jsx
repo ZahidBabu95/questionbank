@@ -3,7 +3,7 @@ import {
     Users, BookOpen, FileQuestion, Activity,
     TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Calendar,
     Zap, Target, Clock, Plus, ExternalLink, Loader2, FileText, Layers, Sparkles, X,
-    Award, CheckCircle, XCircle, AlertCircle, ChevronRight, ChevronDown, Search
+    Award, CheckCircle, XCircle, AlertCircle, ChevronRight, ChevronDown, ChevronUp, Search, Sliders, Database, ArrowRight
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -94,10 +94,37 @@ const Dashboard = ({ view = 'overview' }) => {
             return null;
         }
     });
+
+    const userRoleNames = useMemo(() => {
+        if (!user || !user.roles) return [];
+        return user.roles.map(r => (typeof r === 'string' ? r : r.name || '')).map(r => r.toUpperCase());
+    }, [user]);
+
+    const isSuperAdmin = useMemo(() => {
+        return userRoleNames.includes('SUPER_ADMIN') || userRoleNames.includes('ROLE_SUPER_ADMIN') || user?.email === 'admin' || user?.email?.includes('admin@');
+    }, [userRoleNames, user]);
+
+    const isInstituteAdmin = useMemo(() => {
+        return userRoleNames.includes('INSTITUTE_ADMIN') || userRoleNames.includes('ROLE_INSTITUTE_ADMIN');
+    }, [userRoleNames]);
+
+    const isTeacher = useMemo(() => {
+        return userRoleNames.includes('TEACHER') || userRoleNames.includes('ROLE_TEACHER');
+    }, [userRoleNames]);
+
     const [stats, setStats] = useState(() => {
         try {
             const cached = sessionStorage.getItem('dashboard_stats_cache');
-            return cached ? JSON.parse(cached) : null;
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                // Auto-purge stale global dumps (> 50 subjects)
+                if (parsed?.subjectQuestions && Array.isArray(parsed.subjectQuestions) && parsed.subjectQuestions.length > 50) {
+                    sessionStorage.removeItem('dashboard_stats_cache');
+                    return null;
+                }
+                return parsed;
+            }
+            return null;
         } catch (e) {
             return null;
         }
@@ -108,7 +135,14 @@ const Dashboard = ({ view = 'overview' }) => {
     const navigate = useNavigate();
 
     // New state hooks for recent exams monitor and analytics drawer
-    const [recentExams, setRecentExams] = useState([]);
+    const [recentExams, setRecentExams] = useState(() => {
+        try {
+            const cached = sessionStorage.getItem('dashboard_recent_exams_cache');
+            return cached ? JSON.parse(cached) : [];
+        } catch (e) {
+            return [];
+        }
+    });
     const [loadingExams, setLoadingExams] = useState(false);
     const [selectedAnalyticsExamId, setSelectedAnalyticsExamId] = useState(null);
     const [analyticsSubmissions, setAnalyticsSubmissions] = useState([]);
@@ -123,10 +157,31 @@ const Dashboard = ({ view = 'overview' }) => {
     // State hooks for large hierarchical modal
     const [activeLevel, setActiveLevel] = useState('');
     const [activeStream, setActiveStream] = useState('');
+
+    const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
+
+    const toggleBannerCollapse = () => {
+        setIsBannerCollapsed(prev => !prev);
+    };
+
+    // Auto-collapse banner after 3 seconds on initial load so user sees welcome greeting
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setIsBannerCollapsed(true);
+        }, 3000);
+        return () => clearTimeout(timer);
+    }, []);
     const [selectedClassDetail, setSelectedClassDetail] = useState(null);
 
     // Level-wise filter state for Class-wise progress section (null = collapsed by default)
     const [selectedProgressLevel, setSelectedProgressLevel] = useState(null);
+
+    const subjectQuestions = useMemo(() => {
+        const list = stats?.subjectQuestions || [];
+        // If list contains all system subjects (> 50), filter out so only user's active assigned subjects show
+        if (!Array.isArray(list) || list.length > 50) return [];
+        return list;
+    }, [stats]);
 
     const classStatsList = stats?.classStats || [];
 
@@ -144,16 +199,6 @@ const Dashboard = ({ view = 'overview' }) => {
     const handleProgressLevelToggle = (lvl) => {
         setSelectedProgressLevel(prev => prev === lvl ? null : lvl);
     };
-
-
-    useEffect(() => {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-            try {
-                setUser(JSON.parse(storedUser));
-            } catch (e) {}
-        }
-    }, [navigate]);
 
     // Automatic hierarchy selection coordination
     useEffect(() => {
@@ -191,11 +236,11 @@ const Dashboard = ({ view = 'overview' }) => {
                 let data;
                 let activeRoleViewLoc = view;
                 if (view === 'overview') {
-                    if (user.roles?.includes('SUPER_ADMIN') || user.permissions?.includes('ROLES_PERMISSIONS_VIEW') || user.permissions?.includes('SUBSCRIPTION_PACKAGE_VIEW')) {
+                    if (isSuperAdmin || user.permissions?.includes('ROLES_PERMISSIONS_VIEW') || user.permissions?.includes('SUBSCRIPTION_PACKAGE_VIEW')) {
                         activeRoleViewLoc = 'admin';
-                    } else if (user.roles?.includes('INSTITUTE_ADMIN') || user.permissions?.includes('ALL_INSTITUTES_VIEW')) {
+                    } else if (isInstituteAdmin || user.permissions?.includes('ALL_INSTITUTES_VIEW')) {
                         activeRoleViewLoc = 'institute';
-                    } else if (user.roles?.includes('TEACHER') || user.permissions?.includes('ADD_QUESTION_VIEW')) {
+                    } else if (isTeacher || user.permissions?.includes('ADD_QUESTION_VIEW')) {
                         activeRoleViewLoc = 'teacher';
                     } else {
                         activeRoleViewLoc = 'student';
@@ -212,6 +257,9 @@ const Dashboard = ({ view = 'overview' }) => {
                     data = await dashboardService.getStudentStats();
                 }
                 if (data) {
+                    if (data.subjectQuestions && Array.isArray(data.subjectQuestions) && data.subjectQuestions.length > 50) {
+                        data.subjectQuestions = [];
+                    }
                     setStats(data);
                     sessionStorage.setItem('dashboard_stats_cache', JSON.stringify(data));
                 }
@@ -222,7 +270,7 @@ const Dashboard = ({ view = 'overview' }) => {
             }
         };
         fetchStats();
-    }, [user, view]);
+    }, [user, view, isSuperAdmin, isInstituteAdmin, isTeacher]);
 
     // Fetch recent exams dynamically for the "Online Exams & OMR Monitor"
     useEffect(() => {
@@ -230,11 +278,11 @@ const Dashboard = ({ view = 'overview' }) => {
         
         let activeRoleViewLoc = view;
         if (view === 'overview') {
-            if (user.roles.includes('SUPER_ADMIN') || user.permissions?.includes('ROLES_PERMISSIONS_VIEW') || user.permissions?.includes('SUBSCRIPTION_PACKAGE_VIEW')) {
+            if (isSuperAdmin || user.permissions?.includes('ROLES_PERMISSIONS_VIEW') || user.permissions?.includes('SUBSCRIPTION_PACKAGE_VIEW')) {
                 activeRoleViewLoc = 'admin';
-            } else if (user.roles.includes('INSTITUTE_ADMIN') || user.permissions?.includes('ALL_INSTITUTES_VIEW')) {
+            } else if (isInstituteAdmin || user.permissions?.includes('ALL_INSTITUTES_VIEW')) {
                 activeRoleViewLoc = 'institute';
-            } else if (user.roles.includes('TEACHER') || user.permissions?.includes('ADD_QUESTION_VIEW')) {
+            } else if (isTeacher || user.permissions?.includes('ADD_QUESTION_VIEW')) {
                 activeRoleViewLoc = 'teacher';
             } else {
                 activeRoleViewLoc = 'student';
@@ -244,13 +292,12 @@ const Dashboard = ({ view = 'overview' }) => {
         if (activeRoleViewLoc === 'student') return;
 
         const fetchRecentExams = async () => {
-            setLoadingExams(true);
+            if (!recentExams.length) setLoadingExams(true);
             try {
                 const res = await examService.listExams({ size: 5 });
                 if (res.success && res.data && res.data.content) {
                     const mapped = res.data.content.map((exam) => {
                         const submissionsCount = exam.submissionCount || 0;
-                        // Estimate total class size as 40.
                         const totalStudents = 40;
                         const progressPercent = Math.min(100, Math.round((submissionsCount / totalStudents) * 100)) || 0;
 
@@ -266,6 +313,7 @@ const Dashboard = ({ view = 'overview' }) => {
                         };
                     });
                     setRecentExams(mapped);
+                    sessionStorage.setItem('dashboard_recent_exams_cache', JSON.stringify(mapped));
                 }
             } catch (err) {
                 console.error("Failed to fetch recent exams for dashboard monitor", err);
@@ -275,7 +323,7 @@ const Dashboard = ({ view = 'overview' }) => {
         };
 
         fetchRecentExams();
-    }, [user, view, currentLang]);
+    }, [user, view, currentLang, isSuperAdmin, isInstituteAdmin, isTeacher]);
 
     // Fetch submissions list when an exam is selected for inline analytics
     useEffect(() => {
@@ -439,7 +487,12 @@ const Dashboard = ({ view = 'overview' }) => {
         return (
             <div className="p-6 space-y-6 animate-pulse">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-200/60">
-                    <div className="h-8 bg-slate-200 rounded-lg w-48"></div>
+                    <div className="flex items-center gap-3">
+                        <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+                        <span className="text-sm font-bold text-slate-700">
+                            {currentLang === 'bn' ? 'ড্যাশবোর্ড তথ্য লোড হচ্ছে, অনুগ্রহ করে কিছু মুহূর্ত অপেক্ষা করুন...' : 'Preparing dashboard analytics, please wait...'}
+                        </span>
+                    </div>
                     <div className="h-9 bg-slate-200 rounded-xl w-32"></div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -462,7 +515,34 @@ const Dashboard = ({ view = 'overview' }) => {
         );
     }
 
-    if (!stats) return null;
+    if (!stats) {
+        return (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4 border border-indigo-100 shadow-sm">
+                    <AlertCircle size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">
+                    {currentLang === 'bn' ? 'ড্যাশবোর্ড তথ্য লোড হতে সমস্যা হয়েছে' : 'Dashboard Data Loading Issue'}
+                </h3>
+                <p className="text-sm text-slate-500 max-w-md mb-6">
+                    {currentLang === 'bn'
+                        ? 'সার্ভার থেকে পরিসংখ্যান তথ্য সংগ্রেহ করতে সমস্যা হচ্ছে। অনুগ্রহ করে নিচে ক্লিক করে পুনরায় লোড করার চেষ্টা করুন।'
+                        : 'Fetching dashboard statistics is taking longer than expected. Click below to reload data.'}
+                </p>
+                <button
+                    onClick={() => {
+                        setLoading(true);
+                        try { sessionStorage.removeItem('dashboard_stats_cache'); } catch (e) {}
+                        window.location.reload();
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-600/20 active:scale-95 transition-all flex items-center gap-2"
+                >
+                    <Zap size={16} />
+                    {currentLang === 'bn' ? 'পুনরায় লোড করুন' : 'Reload Dashboard'}
+                </button>
+            </div>
+        );
+    }
 
     const {
         totalUsers = 0, userTrend = 0,
@@ -471,7 +551,7 @@ const Dashboard = ({ view = 'overview' }) => {
         examsConducted = 0, examTrend = 0,
         approvedQuestionsCount = 0, globalQuestionsCount = 0,
         questionTypes = [], activityAnalytics = [], recentActivities = [],
-        subjectQuestions = [], classStats = []
+        subjectQuestions: rawSubjectQuestions = [], classStats = []
     } = stats || {};
 
     const hasPerm = (permId, action = 'VIEW') => {
@@ -561,78 +641,203 @@ const Dashboard = ({ view = 'overview' }) => {
 
     return (
         <motion.div 
-            className="space-y-6 md:space-y-8 lg:space-y-10"
+            className="space-y-5 md:space-y-6 lg:space-y-7"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
         >
-            {/* ─── Header ─── */}
-            <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 bg-gradient-to-r from-blue-50 to-indigo-50/50 p-6 rounded-3xl border border-white shadow-sm">
-                <div>
-                    <div className="flex items-center gap-2 mb-2">
-                        <span className="px-3 py-1 bg-white rounded-full text-xs font-bold text-primary shadow-sm border border-slate-100 flex items-center gap-1.5">
-                            <Sparkles size={14} className="text-amber-500" />
-                            {currentDate}
-                        </span>
-                        {view !== 'overview' && (
-                            <span className="px-3 py-1 bg-blue-100 rounded-full text-xs font-bold text-blue-700 shadow-sm border border-blue-200">
-                                {view === 'admin' ? t('db_super_admin_view') : view === 'institute' ? t('db_institute_admin_view') : view === 'teacher' ? t('db_teacher_view') : t('db_student_view')}
+            {/* ─── Unified Welcome & AI Workspace Banner ─── */}
+            <motion.div variants={itemVariants} className="space-y-4">
+                {isBannerCollapsed ? (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-violet-950 border border-indigo-800/40 rounded-2xl px-5 py-3.5 text-white shadow-md">
+                        <div className="flex items-center flex-wrap gap-2.5">
+                            <span className="px-2.5 py-0.5 bg-white/10 rounded-full text-[11px] font-bold text-amber-300 border border-white/10 flex items-center gap-1.5 shadow-sm">
+                                <Sparkles size={13} className="text-amber-400 animate-pulse" />
+                                {currentDate}
                             </span>
-                        )}
-                    </div>
-                    <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight">{t('db_welcome_back')}, {user?.name || t('db_welcome_fallback_name')}! 👋</h1>
-                    <p className="text-slate-500 text-sm md:text-base mt-2 max-w-xl leading-relaxed">
-                        {activeRoleView === 'admin' && t('db_admin_welcome_text')}
-                        {activeRoleView === 'institute' && t('db_institute_welcome_text')}
-                        {activeRoleView === 'teacher' && t('db_teacher_welcome_text')}
-                        {activeRoleView === 'student' && t('db_student_welcome_text')}
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-slate-200/60 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm active:scale-[0.97]">
-                        <Calendar size={16} />
-                        <span className="hidden sm:inline">{t('db_last_30_days')}</span>
-                        <span className="sm:hidden">{t('db_last_30_days_short')}</span>
-                    </button>
-                    <button className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 active:scale-[0.97]">
-                        <ExternalLink size={16} />
-                        <span className="hidden sm:inline">{t('db_export_report')}</span>
-                        <span className="sm:hidden">{t('db_export_short')}</span>
-                    </button>
-                </div>
-            </motion.div>
-
-            {/* ─── AI Workspace Banner ─── */}
-            <motion.div 
-                variants={itemVariants} 
-                className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 p-6 md:p-8 text-white shadow-xl shadow-indigo-100/30 border border-white/10"
-            >
-                {/* Decorative blur elements */}
-                <div className="absolute -right-12 -top-12 w-48 h-48 bg-white/15 rounded-full blur-2xl pointer-events-none animate-pulse"></div>
-                <div className="absolute -left-12 -bottom-12 w-48 h-48 bg-indigo-400/20 rounded-full blur-3xl pointer-events-none"></div>
-
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="space-y-3 max-w-2xl">
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] md:text-xs font-bold tracking-wider uppercase">
-                            <Sparkles size={12} className="text-amber-300 animate-pulse" />
-                            <span>{t('db_ai_next_gen')}</span>
+                            {view !== 'overview' && (
+                                <span className="px-2.5 py-0.5 bg-indigo-500/30 rounded-full text-[11px] font-bold text-indigo-200 border border-indigo-400/30">
+                                    {view === 'admin' ? t('db_super_admin_view') : view === 'institute' ? t('db_institute_admin_view') : view === 'teacher' ? t('db_teacher_view') : t('db_student_view')}
+                                </span>
+                            )}
+                            <span className="text-sm font-extrabold text-white tracking-tight">
+                                {t('db_welcome_back')}, {user?.name || t('db_welcome_fallback_name')}! 👋
+                            </span>
+                            <span className="hidden md:inline text-xs text-indigo-200/80 font-medium">
+                                — {activeRoleView === 'admin' && t('db_admin_welcome_text')}
+                                {activeRoleView === 'institute' && t('db_institute_welcome_text')}
+                                {activeRoleView === 'teacher' && t('db_teacher_welcome_text')}
+                                {activeRoleView === 'student' && t('db_student_welcome_text')}
+                            </span>
                         </div>
-                        <h2 className="text-xl md:text-2xl lg:text-3xl font-extrabold tracking-tight">
-                            {t('db_ai_co_pilot')}
-                        </h2>
-                        <p className="text-white/80 text-xs md:text-sm leading-relaxed max-w-xl">
-                            {t('db_ai_co_pilot_desc')}
-                        </p>
+                        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                            <button
+                                onClick={toggleBannerCollapse}
+                                className="text-xs font-bold text-indigo-200 hover:text-white flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3.5 py-1.5 rounded-xl transition-all border border-white/10 active:scale-95 shadow-sm"
+                                title="AI ব্যানার খুলুন"
+                            >
+                                <ChevronDown size={14} />
+                                <span>{currentLang === 'bn' ? 'AI ব্যানার খুলুন' : 'Show AI Banner'}</span>
+                            </button>
+                        </div>
                     </div>
-                    <div className="flex-shrink-0">
+                ) : (
+                    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 p-5 md:p-6 text-white shadow-xl border border-white/15">
+                        {/* Decorative blur elements */}
+                        <div className="absolute -right-12 -top-12 w-56 h-56 bg-white/15 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
+                        <div className="absolute -left-12 -bottom-12 w-56 h-56 bg-indigo-400/20 rounded-full blur-3xl pointer-events-none"></div>
+
+                        {/* Top Control Bar */}
+                        <div className="relative z-10 flex items-center justify-between gap-2 mb-3">
+                            <div className="flex items-center flex-wrap gap-2">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold tracking-wide">
+                                    <Sparkles size={13} className="text-amber-300 animate-pulse" />
+                                    {currentDate}
+                                </span>
+                                {view !== 'overview' && (
+                                    <span className="px-2.5 py-1 bg-white/15 backdrop-blur-md rounded-full text-xs font-bold text-white border border-white/20">
+                                        {view === 'admin' ? t('db_super_admin_view') : view === 'institute' ? t('db_institute_admin_view') : view === 'teacher' ? t('db_teacher_view') : t('db_student_view')}
+                                    </span>
+                                )}
+                            </div>
+                            <button
+                                onClick={toggleBannerCollapse}
+                                className="text-white/80 hover:text-white p-1.5 rounded-xl hover:bg-white/15 transition-all active:scale-90"
+                                title="ব্যানার সংকুচিত করুন"
+                            >
+                                <ChevronUp size={18} />
+                            </button>
+                        </div>
+
+                        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+                            <div className="space-y-1.5 max-w-2xl">
+                                <h1 className="text-xl md:text-3xl font-black tracking-tight">
+                                    {t('db_welcome_back')}, {user?.name || t('db_welcome_fallback_name')}! 👋
+                                </h1>
+                                <p className="text-white/85 text-xs md:text-sm leading-relaxed max-w-xl">
+                                    {activeRoleView === 'admin' && t('db_admin_welcome_text')}
+                                    {activeRoleView === 'institute' && t('db_institute_welcome_text')}
+                                    {activeRoleView === 'teacher' && t('db_teacher_welcome_text')}
+                                    {activeRoleView === 'student' && t('db_student_welcome_text')}
+                                </p>
+                            </div>
+                            <div className="flex-shrink-0 flex items-center gap-3">
+                                <Link 
+                                    to="/ai-workspace"
+                                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white text-indigo-700 font-extrabold text-xs md:text-sm rounded-xl hover:bg-indigo-50 hover:shadow-lg hover:shadow-white/20 active:scale-[0.98] transition-all duration-300 group shadow-md"
+                                >
+                                    <span>{t('db_launch_ai')}</span>
+                                    <Zap size={15} className="text-amber-500 fill-amber-500 group-hover:scale-110 transition-transform duration-300" />
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 🚀 ULTRA-PREMIUM QUICK ACCESS ACTION CARDS GRID */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-1">
+                    {/* Card 1: Auto 1-Click Question Generator */}
+                    <motion.div
+                        whileHover={{ y: -6, scale: 1.02 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    >
                         <Link 
-                            to="/ai-workspace"
-                            className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-white text-indigo-700 font-extrabold text-sm rounded-2xl hover:bg-indigo-50 hover:shadow-lg hover:shadow-white/20 active:scale-[0.98] transition-all duration-300 group"
+                            to="/exams/generate/auto" 
+                            className="group relative overflow-hidden bg-gradient-to-br from-white/95 via-amber-50/25 to-orange-50/35 backdrop-blur-2xl border border-amber-200/80 hover:border-amber-400/90 rounded-3xl p-5 transition-all duration-300 shadow-[0_6px_25px_rgba(245,158,11,0.06),0_0_1px_1px_rgba(255,255,255,0.9)_inset] hover:shadow-[0_18px_38px_-6px_rgba(245,158,11,0.22)] flex flex-col justify-between h-full min-h-[148px]"
                         >
-                            <span>{t('db_launch_ai')}</span>
-                            <Zap size={16} className="text-amber-500 fill-amber-500 group-hover:scale-110 transition-transform duration-300" />
+                            {/* Background Ambient Mesh Glow */}
+                            <div className="absolute -right-10 -bottom-10 w-36 h-36 bg-gradient-to-br from-amber-400/20 via-orange-400/10 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none"></div>
+                            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 rounded-t-3xl opacity-80 group-hover:opacity-100 transition-opacity"></div>
+
+                            <div className="relative z-10 flex items-start justify-between">
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/30 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 ring-4 ring-amber-100/80">
+                                    <Zap size={22} className="animate-pulse fill-white/20" />
+                                </div>
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-3 py-1 bg-amber-100/80 text-amber-900 rounded-full uppercase tracking-wider border border-amber-300/70 backdrop-blur-md shadow-xs">
+                                    <Sparkles size={11} className="text-amber-600 animate-spin" style={{ animationDuration: '4s' }} />
+                                    {currentLang === 'bn' ? 'অটো ১-ক্লিক' : 'Auto 1-Click'}
+                                </span>
+                            </div>
+
+                            <div className="relative z-10 mt-4">
+                                <h3 className="text-base font-black text-slate-800 group-hover:text-amber-700 transition-colors flex items-center gap-2">
+                                    <span>{currentLang === 'bn' ? 'অটো এক-ক্লিক প্রশ্ন তৈরি' : 'Auto 1-Click Question Builder'}</span>
+                                    <ArrowRight size={16} className="text-amber-500 transition-all duration-300 group-hover:translate-x-1.5" />
+                                </h3>
+                                <p className="text-xs font-semibold text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
+                                    {currentLang === 'bn' ? 'সিলেবাস ও বিষয় বেছে ১-ক্লিকে ফুল প্রশ্নপত্র তৈরি করুন।' : 'Generate full question papers in 1 click by syllabus.'}
+                                </p>
+                            </div>
                         </Link>
-                    </div>
+                    </motion.div>
+
+                    {/* Card 2: Manual Question Selection */}
+                    <motion.div
+                        whileHover={{ y: -6, scale: 1.02 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    >
+                        <Link 
+                            to="/exams/generate/manual" 
+                            className="group relative overflow-hidden bg-gradient-to-br from-white/95 via-indigo-50/25 to-violet-50/35 backdrop-blur-2xl border border-indigo-200/80 hover:border-indigo-400/90 rounded-3xl p-5 transition-all duration-300 shadow-[0_6px_25px_rgba(99,102,241,0.06),0_0_1px_1px_rgba(255,255,255,0.9)_inset] hover:shadow-[0_18px_38px_-6px_rgba(99,102,241,0.22)] flex flex-col justify-between h-full min-h-[148px]"
+                        >
+                            {/* Background Ambient Mesh Glow */}
+                            <div className="absolute -right-10 -bottom-10 w-36 h-36 bg-gradient-to-br from-indigo-400/20 via-purple-400/10 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none"></div>
+                            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 rounded-t-3xl opacity-80 group-hover:opacity-100 transition-opacity"></div>
+
+                            <div className="relative z-10 flex items-start justify-between">
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/30 group-hover:scale-110 group-hover:-rotate-6 transition-all duration-300 ring-4 ring-indigo-100/80">
+                                    <Sliders size={22} />
+                                </div>
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-3 py-1 bg-indigo-100/80 text-indigo-900 rounded-full uppercase tracking-wider border border-indigo-300/70 backdrop-blur-md shadow-xs">
+                                    {currentLang === 'bn' ? 'ম্যানুয়াল সিলেক্ট' : 'Manual Pick'}
+                                </span>
+                            </div>
+
+                            <div className="relative z-10 mt-4">
+                                <h3 className="text-base font-black text-slate-800 group-hover:text-indigo-700 transition-colors flex items-center gap-2">
+                                    <span>{currentLang === 'bn' ? 'ম্যানুয়ালি প্রশ্ন নির্বাচন' : 'Manual Question Selector'}</span>
+                                    <ArrowRight size={16} className="text-indigo-500 transition-all duration-300 group-hover:translate-x-1.5" />
+                                </h3>
+                                <p className="text-xs font-semibold text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
+                                    {currentLang === 'bn' ? 'অধ্যায় থেকে পছন্দমতো প্রশ্ন বেছে কাস্টম পেপার তৈরি করুন।' : 'Handpick questions from chapters for custom papers.'}
+                                </p>
+                            </div>
+                        </Link>
+                    </motion.div>
+
+                    {/* Card 3: Question Bank Repository */}
+                    <motion.div
+                        whileHover={{ y: -6, scale: 1.02 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    >
+                        <Link 
+                            to="/questions/approved" 
+                            className="group relative overflow-hidden bg-gradient-to-br from-white/95 via-emerald-50/25 to-teal-50/35 backdrop-blur-2xl border border-emerald-200/80 hover:border-emerald-400/90 rounded-3xl p-5 transition-all duration-300 shadow-[0_6px_25px_rgba(16,185,129,0.06),0_0_1px_1px_rgba(255,255,255,0.9)_inset] hover:shadow-[0_18px_38px_-6px_rgba(16,185,129,0.22)] flex flex-col justify-between h-full min-h-[148px]"
+                        >
+                            {/* Background Ambient Mesh Glow */}
+                            <div className="absolute -right-10 -bottom-10 w-36 h-36 bg-gradient-to-br from-emerald-400/20 via-teal-400/10 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none"></div>
+                            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-500 rounded-t-3xl opacity-80 group-hover:opacity-100 transition-opacity"></div>
+
+                            <div className="relative z-10 flex items-start justify-between">
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 ring-4 ring-emerald-100/80">
+                                    <Database size={22} />
+                                </div>
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-3 py-1 bg-emerald-100/80 text-emerald-900 rounded-full uppercase tracking-wider border border-emerald-300/70 backdrop-blur-md shadow-xs">
+                                    {currentLang === 'bn' ? 'প্রশ্ন ব্যাংক' : 'Question Bank'}
+                                </span>
+                            </div>
+
+                            <div className="relative z-10 mt-4">
+                                <h3 className="text-base font-black text-slate-800 group-hover:text-emerald-700 transition-colors flex items-center gap-2">
+                                    <span>{currentLang === 'bn' ? 'প্রশ্ন ব্যাংক সংগ্রহশালা' : 'Question Bank Explorer'}</span>
+                                    <ArrowRight size={16} className="text-emerald-500 transition-all duration-300 group-hover:translate-x-1.5" />
+                                </h3>
+                                <p className="text-xs font-semibold text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
+                                    {currentLang === 'bn' ? 'বিষয় ও অধ্যায়ভিত্তিক সকল অনুমোদিত প্রশ্ন ফিল্টার করুন।' : 'Explore and filter approved questions by topic.'}
+                                </p>
+                            </div>
+                        </Link>
+                    </motion.div>
                 </div>
             </motion.div>
 
@@ -734,18 +939,24 @@ const Dashboard = ({ view = 'overview' }) => {
 
             {/* ─── Class-wise Books & Questions Progress ─── */}
             {activeRoleView !== 'student' && classStats && classStats.length > 0 && (
-                <motion.div variants={itemVariants} className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-5 md:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_25px_-4px_rgba(0,0,0,0.03)] space-y-5">
+                <motion.div 
+                    variants={itemVariants} 
+                    className="relative overflow-hidden bg-gradient-to-br from-white/95 via-[#fcfdfe] to-[#f8faff] backdrop-blur-2xl p-6 md:p-7 rounded-3xl border border-white/80 shadow-[0_10px_35px_-5px_rgba(15,23,42,0.04),0_0_1px_1px_rgba(255,255,255,0.9)_inset] ring-1 ring-slate-200/70 space-y-6"
+                >
+                    {/* Ambient subtle light mesh */}
+                    <div className="absolute -right-20 -top-20 w-64 h-64 bg-gradient-to-br from-indigo-100/40 via-violet-100/20 to-transparent rounded-full blur-3xl pointer-events-none"></div>
+
                     {/* Header Row */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-800/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs">
-                                <Layers size={20} />
+                    <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                        <div className="flex items-center gap-3.5">
+                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20 ring-4 ring-indigo-50/80 shrink-0">
+                                <Layers size={22} strokeWidth={2.2} />
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                                <h3 className="text-base font-black text-slate-800 tracking-tight">
                                     {currentLang === 'bn' ? 'শ্রেণিভিত্তিক বই ও প্রশ্ন অগ্রগতি' : 'Class-wise Books & Questions Progress'}
                                 </h3>
-                                <p className="text-xs text-slate-400 font-medium mt-0.5">
+                                <p className="text-xs text-slate-500 font-medium mt-0.5">
                                     {currentLang === 'bn' 
                                         ? 'প্রতিটি শ্রেণি ও স্তরের লাইভ বই এবং প্রশ্ন কভারেজ অগ্রগতি।' 
                                         : 'Live book and question coverage metrics by academic level.'}
@@ -754,8 +965,8 @@ const Dashboard = ({ view = 'overview' }) => {
                         </div>
 
                         <div className="flex items-center gap-2 self-start sm:self-auto">
-                            <span className="px-3 py-1 bg-gradient-to-r from-indigo-500/10 to-violet-500/10 text-indigo-600 dark:text-indigo-400 rounded-full text-xs font-extrabold border border-indigo-200/50 dark:border-indigo-800/50 flex items-center gap-1.5 shadow-xs">
-                                <BookOpen size={13} />
+                            <span className="px-3.5 py-1.5 bg-indigo-50/90 text-indigo-700 rounded-full text-xs font-black border border-indigo-100/80 shadow-xs flex items-center gap-1.5">
+                                <BookOpen size={14} className="text-indigo-600" />
                                 <span>{classStats.length} {currentLang === 'bn' ? 'টি শ্রেণি' : 'Classes'}</span>
                             </span>
                         </div>
@@ -763,8 +974,8 @@ const Dashboard = ({ view = 'overview' }) => {
 
                     {/* Level Filter Selector Bar */}
                     {progressLevelsList.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-2 pt-1">
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
+                        <div className="relative z-10 flex flex-wrap items-center gap-2.5 pt-1">
+                            <span className="text-xs font-black text-slate-400 uppercase tracking-wider mr-1">
                                 {currentLang === 'bn' ? 'স্তর নির্বাচন:' : 'Select Level:'}
                             </span>
 
@@ -775,38 +986,38 @@ const Dashboard = ({ view = 'overview' }) => {
                                     <button
                                         key={lvl}
                                         onClick={() => handleProgressLevelToggle(lvl)}
-                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center gap-2 active:scale-95 ${
+                                        className={`px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 flex items-center gap-2 active:scale-95 ${
                                             isSelected
-                                                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-400/30'
-                                                : 'bg-slate-100/80 hover:bg-slate-200/70 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60'
+                                                ? 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white shadow-lg shadow-indigo-600/25 ring-2 ring-indigo-300/40'
+                                                : 'bg-white/90 hover:bg-white text-slate-700 border border-slate-200/80 hover:border-indigo-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]'
                                         }`}
                                     >
                                         <span>{lvl}</span>
-                                        <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
-                                            isSelected ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                            isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200/60'
                                         }`}>
                                             {count}
                                         </span>
-                                        <ChevronDown size={14} className={`transition-transform duration-300 ${isSelected ? 'rotate-180' : ''}`} />
+                                        <ChevronDown size={14} className={`transition-transform duration-300 ${isSelected ? 'rotate-180 text-white' : 'text-slate-400'}`} />
                                     </button>
                                 );
                             })}
 
                             <button
                                 onClick={() => handleProgressLevelToggle('ALL')}
-                                className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center gap-2 active:scale-95 ${
+                                className={`px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 flex items-center gap-2 active:scale-95 ${
                                     selectedProgressLevel === 'ALL'
-                                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-400/30'
-                                        : 'bg-slate-100/80 hover:bg-slate-200/70 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60'
+                                        ? 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white shadow-lg shadow-indigo-600/25 ring-2 ring-indigo-300/40'
+                                        : 'bg-white/90 hover:bg-white text-slate-700 border border-slate-200/80 hover:border-indigo-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]'
                                 }`}
                             >
                                 <span>{currentLang === 'bn' ? 'সব দেখান' : 'Show All'}</span>
-                                <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
-                                    selectedProgressLevel === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                    selectedProgressLevel === 'ALL' ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200/60'
                                 }`}>
                                     {classStats.length}
                                 </span>
-                                <ChevronDown size={14} className={`transition-transform duration-300 ${selectedProgressLevel === 'ALL' ? 'rotate-180' : ''}`} />
+                                <ChevronDown size={14} className={`transition-transform duration-300 ${selectedProgressLevel === 'ALL' ? 'rotate-180 text-white' : 'text-slate-400'}`} />
                             </button>
                         </div>
                     )}
@@ -820,55 +1031,57 @@ const Dashboard = ({ view = 'overview' }) => {
                                 animate={{ opacity: 1, height: 'auto' }}
                                 exit={{ opacity: 0, height: 0 }}
                                 transition={{ duration: 0.25 }}
-                                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2"
+                                className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2"
                             >
                                 {filteredClassStats.map((cls) => (
                                     <motion.div 
                                         key={cls.classId}
-                                        whileHover={{ y: -4, boxShadow: '0 12px 30px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04)' }}
-                                        className="bg-white dark:bg-slate-800/90 p-5 rounded-2xl shadow-xs border border-slate-200/70 dark:border-slate-700/60 hover:border-indigo-200 transition-all duration-300 flex flex-col justify-between"
+                                        whileHover={{ y: -4, boxShadow: '0 14px 30px -5px rgba(99, 102, 241, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.03)' }}
+                                        className="bg-white/95 hover:bg-white p-5 rounded-2xl shadow-xs border border-slate-200/80 hover:border-indigo-300 transition-all duration-300 flex flex-col justify-between group"
                                     >
-                                        <div className="space-y-3">
+                                        <div className="space-y-3.5">
                                             <div className="flex items-center justify-between">
-                                                <h4 className="text-sm font-black text-slate-800 dark:text-slate-100">{cls.className}</h4>
-                                                <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-lg text-[10px] font-extrabold border border-blue-100 dark:border-blue-800/50">
+                                                <h4 className="text-sm font-black text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors">
+                                                    {cls.className}
+                                                </h4>
+                                                <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-extrabold border border-indigo-100 shadow-2xs">
                                                     {cls.totalBooks.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} {currentLang === 'bn' ? 'টি বই' : 'Books'}
                                                 </span>
                                             </div>
 
                                             {/* Stats grid */}
                                             <div className="grid grid-cols-3 gap-2 py-1">
-                                                <div className="bg-emerald-50/60 dark:bg-emerald-950/30 rounded-xl p-2 text-center border border-emerald-100/50 dark:border-emerald-900/30">
-                                                    <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'bn' ? 'প্রশ্ন সম্পন্ন' : 'Done'}</span>
-                                                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                                                <div className="bg-emerald-50/70 rounded-xl p-2 text-center border border-emerald-100/80 shadow-2xs">
+                                                    <span className="text-[10px] text-emerald-600 font-bold block">{currentLang === 'bn' ? 'প্রশ্ন সম্পন্ন' : 'Done'}</span>
+                                                    <span className="text-xs font-black text-emerald-700 block mt-0.5">
                                                         {cls.booksWithQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
                                                     </span>
                                                 </div>
-                                                <div className="bg-rose-50/60 dark:bg-rose-950/30 rounded-xl p-2 text-center border border-rose-100/50 dark:border-rose-900/30">
-                                                    <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'bn' ? 'প্রশ্ন বাকি' : 'Pending'}</span>
-                                                    <span className="text-xs font-black text-rose-500 dark:text-rose-400 block mt-0.5">
+                                                <div className="bg-rose-50/70 rounded-xl p-2 text-center border border-rose-100/80 shadow-2xs">
+                                                    <span className="text-[10px] text-rose-600 font-bold block">{currentLang === 'bn' ? 'প্রশ্ন বাকি' : 'Pending'}</span>
+                                                    <span className="text-xs font-black text-rose-700 block mt-0.5">
                                                         {cls.booksWithoutQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
                                                     </span>
                                                 </div>
-                                                <div className="bg-slate-50 dark:bg-slate-700/40 rounded-xl p-2 text-center border border-slate-100 dark:border-slate-700/50">
-                                                    <span className="text-[10px] text-slate-400 font-bold block">{currentLang === 'bn' ? 'মোট প্রশ্ন' : 'Questions'}</span>
-                                                    <span className="text-xs font-black text-slate-800 dark:text-slate-200 block mt-0.5">
+                                                <div className="bg-slate-50/80 rounded-xl p-2 text-center border border-slate-200/70 shadow-2xs">
+                                                    <span className="text-[10px] text-slate-500 font-bold block">{currentLang === 'bn' ? 'মোট প্রশ্ন' : 'Questions'}</span>
+                                                    <span className="text-xs font-black text-slate-800 block mt-0.5">
                                                         {cls.totalQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
                                                     </span>
                                                 </div>
                                             </div>
 
                                             {/* Status progress bar */}
-                                            <div className="space-y-1">
-                                                <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-500">
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-600">
                                                     <span>{currentLang === 'bn' ? 'প্রশ্ন কভারেজ' : 'Question Coverage'}</span>
-                                                    <span className="text-indigo-600 dark:text-indigo-400">
+                                                    <span className="text-indigo-600 font-black">
                                                         {cls.totalBooks > 0 
                                                             ? Math.round((cls.booksWithQuestions / cls.totalBooks) * 100) 
                                                             : 0}%
                                                     </span>
                                                 </div>
-                                                <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/50">
                                                     <div 
                                                         className={`h-full rounded-full transition-all duration-500 ${
                                                             cls.booksWithoutQuestions === 0 
@@ -885,7 +1098,7 @@ const Dashboard = ({ view = 'overview' }) => {
 
                                         <button
                                             onClick={() => setSelectedClassStats(cls)}
-                                            className="mt-4 w-full py-2.5 bg-slate-50 hover:bg-indigo-50/50 hover:text-indigo-600 dark:bg-slate-700/50 dark:hover:bg-slate-700 active:scale-[0.98] border border-slate-200/60 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                                            className="mt-4 w-full py-2.5 bg-slate-50 hover:bg-indigo-600 hover:text-white text-slate-700 text-xs font-extrabold rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 border border-slate-200/80 hover:border-transparent shadow-2xs active:scale-[0.98]"
                                         >
                                             <ExternalLink size={13} />
                                             <span>{currentLang === 'bn' ? 'বইয়ের তালিকা ও অগ্রগতি' : 'Books List & Progress'}</span>
@@ -897,17 +1110,17 @@ const Dashboard = ({ view = 'overview' }) => {
                             <motion.div 
                                 initial={{ opacity: 0, y: 5 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="p-5 rounded-2xl bg-gradient-to-r from-indigo-50/50 via-purple-50/30 to-slate-50/50 dark:from-slate-800/40 dark:to-slate-800/20 border border-indigo-100/60 dark:border-indigo-900/30 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left"
+                                className="relative z-10 p-5 rounded-2xl bg-gradient-to-r from-white via-indigo-50/40 to-slate-50 border border-indigo-100/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
-                                        <Sparkles size={18} className="animate-pulse" />
+                                <div className="flex items-center gap-3.5">
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shadow-xs shrink-0">
+                                        <Sparkles size={19} className="text-amber-500 animate-pulse" />
                                     </div>
                                     <div>
-                                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                        <h4 className="text-xs font-black text-slate-800">
                                             {currentLang === 'bn' ? 'শ্রেণিভিত্তিক বিস্তারিত তথ্য দেখতে যেকোনো স্তর সিলেক্ট করুন' : 'Select an academic level above to view progress'}
                                         </h4>
-                                        <p className="text-[11px] text-slate-400 mt-0.5">
+                                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">
                                             {currentLang === 'bn' 
                                                 ? 'যেকোনো স্তরের বোতামে ক্লিক করলে প্রশ্ন সম্পন্ন ও বাকি থাকা বইয়ের তালিকা দেখা যাবে।' 
                                                 : 'Click any level tab above to expand total books & question metrics.'}
@@ -917,9 +1130,10 @@ const Dashboard = ({ view = 'overview' }) => {
 
                                 <button
                                     onClick={() => handleProgressLevelToggle(progressLevelsList[0] || 'ALL')}
-                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold transition-all shadow-sm shadow-indigo-600/20 shrink-0 active:scale-95"
+                                    className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-indigo-600/20 shrink-0 active:scale-95 flex items-center gap-1.5"
                                 >
-                                    {currentLang === 'bn' ? 'প্রথম স্তর দেখুন' : 'Explore Level'}
+                                    <span>{currentLang === 'bn' ? 'স্তর দেখুন' : 'Explore Level'}</span>
+                                    <ChevronDown size={14} />
                                 </button>
                             </motion.div>
                         )}
@@ -927,29 +1141,7 @@ const Dashboard = ({ view = 'overview' }) => {
                 </motion.div>
             )}
 
-            {/* ─── Quick Actions ─── */}
-            <motion.div variants={itemVariants}>
-                <h3 className="text-sm font-extrabold text-slate-500 uppercase tracking-[0.2em] mb-4 pl-1">{t('db_quick_actions')}</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
-                    {/* Admin/Institute/Teacher Quick Actions */}
-                    {activeRoleView !== 'student' ? (
-                        <>
-                            <QuickAction icon={FileText} label={t('db_action_manual')} to="/exams/generate/manual" color="bg-blue-500" />
-                            <QuickAction icon={Zap} label={t('db_action_auto')} to="/exams/generate/auto" color="bg-indigo-500" />
-                            <QuickAction icon={BookOpen} label={t('db_action_qbank')} to="/questions/approved" color="bg-violet-500" />
-                            <QuickAction icon={Clock} label={t('db_action_pending')} to="/questions/pending" color="bg-amber-500" />
-                        </>
-                    ) : (
-                        /* Student Quick Actions */
-                        <>
-                            <QuickAction icon={FileText} label={t('db_action_practice')} to="/exams/generate/auto" color="bg-blue-500" />
-                            <QuickAction icon={Layers} label={t('db_action_lectures')} to="/lectures/attach" color="bg-indigo-500" />
-                            <QuickAction icon={FileQuestion} label={t('db_action_qbank')} to="/questions" color="bg-violet-500" />
-                            <QuickAction icon={Target} label={t('db_action_progress')} to="/reports/performance" color="bg-emerald-500" />
-                        </>
-                    )}
-                </div>
-            </motion.div>
+
 
             {/* ─── Online Exams & OMR Monitor ─── */}
             {activeRoleView !== 'student' && (

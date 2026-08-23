@@ -41,6 +41,28 @@ public class QuestionServiceImpl implements QuestionService {
     private final com.testshaper.repository.ExamQuestionRepository examQuestionRepository;
     private final com.testshaper.repository.LectureQuestionRepository lectureQuestionRepository;
     private final com.testshaper.repository.AppNotificationRepository notificationRepository;
+    private final com.testshaper.repository.ClassSubjectRepository classSubjectRepository;
+    private final com.testshaper.repository.ChapterRepository chapterRepository;
+    private final com.testshaper.repository.TopicRepository topicRepository;
+
+    private void resolveAcademicEntities(Question question) {
+        if (question == null) return;
+        try {
+            if (question.getClassSubject() != null && question.getClassSubject().getId() != null) {
+                classSubjectRepository.findById(question.getClassSubject().getId()).ifPresent(question::setClassSubject);
+            }
+
+            if (question.getChapter() != null && question.getChapter().getId() != null) {
+                chapterRepository.findById(question.getChapter().getId()).ifPresent(question::setChapter);
+            }
+
+            if (question.getTopic() != null && question.getTopic().getId() != null) {
+                topicRepository.findById(question.getTopic().getId()).ifPresent(question::setTopic);
+            }
+        } catch (Exception e) {
+            // Non-fatal resolution fallback
+        }
+    }
 
     @Override
     @Transactional
@@ -66,7 +88,7 @@ public class QuestionServiceImpl implements QuestionService {
         if (Boolean.TRUE.equals(question.getAiGenerated())) {
             question.setStatus(Question.QuestionStatus.DRAFT);
         } else {
-            question.setStatus(Question.QuestionStatus.PENDING); // Default status
+            question.setStatus(Question.QuestionStatus.APPROVED);
         }
         
         if (question.getSources() != null) {
@@ -75,6 +97,8 @@ public class QuestionServiceImpl implements QuestionService {
             }
         }
         
+        resolveAcademicEntities(question);
+
         Question savedQuestion = questionRepository.save(question);
 
         // Save Options
@@ -316,6 +340,7 @@ public class QuestionServiceImpl implements QuestionService {
             }
         }
 
+        resolveAcademicEntities(question);
         return questionRepository.save(question);
     }
 
@@ -329,13 +354,14 @@ public class QuestionServiceImpl implements QuestionService {
         if (Boolean.TRUE.equals(question.getAiGenerated())) {
             question.setStatus(Question.QuestionStatus.DRAFT);
         } else {
-            question.setStatus(Question.QuestionStatus.PENDING);
+            question.setStatus(Question.QuestionStatus.APPROVED);
         }
         if (question.getSources() != null) {
             for (com.testshaper.entity.QuestionSource source : question.getSources()) {
                 source.setQuestion(question);
             }
         }
+        resolveAcademicEntities(question);
         // Default marks for CQ is usually 10, but client can send it.
         // If questionText holds the formatted Stem+Questions, we just save it.
         return questionRepository.save(question);

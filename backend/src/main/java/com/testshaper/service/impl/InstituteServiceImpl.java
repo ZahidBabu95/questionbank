@@ -294,10 +294,41 @@ public class InstituteServiceImpl implements InstituteService {
         instituteRepository.save(institute);
     }
 
+    private Institute getOrCreateInstituteForTarget(UUID id) {
+        java.util.Optional<Institute> instOpt = instituteRepository.findById(id);
+        if (instOpt.isPresent()) {
+            return instOpt.get();
+        }
+        java.util.Optional<com.testshaper.entity.User> userOpt = userRepository.findById(id);
+        if (userOpt.isPresent()) {
+            com.testshaper.entity.User user = userOpt.get();
+            if (user.getInstitute() != null) {
+                return user.getInstitute();
+            }
+            String pCode = "PERS-" + user.getId().toString().substring(0, 8).toUpperCase();
+            java.util.Optional<Institute> existingPers = instituteRepository.findByCode(pCode);
+            if (existingPers.isPresent()) {
+                user.setInstitute(existingPers.get());
+                userRepository.save(user);
+                return existingPers.get();
+            }
+            Institute personal = new Institute();
+            personal.setName((user.getName() != null ? user.getName() : "Personal") + " Workspace");
+            personal.setCode(pCode);
+            personal.setStatus(Institute.InstituteStatus.ACTIVE);
+            personal.setPlanType(Institute.SubscriptionPlan.FREE);
+            personal = instituteRepository.save(personal);
+            user.setInstitute(personal);
+            userRepository.save(user);
+            return personal;
+        }
+        return getInstitute(id);
+    }
+
     @Override
     @Transactional
     public void assignAcademicSubjects(UUID instituteId, java.util.Set<UUID> classSubjectIds) {
-        Institute institute = getInstitute(instituteId);
+        Institute institute = getOrCreateInstituteForTarget(instituteId);
         java.util.List<com.testshaper.entity.ClassSubject> subjects = classSubjectRepository.findAllById(classSubjectIds);
         institute.setAssignedSubjects(new java.util.HashSet<>(subjects));
         instituteRepository.save(institute);
@@ -305,7 +336,7 @@ public class InstituteServiceImpl implements InstituteService {
 
     @Override
     public java.util.Set<UUID> getAssignedAcademicSubjects(UUID instituteId) {
-        Institute institute = getInstitute(instituteId);
+        Institute institute = getOrCreateInstituteForTarget(instituteId);
         return institute.getAssignedSubjects().stream()
                 .map(com.testshaper.entity.ClassSubject::getId)
                 .collect(java.util.stream.Collectors.toSet());

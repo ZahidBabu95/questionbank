@@ -80,7 +80,7 @@ public class CacheConfig implements CachingConfigurer {
         cacheConfigurations.put("aiSettings", defaultConfig.entryTtl(Duration.ofSeconds(60)));
         cacheConfigurations.put("apiKeyPool", defaultConfig.entryTtl(Duration.ofSeconds(30)));
         cacheConfigurations.put("academicHierarchy", defaultConfig.entryTtl(Duration.ofMinutes(5)));
-        cacheConfigurations.put("questionStats", defaultConfig.entryTtl(Duration.ofSeconds(120)));
+        cacheConfigurations.put("questionStats", defaultConfig.entryTtl(Duration.ofMinutes(15)));
         cacheConfigurations.put("sourceTags", defaultConfig.entryTtl(Duration.ofSeconds(120)));
         cacheConfigurations.put("scrapeResultCache", defaultConfig.entryTtl(Duration.ofHours(1)));
         cacheConfigurations.put("exams", defaultConfig.entryTtl(Duration.ofMinutes(10)));
@@ -105,7 +105,7 @@ public class CacheConfig implements CachingConfigurer {
             Caffeine.newBuilder().expireAfterWrite(300, TimeUnit.SECONDS).maximumSize(200).recordStats().build());
 
         manager.registerCustomCache("questionStats",
-            Caffeine.newBuilder().expireAfterWrite(120, TimeUnit.SECONDS).maximumSize(500).recordStats().build());
+            Caffeine.newBuilder().expireAfterWrite(15, TimeUnit.MINUTES).maximumSize(500).recordStats().build());
 
         manager.registerCustomCache("sourceTags",
             Caffeine.newBuilder().expireAfterWrite(120, TimeUnit.SECONDS).maximumSize(500).recordStats().build());

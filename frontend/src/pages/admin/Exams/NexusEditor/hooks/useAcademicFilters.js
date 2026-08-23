@@ -4,7 +4,7 @@ import questionService from '../../../../../services/questionService';
 import { useNexusEditor } from '../context/NexusEditorContext';
 
 export const useAcademicFilters = () => {
-    const { leftPanelTab, docSettings } = useNexusEditor();
+    const { leftPanelTab, docSettings, swapTarget, documentQuestions, examData } = useNexusEditor();
 
     const [levels, setLevels] = useState([]);
     const [streams, setStreams] = useState([]);
@@ -32,6 +32,7 @@ export const useAcademicFilters = () => {
     const [loadingQuestions, setLoadingQuestions] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [disableAutoFilter, setDisableAutoFilter] = useState(false);
+    const [onlyEligible, setOnlyEligible] = useState(true);
 
     // Hierarchy Fetching
     useEffect(() => {
@@ -73,23 +74,45 @@ export const useAcademicFilters = () => {
         setSelectedTopicId('');
     }, [selectedChapterId]);
 
+    // When swapTarget changes, automatically set chapter and subject filter if available
+    useEffect(() => {
+        if (swapTarget?.attrs) {
+            if (swapTarget.attrs.chapterId) {
+                setSelectedChapterId(swapTarget.attrs.chapterId);
+            }
+            if (swapTarget.attrs.subjectId) {
+                setSelectedSubjectId(swapTarget.attrs.subjectId);
+            }
+        }
+    }, [swapTarget]);
+
     // Fetch real questions for Question Bank
     useEffect(() => {
         const fetchQuestions = async () => {
             if (leftPanelTab !== 'manual') return;
             setLoadingQuestions(true);
             try {
+                // If in swap mode or onlyEligible is active, query matching type and chapter
+                const queryChapterId = (swapTarget?.attrs?.chapterId && !selectedChapterId) 
+                    ? swapTarget.attrs.chapterId 
+                    : (selectedChapterId || '');
+                const querySubjectId = (swapTarget?.attrs?.subjectId && !selectedSubjectId)
+                    ? swapTarget.attrs.subjectId 
+                    : (selectedSubjectId || examData?.classSubjectId || examData?.subjectId || '');
+                const queryType = swapTarget?.attrs?.type || '';
+
                 const res = await questionService.getAllQuestionsPaginated({ 
                     page: 0, 
                     size: 100, 
                     search: searchQuery,
                     filterStatus: 'APPROVED',
+                    filterType: queryType || undefined,
                     language: selectedLanguage === 'ALL' ? '' : selectedLanguage,
                     levelId: selectedLevelId || '',
                     streamId: selectedStreamId || '',
                     classId: selectedClassId || '',
-                    subjectId: selectedSubjectId || '',
-                    chapterId: selectedChapterId || '',
+                    subjectId: querySubjectId,
+                    chapterId: queryChapterId,
                     topicId: selectedTopicId || '',
                     className: (!selectedLevelId && docSettings?.className && !disableAutoFilter) ? docSettings.className : '',
                     subjectName: (!selectedLevelId && docSettings?.subject && !disableAutoFilter) ? docSettings.subject : '',
@@ -99,8 +122,20 @@ export const useAcademicFilters = () => {
                     years: docSettings?.years || undefined,
                     schools: docSettings?.schools || undefined
                 });
+
                 if (res?.content) {
-                    setBankQuestions(res.content);
+                    let results = res.content;
+                    
+                    // Filter out already used questions in current document if onlyEligible is active or in swap mode
+                    if (onlyEligible || swapTarget) {
+                        const existingIds = new Set((documentQuestions || []).map(q => q.attrs?.questionId).filter(Boolean));
+                        results = results.filter(q => !existingIds.has(q.id));
+                        if (queryType) {
+                            results = results.filter(q => q.type === queryType);
+                        }
+                    }
+
+                    setBankQuestions(results);
                 } else {
                     setBankQuestions([]);
                 }
@@ -118,7 +153,8 @@ export const useAcademicFilters = () => {
         leftPanelTab, selectedLanguage, selectedLevelId, selectedStreamId, 
         selectedClassId, selectedSubjectId, selectedChapterId, selectedTopicId, 
         disableAutoFilter, docSettings?.sourceMode, docSettings?.lectureIds,
-        docSettings?.boards, docSettings?.years, docSettings?.schools
+        docSettings?.boards, docSettings?.years, docSettings?.schools,
+        swapTarget, documentQuestions, onlyEligible, examData
     ]);
 
     return {
@@ -132,6 +168,7 @@ export const useAcademicFilters = () => {
         selectedTopicId, setSelectedTopicId,
         bankQuestions, loadingQuestions,
         searchQuery, setSearchQuery,
-        disableAutoFilter, setDisableAutoFilter
+        disableAutoFilter, setDisableAutoFilter,
+        onlyEligible, setOnlyEligible
     };
 };

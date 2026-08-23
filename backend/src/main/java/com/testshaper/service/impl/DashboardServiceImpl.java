@@ -56,6 +56,52 @@ public class DashboardServiceImpl implements DashboardService {
         @org.springframework.context.annotation.Lazy
         private com.testshaper.repository.ClassSubjectRepository classSubjectRepository;
 
+        @org.springframework.beans.factory.annotation.Autowired
+        @org.springframework.context.annotation.Lazy
+        private org.springframework.cache.CacheManager cacheManager;
+
+        @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+        public void warmUpCacheOnStartup() {
+                try {
+                        org.slf4j.LoggerFactory.getLogger(DashboardServiceImpl.class).info("⚡ Pre-warming Admin Dashboard stats cache on startup...");
+                        long totalUsers = userRepository.count();
+                        long totalInstitutes = instituteRepository.count();
+                        long totalQuestions = questionRepository.count();
+                        long totalExams = examRepository.count();
+                        long approvedQuestionsCount = questionRepository.countApprovedQuestions();
+                        DashboardStatsDTO stats = buildFullStats(totalUsers, totalInstitutes, totalQuestions, totalExams, null, null, approvedQuestionsCount, totalQuestions);
+                        if (stats != null && cacheManager != null) {
+                                org.springframework.cache.Cache cache = cacheManager.getCache("questionStats");
+                                if (cache != null) {
+                                        cache.put("admin_dashboard_stats", stats);
+                                        org.slf4j.LoggerFactory.getLogger(DashboardServiceImpl.class).info("✅ Admin Dashboard stats cache pre-warmed successfully!");
+                                }
+                        }
+                } catch (Exception e) {
+                        org.slf4j.LoggerFactory.getLogger(DashboardServiceImpl.class).warn("⚠️ Failed to pre-warm dashboard cache on startup: {}", e.getMessage());
+                }
+        }
+
+        @org.springframework.scheduling.annotation.Scheduled(fixedRate = 600000, initialDelay = 60000)
+        public void refreshDashboardCachePeriodically() {
+                try {
+                        long totalUsers = userRepository.count();
+                        long totalInstitutes = instituteRepository.count();
+                        long totalQuestions = questionRepository.count();
+                        long totalExams = examRepository.count();
+                        long approvedQuestionsCount = questionRepository.countApprovedQuestions();
+                        DashboardStatsDTO stats = buildFullStats(totalUsers, totalInstitutes, totalQuestions, totalExams, null, null, approvedQuestionsCount, totalQuestions);
+                        if (stats != null && cacheManager != null) {
+                                org.springframework.cache.Cache cache = cacheManager.getCache("questionStats");
+                                if (cache != null) {
+                                        cache.put("admin_dashboard_stats", stats);
+                                }
+                        }
+                } catch (Exception e) {
+                        org.slf4j.LoggerFactory.getLogger(DashboardServiceImpl.class).warn("Background refresh of dashboard cache skipped: {}", e.getMessage());
+                }
+        }
+
 
         private long getApprovedQuestionsCountForUser(User currentUser) {
                 if (currentUser == null) return 0;
@@ -243,55 +289,42 @@ public class DashboardServiceImpl implements DashboardService {
                         activityTrend.add(DashboardStatsDTO.ActivityStat.builder().name(monthName).questions((int) qCount).exams((int) eCount).build());
                 }
 
-                User currentUser = getCurrentUser();
-                List<Object[]> subjectQueryResults = new ArrayList<>();
-                if (currentUser != null) {
-                        boolean isSuperAdmin = currentUser.getRoles().stream()
-                                .anyMatch(r -> r.getName().equals("SUPER_ADMIN") || r.getName().equals("ROLE_SUPER_ADMIN")) 
-                                || "admin".equalsIgnoreCase(currentUser.getEmail());
-                        if (isSuperAdmin) {
-                                subjectQueryResults = questionRepository.countApprovedQuestionsGroupedBySubject();
-                        } else if (currentUser.getInstitute() != null) {
-                                java.util.Set<com.testshaper.entity.ClassSubject> assignedSubjects = currentUser.getInstitute().getAssignedSubjects();
-                                if (assignedSubjects != null && !assignedSubjects.isEmpty()) {
-                                        java.util.List<UUID> subjectIds = assignedSubjects.stream()
-                                                        .map(com.testshaper.entity.ClassSubject::getId)
-                                                        .collect(Collectors.toList());
-                                        subjectQueryResults = questionRepository.countApprovedQuestionsGroupedBySubjectForSubjectIds(subjectIds);
-                                } else {
-                                        subjectQueryResults = questionRepository.countApprovedQuestionsGroupedBySubjectForTenant(currentUser.getInstitute().getCode());
-                                }
-                        }
-                }
-
-                List<DashboardStatsDTO.SubjectQuestionStat> subjectQuestions = subjectQueryResults.stream().map(result -> {
-                        String name = (result[0] != null) ? (String) result[0] : "Unassigned";
-                        String className = (result[1] != null) ? (String) result[1] : "Unknown Class";
-                        String levelName = (result[2] != null) ? (String) result[2] : "Unknown Level";
-                        Boolean isEng = (result[3] != null) ? (Boolean) result[3] : false;
-                        String version = isEng ? "English Version" : "Bangla Version";
-                        long count = ((Number) result[4]).longValue();
-                        return DashboardStatsDTO.SubjectQuestionStat.builder()
-                                        .subjectName(name)
-                                        .className(className)
-                                        .levelName(levelName)
-                                        .version(version)
-                                        .count(count)
-                                        .build();
-                }).collect(Collectors.toList());
-
-                // Class and Book stats calculations
-                List<AcademicClass> allClasses = academicClassRepository.findAll();
-                allClasses.sort(java.util.Comparator.comparing(AcademicClass::getOrder, java.util.Comparator.nullsLast(Integer::compareTo)));
-
-                List<SourceBookMaster> allBooks = sourceBookMasterRepository.findAllWithIndicesAndClassSubject();
-
                 java.util.Map<UUID, Long> classSubjectQuestionCounts = new java.util.HashMap<>();
                 for (Object[] row : questionRepository.countApprovedQuestionsGroupedByClassSubjectId()) {
                         if (row[0] != null) {
                                 classSubjectQuestionCounts.put((UUID) row[0], ((Number) row[1]).longValue());
                         }
                 }
+
+                User currentUser = getCurrentUser();
+                List<DashboardStatsDTO.SubjectQuestionStat> subjectQuestions = new ArrayList<>();
+                if (currentUser != null && currentUser.getInstitute() != null) {
+                        java.util.Set<com.testshaper.entity.ClassSubject> assignedSubjects = currentUser.getInstitute().getAssignedSubjects();
+                        if (assignedSubjects != null && !assignedSubjects.isEmpty()) {
+                                for (com.testshaper.entity.ClassSubject cs : assignedSubjects) {
+                                        String name = (cs.getSubject() != null) ? cs.getSubject().getName() : "Unassigned";
+                                        String className = (cs.getAcademicClass() != null) ? cs.getAcademicClass().getName() : "General";
+                                        String levelName = (cs.getAcademicClass() != null && cs.getAcademicClass().getStream() != null && cs.getAcademicClass().getStream().getLevel() != null) 
+                                                        ? cs.getAcademicClass().getStream().getLevel().getName() : "General";
+                                        Boolean isEng = (cs.getSubject() != null) ? cs.getSubject().isEnglishVersion() : false;
+                                        String version = isEng ? "English Version" : "Bangla Version";
+                                        long count = classSubjectQuestionCounts.getOrDefault(cs.getId(), 0L);
+
+                                        subjectQuestions.add(DashboardStatsDTO.SubjectQuestionStat.builder()
+                                                        .subjectName(name)
+                                                        .className(className)
+                                                        .levelName(levelName)
+                                                        .version(version)
+                                                        .count(count)
+                                                        .build());
+                                }
+                        }
+                }
+
+                List<AcademicClass> allClasses = academicClassRepository.findAll();
+                allClasses.sort(java.util.Comparator.comparing(AcademicClass::getOrder, java.util.Comparator.nullsLast(Integer::compareTo)));
+
+                List<SourceBookMaster> allBooks = sourceBookMasterRepository.findAllWithIndicesAndClassSubject();
 
                 java.util.Map<UUID, Long> chapterQuestionCounts = new java.util.HashMap<>();
                 for (Object[] row : questionRepository.countApprovedQuestionsGroupedByChapterId()) {

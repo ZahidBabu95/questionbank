@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { 
-    PanelLeftClose, Layers, Loader2, RefreshCw, Edit3, RotateCcw, Trash2, X
+    PanelLeftClose, Layers, Loader2, RefreshCw, Edit3, RotateCcw, Trash2, X,
+    ChevronDown, ChevronRight, BookOpen, Sparkles, SearchX, GripVertical, Plus
 } from 'lucide-react';
 import { useNexusEditor } from '../../context/NexusEditorContext';
 import { useAcademicFilters } from '../../hooks/useAcademicFilters';
 import questionService from '../../../../../../services/questionService';
 import QuestionEdit from '../../../../QuestionBank/QuestionEdit';
+import AutoExamGeneratorInline from '../AutoExamGeneratorInline';
+import QuestionCreateModal from '../QuestionCreateModal';
 
 const isPlaceholderText = (text) => {
     if (!text) return true;
@@ -17,6 +20,51 @@ const isPlaceholderText = (text) => {
            clean.startsWith('dynamic question') || 
            clean.startsWith('ডায়নামিক প্রশ্ন') || 
            clean.startsWith('ডায়নামিক প্রশ্ন');
+};
+
+const getSectionDefaultType = (section, isMCQ) => {
+    if (isMCQ === true) return 'MCQ';
+    if (isMCQ === false) return 'CQ';
+    const sName = (section?.name || '').toLowerCase();
+    if (sName.includes('বহুনির্বাচন') || sName.includes('mcq')) return 'MCQ';
+    if (sName.includes('সৃজনশীল') || sName.includes('cq') || sName.includes('creative') || sName.includes('রচনামূলক')) return 'CQ';
+    if (sName.includes('সংক্ষিপ্ত') || sName.includes('short')) return 'SHORT';
+    if (sName.includes('ডায়নামিক') || sName.includes('ডায়নামিক') || sName.includes('dynamic')) return 'DYNAMIC';
+    return 'MCQ';
+};
+
+const formatMarksDigits = (marksVal, numberingStyle = 'bn') => {
+    if (marksVal === null || marksVal === undefined) return '';
+    let str = marksVal.toString().trim();
+    const bnToEn = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+    let enStr = str.replace(/[০-৯]/g, m => bnToEn[m]);
+    const num = parseFloat(enStr);
+    if (!isNaN(num)) {
+        enStr = num.toString();
+    }
+    if (numberingStyle === 'bn') {
+        const enToBn = { '0': '০', '1': '১', '2': '২', '3': '৩', '4': '৪', '5': '৫', '6': '৬', '7': '৭', '8': '৮', '9': '৯' };
+        return enStr.replace(/[0-9]/g, m => enToBn[m]);
+    }
+    return enStr;
+};
+
+const parseMarkdownImages = (text) => {
+    if (!text) return '';
+    return text.toString().replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, rawAlt, url) => {
+        let finalUrl = url;
+        if (url.includes('r2.dev') && !url.includes('proxy-image')) {
+            finalUrl = `/api/v1/public/proxy-image?url=${encodeURIComponent(url)}`;
+        }
+        let alt = rawAlt || '';
+        let width = 'auto';
+        if (rawAlt && rawAlt.includes('|')) {
+            const parts = rawAlt.split('|');
+            alt = parts[0];
+            if (parts[2]) width = parts[2];
+        }
+        return `<img src="${finalUrl}" alt="${alt}" style="max-width: 100%; max-height: 180px; object-fit: contain; border-radius: 6px; margin: 6px auto; display: block;" class="rounded-lg border border-slate-200 shadow-2xs" />`;
+    });
 };
 
 const getDisplayQuestionText = (q) => {
@@ -85,7 +133,8 @@ const getDisplayQuestionText = (q) => {
                                     const cleanVal = val.replace(/<[^>]*>?/gm, '').trim().toLowerCase();
                                     if (cleanVal && !cleanVal.startsWith('generated question') && !cleanVal.startsWith('dynamic question') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন') && !cleanVal.startsWith('ডায়নামিক প্রশ্ন')) {
                                         const partLabel = part.part_label || part.label || ['ক', 'খ', 'গ', 'ঘ'][pIdx];
-                                        partsTexts.push(`(${partLabel}) ${val}`);
+                                        const marksStr = part.marks ? `<span class="text-slate-400 font-bold text-[10px] ml-1">(${formatMarksDigits(part.marks, 'bn')})</span>` : '';
+                                        partsTexts.push(`<div class="flex items-start gap-1.5 mt-1.5 text-slate-700 text-xs"><span class="font-bold text-indigo-700 font-mono shrink-0">(${partLabel})</span> <span class="flex-grow leading-relaxed">${val}</span>${marksStr}</div>`);
                                         break;
                                     }
                                 }
@@ -93,7 +142,7 @@ const getDisplayQuestionText = (q) => {
                         }
                     });
                     if (partsTexts.length > 0) {
-                        return partsTexts.join(' ');
+                        return `<div class="space-y-1.5 mt-1 border-t border-slate-100 pt-1.5">${partsTexts.join('')}</div>`;
                     }
                 }
             }
@@ -101,6 +150,18 @@ const getDisplayQuestionText = (q) => {
         return '';
     }
     return text;
+};
+
+const convertDigits = (value, language) => {
+    if (value === null || value === undefined) return '';
+    const str = value.toString();
+    const lang = (language || '').toUpperCase();
+    if (lang === 'ENGLISH' || lang === 'EN') {
+        const bnToEnMap = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+        return str.replace(/[০-৯]/g, match => bnToEnMap[match] || match);
+    }
+    const enToBnMap = { '0': '০', '1': '১', '2': '২', '3': '৩', '4': '৪', '5': '৫', '6': '৬', '7': '৭', '8': '৮', '9': '৯' };
+    return str.replace(/[0-9]/g, match => enToBnMap[match] || match);
 };
 
 const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
@@ -111,7 +172,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
         leftPanelWidth, 
         leftPanelTab, setLeftPanelTab,
         swapTarget, setSwapTarget,
-        editorConfig, rawContent, docSettings,
+        editorConfig, rawContent, setRawContent, docSettings,
         setPendingInsertQuestion, setPendingSwapQuestion,
         documentQuestions, addToast, examData,
         editor, editorMode
@@ -122,6 +183,175 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
     }, [leftPanelWidth]);
 
     const [revisingQuestionNode, setRevisingQuestionNode] = useState(null);
+    const [collapsedSections, setCollapsedSections] = useState({});
+    const [draggedQIndex, setDraggedQIndex] = useState(null);
+    const [dragOverQIndex, setDragOverQIndex] = useState(null);
+
+    const handleReorderQuestion = (fromIdx, toIdx) => {
+        if (fromIdx === null || toIdx === null || fromIdx === toIdx || !editor) return;
+        
+        const questionNodes = [];
+        editor.state.doc.descendants((node, pos) => {
+            if (node.type.name === 'questionBlock') {
+                questionNodes.push({ node, pos, size: node.nodeSize });
+            }
+        });
+
+        if (fromIdx < 0 || fromIdx >= questionNodes.length || toIdx < 0 || toIdx >= questionNodes.length) {
+            return;
+        }
+
+        const source = questionNodes[fromIdx];
+        const target = questionNodes[toIdx];
+
+        const tr = editor.state.tr;
+        const nodeToMove = source.node;
+
+        // Delete source node
+        tr.delete(source.pos, source.pos + source.size);
+
+        // Determine target insertion pos after source deletion
+        let insertPos;
+        if (fromIdx < toIdx) {
+            const targetPosAfterDelete = target.pos - source.size;
+            insertPos = targetPosAfterDelete + target.size;
+        } else {
+            insertPos = target.pos;
+        }
+
+        tr.insert(insertPos, nodeToMove);
+        editor.view.dispatch(tr);
+        setRawContent(editor.getHTML());
+        window.dispatchEvent(new CustomEvent('nexus-editor-rerender'));
+        addToast(uiLang === 'bn' ? 'প্রশ্নের ক্রম সফলভাবে পরিবর্তন করা হয়েছে।' : 'Question sequence reordered successfully.', 'success');
+    };
+
+    const [createModalConfig, setCreateModalConfig] = useState({
+        isOpen: false,
+        defaultType: 'MCQ',
+        targetSectionId: null,
+        insertAfterIndex: null
+    });
+
+    const toggleSectionCollapse = (secId) => {
+        setCollapsedSections(prev => ({ ...prev, [secId]: !prev[secId] }));
+    };
+
+    // Compute grouped questions by sections for Document Tab
+    const groupedQuestions = React.useMemo(() => {
+        if (!documentQuestions || documentQuestions.length === 0) return [];
+        
+        const sections = docSettings?.sections || [];
+        if (sections.length === 0) {
+            return [{
+                section: { id: 'default', name: uiLang === 'bn' ? 'সকল প্রশ্ন' : 'All Questions', isMCQ: null },
+                questions: documentQuestions.map((q, idx) => ({ 
+                    ...q, 
+                    globalIndex: idx,
+                    displayNumber: idx + 1
+                }))
+            }];
+        }
+
+        const sectionMap = new Map();
+        sections.forEach(sec => {
+            sectionMap.set(sec.id, {
+                section: sec,
+                questions: []
+            });
+        });
+
+        const unassigned = [];
+        let currentSecId = sections[0]?.id;
+
+        documentQuestions.forEach((q, idx) => {
+            const item = { ...q, globalIndex: idx };
+            const qSecId = q.attrs?.sectionId;
+            
+            if (qSecId && sectionMap.has(qSecId)) {
+                currentSecId = qSecId;
+                sectionMap.get(qSecId).questions.push(item);
+            } else if (q.attrs?.firstInSection) {
+                const matchingSec = sections.find(s => s.isMCQ === (q.attrs?.type === 'MCQ')) || sections[0];
+                if (matchingSec && sectionMap.has(matchingSec.id)) {
+                    currentSecId = matchingSec.id;
+                    sectionMap.get(matchingSec.id).questions.push(item);
+                } else {
+                    unassigned.push(item);
+                }
+            } else if (currentSecId && sectionMap.has(currentSecId)) {
+                const curSec = sectionMap.get(currentSecId).section;
+                if (q.attrs?.type && curSec.isMCQ !== undefined && curSec.isMCQ !== (q.attrs.type === 'MCQ')) {
+                    const matchingSec = sections.find(s => s.isMCQ === (q.attrs.type === 'MCQ'));
+                    if (matchingSec && sectionMap.has(matchingSec.id)) {
+                        currentSecId = matchingSec.id;
+                        sectionMap.get(matchingSec.id).questions.push(item);
+                    } else {
+                        sectionMap.get(currentSecId).questions.push(item);
+                    }
+                } else {
+                    sectionMap.get(currentSecId).questions.push(item);
+                }
+            } else {
+                const matchingSec = sections.find(s => s.isMCQ === (q.attrs?.type === 'MCQ')) || sections[0];
+                if (matchingSec && sectionMap.has(matchingSec.id)) {
+                    sectionMap.get(matchingSec.id).questions.push(item);
+                } else {
+                    unassigned.push(item);
+                }
+            }
+        });
+
+        // Compute correct numbering for each section based on continuousNumbering & numberingStart
+        let runningGlobalCounter = 0;
+        const groups = [];
+
+        sections.forEach(sec => {
+            const entry = sectionMap.get(sec.id);
+            if (entry && entry.questions.length > 0) {
+                const isContinuous = sec.continuousNumbering !== false;
+                let secRunningCounter = (Number(sec.numberingStart) || 1) - 1;
+
+                entry.questions.forEach(q => {
+                    const isAlternative = q.attrs?.alternativeToId != null && q.attrs?.alternativeToId !== '';
+                    if (!isAlternative) {
+                        if (isContinuous) {
+                            runningGlobalCounter++;
+                            q.displayNumber = runningGlobalCounter;
+                        } else {
+                            secRunningCounter++;
+                            q.displayNumber = secRunningCounter;
+                        }
+                    } else {
+                        q.displayNumber = null;
+                    }
+                });
+
+                groups.push(entry);
+            }
+        });
+
+        if (unassigned.length > 0) {
+            unassigned.forEach(q => {
+                const isAlternative = q.attrs?.alternativeToId != null && q.attrs?.alternativeToId !== '';
+                if (!isAlternative) {
+                    runningGlobalCounter++;
+                    q.displayNumber = runningGlobalCounter;
+                } else {
+                    q.displayNumber = null;
+                }
+            });
+            groups.push({
+                section: { id: 'unassigned', name: uiLang === 'bn' ? 'অন্যান্য / সাধারণ প্রশ্ন' : 'Other Questions', isMCQ: null },
+                questions: unassigned
+            });
+        }
+
+        return groups.length > 0 ? groups : [{
+            section: { id: 'default', name: uiLang === 'bn' ? 'সকল প্রশ্ন' : 'All Questions', isMCQ: null },
+            questions: documentQuestions.map((q, idx) => ({ ...q, globalIndex: idx, displayNumber: idx + 1 }))
+        }];
+    }, [documentQuestions, docSettings?.sections, uiLang]);
 
     const handleLinkAsAlternative = (q, idx) => {
         if (idx === 0 || !editor) return;
@@ -349,7 +579,7 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                     return;
                 }
             }
-            addToast(uiLang === 'bn' ? "এই অধ্যায়ে নতুন কোনো প্রশ্ন পাওয়া যায়নি।" : "No fresh questions available for auto-swap in this chapter.", 'warning');
+            addToast(uiLang === 'bn' ? "এমন কোনো প্রশ্ন খুঁজে পাওয়া যায়নি" : "No fresh questions available for auto-swap in this chapter.", 'warning');
         } catch (err) {
             console.error("Auto swap failed", err);
             addToast(uiLang === 'bn' ? "অটো সোয়াপ ব্যর্থ হয়েছে।" : "Auto swap failed.", 'error');
@@ -387,82 +617,83 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                     
                     {leftPanelTab === 'manual' && (
                         <div className="space-y-2 mt-1">
-                            <input 
-                                type="text" placeholder={t.searchQ} value={filters.searchQuery}
-                                onChange={(e) => filters.setSearchQuery(e.target.value)}
-                                className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all placeholder-slate-400"
-                            />
-                            {(!filters.selectedLevelId && (docSettings.className || docSettings.subject) && !filters.disableAutoFilter) && (
-                                <div className="mt-2 text-[10px] bg-blue-50 text-blue-700 px-2 py-1.5 rounded flex justify-between items-center font-medium border border-blue-100">
-                                    <span className="truncate pr-2">Auto-filtered: <b>{docSettings.className}</b> {docSettings.subject && `| ${docSettings.subject}`}</span>
-                                    <button onClick={() => filters.setDisableAutoFilter(true)} className="text-blue-600 hover:text-blue-800 font-bold" title="Clear filter">✕</button>
+                            {swapTarget ? (
+                                /* Sleek, Ultra-Clean Single Swap Header */
+                                <div className="space-y-2">
+                                    <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-200/90 p-2 rounded-xl flex items-center justify-between shadow-2xs">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <div className="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                                                <RefreshCw size={12} />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-[11px] font-black text-amber-950">
+                                                        {swapTarget.attrs?.type || 'প্রশ্ন'} প্রতিস্থাপন (Swap)
+                                                    </span>
+                                                </div>
+                                                <p className="text-[9.5px] text-amber-800/90 font-semibold truncate">
+                                                    {swapTarget.attrs?.chapterName || (docSettings?.subject ? `${docSettings.subject}` : 'উপযুক্ত প্রশ্নসমূহ')}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => { setSwapTarget(null); setLeftPanelTab('document'); }}
+                                            className="text-[10px] font-bold text-amber-900 hover:text-red-700 bg-white hover:bg-red-50 border border-amber-200/80 px-2 py-0.5 rounded-md transition-all shadow-2xs shrink-0"
+                                        >
+                                            ✕ বাতিল
+                                        </button>
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        placeholder={uiLang === 'bn' ? 'উপযুক্ত প্রশ্ন সার্চ করুন...' : 'Search eligible questions...'} 
+                                        value={filters.searchQuery}
+                                        onChange={(e) => filters.setSearchQuery(e.target.value)}
+                                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all placeholder-slate-400"
+                                    />
                                 </div>
+                            ) : (
+                                /* Normal Browsing Filter Controls */
+                                <>
+                                    <input 
+                                        type="text" placeholder={t.searchQ} value={filters.searchQuery}
+                                        onChange={(e) => filters.setSearchQuery(e.target.value)}
+                                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all placeholder-slate-400"
+                                    />
+                                    
+                                    <div className="flex items-center justify-between px-0.5">
+                                        <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={filters.onlyEligible}
+                                                onChange={(e) => filters.setOnlyEligible(e.target.checked)}
+                                                className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                                            />
+                                            <span className="text-[10px] font-bold text-slate-700">
+                                                {uiLang === 'bn' ? '⚡ শুধুমাত্র অব্যবহৃত প্রশ্ন' : '⚡ Unused Questions Only'}
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                                        <select value={filters.selectedChapterId} onChange={(e) => filters.setSelectedChapterId(e.target.value)} className="w-full text-[10.5px] bg-slate-50 border border-slate-200 rounded px-2 py-1 outline-none focus:border-indigo-400 font-medium text-slate-700">
+                                            <option value="">{uiLang === 'bn' ? 'সকল অধ্যায়' : 'All Chapters'}</option>
+                                            {filters.chapters.map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
+                                        </select>
+                                        <select value={filters.selectedTopicId} onChange={(e) => filters.setSelectedTopicId(e.target.value)} disabled={!filters.selectedChapterId} className="w-full text-[10.5px] bg-slate-50 border border-slate-200 rounded px-2 py-1 outline-none focus:border-indigo-400 font-medium text-slate-700 disabled:opacity-50">
+                                            <option value="">{uiLang === 'bn' ? 'সকল টপিক' : 'All Topics'}</option>
+                                            {filters.topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                        </select>
+                                    </div>
+                                </>
                             )}
-                            <div className="grid grid-cols-2 gap-2 mt-2">
-                                <select 
-                                    value={filters.selectedLanguage} onChange={(e) => filters.setSelectedLanguage(e.target.value)}
-                                    disabled={!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual')}
-                                    className={`w-full text-[11px] bg-slate-50 border border-slate-200 rounded px-2 py-1.5 outline-none focus:border-indigo-400 font-medium text-slate-700 col-span-2 ${!hasFullLangAccess && user?.instituteMedium && !user.instituteMedium.includes(',') && !user.instituteMedium.includes('Bilingual') ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                >
-                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual') || user.instituteMedium.includes(',')) && <option value="ALL">{uiLang === 'bn' ? 'সব ভার্সন' : 'All Versions'}</option>}
-                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bangla') || user.instituteMedium.includes('Bilingual')) && <option value="Bangla">Bangla</option>}
-                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('English') || user.instituteMedium.includes('Bilingual')) && <option value="English">English</option>}
-                                    {(hasFullLangAccess || !user?.instituteMedium || user.instituteMedium.includes('Bilingual')) && <option value="Bilingual">Bilingual</option>}
-                                </select>
-                                
-                                {!((!filters.disableAutoFilter && docSettings?.className && docSettings?.subject) || !!swapTarget) && (
-                                    <>
-                                        <select value={filters.selectedLevelId} onChange={(e) => filters.setSelectedLevelId(e.target.value)} className="w-full text-[11px] bg-slate-50 border border-slate-200 rounded px-2 py-1.5 outline-none focus:border-indigo-400 font-medium text-slate-700">
-                                            <option value="">{uiLang === 'bn' ? 'সকল স্তর' : 'All Levels'}</option>
-                                            {filters.levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                                        </select>
-                                        <select value={filters.selectedStreamId} onChange={(e) => filters.setSelectedStreamId(e.target.value)} disabled={!filters.selectedLevelId} className="w-full text-[11px] bg-slate-50 border border-slate-200 rounded px-2 py-1.5 outline-none focus:border-indigo-400 font-medium text-slate-700 disabled:opacity-50">
-                                            <option value="">{uiLang === 'bn' ? 'সকল শাখা' : 'All Streams'}</option>
-                                            {filters.streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                        </select>
-                                        <select value={filters.selectedClassId} onChange={(e) => filters.setSelectedClassId(e.target.value)} disabled={!filters.selectedStreamId && filters.streams.length > 0} className="w-full text-[11px] bg-slate-50 border border-slate-200 rounded px-2 py-1.5 outline-none focus:border-indigo-400 font-medium text-slate-700 disabled:opacity-50">
-                                            <option value="">{uiLang === 'bn' ? 'সকল শ্রেণি' : 'All Classes'}</option>
-                                            {filters.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </select>
-                                        <select value={filters.selectedSubjectId} onChange={(e) => filters.setSelectedSubjectId(e.target.value)} disabled={!filters.selectedClassId} className="w-full text-[11px] bg-slate-50 border border-slate-200 rounded px-2 py-1.5 outline-none focus:border-indigo-400 font-medium text-slate-700 disabled:opacity-50">
-                                            <option value="">{uiLang === 'bn' ? 'সকল বিষয়' : 'All Subjects'}</option>
-                                            {filters.subjects.map(s => <option key={s.classSubjectId || s.id} value={s.classSubjectId || s.id}>{s.subjectName || s.subject?.name}</option>)}
-                                        </select>
-                                    </>
-                                )}
-                                <select value={filters.selectedChapterId} onChange={(e) => filters.setSelectedChapterId(e.target.value)} disabled={!filters.selectedSubjectId} className="w-full text-[11px] bg-slate-50 border border-slate-200 rounded px-2 py-1.5 outline-none focus:border-indigo-400 font-medium text-slate-700 disabled:opacity-50">
-                                    <option value="">{uiLang === 'bn' ? 'সকল অধ্যায়' : 'All Chapters'}</option>
-                                    {filters.chapters.map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
-                                </select>
-                                <select value={filters.selectedTopicId} onChange={(e) => filters.setSelectedTopicId(e.target.value)} disabled={!filters.selectedChapterId} className="w-full text-[11px] bg-slate-50 border border-slate-200 rounded px-2 py-1.5 outline-none focus:border-indigo-400 font-medium text-slate-700 disabled:opacity-50">
-                                    <option value="">{uiLang === 'bn' ? 'সকল টপিক' : 'All Topics'}</option>
-                                    {filters.topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                </select>
-                            </div>
                         </div>
                     )}
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar bg-slate-50/50">
-                    {swapTarget && (
-                        <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg flex items-center justify-between mb-2 shadow-sm animate-pulse">
-                            <div>
-                                <h4 className="text-amber-800 font-bold text-xs">Swap Mode Active</h4>
-                                <p className="text-amber-700/80 text-[10px] mt-0.5 font-medium">Select a question below to replace.</p>
-                            </div>
-                            <button onClick={() => { setSwapTarget(null); setLeftPanelTab('document'); }} className="text-amber-600 hover:text-amber-800 font-bold px-2 py-1 bg-amber-100 hover:bg-amber-200 rounded text-[10px]">Cancel</button>
-                        </div>
-                    )}
                     
                     {leftPanelTab === 'auto' ? (
-                        <div className="p-4 bg-white border border-slate-200 rounded-xl text-center space-y-3 shadow-sm">
-                            <div className="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-2"><Layers size={24} /></div>
-                            <h3 className="text-sm font-bold text-slate-800">AI Exam Generator</h3>
-                            <p className="text-xs text-slate-500 leading-relaxed">Click the button below to automatically generate questions based on the selected curriculum rules.</p>
-                            <button onClick={() => navigate('/exams/generate/auto')} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 rounded-lg shadow transition-colors flex justify-center items-center gap-2">
-                                <Layers size={14} /> Go to AI Generator Wizard
-                            </button>
-                        </div>
+                        <AutoExamGeneratorInline />
                     ) : leftPanelTab === 'manual' ? (
                         filters.loadingQuestions ? (
                             <div className="flex justify-center p-4"><Loader2 className="animate-spin text-slate-400" size={20} /></div>
@@ -484,22 +715,24 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                                         <span className="text-[10px] font-bold text-slate-400">{q.chapterName || q.subjectName || 'General'}</span>
                                     </div>
                                     
-                                    {q.stimulus && !isPlaceholderText(q.stimulus) && <div className="mb-2 p-2 bg-amber-50 rounded text-xs text-slate-700 italic border border-amber-100/50" dangerouslySetInnerHTML={{__html: q.stimulus}}></div>}
+                                    {q.stimulus && !isPlaceholderText(q.stimulus) && (
+                                        <div className="mb-2 p-2 bg-amber-50 rounded-lg text-xs text-slate-800 italic border border-amber-200/50 leading-relaxed shadow-2xs" dangerouslySetInnerHTML={{__html: parseMarkdownImages(q.stimulus)}}></div>
+                                    )}
                                     {(() => {
                                         const cleanText = getDisplayQuestionText(q);
                                         return cleanText ? (
-                                            <div className={`text-xs text-slate-700 font-medium ${q.type === 'CQ' ? 'line-clamp-none' : 'line-clamp-3'}`} dangerouslySetInnerHTML={{__html: cleanText}}></div>
+                                            <div className="text-xs text-slate-800 font-medium leading-relaxed" dangerouslySetInnerHTML={{__html: parseMarkdownImages(cleanText)}}></div>
                                         ) : null;
                                     })()}
                                     
                                     {q.statements && q.statements.length > 0 && (
-                                        <div className="mt-2 mb-2 pl-2 space-y-1 border-l-2 border-indigo-200">
+                                        <div className="mt-2 mb-2 pl-2.5 space-y-1 border-l-2 border-indigo-300 bg-indigo-50/30 py-1 rounded-r-md">
                                             {q.statements.map((stmt, i) => {
                                                 const cleanStmt = (typeof stmt === 'string' ? stmt : '').replace(/^(?:i{1,3}|iv|v|vi{0,3}|ix|x|[0-9]+|[১-৯]+)[\.\)]\s*/i, '').trim();
                                                 return (
-                                                <div key={i} className="text-[10px] text-slate-600 flex gap-1">
-                                                    <span>{['i', 'ii', 'iii', 'iv', 'v'][i] || i + 1}.</span>
-                                                    <span dangerouslySetInnerHTML={{__html: cleanStmt}}></span>
+                                                <div key={i} className="text-[11px] text-slate-700 flex gap-1.5 leading-snug">
+                                                    <span className="font-bold text-indigo-700 font-mono shrink-0">{['i', 'ii', 'iii', 'iv', 'v'][i] || i + 1}.</span>
+                                                    <span dangerouslySetInnerHTML={{__html: parseMarkdownImages(cleanStmt)}}></span>
                                                 </div>
                                                 );
                                             })}
@@ -507,13 +740,17 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                                     )}
                                     
                                     {q.options && q.options.length > 0 && (
-                                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 mt-2 bg-slate-50 p-2 rounded border border-slate-100">
-                                            {q.options.map((opt, i) => (
-                                                <div key={i} className="flex items-start gap-1.5">
-                                                    <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${opt.isCorrect ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
-                                                    <span className={`text-[10px] line-clamp-1 ${opt.isCorrect ? 'text-emerald-700 font-bold' : 'text-slate-600'}`} dangerouslySetInnerHTML={{__html: opt.optionText?.replace(/<p>/g, '').replace(/<\/p>/g, '')}} />
-                                                </div>
-                                            ))}
+                                        <div className="grid grid-cols-2 gap-1.5 mt-2 bg-slate-50 p-2 rounded-lg border border-slate-200/70 shadow-2xs">
+                                            {q.options.map((opt, i) => {
+                                                const optText = opt.optionText || opt.text || '';
+                                                const optLabel = ['(ক)', '(খ)', '(গ)', '(ঘ)'][i] || `(${i + 1})`;
+                                                return (
+                                                    <div key={i} className={`flex items-start gap-1.5 p-1 rounded text-[11px] leading-snug ${opt.isCorrect ? 'bg-emerald-100/70 border border-emerald-300/80 text-emerald-900 font-semibold' : 'text-slate-700'}`}>
+                                                        <span className={`font-mono text-[10px] shrink-0 ${opt.isCorrect ? 'text-emerald-700 font-bold' : 'text-slate-400 font-medium'}`}>{optLabel}</span>
+                                                        <span className="flex-grow break-words" dangerouslySetInnerHTML={{__html: parseMarkdownImages(optText.replace(/<p>/g, '').replace(/<\/p>/g, ''))}} />
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                     
@@ -538,89 +775,359 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                                 );
                             })
                         ) : (
-                            <div className="text-center p-4 text-xs text-slate-400 font-medium">{t.noQ}</div>
+                            <div className="text-center py-10 px-4 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5 my-2">
+                                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/80 flex items-center justify-center mx-auto shadow-2xs">
+                                    <SearchX size={20} />
+                                </div>
+                                <div className="space-y-1">
+                                    <h4 className="text-xs font-black text-slate-800">
+                                        {uiLang === 'bn' ? 'এমন কোনো প্রশ্ন খুঁজে পাওয়া যায়নি' : 'No matching questions found'}
+                                    </h4>
+                                    <p className="text-[10.5px] text-slate-500 max-w-[230px] mx-auto leading-relaxed">
+                                        {swapTarget
+                                            ? (uiLang === 'bn' ? 'এই অধ্যায় ও টাইপের কোনো অব্যবহৃত যোগ্য প্রশ্ন ডাটাবেজে অবশিষ্ট নেই।' : 'No fresh unused questions available for replacement in this chapter.')
+                                            : (uiLang === 'bn' ? 'বর্তমান ফিল্টার বা সার্চ শর্তানুযায়ী কোনো অনুমোদিত প্রশ্ন পাওয়া যায়নি।' : 'No approved questions match the selected filters or search criteria.')
+                                        }
+                                    </p>
+                                </div>
+                                {swapTarget ? (
+                                    <button
+                                        onClick={() => { setSwapTarget(null); setLeftPanelTab('document'); }}
+                                        className="mt-1 text-[10px] font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-1 rounded-lg transition-all border border-slate-200"
+                                    >
+                                        {uiLang === 'bn' ? 'সোয়াপ বাতিল করুন' : 'Cancel Swap'}
+                                    </button>
+                                ) : (
+                                    filters.onlyEligible && (
+                                        <button
+                                            onClick={() => filters.setOnlyEligible(false)}
+                                            className="mt-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-lg transition-all border border-indigo-100"
+                                        >
+                                            {uiLang === 'bn' ? 'সকল প্রশ্ন দেখুন' : 'Show All Questions'}
+                                        </button>
+                                    )
+                                )}
+                            </div>
                         )
                     ) : null}
                     
                     {leftPanelTab === 'document' && (
-                        <div className="space-y-2 mt-2 h-full overflow-y-auto pr-1 custom-scrollbar pb-32">
-                            <div className="flex items-center justify-between bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg border border-indigo-100 mb-2">
-                                <span className="text-xs font-bold">Total Questions:</span>
-                                <span className="text-sm font-black">{documentQuestions.length}</span>
+                        <div className="space-y-2 mt-0.5 h-full overflow-y-auto pr-0.5 custom-scrollbar pb-28">
+                            {/* Document Header Summary - Ultra Compact */}
+                            <div className="bg-gradient-to-r from-indigo-50/90 via-white to-indigo-50/60 px-2.5 py-1.5 rounded-xl border border-indigo-100/80 shadow-2xs flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center shadow-2xs">
+                                        <BookOpen size={11} />
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <h4 className="text-[11px] font-black text-slate-800">
+                                            {uiLang === 'bn' ? 'ডকুমেন্ট প্রশ্নমালা' : 'Questions'}
+                                        </h4>
+                                        <span className="text-[9px] text-slate-400 font-bold bg-slate-100 px-1.5 py-0.2 rounded">
+                                            {groupedQuestions.length} {uiLang === 'bn' ? 'বিভাগ' : 'Sec'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <span className="text-[10px] text-slate-400 font-bold">
+                                        {uiLang === 'bn' ? 'মোট:' : 'Total:'}
+                                    </span>
+                                    <span className="text-xs font-black text-indigo-700 bg-white border border-indigo-200/80 px-2 py-0.2 rounded-md shadow-2xs font-mono">
+                                        {documentQuestions.length}
+                                    </span>
+                                </div>
                             </div>
                             
                             {documentQuestions.length === 0 ? (
-                                <div className="text-center py-10 text-slate-400 text-sm italic">No questions in document.</div>
+                                <div className="text-center py-8 text-slate-400 text-xs italic bg-white rounded-xl border border-slate-100 p-4">
+                                    {uiLang === 'bn' ? 'ডকুমেন্টে এখনো কোনো প্রশ্ন যুক্ত করা হয়নি।' : 'No questions in document yet.'}
+                                </div>
                             ) : (
-                                    documentQuestions.map((q, idx) => (
-                                        <div key={`${q.attrs.questionId}-${idx}`} className="bg-white border border-slate-200 rounded-lg p-3 hover:border-indigo-300 transition-colors group relative">
-                                            <div className="flex items-start gap-2 mb-2">
-                                                <span className="shrink-0 bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                                    {q.attrs.alternativeToId ? 'অথবা' : idx + 1}
-                                                </span>
-                                                <div className="text-xs font-medium text-slate-700 line-clamp-2 leading-relaxed flex-grow" dangerouslySetInnerHTML={{__html: (getDisplayQuestionText(q.attrs) || '').replace(/<[^>]*>?/gm, '')}} />
-                                                {q.attrs.alternativeToId && (
-                                                    <span className="shrink-0 bg-amber-50 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-200/50 font-sans">
-                                                        OR / অথবা
+                                groupedQuestions.map((group, gIdx) => {
+                                    const secId = group.section.id || `sec-${gIdx}`;
+                                    const isCollapsed = !!collapsedSections[secId];
+                                    const isMCQ = group.section.isMCQ;
+
+                                    return (
+                                        <div key={secId} className="space-y-1.5">
+                                            {/* Section Header Separator - Compact */}
+                                            <div 
+                                                onClick={() => toggleSectionCollapse(secId)}
+                                                className="sticky top-0 z-10 bg-slate-100/95 hover:bg-slate-200/95 border border-slate-200/90 shadow-2xs backdrop-blur-md rounded-lg px-2.5 py-1.5 flex items-center justify-between cursor-pointer transition-all select-none group"
+                                            >
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <div className={`w-1.5 h-3.5 rounded-full shrink-0 ${isMCQ === true ? 'bg-blue-500' : isMCQ === false ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
+                                                    <span className="text-[11.5px] font-bold text-slate-800 truncate" title={group.section.name}>
+                                                        {group.section.name || (uiLang === 'bn' ? `বিভাগ ${gIdx + 1}` : `Section ${gIdx + 1}`)}
                                                     </span>
-                                                )}
-                                            </div>
-                                            <div className="flex flex-wrap items-center justify-end gap-1.5 mt-2 pt-2 border-t border-slate-100 opacity-50 group-hover:opacity-100 transition-opacity">
-                                                {q.attrs.alternativeToId ? (
-                                                    <button 
-                                                        onClick={() => handleUnlinkAlternative(q)} 
-                                                        className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-[10px] font-bold rounded shadow-sm transition-all"
-                                                        title={uiLang === 'bn' ? 'লিঙ্ক বাতিল করুন' : 'Unlink alternative'}
-                                                    >
-                                                        {uiLang === 'bn' ? 'লিঙ্ক বাতিল' : 'Unlink'}
-                                                    </button>
-                                                ) : (
-                                                    idx > 0 && (
-                                                        <button 
-                                                            onClick={() => handleLinkAsAlternative(q, idx)} 
-                                                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-700 text-[10px] font-bold rounded shadow-sm transition-all"
-                                                            title={uiLang === 'bn' ? 'পূর্ববর্তী প্রশ্নের সাথে অথবা হিসেবে লিঙ্ক করুন' : 'Link as alternative to previous question'}
-                                                        >
-                                                            {uiLang === 'bn' ? 'অথবা লিঙ্ক' : 'Link alternative'}
-                                                        </button>
-                                                    )
-                                                )}
-                                                {editorMode === 'FREE_EDIT' ? (
-                                                    <button 
-                                                        onClick={() => setRevisingQuestionNode(q)} 
-                                                        className="p-1.5 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded flex items-center gap-1 border border-transparent hover:border-emerald-100 transition-all" 
-                                                        title={uiLang === 'bn' ? 'প্রশ্ন সম্পাদন করুন' : 'Edit Question'}
-                                                    >
-                                                        <Edit3 size={12} />
-                                                        <span className="text-[10px] font-bold uppercase tracking-wider">
-                                                            {uiLang === 'bn' ? 'এডিট' : 'Edit'}
+                                                </div>
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    {isMCQ !== null && isMCQ !== undefined && (
+                                                        <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded uppercase ${isMCQ ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                            {isMCQ ? 'MCQ' : 'CQ/লিখিত'}
                                                         </span>
-                                                    </button>
-                                                ) : (
-                                                    <button 
-                                                        onClick={() => setRevisingQuestionNode(q)} 
-                                                        className="p-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded flex items-center gap-1 border border-transparent hover:border-amber-100 transition-all" 
-                                                        title={uiLang === 'bn' ? 'সংশোধন প্রস্তাব করুন' : 'Suggest a Revision'}
+                                                    )}
+                                                    <span className="text-[9.5px] font-extrabold bg-white border border-slate-200 text-slate-700 px-1.5 py-0.2 rounded shadow-2xs">
+                                                        {group.questions.length} {uiLang === 'bn' ? 'টি' : 'Qs'}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setCreateModalConfig({
+                                                                isOpen: true,
+                                                                defaultType: getSectionDefaultType(group.section, isMCQ),
+                                                                targetSectionId: secId,
+                                                                insertAfterIndex: group.questions[group.questions.length - 1]?.globalIndex ?? null
+                                                            });
+                                                        }}
+                                                        className="text-[9px] font-extrabold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-50 border border-indigo-200/80 px-1.5 py-0.2 rounded shadow-2xs flex items-center gap-0.5 transition-all"
+                                                        title={uiLang === 'bn' ? 'এই বিভাগে নতুন প্রশ্ন তৈরি ও যোগ করুন' : 'Create & Add Question'}
                                                     >
-                                                        <RotateCcw size={12} />
-                                                        <span className="text-[10px] font-bold uppercase tracking-wider">
-                                                            {uiLang === 'bn' ? 'রিভাইস' : 'Revise'}
-                                                        </span>
+                                                        <Plus size={10} />
+                                                        <span>{uiLang === 'bn' ? 'নতুন প্রশ্ন' : 'New Q'}</span>
                                                     </button>
-                                                )}
-                                                <button onClick={() => handleAutoSwap(q)} className="p-1.5 px-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded flex items-center gap-1 border border-transparent hover:border-indigo-100" title="Auto Swap"><RefreshCw size={12} /> <span className="text-[10px] font-bold uppercase tracking-wider">Auto</span></button>
-                                                <button onClick={() => {
-                                                    window.dispatchEvent(new CustomEvent('nexusSwapRequested', { detail: { pos: q.pos, nodeSize: q.nodeSize, attrs: q.attrs } }));
-                                                }} className="p-1.5 px-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded flex items-center gap-1 border border-transparent hover:border-blue-100" title="Manual Swap"><RefreshCw size={12} /> <span className="text-[10px] font-bold uppercase tracking-wider">Manual</span></button>
-                                                <button onClick={() => {
-                                                    if(window.confirm("Are you sure you want to delete this question?")) {
-                                                        window.dispatchEvent(new CustomEvent('nexusDeleteNodeRequested', { detail: { pos: q.pos, nodeSize: q.nodeSize } }));
-                                                        addToast(uiLang === 'bn' ? 'প্রশ্নটি মুছে ফেলা হয়েছে।' : 'Question has been deleted.', 'info');
-                                                    }
-                                                }} className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded" title="Delete Question"><Trash2 size={14} /></button>
+                                                    <div className="text-slate-400 group-hover:text-slate-700 transition-transform">
+                                                        {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                                                    </div>
+                                                </div>
                                             </div>
+
+                                            {/* Questions inside Section - Compact */}
+                                            {!isCollapsed && (
+                                                <div className="space-y-1.5 pl-0.5">
+                                                    {group.questions.map((q) => {
+                                                        const idx = q.globalIndex;
+                                                        const cleanText = getDisplayQuestionText(q.attrs);
+                                                        const hasStimulus = q.attrs.stimulus && !isPlaceholderText(q.attrs.stimulus);
+                                                        const hasStatements = q.attrs.statements && q.attrs.statements.length > 0;
+                                                        const hasOptions = q.attrs.options && q.attrs.options.length > 0;
+
+                                                        return (
+                                                            <React.Fragment key={`${q.attrs.questionId}-${idx}`}>
+                                                            <div 
+                                                                draggable={true}
+                                                                onDragStart={(e) => {
+                                                                    e.dataTransfer.setData('text/plain', String(idx));
+                                                                    setDraggedQIndex(idx);
+                                                                }}
+                                                                onDragOver={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.dataTransfer.dropEffect = 'move';
+                                                                    if (dragOverQIndex !== idx) setDragOverQIndex(idx);
+                                                                }}
+                                                                onDragLeave={() => {
+                                                                    if (dragOverQIndex === idx) setDragOverQIndex(null);
+                                                                }}
+                                                                onDrop={(e) => {
+                                                                    e.preventDefault();
+                                                                    handleReorderQuestion(draggedQIndex, idx);
+                                                                    setDraggedQIndex(null);
+                                                                    setDragOverQIndex(null);
+                                                                }}
+                                                                onDragEnd={() => {
+                                                                    setDraggedQIndex(null);
+                                                                    setDragOverQIndex(null);
+                                                                }}
+                                                                className={`bg-white border rounded-lg p-2.5 transition-all group relative shadow-2xs space-y-1.5 cursor-grab active:cursor-grabbing ${
+                                                                    draggedQIndex === idx 
+                                                                        ? 'opacity-40 scale-[0.98] border-dashed border-indigo-400 bg-indigo-50/20' 
+                                                                        : dragOverQIndex === idx && draggedQIndex !== idx
+                                                                            ? 'ring-2 ring-indigo-500 border-indigo-500 bg-indigo-50/60 shadow-md -translate-y-0.5'
+                                                                            : 'border-slate-200/90 hover:border-indigo-300 hover:shadow-xs'
+                                                                }`}
+                                                            >
+                                                                {/* Header / Meta row */}
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex items-center gap-1 min-w-0">
+                                                                        <div 
+                                                                            className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-500 hover:text-indigo-600 transition-colors shrink-0 -ml-0.5" 
+                                                                            title={uiLang === 'bn' ? 'টেনে নিয়ে ক্রম পরিবর্তন করুন' : 'Drag to reorder'}
+                                                                        >
+                                                                            <GripVertical size={13} />
+                                                                        </div>
+                                                                        <span className="shrink-0 bg-slate-800 text-white text-[9.5px] font-black px-1.5 py-0.2 rounded font-mono shadow-2xs">
+                                                                            {q.attrs.alternativeToId 
+                                                                                ? (uiLang === 'bn' ? 'অথবা' : 'OR') 
+                                                                                : convertDigits(
+                                                                                    q.displayNumber || q.attrs.questionNumber || (idx + 1),
+                                                                                    group.section.numberingStyle === 'en' ? 'ENGLISH' : 'BANGLA'
+                                                                                )
+                                                                            }
+                                                                        </span>
+                                                                        <span className={`text-[8.5px] font-black px-1.2 py-0.2 rounded uppercase ${q.attrs.type === 'MCQ' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                                            {q.attrs.type || 'Q'}
+                                                                        </span>
+                                                                        {q.attrs.marks && (
+                                                                            <span className="text-[8.5px] font-bold px-1.2 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200/60 font-mono">
+                                                                                {uiLang === 'bn' ? `মান: ${convertDigits(q.attrs.marks, 'BANGLA')}` : `M: ${q.attrs.marks}`}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    {q.attrs.alternativeToId ? (
+                                                                        <span className="shrink-0 bg-amber-50 text-amber-700 text-[8.5px] font-bold px-1.5 py-0.2 rounded border border-amber-200/60 font-sans">
+                                                                            OR / অথবা
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-[9.5px] font-bold text-slate-400 truncate max-w-[100px]" title={q.attrs.chapterName || q.attrs.subjectName}>
+                                                                            {q.attrs.chapterName || q.attrs.subjectName || ''}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+
+                                                                {/* Stimulus / উদ্দীপক */}
+                                                                {hasStimulus && (
+                                                                    <div 
+                                                                        className="p-1.5 bg-amber-50/90 rounded-md text-[11px] text-slate-800 italic border border-amber-200/50 leading-relaxed shadow-2xs"
+                                                                        dangerouslySetInnerHTML={{ __html: parseMarkdownImages(q.attrs.stimulus) }}
+                                                                    />
+                                                                )}
+
+                                                                {/* Main Question Text & CQ Sub-parts */}
+                                                                {cleanText ? (
+                                                                    <div 
+                                                                        className="text-[11.5px] text-slate-800 font-medium leading-snug"
+                                                                        dangerouslySetInnerHTML={{ __html: parseMarkdownImages(cleanText) }}
+                                                                    />
+                                                                ) : null}
+
+                                                                {/* Statements (i, ii, iii) */}
+                                                                {hasStatements && (
+                                                                    <div className="pl-2 py-0.5 space-y-0.5 border-l-2 border-indigo-300 bg-indigo-50/30 rounded-r">
+                                                                        {q.attrs.statements.map((stmt, sIdx) => {
+                                                                            const cleanStmt = (typeof stmt === 'string' ? stmt : '').replace(/^(?:i{1,3}|iv|v|vi{0,3}|ix|x|[0-9]+|[১-৯]+)[\.\)]\s*/i, '').trim();
+                                                                            return (
+                                                                                <div key={sIdx} className="text-[10.5px] text-slate-700 flex gap-1 leading-tight">
+                                                                                    <span className="font-bold text-indigo-700 font-mono shrink-0">{['i', 'ii', 'iii', 'iv', 'v'][sIdx] || sIdx + 1}.</span>
+                                                                                    <span dangerouslySetInnerHTML={{ __html: parseMarkdownImages(cleanStmt) }}></span>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Options (ক, খ, গ, ঘ) */}
+                                                                {hasOptions && (
+                                                                    <div className="grid grid-cols-2 gap-1 mt-1 bg-slate-50/80 p-1.5 rounded-md border border-slate-200/70 shadow-2xs">
+                                                                        {q.attrs.options.map((opt, oIdx) => {
+                                                                            const optText = opt.optionText || opt.text || '';
+                                                                            const optLabel = ['(ক)', '(খ)', '(গ)', '(ঘ)'][oIdx] || `(${oIdx + 1})`;
+                                                                            const isCorrect = !!opt.isCorrect;
+                                                                            return (
+                                                                                <div 
+                                                                                    key={oIdx} 
+                                                                                    className={`flex items-start gap-1 p-0.5 rounded text-[10.5px] leading-tight ${isCorrect ? 'bg-emerald-100/70 border border-emerald-300/80 text-emerald-900 font-semibold' : 'text-slate-700'}`}
+                                                                                >
+                                                                                    <span className={`font-mono text-[9.5px] shrink-0 ${isCorrect ? 'text-emerald-700 font-bold' : 'text-slate-400 font-medium'}`}>
+                                                                                        {optLabel}
+                                                                                    </span>
+                                                                                    <span 
+                                                                                        className="flex-grow break-words" 
+                                                                                        dangerouslySetInnerHTML={{ __html: parseMarkdownImages(optText.replace(/<p>/g, '').replace(/<\/p>/g, '')) }} 
+                                                                                    />
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Controls Toolbar */}
+                                                                <div className="flex flex-wrap items-center justify-end gap-1 pt-1.5 border-t border-slate-100 opacity-60 group-hover:opacity-100 transition-opacity">
+                                                                    {q.attrs.alternativeToId ? (
+                                                                        <button 
+                                                                            onClick={() => handleUnlinkAlternative(q)} 
+                                                                            className="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-[9px] font-bold rounded shadow-2xs transition-all"
+                                                                            title={uiLang === 'bn' ? 'লিঙ্ক বাতিল করুন' : 'Unlink alternative'}
+                                                                        >
+                                                                            {uiLang === 'bn' ? 'লিঙ্ক বাতিল' : 'Unlink'}
+                                                                        </button>
+                                                                    ) : (
+                                                                        idx > 0 && (
+                                                                            <button 
+                                                                                onClick={() => handleLinkAsAlternative(q, idx)} 
+                                                                                className="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-700 text-[9px] font-bold rounded shadow-2xs transition-all"
+                                                                                title={uiLang === 'bn' ? 'পূর্ববর্তী প্রশ্নের সাথে অথবা হিসেবে লিঙ্ক করুন' : 'Link as alternative to previous question'}
+                                                                            >
+                                                                                {uiLang === 'bn' ? 'অথবা লিঙ্ক' : 'Link alternative'}
+                                                                            </button>
+                                                                        )
+                                                                    )}
+                                                                    {editorMode === 'FREE_EDIT' ? (
+                                                                        <button 
+                                                                            onClick={() => setRevisingQuestionNode(q)} 
+                                                                            className="p-1 px-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded flex items-center gap-0.5 border border-transparent hover:border-emerald-100 transition-all" 
+                                                                            title={uiLang === 'bn' ? 'প্রশ্ন সম্পাদন করুন' : 'Edit Question'}
+                                                                        >
+                                                                            <Edit3 size={11} />
+                                                                            <span className="text-[9px] font-bold uppercase tracking-wider">
+                                                                                {uiLang === 'bn' ? 'এডিট' : 'Edit'}
+                                                                            </span>
+                                                                        </button>
+                                                                    ) : (
+                                                                        <button 
+                                                                            onClick={() => setRevisingQuestionNode(q)} 
+                                                                            className="p-1 px-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded flex items-center gap-0.5 border border-transparent hover:border-amber-100 transition-all" 
+                                                                            title={uiLang === 'bn' ? 'সংশোধন প্রস্তাব করুন' : 'Suggest a Revision'}
+                                                                        >
+                                                                            <RotateCcw size={11} />
+                                                                            <span className="text-[9px] font-bold uppercase tracking-wider">
+                                                                                {uiLang === 'bn' ? 'রিভাইস' : 'Revise'}
+                                                                            </span>
+                                                                        </button>
+                                                                    )}
+                                                                    <button onClick={() => handleAutoSwap(q)} className="p-1 px-1.5 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded flex items-center gap-0.5 border border-transparent hover:border-indigo-100" title="Auto Swap"><RefreshCw size={11} /> <span className="text-[9px] font-bold uppercase tracking-wider">Auto</span></button>
+                                                                    <button onClick={() => {
+                                                                        window.dispatchEvent(new CustomEvent('nexusSwapRequested', { detail: { pos: q.pos, nodeSize: q.nodeSize, attrs: q.attrs } }));
+                                                                    }} className="p-1 px-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded flex items-center gap-0.5 border border-transparent hover:border-blue-100" title="Manual Swap"><RefreshCw size={11} /> <span className="text-[9px] font-bold uppercase tracking-wider">Manual</span></button>
+                                                                    <button onClick={() => {
+                                                                        if(window.confirm("Are you sure you want to delete this question?")) {
+                                                                            window.dispatchEvent(new CustomEvent('nexusDeleteNodeRequested', { detail: { pos: q.pos, nodeSize: q.nodeSize } }));
+                                                                            addToast(uiLang === 'bn' ? 'প্রশ্নটি মুছে ফেলা হয়েছে।' : 'Question has been deleted.', 'info');
+                                                                        }
+                                                                    }} className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded" title="Delete Question"><Trash2 size={13} /></button>
+                                                                </div>
+                                                            </div>
+                                                            {/* In-between Add Question Button Line */}
+                                                            <div className="relative py-0.5 group/insert flex items-center justify-center">
+                                                                <div className="absolute inset-0 flex items-center">
+                                                                    <div className="w-full border-t border-dashed border-slate-200 group-hover/insert:border-indigo-300 transition-colors" />
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setCreateModalConfig({
+                                                                        isOpen: true,
+                                                                        defaultType: q.attrs.type || getSectionDefaultType(group.section, isMCQ),
+                                                                        targetSectionId: secId,
+                                                                        insertAfterIndex: idx
+                                                                    })}
+                                                                    className="relative z-10 opacity-0 group-hover/insert:opacity-100 transition-all bg-white hover:bg-indigo-600 text-slate-500 hover:text-white border border-slate-200 hover:border-indigo-600 px-2 py-0.5 rounded-full text-[9px] font-black shadow-xs flex items-center gap-1 scale-90 group-hover/insert:scale-100"
+                                                                >
+                                                                    <Plus size={10} />
+                                                                    <span>{uiLang === 'bn' ? 'এখানে নতুন প্রশ্ন তৈরি করুন' : 'Insert Question Here'}</span>
+                                                                </button>
+                                                            </div>
+                                                        </React.Fragment>
+                                                        );
+                                                    })}
+                                                    {/* Bottom of Section Add Question Button */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setCreateModalConfig({
+                                                            isOpen: true,
+                                                            defaultType: getSectionDefaultType(group.section, isMCQ),
+                                                            targetSectionId: secId,
+                                                            insertAfterIndex: group.questions[group.questions.length - 1]?.globalIndex ?? null
+                                                        })}
+                                                        className="w-full py-1.5 bg-white hover:bg-indigo-50 border border-dashed border-slate-200 hover:border-indigo-300 rounded-lg text-slate-500 hover:text-indigo-700 text-[10.5px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs mt-1"
+                                                    >
+                                                        <Plus size={12} />
+                                                        <span>{uiLang === 'bn' ? '➕ এই বিভাগে নতুন প্রশ্ন তৈরি করুন' : '➕ Add Question to Section'}</span>
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
-                                    ))
+                                    );
+                                })
                             )}
                         </div>
                     )}
@@ -628,33 +1135,45 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
             </div>
  
             {revisingQuestionNode && createPortal(
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 print:hidden animate-in fade-in zoom-in-95 duration-200">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col relative border border-slate-200">
-                        <div className="flex justify-between items-center p-6 border-b border-slate-200 bg-white shadow-sm z-10">
-                            <div className="flex items-center gap-4">
-                                <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-xl shadow-md">
-                                    {editorMode === 'FREE_EDIT' ? <Edit3 size={22} strokeWidth={2.5} /> : <RotateCcw size={22} strokeWidth={2.5} />}
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-3 md:p-6 print:hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[88vh] overflow-hidden flex flex-col relative border border-slate-700/30">
+                        {/* Modern Dark Header Bar */}
+                        <div className="flex justify-between items-center px-4 py-2.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-sm z-10 border-b border-slate-800 shrink-0">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="p-1.5 bg-indigo-500/20 text-indigo-400 border border-indigo-400/30 rounded-lg shadow-2xs shrink-0">
+                                    {editorMode === 'FREE_EDIT' ? <Edit3 size={15} strokeWidth={2.5} /> : <RotateCcw size={15} strokeWidth={2.5} />}
                                 </div>
-                                <div>
-                                    <h2 className="text-xl font-black text-slate-800 tracking-tight">
-                                        {editorMode === 'FREE_EDIT' 
-                                            ? (uiLang === 'bn' ? 'প্রশ্ন সম্পাদনা করুন' : 'Edit Question') 
-                                            : (uiLang === 'bn' ? 'প্রশ্ন সংশোধন (রিভিশন)' : 'Suggest a Revision')
-                                        }
+                                <div className="truncate">
+                                    <h2 className="text-xs font-black text-white tracking-tight flex items-center gap-2">
+                                        <span>
+                                            {editorMode === 'FREE_EDIT' 
+                                                ? (uiLang === 'bn' ? 'প্রশ্ন সম্পাদনা' : 'Edit Question') 
+                                                : (uiLang === 'bn' ? 'প্রশ্ন সংশোধন (রিভিশন)' : 'Suggest a Revision')
+                                            }
+                                        </span>
+                                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-indigo-500/30 text-indigo-200 rounded border border-indigo-400/30 uppercase font-mono">
+                                            {revisingQuestionNode.attrs?.type || 'Q'}
+                                        </span>
                                     </h2>
-                                    <p className="text-sm text-slate-500 font-medium mt-0.5">
+                                    <p className="text-[10px] text-slate-300 font-normal truncate">
                                         {editorMode === 'FREE_EDIT'
-                                            ? (uiLang === 'bn' ? 'আপনার পরিবর্তনগুলো সরাসরি ক্যানভাস এবং প্রশ্ন ব্যাংকে সংরক্ষিত হবে।' : 'Your changes will update the canvas instantly and await admin approval.')
-                                            : (uiLang === 'bn' ? 'আপনার পরিবর্তনগুলো ক্যানভাসে দেখা যাবে এবং অ্যাডমিনের অনুমোদনের অপেক্ষায় থাকবে।' : 'Your changes will update the canvas instantly and await admin approval.')
+                                            ? (uiLang === 'bn' ? 'পরিবর্তনগুলো সরাসরি ক্যানভাস এবং ডাটাবেজে সংরক্ষিত হবে।' : 'Changes update canvas and database instantly.')
+                                            : (uiLang === 'bn' ? 'পরিবর্তনগুলো অ্যাডমিনের অনুমোদনের পর চূড়ান্ত হবে।' : 'Changes await admin approval.')
                                         }
                                     </p>
                                 </div>
                             </div>
-                            <button onClick={() => setRevisingQuestionNode(null)} className="p-2.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all active:scale-95 border border-transparent hover:border-slate-200">
-                                <X size={20} strokeWidth={2.5} />
+                            <button 
+                                onClick={() => setRevisingQuestionNode(null)} 
+                                className="p-1 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all active:scale-95 border border-transparent shrink-0"
+                                title="Close"
+                            >
+                                <X size={16} strokeWidth={2.5} />
                             </button>
                         </div>
-                        <div className="flex-1 overflow-auto custom-scrollbar bg-slate-50 relative">
+                        
+                        {/* Editor Body */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50 relative p-3">
                             <QuestionEdit 
                                 inlineId={revisingQuestionNode.attrs.questionId} 
                                 forceMode={editorMode === 'FREE_EDIT' ? 'edit' : 'revise'} 
@@ -683,6 +1202,17 @@ const LeftSidebar = ({ isDraggingLeft, setIsDraggingLeft }) => {
                     </div>
                 </div>,
                 document.body
+            )}
+
+            {/* Question Create & Insert Modal */}
+            {createModalConfig.isOpen && (
+                <QuestionCreateModal
+                    isOpen={createModalConfig.isOpen}
+                    onClose={() => setCreateModalConfig(prev => ({ ...prev, isOpen: false }))}
+                    defaultType={createModalConfig.defaultType}
+                    targetSectionId={createModalConfig.targetSectionId}
+                    insertAfterIndex={createModalConfig.insertAfterIndex}
+                />
             )}
         </div>
     );

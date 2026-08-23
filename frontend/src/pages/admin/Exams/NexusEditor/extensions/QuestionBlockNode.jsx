@@ -249,7 +249,7 @@ const processTabularHTML = (html) => {
         const doc = parser.parseFromString(html, 'text/html');
         
         const isTabularText = (text) => {
-            return /\t| {3,}|(?:\s*&nbsp;\s*){2,}/i.test(text) || text.includes('\u00A0\u00A0');
+            return text && text.includes('\t');
         };
         
         const processBlock = (blockNode) => {
@@ -316,7 +316,7 @@ const processTabularHTML = (html) => {
                 if (group.isTable) {
                     const tableDiv = doc.createElement('div');
                     tableDiv.className = 'nexus-tabular-grid';
-                    tableDiv.setAttribute('style', "font-family: Consolas, Monaco, 'Courier New', monospace !important; white-space: pre !important; font-size: 12.5px !important; line-height: 1.5 !important; background-color: #fafafa; border: 1px solid #d1d5db; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 10px 0; letter-spacing: 0.03em; color: #111827; display: block; width: 100%; box-sizing: border-box;");
+                    tableDiv.setAttribute('style', "font-family: inherit !important; white-space: pre-wrap !important; font-size: inherit !important; line-height: inherit !important; background-color: transparent; border: none; padding: 0; margin: 4px 0; color: inherit; display: block; width: 100%;");
                     
                     group.lines.forEach((lineNodes, lIdx) => {
                         lineNodes.forEach(node => {

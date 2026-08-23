@@ -5,7 +5,7 @@ import {
     Settings2, FileText, Copy, Loader2, Printer, 
     FileDown, LayoutTemplate, Save, Languages, Cloud,
     ClipboardList, HelpCircle, Sliders, Palette, CheckSquare,
-    Image as ImageIcon, MoreVertical, ArrowLeft
+    Image as ImageIcon, MoreVertical, ArrowLeft, Share2
 } from 'lucide-react';
 import { useNexusEditor } from '../../context/NexusEditorContext';
 import { useExamManager } from '../../hooks/useExamManager';
@@ -27,6 +27,7 @@ const NexusHeader = () => {
         activeTab, setActiveTab,
         isSavingDocument, addToast, autoSaveStatus,
         setShowFilenameModal,
+        showShareModal, setShowShareModal,
         docSettings, updateSetting
     } = useNexusEditor();
 
@@ -172,7 +173,7 @@ const NexusHeader = () => {
                 </div>
                 
                 <div className="flex items-center gap-2 sm:gap-3">
-                    {/* Header Actions: Print, Save & Dropdown */}
+                    {/* Header Actions: Print, Share, Save & Dropdown */}
                     <div className="flex items-center gap-2 border-l border-slate-200 pl-3 relative">
                         {/* Print Button (Visible Outside) */}
                         {!isMobileApp && (
@@ -182,9 +183,19 @@ const NexusHeader = () => {
                                 title={uiLang === 'bn' ? 'ডকুমেন্ট প্রিন্ট করুন' : 'Print Document'}
                             >
                                 <Printer size={14} className="text-slate-500 group-hover:text-indigo-600 transition-colors" />
-                                <span>{uiLang === 'bn' ? 'প্রিন্ট করুন' : 'Print'}</span>
+                                <span>{uiLang === 'bn' ? 'প্রিন্ট' : 'Print'}</span>
                             </button>
                         )}
+
+                        {/* Share Button (Visible Outside beside Print) */}
+                        <button 
+                            onClick={() => setShowShareModal(true)}
+                            className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-indigo-50/60 hover:border-indigo-300 hover:text-indigo-600 rounded-lg text-xs font-bold shadow-sm transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 group"
+                            title={uiLang === 'bn' ? 'প্রশ্নপত্র শেয়ার করুন' : 'Share Exam Paper'}
+                        >
+                            <Share2 size={14} className="text-slate-500 group-hover:text-indigo-600 transition-colors" />
+                            <span>{uiLang === 'bn' ? 'শেয়ার' : 'Share'}</span>
+                        </button>
 
                         {/* Save Document Primary Button */}
                         <button 
@@ -215,6 +226,21 @@ const NexusHeader = () => {
                                         {uiLang === 'bn' ? 'অতিরিক্ত অপশন' : 'More Options'}
                                     </div>
                                     
+                                    {/* Share Button in Dropdown */}
+                                    <button 
+                                        onClick={() => { 
+                                            setShowShareModal(true);
+                                            setShowMoreMenu(false); 
+                                        }}
+                                        className="w-full px-2.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 rounded-lg flex items-center justify-between transition-colors group"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Share2 size={14} className="text-indigo-500" />
+                                            <span>{uiLang === 'bn' ? 'প্রশ্নপত্র শেয়ার করুন' : 'Share Exam Paper'}</span>
+                                        </div>
+                                        <span className="text-[9px] font-mono text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded uppercase">Share</span>
+                                    </button>
+
                                     {/* Save As Button */}
                                     <button 
                                         onClick={() => { 

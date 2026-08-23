@@ -10,6 +10,19 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang, documen
     const [sectionTabs, setSectionTabs] = React.useState({});
     const [collapsedSections, setCollapsedSections] = React.useState({});
 
+    const profileInstituteName = React.useMemo(() => {
+        try {
+            const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+            const lang = (s.language || '').toUpperCase();
+            if (lang === 'ENGLISH') {
+                return storedUser.instituteNameEn || storedUser.instituteName || storedUser.institute?.nameEn || storedUser.institute?.name || storedUser.name || s.institute || '';
+            }
+            return storedUser.instituteNameBn || storedUser.instituteName || storedUser.institute?.nameBn || storedUser.institute?.name || storedUser.name || s.institute || '';
+        } catch (e) {
+            return s.institute || '';
+        }
+    }, [s.language, s.institute]);
+
     return (
         <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-white">
             {activeTab === "questionSetup" && <>
@@ -507,13 +520,29 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang, documen
                 <div className="space-y-4">
                     {/* Institute Card */}
                     <div className="bg-slate-50 rounded-xl border border-slate-100 p-3.5 shadow-sm">
-                        <div className="flex items-center gap-2 mb-3">
-                            <div className="w-1.5 h-4 bg-indigo-500 rounded-full"></div>
-                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest">{t.institute || 'Institute Details'}</h3>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-4 bg-indigo-500 rounded-full"></div>
+                                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest">{t.institute || 'Institute Details'}</h3>
+                            </div>
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Lock size={10} />
+                                <span>{uiLang === 'bn' ? 'প্রোফাইল থেকে লকড' : 'Locked from Profile'}</span>
+                            </span>
                         </div>
                         <div className="space-y-2">
                             <FL label={t.name} toggleKey="showInstitute" toggleVal={s.showInstitute!==false} onToggle={u}>
-                                <FieldDisplay isEdit={isEditMode} value={s.institute} onChange={v=>u("institute",v)} />
+                                <div className="relative group">
+                                    <input 
+                                        type="text" 
+                                        value={profileInstituteName || s.institute || ''} 
+                                        disabled={true} 
+                                        readOnly={true}
+                                        className="w-full text-[13px] px-2.5 py-1.5 border border-slate-200 rounded-md bg-slate-100/90 text-slate-700 font-bold cursor-not-allowed select-none pl-8 shadow-inner" 
+                                        title={uiLang === 'bn' ? 'প্রতিষ্ঠানের নাম পরিবর্তনযোগ্য নয় (প্রোফাইল থেকে সংগৃহীত)' : 'Institute name is locked and loaded from profile'}
+                                    />
+                                    <Lock size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                </div>
                             </FL>
                             <FL label={t.board} toggleKey="showBoard" toggleVal={s.showBoard} onToggle={u}>
                                 <FieldDisplay isEdit={isEditMode} value={s.board} onChange={v=>u("board",v)} />

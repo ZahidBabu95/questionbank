@@ -15,6 +15,7 @@ public interface QuestionFeedbackService {
     // Favorites
     Map<String, Object> toggleFavorite(UUID questionId, String userEmail);
     boolean hasFavorited(UUID questionId, String userEmail);
+    Page<Question> getUserFavorites(String userEmail, Map<String, String> filters, Pageable pageable);
     Page<Question> getUserFavorites(String userEmail, Pageable pageable);
     java.util.List<UUID> getUserFavoriteIds(String userEmail);
 

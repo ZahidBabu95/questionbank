@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from '../../utils/axios';
 import questionService from '../../services/questionService';
 import academicService from '../../services/academicService';
@@ -7,7 +7,8 @@ import { useLanguage } from '../../context/LanguageContext';
 import {
     BookOpen, Clock, Award, Play, AlertCircle, Loader2, Trophy,
     TrendingUp, Star, Sparkles, ArrowRight, Search, Filter,
-    CheckCircle2, XCircle, X, ChevronRight, Info, Eye, ExternalLink, HelpCircle
+    CheckCircle2, XCircle, X, ChevronRight, ChevronDown, ChevronUp, Info, Eye, ExternalLink, HelpCircle,
+    Sliders, FileText, Database, Zap, EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -30,7 +31,20 @@ const StudentDashboard = ({ user }) => {
         } catch(e) { return []; }
     });
     const [questions, setQuestions] = useState([]);
-    const [subjects, setSubjects] = useState([]);
+    const [subjects, setSubjects] = useState(() => {
+        try {
+            const cached = sessionStorage.getItem('student_subjects_cache');
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Array.isArray(parsed) && parsed.length > 50) {
+                    sessionStorage.removeItem('student_subjects_cache');
+                    return [];
+                }
+                return parsed;
+            }
+            return [];
+        } catch(e) { return []; }
+    });
     
     // Question Bank States
     const [loadingQuestions, setLoadingQuestions] = useState(false);
@@ -42,6 +56,25 @@ const StudentDashboard = ({ user }) => {
     const [loadingOptions, setLoadingOptions] = useState(false);
 
     // General States
+    const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
+
+    const toggleBannerCollapse = () => {
+        setIsBannerCollapsed(prev => !prev);
+    };
+
+    // Filter display subjects so global dumps (> 50) never show
+    const displaySubjects = useMemo(() => {
+        if (!Array.isArray(subjects) || subjects.length > 50) return [];
+        return subjects;
+    }, [subjects]);
+
+    // Auto-collapse banner after 3 seconds on initial load so user sees welcome greeting
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setIsBannerCollapsed(true);
+        }, 3000);
+        return () => clearTimeout(timer);
+    }, []);
     const [loading, setLoading] = useState(!exams.length && !completedExams.length);
     const [topicAccuracy, setTopicAccuracy] = useState({});
     const [loadingTopicAnalytics, setLoadingTopicAnalytics] = useState(false);
@@ -52,25 +85,33 @@ const StudentDashboard = ({ user }) => {
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
-                // Fetch assigned exams
-                const resExams = await axios.get('/v1/student/exams/assigned');
-                if (resExams.data) {
-                    setExams(resExams.data);
-                    sessionStorage.setItem('student_assigned_exams_cache', JSON.stringify(resExams.data));
+                // Fetch assigned exams, results, and subjects in parallel
+                const [resExams, resResults, resSubjects] = await Promise.allSettled([
+                    axios.get('/v1/student/exams/assigned'),
+                    axios.get('/v1/student/results'),
+                    user?.classId ? academicService.getSubjectsByClass(user.classId) : Promise.resolve([])
+                ]);
+
+                if (resExams.status === 'fulfilled' && resExams.value?.data) {
+                    setExams(resExams.value.data);
+                    sessionStorage.setItem('student_assigned_exams_cache', JSON.stringify(resExams.value.data));
                 }
 
-                // Fetch completed exams results
-                const resResults = await axios.get('/v1/student/results');
-                if (resResults.data) {
-                    setCompletedExams(resResults.data);
-                    sessionStorage.setItem('student_completed_exams_cache', JSON.stringify(resResults.data));
+                if (resResults.status === 'fulfilled' && resResults.value?.data) {
+                    setCompletedExams(resResults.value.data);
+                    sessionStorage.setItem('student_completed_exams_cache', JSON.stringify(resResults.value.data));
                 }
 
-                // Fetch subjects for filters
-                if (user?.classId) {
-                    const resSubjects = await academicService.getSubjectsByClass(user.classId);
-                    if (resSubjects) {
-                        setSubjects(resSubjects);
+                if (resSubjects.status === 'fulfilled' && resSubjects.value) {
+                    const rawSubj = resSubjects.value;
+                    let subjList = Array.isArray(rawSubj) ? rawSubj : (rawSubj.data || []);
+                    if (subjList.length > 50) {
+                        subjList = [];
+                        sessionStorage.removeItem('student_subjects_cache');
+                    }
+                    setSubjects(subjList);
+                    if (subjList.length > 0) {
+                        sessionStorage.setItem('student_subjects_cache', JSON.stringify(subjList));
                     }
                 }
             } catch (err) {
@@ -274,54 +315,187 @@ const StudentDashboard = ({ user }) => {
             animate="visible"
             className="space-y-6 font-sans pb-10"
         >
-            {/* 🌟 HERO HERO SECTION */}
-            <motion.div
-                variants={cardVariants}
-                className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 md:p-8 text-white shadow-xl border border-white/10"
-            >
-                <div className="absolute -right-24 -top-24 w-64 h-64 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none animate-pulse"></div>
-                <div className="absolute -left-24 -bottom-24 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none"></div>
-
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="space-y-3.5">
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-extrabold tracking-wider uppercase border border-white/10 text-indigo-200">
-                            <Sparkles size={13} className="text-amber-400 animate-spin" style={{ animationDuration: '6s' }} />
-                            <span>{t('db_student_portal')}</span>
+            {/* 🌟 HERO HERO SECTION (COMPACT & AUTO-HIDEABLE) */}
+            <motion.div variants={cardVariants} className="space-y-4">
+                {isBannerCollapsed ? (
+                    <div className="flex items-center justify-between bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-slate-800 rounded-2xl px-5 py-3 text-white shadow-md">
+                        <div className="flex items-center gap-2.5 text-xs font-extrabold">
+                            <Sparkles size={15} className="text-amber-400 animate-pulse" />
+                            <span>{t('db_welcome_back')}, {user?.name || t('db_student_welcome_fallback')}! 👋</span>
                         </div>
-                        <h1 className="text-2xl md:text-4xl font-extrabold tracking-tight">
-                            {t('db_welcome_back')}, <span className="bg-gradient-to-r from-indigo-300 to-purple-300 bg-clip-text text-transparent">{user?.name || t('db_student_welcome_fallback')}</span>! 👋
-                        </h1>
-                        <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-300">
-                            <span className="bg-white/5 px-3.5 py-1.5 rounded-xl border border-white/5 backdrop-blur-sm">
-                                {t('db_student_class')}{user?.className || t('db_student_unassigned')}
-                            </span>
-                            {user?.studentRoll && (
-                                <span className="bg-white/5 px-3.5 py-1.5 rounded-xl border border-white/5 backdrop-blur-sm">
-                                    {t('db_student_roll')}{formatDigits(user.studentRoll)}
-                                </span>
-                            )}
-                        </div>
+                        <button
+                            onClick={toggleBannerCollapse}
+                            className="text-xs font-bold text-indigo-300 hover:text-white flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-xl transition-all border border-white/10 active:scale-95"
+                            title="ব্যানার খুলুন"
+                        >
+                            <ChevronDown size={14} />
+                            <span>{currentLang === 'bn' ? 'ব্যানার খুলুন' : 'Show Banner'}</span>
+                        </button>
                     </div>
+                ) : (
+                    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-4 md:p-5 text-white shadow-lg border border-white/10">
+                        <div className="absolute -right-24 -top-24 w-64 h-64 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none animate-pulse"></div>
+                        <div className="absolute -left-24 -bottom-24 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-                    {/* Scholar Progress */}
-                    <div className="flex items-center gap-4 bg-white/5 backdrop-blur-lg border border-white/10 p-4 rounded-2xl flex-shrink-0">
-                        <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${badgeColor} text-white flex items-center justify-center shadow-lg shadow-indigo-500/10 font-extrabold text-xl flex-shrink-0 border ${badgeBorder}`}>
-                            {formatDigits(currentLevel)}
+                        {/* Top Banner Control Bar */}
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 bg-white/10 backdrop-blur-md rounded-full text-[10px] md:text-xs font-extrabold tracking-wider uppercase border border-white/10 text-indigo-200">
+                                <Sparkles size={12} className="text-amber-400 animate-spin" style={{ animationDuration: '6s' }} />
+                                <span>{t('db_student_portal')}</span>
+                            </div>
+                            <button
+                                onClick={toggleBannerCollapse}
+                                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-all active:scale-90"
+                                title="ব্যানার কোলাপ্স করুন / লুকান"
+                            >
+                                <ChevronUp size={16} />
+                            </button>
                         </div>
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{t('db_student_level_title')}</p>
-                            <p className="text-sm font-extrabold text-white">{badgeTitle}</p>
-                            <div className="w-36">
-                                <div className="flex justify-between text-[9px] font-bold text-indigo-300 mb-0.5">
-                                    <span>{formatDigits(xpProgressToNextLevel)} XP</span>
-                                    <span>{formatDigits(100)} XP</span>
+
+                        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="space-y-1.5">
+                                <h1 className="text-xl md:text-3xl font-extrabold tracking-tight">
+                                    {t('db_welcome_back')}, <span className="bg-gradient-to-r from-indigo-300 to-purple-300 bg-clip-text text-transparent">{user?.name || t('db_student_welcome_fallback')}</span>! 👋
+                                </h1>
+                                <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-300">
+                                    <span className="bg-white/5 px-3 py-1 rounded-lg border border-white/5 backdrop-blur-sm">
+                                        {t('db_student_class')}{user?.className || t('db_student_unassigned')}
+                                    </span>
+                                    {user?.studentRoll && (
+                                        <span className="bg-white/5 px-3 py-1 rounded-lg border border-white/5 backdrop-blur-sm">
+                                            {t('db_student_roll')}{formatDigits(user.studentRoll)}
+                                        </span>
+                                    )}
                                 </div>
-                                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full" style={{ width: `${xpProgressToNextLevel}%` }}></div>
+                            </div>
+
+                            {/* Scholar Progress */}
+                            <div className="flex items-center gap-3 bg-white/5 backdrop-blur-lg border border-white/10 p-3 rounded-xl flex-shrink-0">
+                                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${badgeColor} text-white flex items-center justify-center shadow-md font-extrabold text-base flex-shrink-0 border ${badgeBorder}`}>
+                                    {formatDigits(currentLevel)}
+                                </div>
+                                <div className="space-y-0.5">
+                                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{t('db_student_level_title')}</p>
+                                    <p className="text-xs font-extrabold text-white">{badgeTitle}</p>
+                                    <div className="w-32">
+                                        <div className="flex justify-between text-[8px] font-bold text-indigo-300 mb-0.5">
+                                            <span>{formatDigits(xpProgressToNextLevel)} XP</span>
+                                            <span>{formatDigits(100)} XP</span>
+                                        </div>
+                                        <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                                            <div className="h-full bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full" style={{ width: `${xpProgressToNextLevel}%` }}></div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
+                )}
+
+                {/* 🚀 ULTRA-PREMIUM QUICK ACCESS ACTION CARDS GRID */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-1">
+                    {/* Card 1: Auto 1-Click Question Generator */}
+                    <motion.div
+                        whileHover={{ y: -6, scale: 1.02 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    >
+                        <Link 
+                            to="/exams/generate/auto" 
+                            className="group relative overflow-hidden bg-white/80 dark:bg-slate-900/90 backdrop-blur-xl border border-amber-200/80 dark:border-amber-700/40 rounded-3xl p-5 transition-all duration-300 shadow-[0_4px_20px_rgba(245,158,11,0.06)] hover:shadow-[0_16px_35px_-6px_rgba(245,158,11,0.22)] hover:border-amber-400 flex flex-col justify-between h-full min-h-[148px]"
+                        >
+                            {/* Background Ambient Mesh Glow */}
+                            <div className="absolute -right-10 -bottom-10 w-36 h-36 bg-gradient-to-br from-amber-400/20 via-orange-400/10 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none"></div>
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 rounded-t-3xl opacity-80 group-hover:opacity-100 transition-opacity"></div>
+
+                            <div className="relative z-10 flex items-start justify-between">
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center shadow-lg shadow-amber-500/35 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                                    <Zap size={22} className="animate-pulse fill-white/20" />
+                                </div>
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-3 py-1 bg-amber-500/15 text-amber-800 dark:text-amber-300 rounded-full uppercase tracking-wider border border-amber-400/30 backdrop-blur-md shadow-sm">
+                                    <Sparkles size={11} className="text-amber-500 animate-spin" style={{ animationDuration: '4s' }} />
+                                    {currentLang === 'bn' ? 'অটো ১-ক্লিক' : 'Auto 1-Click'}
+                                </span>
+                            </div>
+
+                            <div className="relative z-10 mt-4">
+                                <h3 className="text-base font-extrabold text-slate-900 dark:text-white group-hover:text-amber-600 transition-colors flex items-center gap-2">
+                                    <span>{currentLang === 'bn' ? 'অটো এক-ক্লিক প্রশ্ন তৈরি' : 'Auto 1-Click Question Builder'}</span>
+                                    <ArrowRight size={16} className="text-amber-500 transition-all duration-300 group-hover:translate-x-1.5" />
+                                </h3>
+                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-2 leading-relaxed">
+                                    {currentLang === 'bn' ? 'সিলেবাস ও বিষয় বেছে ১-ক্লিকে ফুল প্রশ্নপত্র তৈরি করুন।' : 'Generate full question papers in 1 click by syllabus.'}
+                                </p>
+                            </div>
+                        </Link>
+                    </motion.div>
+
+                    {/* Card 2: Manual Question Selection */}
+                    <motion.div
+                        whileHover={{ y: -6, scale: 1.02 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    >
+                        <Link 
+                            to="/exams/generate/manual" 
+                            className="group relative overflow-hidden bg-white/80 dark:bg-slate-900/90 backdrop-blur-xl border border-indigo-200/80 dark:border-indigo-700/40 rounded-3xl p-5 transition-all duration-300 shadow-[0_4px_20px_rgba(99,102,241,0.06)] hover:shadow-[0_16px_35px_-6px_rgba(99,102,241,0.22)] hover:border-indigo-400 flex flex-col justify-between h-full min-h-[148px]"
+                        >
+                            {/* Background Ambient Mesh Glow */}
+                            <div className="absolute -right-10 -bottom-10 w-36 h-36 bg-gradient-to-br from-indigo-400/20 via-purple-400/10 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none"></div>
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 rounded-t-3xl opacity-80 group-hover:opacity-100 transition-opacity"></div>
+
+                            <div className="relative z-10 flex items-start justify-between">
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/35 group-hover:scale-110 group-hover:-rotate-6 transition-all duration-300">
+                                    <Sliders size={22} />
+                                </div>
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-3 py-1 bg-indigo-500/15 text-indigo-800 dark:text-indigo-300 rounded-full uppercase tracking-wider border border-indigo-400/30 backdrop-blur-md shadow-sm">
+                                    {currentLang === 'bn' ? 'ম্যানুয়াল সিলেক্ট' : 'Manual Pick'}
+                                </span>
+                            </div>
+
+                            <div className="relative z-10 mt-4">
+                                <h3 className="text-base font-extrabold text-slate-900 dark:text-white group-hover:text-indigo-600 transition-colors flex items-center gap-2">
+                                    <span>{currentLang === 'bn' ? 'ম্যানুয়ালি প্রশ্ন নির্বাচন' : 'Manual Question Selector'}</span>
+                                    <ArrowRight size={16} className="text-indigo-500 transition-all duration-300 group-hover:translate-x-1.5" />
+                                </h3>
+                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-2 leading-relaxed">
+                                    {currentLang === 'bn' ? 'অধ্যায় থেকে পছন্দমতো প্রশ্ন বেছে কাস্টম পেপার তৈরি করুন।' : 'Handpick questions from chapters for custom papers.'}
+                                </p>
+                            </div>
+                        </Link>
+                    </motion.div>
+
+                    {/* Card 3: Question Bank Repository */}
+                    <motion.div
+                        whileHover={{ y: -6, scale: 1.02 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    >
+                        <Link 
+                            to="/questions/approved" 
+                            className="group relative overflow-hidden bg-white/80 dark:bg-slate-900/90 backdrop-blur-xl border border-emerald-200/80 dark:border-emerald-700/40 rounded-3xl p-5 transition-all duration-300 shadow-[0_4px_20px_rgba(16,185,129,0.06)] hover:shadow-[0_16px_35px_-6px_rgba(16,185,129,0.22)] hover:border-emerald-400 flex flex-col justify-between h-full min-h-[148px]"
+                        >
+                            {/* Background Ambient Mesh Glow */}
+                            <div className="absolute -right-10 -bottom-10 w-36 h-36 bg-gradient-to-br from-emerald-400/20 via-teal-400/10 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500 pointer-events-none"></div>
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-500 rounded-t-3xl opacity-80 group-hover:opacity-100 transition-opacity"></div>
+
+                            <div className="relative z-10 flex items-start justify-between">
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/35 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                                    <Database size={22} />
+                                </div>
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-3 py-1 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 rounded-full uppercase tracking-wider border border-emerald-400/30 backdrop-blur-md shadow-sm">
+                                    {currentLang === 'bn' ? 'প্রশ্ন ব্যাংক' : 'Question Bank'}
+                                </span>
+                            </div>
+
+                            <div className="relative z-10 mt-4">
+                                <h3 className="text-base font-extrabold text-slate-900 dark:text-white group-hover:text-emerald-600 transition-colors flex items-center gap-2">
+                                    <span>{currentLang === 'bn' ? 'প্রশ্ন ব্যাংক সংগ্রহশালা' : 'Question Bank Explorer'}</span>
+                                    <ArrowRight size={16} className="text-emerald-500 transition-all duration-300 group-hover:translate-x-1.5" />
+                                </h3>
+                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-2 leading-relaxed">
+                                    {currentLang === 'bn' ? 'বিষয় ও অধ্যায়ভিত্তিক সকল অনুমোদিত প্রশ্ন ফিল্টার করুন।' : 'Explore and filter approved questions by topic.'}
+                                </p>
+                            </div>
+                        </Link>
+                    </motion.div>
                 </div>
             </motion.div>
 

@@ -27,18 +27,25 @@ import { formatDurationString } from '../../../../../utils/formatUtils';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
+const mathPowersCache = new Map();
 const formatMathPowers = (html) => {
     if (!html) return '';
-    return html.replace(/(<[^>]+>)|(([a-zA-Z0-9\)\}])\^\{?(-?[a-zA-Z0-9.]+)\}?)|(([a-zA-Z0-9\)\}])_\{?(-?[a-zA-Z0-9.]+)\}?)/g, (match, tag, powMatch, powBase, powExp, subMatch, subBase, subVal) => {
+    if (mathPowersCache.has(html)) return mathPowersCache.get(html);
+    const result = html.replace(/(<[^>]+>)|(([a-zA-Z0-9\)\}])\^\{?(-?[a-zA-Z0-9.]+)\}?)|(([a-zA-Z0-9\)\}])_\{?(-?[a-zA-Z0-9.]+)\}?)/g, (match, tag, powMatch, powBase, powExp, subMatch, subBase, subVal) => {
         if (tag) return tag;
         if (powMatch) return `${powBase}<sup>${powExp}</sup>`;
         if (subMatch) return `${subBase}<sub>${subVal}</sub>`;
         return match;
     });
+    if (mathPowersCache.size > 1000) mathPowersCache.clear();
+    mathPowersCache.set(html, result);
+    return result;
 };
 
+const tabularCache = new Map();
 const processTabularHTML = (html) => {
     if (!html) return '';
+    if (tabularCache.has(html)) return tabularCache.get(html);
     try {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
@@ -103,34 +110,50 @@ const processTabularHTML = (html) => {
                 groups.push(currentGroup);
             }
             
-            while (blockNode.firstChild) {
-                blockNode.removeChild(blockNode.firstChild);
-            }
+            blockNode.innerHTML = '';
             
-            groups.forEach((group, gIdx) => {
+            groups.forEach(group => {
                 if (group.isTable) {
-                    const tableDiv = doc.createElement('div');
-                    tableDiv.className = 'nexus-tabular-grid';
-                    tableDiv.setAttribute('style', "font-family: Consolas, Monaco, 'Courier New', monospace !important; white-space: pre !important; font-size: 12.5px !important; line-height: 1.5 !important; background-color: #fafafa; border: 1px solid #d1d5db; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 10px 0; letter-spacing: 0.03em; color: #111827; display: block; width: 100%; box-sizing: border-box;");
+                    const table = doc.createElement('table');
+                    table.className = 'nexus-tabular-table';
+                    table.style.width = '100%';
+                    table.style.borderCollapse = 'collapse';
+                    table.style.margin = '4px 0';
                     
-                    group.lines.forEach((lineNodes, lIdx) => {
-                        lineNodes.forEach(node => {
-                            if (node.nodeType === 3) {
-                                node.nodeValue = node.nodeValue.replace(/\u00A0/g, ' ');
-                            }
-                            tableDiv.appendChild(node);
-                        });
-                        if (lIdx < group.lines.length - 1) {
-                            tableDiv.appendChild(doc.createElement('br'));
+                    const tbody = doc.createElement('tbody');
+                    group.lines.forEach(lineNodes => {
+                        const tr = doc.createElement('tr');
+                        const lineText = lineNodes.map(n => n.textContent || '').join('');
+                        let cellTexts = [];
+                        if (/\t/.test(lineText)) {
+                            cellTexts = lineText.split(/\t+/);
+                        } else if (/ {3,}/.test(lineText)) {
+                            cellTexts = lineText.split(/ {3,}/);
+                        } else {
+                            cellTexts = lineText.split(/(?:\s*&nbsp;\s*){2,}|\u00A0\u00A0/);
                         }
+                        cellTexts = cellTexts.map(c => c.trim()).filter(c => c.length > 0);
+                        if (cellTexts.length <= 1) {
+                            cellTexts = [lineText.trim()];
+                        }
+                        
+                        cellTexts.forEach(cText => {
+                            const td = doc.createElement('td');
+                            td.style.padding = '2px 8px';
+                            td.style.verticalAlign = 'top';
+                            td.innerHTML = cText;
+                            tr.appendChild(td);
+                        });
+                        tbody.appendChild(tr);
                     });
-                    blockNode.appendChild(tableDiv);
+                    table.appendChild(tbody);
+                    blockNode.appendChild(table);
                 } else {
                     group.lines.forEach((lineNodes, lIdx) => {
                         lineNodes.forEach(node => {
                             blockNode.appendChild(node);
                         });
-                        if (lIdx < group.lines.length - 1 || gIdx < groups.length - 1) {
+                        if (lIdx < group.lines.length - 1) {
                             blockNode.appendChild(doc.createElement('br'));
                         }
                     });
@@ -145,15 +168,20 @@ const processTabularHTML = (html) => {
             blocks.forEach(block => processBlock(block));
         }
         
-        return doc.body.innerHTML;
+        const result = doc.body.innerHTML;
+        if (tabularCache.size > 1000) tabularCache.clear();
+        tabularCache.set(html, result);
+        return result;
     } catch (e) {
         console.error("Error in processTabularHTML:", e);
         return html;
     }
 };
 
+const katexCache = new Map();
 const renderLatexMath = (html) => {
     if (!html) return '';
+    if (katexCache.has(html)) return katexCache.get(html);
     const mathBlocks = [];
     let count = 0;
     
@@ -189,7 +217,10 @@ const renderLatexMath = (html) => {
         processed = processed.replace(block.placeholder, block.html);
     });
     
-    return processTabularHTML(processed);
+    const finalResult = processTabularHTML(processed);
+    if (katexCache.size > 1000) katexCache.clear();
+    katexCache.set(html, finalResult);
+    return finalResult;
 };
 const getDisplayQuestionText = (q) => {
     if (!q) return '';
@@ -1262,13 +1293,15 @@ const PaperCanvasV2 = React.memo(({
                                         {[s.showExamType !== false ? s.exam : null, s.showYear !== false ? convertDigits(s.year, s.language) : null].filter(Boolean).join(' - ')}
                                     </div>
                                 )}
-                                {(s.showClass !== false || s.showSubject !== false || s.showGroup) && (
-                                    <div>
-                                        {[
-                                            s.showClass !== false ? `${s.language === 'ENGLISH' ? 'Class' : 'শ্রেণি'}: ${s.className}` : null,
-                                            s.showSubject !== false ? `${s.language === 'ENGLISH' ? 'Subject' : 'বিষয়'}: ${s.subject}` : null,
-                                            (s.showGroup && s.group !== 'সাধারণ' && s.group !== 'General') ? `${s.language === 'ENGLISH' ? 'Group' : 'বিভাগ'}: ${s.group}` : null
-                                        ].filter(Boolean).join(' | ')}
+                                {(s.showClass !== false && s.className) && (
+                                    <div style={{marginBottom: subHeaderItemMargin}}>
+                                        {s.language === 'ENGLISH' ? 'Class' : 'শ্রেণি'}: {s.className}
+                                        {(s.showGroup && s.group !== 'সাধারণ' && s.group !== 'General') ? ` | ${s.language === 'ENGLISH' ? 'Group' : 'বিভাগ'}: ${s.group}` : ''}
+                                    </div>
+                                )}
+                                {(s.showSubject !== false && s.subject) && (
+                                    <div style={{marginBottom: subHeaderItemMargin}}>
+                                        {s.language === 'ENGLISH' ? 'Subject' : 'বিষয়'}: {s.subject}
                                     </div>
                                 )}
                             </div>

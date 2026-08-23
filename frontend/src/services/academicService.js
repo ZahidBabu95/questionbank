@@ -213,5 +213,5 @@ export default {
     createClassSubject, assignSubjectToClass, getSubjectsByClass, updateClassSubject, deleteClassSubject,
     createChapter, updateChapter, getChaptersByClassSubject, deleteChapter,
     createTopic, updateTopic, getTopicsByChapter, deleteTopic,
-    getHierarchy, getActiveSession, clearHierarchyCache, preloadKnowledgeRules
+    getHierarchy, getCurriculumHierarchy: getHierarchy, getActiveSession, clearHierarchyCache, preloadKnowledgeRules
 };

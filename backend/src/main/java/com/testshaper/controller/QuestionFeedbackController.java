@@ -46,17 +46,14 @@ public class QuestionFeedbackController {
 
     @GetMapping("/favorites/my")
     public ResponseEntity<Page<Question>> getMyFavorites(
+            @RequestParam(required = false) java.util.Map<String, String> filters,
             Authentication authentication,
             @PageableDefault(size = 50) Pageable pageable) {
-        Page<Question> favorites = feedbackService.getUserFavorites(authentication.getName(), pageable);
-        
-        // Null out heavy content for list view scaling
-        favorites.getContent().forEach(q -> {
-            q.setOptions(null);
-            q.setExplanation(null);
-            q.setCorrectAnswer(null);
-        });
-        
+        Page<Question> favorites = feedbackService.getUserFavorites(
+                authentication.getName(), 
+                filters != null ? filters : java.util.Map.of(), 
+                pageable
+        );
         return ResponseEntity.ok(favorites);
     }
 

@@ -12,6 +12,10 @@ import ToastContainer from './components/Layout/ToastContainer';
 import CanvasControlBar from './components/Layout/CanvasControlBar';
 import DownloadProgressOverlay from './components/Layout/DownloadProgressOverlay';
 import FilenameModal from './components/Layout/FilenameModal';
+import NexusShareModal from './components/Layout/NexusShareModal';
+import KeyboardShortcutsModal from './components/Layout/KeyboardShortcutsModal';
+import SmartSpacingOptimizer from './components/Layout/SmartSpacingOptimizer';
+import { useNexusKeyboardShortcuts } from './hooks/useNexusKeyboardShortcuts';
 import { PanelLeftOpen, PanelRightOpen, Database, Settings2 } from 'lucide-react';
 
 const NexusEditorContent = () => {
@@ -39,6 +43,7 @@ const NexusEditorContent = () => {
     const { isDraggingLeft: resizingL, setIsDraggingLeft, isDraggingRight: resizingR, setIsDraggingRight } = usePanelResizer();
     useAiImporter();
     useExamManager();
+    useNexusKeyboardShortcuts();
 
     // Register global event listeners
     useEffect(() => {
@@ -239,6 +244,15 @@ const NexusEditorContent = () => {
 
             {/* Premium Custom Filename Input Modal */}
             <FilenameModal />
+
+            {/* Premium Exam Share Modal */}
+            <NexusShareModal />
+
+            {/* Keyboard Shortcuts Guide Modal */}
+            <KeyboardShortcutsModal />
+
+            {/* Smart Spacing / Auto-Fit Optimizer Float Overlay */}
+            <SmartSpacingOptimizer />
 
             {/* Glassmorphic Loading Overlay with SVG Percentage Circle & Progress Bar */}
             <div className={`fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[9999] flex flex-col items-center justify-center transition-all duration-500 ease-in-out ${isLoading ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>

@@ -38,6 +38,13 @@ export const MENU_ITEMS = [
         ]
     },
     {
+        id: 'MY_ACADEMIC_SUBJECTS',
+        title: 'Add Academic Subjects',
+        icon: <BookOpen size={20} strokeWidth={1.8} />,
+        path: '/profile?tab=academic',
+        roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT']
+    },
+    {
         id: 'AI_WORKSPACE',
         title: 'AI Workspace',
         icon: <Sparkles size={20} strokeWidth={1.8} />,
@@ -430,24 +437,20 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
         // SUPER_ADMIN has god-mode access to everything
         if (isSuperAdmin) return true;
 
+        // Fundamental user-level features (like Academic Subjects Access) are accessible to all roles
+        if (item.id === 'MY_ACADEMIC_SUBJECTS' || item.path === '/profile?tab=academic') return true;
+
         const generatedId = generateMenuId(item, parentId);
         const requiredPermission = `${generatedId}_VIEW`;
 
-        // If the specific permission exists in user's permissions, use it!
-        if (userPermissions.includes(requiredPermission)) return true;
+        // If the user's role has explicit permissions assigned, strictly enforce them
+        if (Array.isArray(userPermissions) && userPermissions.length > 0) {
+            return userPermissions.includes(requiredPermission);
+        }
 
-        // Fallback: If it's a dashboard submenu, and the user has the parent DASHBOARD_VIEW permission,
-        // and NONE of the dashboard submenus are explicitly present in the user's permissions array:
-        // we grant default access based on the item's role array.
-        // This ensures out-of-the-box functionality before the admin manually configures the submenus.
-        if (generatedId.startsWith('DASHBOARD_') && userPermissions.includes('DASHBOARD_VIEW')) {
-            const hasAnyDashboardSubmenuPermission = userPermissions.some(p => p.startsWith('DASHBOARD_') && p !== 'DASHBOARD_VIEW');
-            if (!hasAnyDashboardSubmenuPermission) {
-                // No submenu permissions have been saved for this user yet, so fallback to default roles check
-                if (item.roles && item.roles.some(role => userRoles.includes(role))) {
-                    return true;
-                }
-            }
+        // Fallback: Check if user's role is included in item.roles ONLY when no granular permissions are defined
+        if (item.roles && item.roles.some(role => userRoles.includes(role))) {
+            return true;
         }
 
         return false;
@@ -488,7 +491,7 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
                 menuItem.submenu.forEach(sub => collect(sub, currentIcon, currentTitle));
             } else if (menuItem.path) {
                 let displayTitle = menuItem.title;
-                if (displayTitle === 'Overview' && parentTitle) {
+                if (displayTitle === 'Overview' && parentTitle && parentTitle !== 'Dashboard') {
                     displayTitle = `${parentTitle} Overview`;
                 }
                 flatList.push({
@@ -508,18 +511,19 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
     const getGroupedAndOrderedMenuItems = (leafItems) => {
         // Define the exact paths we want to group and their order
         const orderMap = {
-            '/ai-workspace': { index: 0, category: 'top' },
-            '/questions/approved': { index: 1, category: 'top' },
-            '/exams/generate/auto': { index: 2, category: 'exam_gen' },
-            '/exams/generate/manual': { index: 3, category: 'exam_gen' },
-            '/exams/generate/saved': { index: 4, category: 'exam_gen' },
-            '/questions/create/mcq': { index: 5, category: 'create_q' },
-            '/questions/add/cq': { index: 6, category: 'create_q' },
-            '/questions/add/short': { index: 7, category: 'create_q' },
-            '/exams/generate/nexus-editor': { index: 8, category: 'nexus' },
-            '/omr/generate': { index: 9, category: 'omr_gen' },
-            '/omr/scan': { index: 10, category: 'omr_gen' },
-            '/omr/results': { index: 11, category: 'omr_gen' }
+            '/dashboard': { index: 0, category: 'top' },
+            '/ai-workspace': { index: 1, category: 'top' },
+            '/questions/approved': { index: 2, category: 'top' },
+            '/exams/generate/auto': { index: 3, category: 'exam_gen' },
+            '/exams/generate/manual': { index: 4, category: 'exam_gen' },
+            '/exams/generate/saved': { index: 5, category: 'exam_gen' },
+            '/questions/create/mcq': { index: 6, category: 'create_q' },
+            '/questions/add/cq': { index: 7, category: 'create_q' },
+            '/questions/add/short': { index: 8, category: 'create_q' },
+            '/exams/generate/nexus-editor': { index: 9, category: 'nexus' },
+            '/omr/generate': { index: 10, category: 'omr_gen' },
+            '/omr/scan': { index: 11, category: 'omr_gen' },
+            '/omr/results': { index: 12, category: 'omr_gen' }
         };
 
         const topItems = [];
@@ -562,7 +566,7 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
 
         const result = [];
 
-        // 1. Top items
+        // 1. Top items (Dashboard, AI Workspace, Question Bank)
         result.push(...topItems);
 
         // 2. EXAM GENERATION header
@@ -586,7 +590,7 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
             result.push(...omrGenItems);
         }
 
-        // 6. Other items if any
+        // 6. Other authorized items if any (User Management, Reports, etc.)
         if (otherItems.length > 0) {
             result.push({ isHeader: true, title: 'More Options' });
             result.push(...otherItems);

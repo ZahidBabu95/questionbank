@@ -15,10 +15,12 @@ const QuestionContentEditor = memo(({
     isInline
 }) => {
     return (
-        <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 ${isInline ? 'p-3' : 'p-6'}`}>
-            <h2 className={`font-semibold text-slate-800 flex items-center gap-2 border-b border-slate-100 ${isInline ? 'text-xs mb-3 pb-1.5' : 'text-lg mb-6 pb-3'}`}>
-                <FileText size={16} className="text-amber-500" /> Content Editor
-            </h2>
+        <div className={`bg-white rounded-xl shadow-2xs border border-slate-200/80 ${isInline ? 'p-2.5' : 'p-6'}`}>
+            {!isInline && (
+                <h2 className="font-semibold text-slate-800 flex items-center gap-2 border-b border-slate-100 text-lg mb-6 pb-3">
+                    <FileText size={16} className="text-amber-500" /> Content Editor
+                </h2>
+            )}
 
             {/* Warning Banner & Mode Selector for Legacy CQ in full editor */}
             {isLegacyCQ && (

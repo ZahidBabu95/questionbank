@@ -64,6 +64,9 @@ export const NexusEditorProvider = ({ children }) => {
     const [downloadProgress, setDownloadProgress] = useState(0);
     const [downloadStatus, setDownloadStatus] = useState('');
     const [showFilenameModal, setShowFilenameModal] = useState(false);
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+    const [showSpacingOptimizer, setShowSpacingOptimizer] = useState(false);
 
     // --- Schema & Blueprint ---
     const [editorConfig, setEditorConfig] = useState(null);
@@ -404,6 +407,9 @@ export const NexusEditorProvider = ({ children }) => {
         downloadProgress, setDownloadProgress,
         downloadStatus, setDownloadStatus,
         showFilenameModal, setShowFilenameModal,
+        showShareModal, setShowShareModal,
+        showShortcutsModal, setShowShortcutsModal,
+        showSpacingOptimizer, setShowSpacingOptimizer,
         editor, setEditor,
         
         // Schema
@@ -435,7 +441,7 @@ export const NexusEditorProvider = ({ children }) => {
     }), [
         editorMode, rawContent, isEditorLoaded, loadingProgress, loadingStatusText, docSettings, updateSetting, updateMultiSettings,
         zoom, pageCount, examData, isSavingDocument, autoSaveStatus, editor,
-        isDownloadingPdf, downloadProgress, downloadStatus, showFilenameModal,
+        isDownloadingPdf, downloadProgress, downloadStatus, showFilenameModal, showShareModal, showShortcutsModal, showSpacingOptimizer,
         editorConfig, generationBlueprint,
         uiLang, t, isMobileApp, isTablet, workspaceTools, toasts, addToast, removeToast, canvasTheme,
         isLeftPanelOpen, leftPanelWidth, leftPanelTab,

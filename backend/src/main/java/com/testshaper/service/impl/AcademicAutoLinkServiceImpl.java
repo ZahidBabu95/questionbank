@@ -112,7 +112,12 @@ public class AcademicAutoLinkServiceImpl implements AcademicAutoLinkService {
     @Override
     @Transactional
     public void autoLink(Question question, Map<String, String> metadata) {
-        if (metadata == null || metadata.isEmpty()) return;
+        if (metadata == null || metadata.isEmpty() || question == null) return;
+
+        if (question.getClassSubject() != null && question.getClassSubject().getId() != null) {
+            log.debug("Question already has classSubject, skipping auto-link");
+            return;
+        }
 
         String className = clean(metadata.get("className"));
         String subjectName = clean(metadata.get("subject"));

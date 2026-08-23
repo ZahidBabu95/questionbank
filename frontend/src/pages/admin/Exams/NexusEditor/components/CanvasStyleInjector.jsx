@@ -687,15 +687,17 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             .theme-dark [data-type="question-block"]::before {
                 color: #cbd5e1 !important;
             }
-            /* Universal Table Styling for Question Paper & Canvas */
+            /* Universal Compact Table Styling for Question Paper & Canvas */
             .ProseMirror table,
             .paper-canvas-container table,
             [data-type="question-block"] table,
             .nexus-question-content table {
                 border-collapse: collapse !important;
-                width: 100% !important;
-                margin: 8px 0 !important;
-                table-layout: auto;
+                width: auto !important;
+                max-width: 100% !important;
+                margin: 6px auto !important;
+                table-layout: auto !important;
+                font-family: inherit !important;
             }
             .ProseMirror table td,
             .ProseMirror table th,
@@ -706,8 +708,10 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             .nexus-question-content table td,
             .nexus-question-content table th {
                 border: 1px solid #000000 !important;
-                padding: 6px 8px !important;
-                line-height: 1.25 !important;
+                padding: 3px 8px !important;
+                line-height: 1.2 !important;
+                font-size: 0.95em !important;
+                font-family: inherit !important;
                 vertical-align: middle !important;
                 text-align: center !important;
                 box-sizing: border-box !important;
@@ -721,7 +725,8 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
             [data-type="question-block"] table th *,
             .nexus-question-content table td *,
             .nexus-question-content table th * {
-                line-height: 1.25 !important;
+                line-height: 1.2 !important;
+                font-family: inherit !important;
                 margin: 0 !important;
                 padding: 0 !important;
             }
@@ -733,8 +738,12 @@ const CanvasStyleInjector = memo(({ s, ptToPx, mmToPx }) => {
                 background-color: rgba(0, 0, 0, 0.03) !important;
             }
             .nexus-tabular-grid {
-                border: 1px solid #000000 !important;
-                border-radius: 4px;
+                font-family: inherit !important;
+                border: none !important;
+                background-color: transparent !important;
+                padding: 0 !important;
+                margin: 4px 0 !important;
+                font-size: inherit !important;
             }
 
             .theme-dark table, .theme-dark td, .theme-dark th {

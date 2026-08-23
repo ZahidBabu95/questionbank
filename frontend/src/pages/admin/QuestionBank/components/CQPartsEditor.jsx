@@ -19,37 +19,38 @@ const CQPartsEditor = ({ cqParts, setCqParts, language, isInline }) => {
     };
 
     return (
-        <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 mt-6 ${isInline ? 'p-3' : 'p-6'}`}>
-            <div className={`flex items-center justify-between border-b border-slate-100 ${isInline ? 'mb-3 pb-1.5' : 'mb-6 pb-3'}`}>
-                <h2 className={`${isInline ? 'text-xs' : 'text-lg'} font-semibold text-slate-800 flex items-center gap-2`}>
-                    <Book size={18} className="text-indigo-500" /> CQ Sub-Questions
+        <div className={`bg-white rounded-xl shadow-2xs border border-slate-200/80 ${isInline ? 'p-2.5 mt-2.5' : 'p-6 mt-6'}`}>
+            <div className={`flex items-center justify-between border-b border-slate-100 ${isInline ? 'mb-2 pb-1' : 'mb-6 pb-3'}`}>
+                <h2 className={`${isInline ? 'text-[11.5px]' : 'text-lg'} font-black text-slate-800 flex items-center gap-1.5`}>
+                    <Book size={14} className="text-indigo-500" /> CQ Sub-Questions
                 </h2>
-                <span className="text-xs font-bold bg-indigo-50 text-indigo-650 px-3 py-1 rounded-full border border-indigo-100">
+                <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-100">
                     {getStructureLabel()}
                 </span>
             </div>
 
-            <div className="space-y-4">
+            <div className={`${isInline ? 'space-y-2' : 'space-y-4'}`}>
                 {cqParts.map((part, index) => {
                     // Decide color scheme based on index
                     const colors = [
-                        { color: 'border-blue-350 bg-blue-50/20', iconBg: 'bg-blue-500' },
-                        { color: 'border-emerald-350 bg-emerald-50/20', iconBg: 'bg-emerald-500' },
-                        { color: 'border-amber-350 bg-amber-50/20', iconBg: 'bg-amber-500' },
-                        { color: 'border-rose-350 bg-rose-50/20', iconBg: 'bg-rose-500' }
+                        { color: 'border-blue-200 bg-blue-50/20', iconBg: 'bg-blue-500' },
+                        { color: 'border-emerald-200 bg-emerald-50/20', iconBg: 'bg-emerald-500' },
+                        { color: 'border-amber-200 bg-amber-50/20', iconBg: 'bg-amber-500' },
+                        { color: 'border-rose-200 bg-rose-50/20', iconBg: 'bg-rose-500' }
                     ];
                     const theme = colors[index % colors.length];
 
                     const isEnglish = language && language.toLowerCase() === 'english';
                     const displayLabel = isEnglish ? String.fromCharCode(97 + index) : (['ক', 'খ', 'গ', 'ঘ', 'ঙ', 'চ'][index] || String.fromCharCode(97 + index));
 
-                    const showAns = !isInline || expandedFields[`${index}_answer`] || !!part.answer;
-                    const showExp = !isInline || expandedFields[`${index}_explanation`] || !!part.explanation;
+                    // In inline modal mode, only expand answer/explanation when explicitly requested
+                    const showAns = isInline ? !!expandedFields[`${index}_answer`] : true;
+                    const showExp = isInline ? !!expandedFields[`${index}_explanation`] : true;
 
                     return (
-                        <div key={index} className={`flex items-start rounded-xl border-2 ${theme.color} transition-all ${isInline ? 'p-2 gap-2' : 'p-4 gap-3'}`}>
+                        <div key={index} className={`flex items-start rounded-xl border ${theme.color} transition-all ${isInline ? 'p-2 gap-2 bg-white/80' : 'p-4 gap-3'}`}>
                             <div className="shrink-0 flex flex-col items-center gap-1">
-                                <span className={`rounded-xl ${theme.iconBg} text-white flex items-center justify-center font-bold shadow-sm ${isInline ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-lg'}`}>
+                                <span className={`rounded-lg ${theme.iconBg} text-white flex items-center justify-center font-bold shadow-2xs ${isInline ? 'w-6 h-6 text-xs' : 'w-10 h-10 text-lg'}`}>
                                     {displayLabel}
                                 </span>
                                 <input 
@@ -60,61 +61,64 @@ const CQPartsEditor = ({ cqParts, setCqParts, language, isInline }) => {
                                         pts[index].marks = parseFloat(e.target.value) || 0;
                                         setCqParts(pts);
                                     }}
-                                    className="w-10 text-center text-xs font-black bg-white border border-slate-200 focus:border-slate-350 p-0.5 rounded-md outline-none"
+                                    className="w-8 text-center text-[10.5px] font-black bg-white border border-slate-200 focus:border-indigo-400 p-0.5 rounded outline-none font-mono"
                                     min="1"
                                     step="1"
-                                    title="Marks for this part"
+                                    title="নম্বর"
                                 />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <div className="space-y-3">
-                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
-                                        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">প্রশ্ন টেক্সট</span>
-                                        <RichTextEditor
-                                            value={part.text || ''}
-                                            onChange={(val) => {
-                                                const pts = [...cqParts];
-                                                pts[index].text = val;
-                                                setCqParts(pts);
-                                            }}
-                                            placeholder={`${displayLabel} অংশের প্রশ্ন লিখুন...`}
-                                            height={isInline ? "h-14" : "h-20"}
-                                            minimal={true}
-                                            compact={isInline}
-                                            className="text-sm bg-white"
-                                        />
-                                    </div>
+                                <div className="space-y-1.5">
+                                    <RichTextEditor
+                                        value={part.text || ''}
+                                        onChange={(val) => {
+                                            const pts = [...cqParts];
+                                            pts[index].text = val;
+                                            setCqParts(pts);
+                                        }}
+                                        placeholder={`${displayLabel} অংশের প্রশ্ন লিখুন...`}
+                                        height={isInline ? "h-auto" : "h-20"}
+                                        minimal={true}
+                                        compact={isInline}
+                                        className="text-xs bg-white shadow-2xs"
+                                    />
                                     
                                     {isInline && (
-                                        <div className="flex gap-2 select-none">
+                                        <div className="flex items-center gap-1.5 select-none pt-0.5">
                                             <button
                                                 type="button"
                                                 onClick={() => toggleField(index, 'answer')}
-                                                className={`px-2 py-0.5 rounded text-[9px] font-extrabold transition-all border ${
-                                                    expandedFields[`${index}_answer`] || part.answer
-                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                                        : 'bg-slate-50 text-slate-650 border-slate-200 hover:bg-slate-100'
+                                                className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold transition-all border flex items-center gap-1 ${
+                                                    showAns
+                                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                                        : part.answer
+                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100/70'
+                                                            : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-700'
                                                 }`}
                                             >
-                                                💡 {part.answer ? 'উত্তর (সেভ করা আছে) ✏️' : 'উত্তর যোগ/এডিট'}
+                                                <span>💡 উত্তর {part.answer ? '(যুক্ত আছে)' : ''}</span>
+                                                <span className="text-[8.5px] opacity-70">{showAns ? '▲' : '▼'}</span>
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => toggleField(index, 'explanation')}
-                                                className={`px-2 py-0.5 rounded text-[9px] font-extrabold transition-all border ${
-                                                    expandedFields[`${index}_explanation`] || part.explanation
-                                                        ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                                        : 'bg-slate-50 text-slate-650 border-slate-200 hover:bg-slate-100'
+                                                className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold transition-all border flex items-center gap-1 ${
+                                                    showExp
+                                                        ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                                                        : part.explanation
+                                                            ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100/70'
+                                                            : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-700'
                                                 }`}
                                             >
-                                                📘 {part.explanation ? 'ব্যাখ্যা (সেভ করা আছে) ✏️' : 'ব্যাখ্যা যোগ/এডিট'}
+                                                <span>📘 ব্যাখ্যা {part.explanation ? '(যুক্ত আছে)' : ''}</span>
+                                                <span className="text-[8.5px] opacity-70">{showExp ? '▲' : '▼'}</span>
                                             </button>
                                         </div>
                                     )}
 
                                     {showAns && (
-                                        <div className="bg-emerald-50/30 p-2.5 rounded-xl border border-emerald-100 shadow-sm">
-                                            <span className="block text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1">উত্তর (ঐচ্ছিক)</span>
+                                        <div className="bg-emerald-50/30 p-2 rounded-lg border border-emerald-200/70 shadow-2xs animate-in fade-in duration-150">
+                                            <span className="block text-[9px] font-bold text-emerald-700 uppercase tracking-wide mb-0.5">উত্তর (ঐচ্ছিক)</span>
                                             <RichTextEditor
                                                 value={part.answer || ''}
                                                 onChange={(val) => {
@@ -123,17 +127,17 @@ const CQPartsEditor = ({ cqParts, setCqParts, language, isInline }) => {
                                                     setCqParts(pts);
                                                 }}
                                                 placeholder={`${displayLabel} অংশের উত্তর লিখুন (ঐচ্ছিক)...`}
-                                                height={isInline ? "h-12" : "h-16"}
+                                                height={isInline ? "h-10" : "h-16"}
                                                 minimal={true}
                                                 compact={isInline}
-                                                className="text-sm bg-white"
+                                                className="text-xs bg-white"
                                             />
                                         </div>
                                     )}
 
                                     {showExp && (
-                                        <div className="bg-amber-50/30 p-2.5 rounded-xl border border-amber-100 shadow-sm">
-                                            <span className="block text-[10px] font-bold text-amber-600 uppercase tracking-wide mb-1">ব্যাখ্যা (ঐচ্ছিক)</span>
+                                        <div className="bg-amber-50/30 p-2 rounded-lg border border-amber-200/70 shadow-2xs animate-in fade-in duration-150">
+                                            <span className="block text-[9px] font-bold text-amber-700 uppercase tracking-wide mb-0.5">ব্যাখ্যা (ঐচ্ছিক)</span>
                                             <RichTextEditor
                                                 value={part.explanation || ''}
                                                 onChange={(val) => {
@@ -142,10 +146,10 @@ const CQPartsEditor = ({ cqParts, setCqParts, language, isInline }) => {
                                                     setCqParts(pts);
                                                 }}
                                                 placeholder={`${displayLabel} অংশের ব্যাখ্যা লিখুন (ঐচ্ছিক)...`}
-                                                height={isInline ? "h-12" : "h-16"}
+                                                height={isInline ? "h-10" : "h-16"}
                                                 minimal={true}
                                                 compact={isInline}
-                                                className="text-sm bg-white"
+                                                className="text-xs bg-white"
                                             />
                                         </div>
                                     )}
@@ -157,7 +161,7 @@ const CQPartsEditor = ({ cqParts, setCqParts, language, isInline }) => {
                                     const pts = cqParts.filter((_, i) => i !== index);
                                     setCqParts(pts);
                                 }}
-                                className="mt-1 shrink-0 p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-100 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                                className="mt-0.5 shrink-0 p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
                                 title="Remove Part"
                             >
                                 ✕

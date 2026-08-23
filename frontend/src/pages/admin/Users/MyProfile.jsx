@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     User, Mail, Phone, Lock, Eye, EyeOff, Save, Key, Shield, AlertTriangle, 
@@ -16,6 +16,7 @@ import { useLanguage } from '../../../context/LanguageContext';
 
 const MyProfile = () => {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { t, currentLang } = useLanguage();
     const isBn = currentLang === 'bn';
     // Current user and workspace state
@@ -28,7 +29,19 @@ const MyProfile = () => {
     const [stats, setStats] = useState(null);
 
     // UI and loading states
-    const [activeTab, setActiveTab] = useState('personal'); // personal, security, subscription, academic
+    const tabParam = searchParams.get('tab');
+    const [activeTab, setActiveTab] = useState(() => {
+        if (['personal', 'security', 'subscription', 'academic'].includes(tabParam)) {
+            return tabParam;
+        }
+        return 'personal';
+    });
+
+    useEffect(() => {
+        if (tabParam && ['personal', 'security', 'subscription', 'academic'].includes(tabParam)) {
+            setActiveTab(tabParam);
+        }
+    }, [tabParam]);
     const [loading, setLoading] = useState(true);
     const [savingProfile, setSavingProfile] = useState(false);
     const [changingPassword, setChangingPassword] = useState(false);
@@ -99,24 +112,27 @@ const MyProfile = () => {
                     // 2. Fetch login history
                     fetchLoginHistory(userData.id);
 
-                    // 3. Always fetch billing packages and academic hierarchy
+                    // 3. Fetch billing packages (academic hierarchy will load lazily if academic tab is opened)
                     fetchBillingPackages();
-                    fetchAcademicHierarchy();
 
-                    // 4. Fetch Institute details & assigned subjects if exists
+                    // 4. Fetch assigned subjects for all users & institute details if exists
+                    fetchAssignedSubjects(userData.instituteId || userData.id);
                     if (userData.instituteId) {
                         fetchInstituteDetails(userData.instituteId);
-                        fetchAssignedSubjects(userData.instituteId);
                     }
 
-                    // 5. Fetch user stats for active/remaining slots calculations
-                    try {
-                        const statsRes = await userService.getUserStats();
-                        if (statsRes.success) {
-                            setStats(statsRes.data);
+                    // 5. Fetch user stats for admin active/remaining slots calculations
+                    const userRoles = (userData?.roles || []).map(r => typeof r === 'string' ? r : (r.name || ''));
+                    const isAdminUser = userRoles.includes('SUPER_ADMIN') || userRoles.includes('INSTITUTE_ADMIN');
+                    if (isAdminUser) {
+                        try {
+                            const statsRes = await userService.getUserStats();
+                            if (statsRes && statsRes.success) {
+                                setStats(statsRes.data);
+                            }
+                        } catch (e) {
+                            // Non-blocking fallback
                         }
-                    } catch (e) {
-                        console.error("Failed to load user stats for limits card", e);
                     }
                 }
             } catch (err) {
@@ -313,13 +329,20 @@ const MyProfile = () => {
     };
 
     const saveAssignedSubjects = async () => {
-        if (!institute?.id) return;
+        const targetId = institute?.id || user?.instituteId || user?.id;
+        if (!targetId) return;
         setSavingSubjects(true);
         try {
-            await instituteService.assignSubjects(institute.id, assignedSubjectIds);
+            await instituteService.assignSubjects(targetId, assignedSubjectIds);
             showMsg('Academic subject access scope updated successfully!', 'success');
-            // Refresh local institute stats/access details
-            fetchInstituteDetails(institute.id);
+            // Purge dashboard cache so new active subjects render instantly
+            try {
+                sessionStorage.removeItem('dashboard_stats_cache');
+                sessionStorage.removeItem('student_subjects_cache');
+            } catch (e) {}
+            if (institute?.id) {
+                fetchInstituteDetails(institute.id);
+            }
         } catch (err) {
             showMsg(err.response?.data?.message || 'Failed to assign subjects', 'error');
         } finally {

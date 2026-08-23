@@ -61,7 +61,7 @@ export const translations = {
         QUESTION_BANK_REPOSITORY_ALL_QUESTIONS: "All Questions",
         QUESTION_BANK_REPOSITORY_DRAFTS_AI_GENERATED: "Drafts (AI Generated)",
         QUESTION_BANK_REPOSITORY_PENDING: "Pending",
-        QUESTION_BANK_REPOSITORY_APPROVED: "Approved Questions",
+        QUESTION_BANK_REPOSITORY_APPROVED: "Question Bank",
         QUESTION_BANK_REPOSITORY_REJECTED: "Rejected",
         QUESTION_BANK_REPOSITORY_SOURCE_MANAGEMENT: "Source Management",
 
@@ -124,8 +124,14 @@ export const translations = {
         SUPPORT_ALL_TICKETS: "All Tickets",
         SUPPORT_AI_SUPPORT_ENGINE: "AI Support Engine",
 
+        MY_ACADEMIC_SUBJECTS: "My Subjects",
+        db_workspace_subjects_title: "My Subjects",
+        db_workspace_subjects_subtitle: "Select subjects to create questions & exams",
+        db_add_subjects_btn: "➕ Add / Change Subjects",
+        db_no_subjects_warning: "No subjects added! Select subjects to start creating questions and exams.",
+
         // Sidebar Headers
-        sb_header_exam_gen: "EXAM GENERATION",
+        sb_header_exam_gen: "CREATE QUESTION",
         sb_header_create_q: "Create New Question",
         sb_header_omr_exam: "OMR OFFLINE EXAM",
         sb_header_more_opt: "More Options",
@@ -691,7 +697,7 @@ export const translations = {
         QUESTION_BANK_REPOSITORY_ALL_QUESTIONS: "সকল প্রশ্ন",
         QUESTION_BANK_REPOSITORY_DRAFTS_AI_GENERATED: "ড্রাফট (এআই তৈরি)",
         QUESTION_BANK_REPOSITORY_PENDING: "পেন্ডিং প্রশ্ন",
-        QUESTION_BANK_REPOSITORY_APPROVED: "অনুমোদিত প্রশ্ন",
+        QUESTION_BANK_REPOSITORY_APPROVED: "প্রশ্ন ব্যাংক",
         QUESTION_BANK_REPOSITORY_REJECTED: "প্রত্যাখ্যাত",
         QUESTION_BANK_REPOSITORY_SOURCE_MANAGEMENT: "উৎস ব্যবস্থাপনা",
 
@@ -754,8 +760,14 @@ export const translations = {
         SUPPORT_ALL_TICKETS: "সকল টিকেট",
         SUPPORT_AI_SUPPORT_ENGINE: "এআই সাপোর্ট ইঞ্জিন",
 
+        MY_ACADEMIC_SUBJECTS: "আমার বিষয়সমূহ",
+        db_workspace_subjects_title: "আমার বিষয়সমূহ",
+        db_workspace_subjects_subtitle: "প্রশ্ন তৈরি ও পরীক্ষা দেওয়ার বিষয় নির্বাচন করুন",
+        db_add_subjects_btn: "➕ বিষয় যুক্ত করুন",
+        db_no_subjects_warning: "কোনো বিষয় যুক্ত নেই! প্রশ্নব্যাংক ও অটো জেনারেটর ব্যবহার করতে এখনই বিষয় নির্বাচন করুন।",
+
         // Sidebar Headers
-        sb_header_exam_gen: "পরীক্ষা তৈরি",
+        sb_header_exam_gen: "প্রশ্ন তৈরি",
         sb_header_create_q: "নতুন প্রশ্ন তৈরি",
         sb_header_omr_exam: "ওএমআর অফলাইন পরীক্ষা",
         sb_header_more_opt: "অন্যান্য অপশন",

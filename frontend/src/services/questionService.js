@@ -37,6 +37,7 @@ const createMCQ = async (question, options, metadata = null) => {
     const body = { question, options };
     if (metadata) body.metadata = metadata;
     const response = await axios.post(`${API_URL}/mcq/create`, body);
+    clearQuestionCache();
     return response.data;
 };
 
@@ -45,6 +46,7 @@ const createMCQBulk = async (questions, optionsList, metadata = null, academicId
     if (metadata) body.metadata = metadata;
     if (academicIds && Object.keys(academicIds).length > 0) body.academicIds = academicIds;
     const response = await axios.post(`${API_URL}/mcq/bulk/create`, body);
+    clearQuestionCache();
     return response.data;
 };
 
@@ -326,8 +328,11 @@ const hasFavorited = async (id) => {
     return response.data;
 };
 
-const getMyFavorites = async (params) => {
-    const response = await axios.get(`${API_URL}/favorites/my`, { params });
+const getMyFavorites = async (params = {}) => {
+    const cleanParams = Object.fromEntries(
+        Object.entries(params || {}).filter(([_, v]) => v !== null && v !== undefined && v !== '')
+    );
+    const response = await axios.get(`${API_URL}/favorites/my`, { params: cleanParams });
     return response.data;
 };
 

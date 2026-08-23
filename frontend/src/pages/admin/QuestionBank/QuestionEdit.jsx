@@ -756,57 +756,57 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                 
                 {isInline ? (
                     /* COMPACT TAB VIEW FOR REVIEW WORKSPACE */
-                    <div className="flex-1 flex flex-col gap-3 min-h-0">
-                        {/* Tab Buttons */}
-                        <div className="flex bg-slate-100 p-1 rounded-xl gap-1 shrink-0 select-none border border-slate-200">
+                    <div className="flex-1 flex flex-col gap-2.5 min-h-0">
+                        {/* Tab Buttons - Modern Segment Control */}
+                        <div className="flex bg-slate-200/70 p-0.5 rounded-xl gap-1 shrink-0 select-none border border-slate-200/80 shadow-2xs">
                             <button
                                 type="button"
                                 onClick={() => setActiveTab('CONTENT')}
-                                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all ${
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] transition-all flex items-center justify-center gap-1 ${
                                     activeTab === 'CONTENT' 
-                                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/50' 
-                                        : 'text-slate-500 hover:text-slate-800'
+                                        ? 'bg-white text-indigo-700 font-black shadow-xs border border-slate-200/60' 
+                                        : 'text-slate-600 font-bold hover:text-slate-900 hover:bg-white/40'
                                 }`}
                             >
-                                📝 এডিট (Edit)
+                                <span>📝</span> <span>এডিট (Edit)</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setActiveTab('IMAGES')}
-                                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 ${
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] transition-all flex items-center justify-center gap-1 ${
                                     activeTab === 'IMAGES' 
-                                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/50' 
-                                        : 'text-slate-500 hover:text-slate-800'
+                                        ? 'bg-white text-indigo-700 font-black shadow-xs border border-slate-200/60' 
+                                        : 'text-slate-600 font-bold hover:text-slate-900 hover:bg-white/40'
                                 }`}
                             >
-                                🖼️ ইমেজ ({extractedSourceImages.length})
+                                <span>🖼️</span> <span>ইমেজ ({extractedSourceImages.length})</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setActiveTab('META')}
-                                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all ${
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] transition-all flex items-center justify-center gap-1 ${
                                     activeTab === 'META' 
-                                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/50' 
-                                        : 'text-slate-500 hover:text-slate-800'
+                                        ? 'bg-white text-indigo-700 font-black shadow-xs border border-slate-200/60' 
+                                        : 'text-slate-600 font-bold hover:text-slate-900 hover:bg-white/40'
                                 }`}
                             >
-                                🏷️ ট্যাগ ও সোর্স
+                                <span>🏷️</span> <span>ট্যাগ ও সোর্স</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setActiveTab('AI_AUDIT')}
-                                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all ${
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] transition-all flex items-center justify-center gap-1 ${
                                     activeTab === 'AI_AUDIT' 
-                                        ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/50' 
-                                        : 'text-indigo-600 font-bold bg-indigo-50 hover:bg-indigo-100'
+                                        ? 'bg-white text-indigo-700 font-black shadow-xs border border-slate-200/60' 
+                                        : 'text-indigo-600 font-bold bg-indigo-50/70 hover:bg-indigo-100/70'
                                 }`}
                             >
-                                🤖 AI Co-Pilot
+                                <span>🤖</span> <span>AI Co-Pilot</span>
                             </button>
                         </div>
 
                         {/* Tab Content Wrapper */}
-                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-0.5">
                             {activeTab === 'AI_AUDIT' && originalQuestion && (
                                 <AiCoPilotPanel
                                     question={originalQuestion}
@@ -815,7 +815,7 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                             )}
 
                             {activeTab === 'CONTENT' && (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     <QuestionContentEditor 
                                         formData={formData} 
                                         setFormData={setFormData} 
@@ -863,37 +863,37 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                             )}
 
                             {activeTab === 'META' && (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     {/* Academic Mapping */}
-                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                                        <h3 className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-                                            <Book size={14} className="text-indigo-500" /> একাডেমিক কনটেক্সট
+                                    <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs space-y-2.5">
+                                        <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                                            <Book size={13} className="text-indigo-500" /> একাডেমিক কনটেক্সট
                                         </h3>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-2 gap-2.5">
                                             <div>
-                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">শ্রেণি (Class)</label>
-                                                <select value={formData.academicClassId} onChange={handleClassChange} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold">
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">শ্রেণি (Class)</label>
+                                                <select value={formData.academicClassId} onChange={handleClassChange} className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold">
                                                     <option value="">Select Class</option>
                                                     {classes.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">বিষয় (Subject)</label>
-                                                <select value={formData.subjectId} onChange={handleSubjectChange} disabled={!formData.academicClassId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold disabled:opacity-50">
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">বিষয় (Subject)</label>
+                                                <select value={formData.subjectId} onChange={handleSubjectChange} disabled={!formData.academicClassId} className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold disabled:opacity-50">
                                                     <option value="">Select Subject</option>
                                                     {subjects.map(subj => <option key={subj.classSubjectId} value={subj.classSubjectId}>{subj.subjectName}</option>)}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">অধ্যায় (Chapter)</label>
-                                                <select value={formData.chapterId} onChange={handleChapterChange} disabled={!formData.subjectId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold disabled:opacity-50">
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">অধ্যায় (Chapter)</label>
+                                                <select value={formData.chapterId} onChange={handleChapterChange} disabled={!formData.subjectId} className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold disabled:opacity-50">
                                                     <option value="">Select Chapter</option>
                                                     {chapters.map(chap => <option key={chap.id} value={chap.id}>{chap.name}</option>)}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">টপিক (Topic)</label>
-                                                <select value={formData.topicId} onChange={(e) => setFormData({ ...formData, topicId: e.target.value })} disabled={!formData.chapterId} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold disabled:opacity-50">
+                                                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">টপিক (Topic)</label>
+                                                <select value={formData.topicId} onChange={(e) => setFormData({ ...formData, topicId: e.target.value })} disabled={!formData.chapterId} className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs font-semibold disabled:opacity-50">
                                                     <option value="">Select Topic</option>
                                                     {topics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
                                                 </select>
@@ -902,24 +902,24 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                                     </div>
 
                                     {/* Exam Sources */}
-                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                                        <h3 className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-                                            <Tag size={14} className="text-orange-500" /> পরীক্ষার উৎসসমূহ (Sources)
+                                    <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs space-y-2.5">
+                                        <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                                            <Tag size={13} className="text-orange-500" /> পরীক্ষার উৎসসমূহ (Sources)
                                         </h3>
                                         <QuestionSourceTagger sources={examSources} onChange={setExamSources} />
                                     </div>
 
                                     {isRevision && (
-                                        <div className="bg-indigo-50/40 p-4 rounded-xl border border-indigo-150 shadow-sm space-y-2">
+                                        <div className="bg-indigo-50/50 p-3.5 rounded-xl border border-indigo-150 shadow-2xs space-y-1.5">
                                             <h3 className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
-                                                <AlertTriangle size={14} className="text-indigo-650" /> রিভিশন বিবরণ (Revision Comment)
+                                                <AlertTriangle size={13} className="text-indigo-650" /> রিভিশন বিবরণ (Revision Comment)
                                             </h3>
                                             <input
                                                 type="text"
                                                 value={versionComment}
                                                 onChange={(e) => setVersionComment(e.target.value)}
                                                 placeholder="উদা: অপশন ক-এর বানান ঠিক করা হয়েছে।"
-                                                className="w-full p-2 bg-white border border-indigo-200 rounded-lg outline-none text-xs font-semibold"
+                                                className="w-full p-2 bg-white border border-indigo-200 rounded-lg outline-none text-xs font-semibold shadow-2xs"
                                             />
                                         </div>
                                     )}
@@ -927,24 +927,33 @@ const QuestionEdit = ({ inlineId, forceMode, onSaveComplete, onCancel }) => {
                             )}
                         </div>
 
-                        {/* Sticky Save Button at Bottom */}
-                        <div className="pt-2 border-t border-slate-100 shrink-0">
+                        {/* Sticky Action Buttons at Bottom */}
+                        <div className="pt-2.5 border-t border-slate-200/80 shrink-0 flex items-center justify-end gap-2 bg-white px-1">
+                            {onCancel && (
+                                <button
+                                    type="button"
+                                    onClick={onCancel}
+                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all border border-slate-200/80 shadow-2xs"
+                                >
+                                    বাতিল
+                                </button>
+                            )}
                             <button 
                                 type="submit" 
                                 disabled={saving} 
-                                className={`w-full py-2.5 font-black text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed text-white ${
-                                    isRevision ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-primary hover:bg-blue-700'
+                                className={`py-2 px-5 font-black text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed text-white ${
+                                    isRevision ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'
                                 }`}
                             >
                                 {saving ? (
                                     <>
-                                        <Loader2 size={16} className="animate-spin" /> 
+                                        <Loader2 size={14} className="animate-spin" /> 
                                         <span>সেভ হচ্ছে...</span>
                                     </>
                                 ) : (
                                     <>
-                                        {isRevision ? <FileText size={16} /> : <Save size={16} />} 
-                                        <span>{isRevision ? 'রিভিশন জমা দিন' : 'প্রশ্ন সেভ করুন (Save)'}</span>
+                                        {isRevision ? <FileText size={14} /> : <Save size={14} />} 
+                                        <span>{isRevision ? 'রিভিশন জমা দিন' : 'পরিবর্তন সেভ করুন'}</span>
                                     </>
                                 )}
                             </button>

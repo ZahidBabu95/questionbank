@@ -15,11 +15,9 @@ const resolveInstituteName = (examLanguage, apiInstituteName) => {
         const u = JSON.parse(localStorage.getItem('user') || '{}');
         const lang = (examLanguage || '').toUpperCase();
         if (lang === 'ENGLISH') {
-            return u.instituteNameEn || apiInstituteName || '';
-        } else if (lang === 'BENGALI' || lang === 'BANGLA') {
-            return u.instituteNameBn || apiInstituteName || '';
+            return u.instituteNameEn || u.instituteName || u.institute?.nameEn || u.institute?.name || apiInstituteName || '';
         }
-        return u.instituteNameBn || apiInstituteName || '';
+        return u.instituteNameBn || u.instituteName || u.institute?.nameBn || u.institute?.name || apiInstituteName || '';
     } catch (e) {
         return apiInstituteName || '';
     }
