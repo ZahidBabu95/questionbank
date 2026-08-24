@@ -38,7 +38,9 @@ const KPICard = ({ title, count, subValue, trend, icon: Icon, gradient, iconBg, 
                     <div className="flex items-baseline gap-1.5 flex-wrap">
                         <h3 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight leading-none">{count}</h3>
                         {subValue !== undefined && subValue !== null && (
-                            <span className="text-[10px] md:text-xs font-bold text-slate-400">/ {subValue} {t('db_kpi_total')}</span>
+                            <span className="text-[10px] md:text-xs font-bold text-slate-400">
+                                {String(subValue).startsWith('/') || String(subValue).includes('(') ? subValue : `/ ${subValue} ${t('db_kpi_total')}`}
+                            </span>
                         )}
                     </div>
                 </div>
@@ -176,12 +178,29 @@ const Dashboard = ({ view = 'overview' }) => {
     // Level-wise filter state for Class-wise progress section (null = collapsed by default)
     const [selectedProgressLevel, setSelectedProgressLevel] = useState(null);
 
+    const assignedSubjectIds = useMemo(() => {
+        return (user?.assignedSubjectIds || []).map(id => String(id));
+    }, [user]);
+
+    const isSubTeacher = useMemo(() => {
+        const instCode = user?.institute?.code || user?.instituteCode || '';
+        const instName = user?.institute?.nameEn || user?.instituteNameEn || '';
+        const isDefaultInstitute = !user?.instituteId || instCode === 'DEFAULT' || instName.toLowerCase().includes('default');
+        return isTeacher && !isSuperAdmin && !isInstituteAdmin && !isDefaultInstitute;
+    }, [isTeacher, isSuperAdmin, isInstituteAdmin, user]);
+
     const subjectQuestions = useMemo(() => {
         const list = stats?.subjectQuestions || [];
-        // If list contains all system subjects (> 50), filter out so only user's active assigned subjects show
-        if (!Array.isArray(list) || list.length > 50) return [];
+        if (!Array.isArray(list)) return [];
+        if (assignedSubjectIds.length > 0) {
+            const filtered = list.filter(s => {
+                const sId = String(s.id || s.classSubjectId || '');
+                return assignedSubjectIds.includes(sId);
+            });
+            if (filtered.length > 0) return filtered;
+        }
         return list;
-    }, [stats]);
+    }, [stats, assignedSubjectIds]);
 
     const classStatsList = stats?.classStats || [];
 
@@ -855,7 +874,7 @@ const Dashboard = ({ view = 'overview' }) => {
                         <KPICard 
                             title={t('db_kpi_approved_qs')} 
                             count={totalActiveApprovedQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
-                            subValue={globalQuestionsCount > 0 ? globalQuestionsCount.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US') : undefined}
+                            subValue={isSubTeacher || assignedSubjectIds.length > 0 ? `(${subjectQuestions.length} ${currentLang === 'bn' ? 'টি বিষয়ে' : 'subjects'})` : (globalQuestionsCount > 0 ? globalQuestionsCount.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US') : undefined)}
                             trend={0} 
                             icon={Layers} 
                             gradient="bg-gradient-to-br from-violet-500 to-purple-600" 

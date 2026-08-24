@@ -61,6 +61,8 @@ public class DashboardStatsDTO {
     @Data
     @Builder
     public static class SubjectQuestionStat {
+        private String id;
+        private String classSubjectId;
         private String subjectName;
         private String className;
         private String levelName;

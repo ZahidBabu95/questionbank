@@ -201,7 +201,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         public User getCurrentUser() {
                 String email = SecurityContextHolder.getContext().getAuthentication().getName();
-                return userRepository.findByEmail(email).orElse(null);
+                return userRepository.findByEmailWithSubjects(email).orElseGet(() -> userRepository.findByEmail(email).orElse(null));
         }
 
         private DashboardStatsDTO getEmptyStats() {
@@ -325,6 +325,8 @@ public class DashboardServiceImpl implements DashboardService {
                                 long count = classSubjectQuestionCounts.getOrDefault(cs.getId(), 0L);
 
                                 subjectQuestions.add(DashboardStatsDTO.SubjectQuestionStat.builder()
+                                                .id(cs.getId().toString())
+                                                .classSubjectId(cs.getId().toString())
                                                 .subjectName(name)
                                                 .className(className)
                                                 .levelName(levelName)
