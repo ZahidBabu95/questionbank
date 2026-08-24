@@ -48,9 +48,9 @@ export const MENU_ITEMS = [
         id: 'AI_WORKSPACE',
         title: 'AI Workspace',
         icon: <Sparkles size={20} strokeWidth={1.8} />,
-        roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'],
+        roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'],
         submenu: [
-            { id: 'AI_WORKSPACE_CHAT_CONSOLE', title: 'Chat Console', path: '/ai-workspace', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER', 'STUDENT'], icon: <MessageSquare size={20} strokeWidth={1.8} /> },
+            { id: 'AI_WORKSPACE_CHAT_CONSOLE', title: 'Chat Console', path: '/ai-workspace', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'], icon: <MessageSquare size={20} strokeWidth={1.8} /> },
             { id: 'AI_WORKSPACE_TOOL_WIDGET_MANAGER', title: 'Tool & Widget Manager', path: '/ai-workspace/admin/tools', roles: ['SUPER_ADMIN'], icon: <Box size={20} strokeWidth={1.8} /> },
             { id: 'AI_WORKSPACE_COMMAND_SETTINGS', title: 'Command & Settings', path: '/ai-workspace/admin/settings', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'], icon: <Sliders size={20} strokeWidth={1.8} /> },
             { id: 'AI_WORKSPACE_PROMPT_RULES', title: 'Prompt Rules', path: '/ai-workspace/admin/prompts', roles: ['SUPER_ADMIN'], icon: <ShieldAlert size={20} strokeWidth={1.8} /> },
@@ -164,8 +164,8 @@ export const MENU_ITEMS = [
                 submenu: [
                     { id: 'EXAM_PAPER_GENERATOR_AUTO_GENERATE', title: 'Auto Generate', path: '/exams/generate/auto', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'], icon: <Zap size={20} strokeWidth={1.8} /> },
                     { id: 'EXAM_PAPER_GENERATOR_SAVED_EXAMS', title: 'Saved Exams', path: '/exams/generate/saved', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'], icon: <Save size={20} strokeWidth={1.8} /> },
-                    { id: 'EXAM_PAPER_GENERATOR_NEXUS_PAPER_ENGINE_V2', title: 'Nexus Paper Engine (V2)', path: '/exams/generate/nexus-editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'], icon: <Cpu size={20} strokeWidth={1.8} /> },
-                    { id: 'EXAM_PAPER_GENERATOR_LEGACY_EDITOR', title: 'Legacy Editor', path: '/exams/generate/editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'], icon: <Edit2 size={20} strokeWidth={1.8} /> },
+                    { id: 'EXAM_PAPER_GENERATOR_NEXUS_PAPER_ENGINE_V2', title: 'Nexus Paper Engine (V2)', path: '/exams/generate/nexus-editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'], icon: <Cpu size={20} strokeWidth={1.8} /> },
+                    { id: 'EXAM_PAPER_GENERATOR_LEGACY_EDITOR', title: 'Legacy Editor', path: '/exams/generate/editor', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN'], icon: <Edit2 size={20} strokeWidth={1.8} /> },
                     { id: 'EXAM_PAPER_GENERATOR_MANUAL_SELECT', title: 'Manual Select', path: '/exams/generate/manual', roles: ['SUPER_ADMIN', 'INSTITUTE_ADMIN', 'TEACHER'], icon: <Play size={20} strokeWidth={1.8} /> },
                 ]
             },
@@ -431,11 +431,24 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
         return roleName;
     });
     const isSuperAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('ROLE_SUPER_ADMIN') || user?.email === 'admin' || user?.email?.includes('admin@');
+    
+    // Check if the user is a sub-teacher under a registered institution (not a default/single teacher)
+    const instituteCode = user?.institute?.code || user?.instituteCode || '';
+    const instituteName = user?.institute?.nameEn || user?.instituteNameEn || '';
+    const isDefaultInstitute = !user?.instituteId || instituteCode === 'DEFAULT' || instituteName.toLowerCase().includes('default');
+    const isSubTeacher = (userRoles.includes('TEACHER') || userRoles.includes('ROLE_TEACHER')) && !isSuperAdmin && !userRoles.includes('INSTITUTE_ADMIN') && !isDefaultInstitute;
+    
     const userPermissions = user?.permissions || [];
 
     const isAuthorized = (item, parentId = '') => {
         // SUPER_ADMIN has god-mode access to everything
         if (isSuperAdmin) return true;
+
+        // Strict exclusions ONLY for Institutional Sub-Teachers (Default/Single teachers retain full workspace tools)
+        if (isSubTeacher) {
+            if (item.id?.startsWith('AI_WORKSPACE') || item.path === '/ai-workspace') return false;
+            if (item.id?.includes('NEXUS') || item.path?.includes('nexus-editor')) return false;
+        }
 
         // Fundamental user-level features (like Academic Subjects Access) are accessible to all roles
         if (item.id === 'MY_ACADEMIC_SUBJECTS' || item.path === '/profile?tab=academic') return true;
@@ -534,6 +547,9 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
         const otherItems = [];
 
         leafItems.forEach(item => {
+            if (isSubTeacher && (item.path === '/ai-workspace' || item.path?.includes('nexus-editor') || item.id?.startsWith('AI_WORKSPACE'))) {
+                return;
+            }
             const pathInfo = orderMap[item.path];
             if (pathInfo) {
                 if (pathInfo.category === 'top') {
@@ -581,8 +597,10 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
             result.push(...createQItems);
         }
 
-        // 4. Nexus Paper Engine (V2)
-        result.push(...nexusItems);
+        // 4. Nexus Paper Engine (V2) - available for admins and single teachers, excluded for institutional sub-teachers
+        if (!isSubTeacher && nexusItems.length > 0) {
+            result.push(...nexusItems);
+        }
 
         // 5. OMR OFFLINE EXAM header
         if (omrGenItems.length > 0) {
@@ -590,8 +608,8 @@ const Sidebar = ({ isOpen, onClose, onLogout }) => {
             result.push(...omrGenItems);
         }
 
-        // 6. Other authorized items if any (User Management, Reports, etc.)
-        if (otherItems.length > 0) {
+        // 6. Other authorized items if any (Excluded for institutional sub-teachers)
+        if (otherItems.length > 0 && !isSubTeacher) {
             result.push({ isHeader: true, title: 'More Options' });
             result.push(...otherItems);
         }

@@ -43,12 +43,14 @@ public class BillingPackage extends BaseEntity {
     @Column(nullable = false)
     private PackageStatus status = PackageStatus.ACTIVE;
 
-    // Limits
     @Column(name = "max_teachers")
     private Integer maxTeachers;
 
     @Column(name = "max_students")
     private Integer maxStudents;
+
+    @Column(name = "max_branches")
+    private Integer maxBranches;
 
     @Column(name = "max_questions")
     private Integer maxQuestions;

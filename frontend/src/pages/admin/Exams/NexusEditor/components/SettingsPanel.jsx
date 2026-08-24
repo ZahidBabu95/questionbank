@@ -2,7 +2,7 @@ import React from 'react';
 import { SUBJECTS, CLASSES, EXAMS, GROUPS, BOARDS, BN_FONTS, EN_FONTS, PAGE_SIZES, HEADER_STYLES, SECTION_STYLES, WATERMARK_OPT } from './DocumentSettings';
 import { Toggle, FL, G2, Num, Sel, Inp, Slide, ST, Seg, FieldDisplay, NumDisplay, CollapsibleBox, TypographyToolbar, Txt } from './SettingsComponents';
 import { UI_TEXT } from './translations';
-import { Lock, Unlock, AlignLeft, AlignCenter, AlignRight, AlignJustify, Trash2, ArrowUp, ArrowDown, FileText, Settings, ChevronDown, ChevronRight } from 'lucide-react';
+import { Lock, Unlock, AlignLeft, AlignCenter, AlignRight, AlignJustify, Trash2, ArrowUp, ArrowDown, FileText, Settings, ChevronDown, ChevronRight, Building2, Sparkles, Check } from 'lucide-react';
 
 export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang, documentQuestions }) {
     const t = UI_TEXT[uiLang];
@@ -26,6 +26,55 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang, documen
             return '';
         }
     }, [s.language, s.institute]);
+
+    const instituteOptions = React.useMemo(() => {
+        try {
+            const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+            const isEnglish = (s.language || '').toUpperCase() === 'ENGLISH';
+            
+            const mainNameEn = storedUser.instituteNameEn || storedUser.instituteName || storedUser.institute?.nameEn || storedUser.institute?.name || '';
+            const mainNameBn = storedUser.instituteNameBn || storedUser.instituteName || storedUser.institute?.nameBn || storedUser.institute?.name || '';
+            const primaryMainName = (isEnglish ? (mainNameEn || mainNameBn) : (mainNameBn || mainNameEn)).trim();
+            
+            let branchesList = [];
+            const rawBranches = storedUser.instituteBranches || storedUser.institute?.branches;
+            if (rawBranches) {
+                try {
+                    branchesList = typeof rawBranches === 'string' ? JSON.parse(rawBranches) : rawBranches;
+                } catch (e) {
+                    branchesList = [];
+                }
+            }
+            if (!Array.isArray(branchesList)) branchesList = [];
+
+            const options = [];
+            if (primaryMainName) {
+                options.push({
+                    title: primaryMainName,
+                    value: primaryMainName,
+                    isMain: true
+                });
+            }
+
+            branchesList.forEach(branch => {
+                const bNameEn = (branch.nameEn || branch.nameBn || '').trim();
+                const bNameBn = (branch.nameBn || branch.nameEn || '').trim();
+                const branchRaw = isEnglish ? (bNameEn || bNameBn) : (bNameBn || bNameEn);
+                
+                if (branchRaw && branchRaw !== primaryMainName) {
+                    options.push({
+                        title: branchRaw,
+                        value: branchRaw,
+                        isMain: false
+                    });
+                }
+            });
+
+            return options;
+        } catch (e) {
+            return [];
+        }
+    }, [s.language]);
 
     return (
         <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-white">
@@ -533,7 +582,7 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang, documen
                                 type="button"
                                 onClick={() => setIsInstCustom(prev => !prev)}
                                 className="text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer"
-                                title={uiLang === 'bn' ? 'প্রতিষ্ঠানের নাম পরিবর্তন করতে ক্লিক করুন' : 'Click to customize institute name'}
+                                title={uiLang === 'bn' ? 'প্রতিষ্ঠানের নাম কাস্টম টেক্সট হিসেবে লিখতে ক্লিক করুন' : 'Click to type custom institute name'}
                             >
                                 {isInstCustom ? <Unlock size={10} className="text-emerald-600" /> : <Lock size={10} />}
                                 <span>{isInstCustom ? (uiLang === 'bn' ? 'কাস্টম এডিট মোড' : 'Custom Edit Mode') : (uiLang === 'bn' ? 'লকড (এডিট করতে ক্লিক করুন)' : 'Locked (Click to edit)')}</span>
@@ -548,17 +597,35 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang, documen
                                         onChange={v => u("institute", v)} 
                                     />
                                 ) : (
-                                    <div className="relative group">
-                                        <input 
-                                            type="text" 
-                                            value={s.institute || profileInstituteName || ''} 
-                                            disabled={true} 
-                                            readOnly={true}
-                                            className="w-full text-[13px] px-2.5 py-1.5 border border-slate-200 rounded-md bg-slate-100/90 text-slate-700 font-bold cursor-not-allowed select-none pl-8 shadow-inner" 
-                                            title={uiLang === 'bn' ? 'প্রতিষ্ঠানের নাম (এডিট করতে উপরের লক বাটনে ক্লিক করুন)' : 'Institute name (Click lock button to edit)'}
-                                        />
-                                        <Lock size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    </div>
+                                    instituteOptions.length > 1 ? (
+                                        <div className="relative">
+                                            <Building2 size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                            <select 
+                                                value={s.institute || profileInstituteName || instituteOptions[0]?.value || ''} 
+                                                onChange={(e) => u("institute", e.target.value)}
+                                                className="w-full text-[13px] pl-8 pr-7 py-1.5 border border-slate-200 rounded-md bg-white text-slate-800 font-medium outline-none focus:border-indigo-400 appearance-none cursor-pointer"
+                                            >
+                                                {instituteOptions.map((opt, oIdx) => (
+                                                    <option key={oIdx} value={opt.value}>
+                                                        {opt.title}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                        </div>
+                                    ) : (
+                                        <div className="relative">
+                                            <Building2 size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <input 
+                                                type="text" 
+                                                value={s.institute || profileInstituteName || ''} 
+                                                disabled={true} 
+                                                readOnly={true}
+                                                className="w-full text-[13px] pl-8 pr-2.5 py-1.5 border border-slate-200 rounded-md bg-slate-100/90 text-slate-700 font-semibold cursor-not-allowed select-none shadow-inner" 
+                                                title={uiLang === 'bn' ? 'প্রতিষ্ঠানের নাম (এডিট করতে উপরের লক বাটনে ক্লিক করুন)' : 'Institute name (Click lock button to edit)'}
+                                            />
+                                        </div>
+                                    )
                                 )}
                             </FL>
                             <FL label={t.board} toggleKey="showBoard" toggleVal={s.showBoard} onToggle={u}>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     Plus, Edit2, Trash2, CheckCircle, XCircle, ChevronRight, ChevronDown,
-    Zap, Users, FileText, Layout, Save, X, Settings, DollarSign
+    Zap, Users, FileText, Layout, Save, X, Settings, DollarSign, Building2
 } from 'lucide-react';
 import billingService from '../../../services/billingService';
 import userService from '../../../services/userService';
@@ -41,6 +41,7 @@ const PackageManagement = () => {
         status: 'ACTIVE',
         maxTeachers: 0,
         maxStudents: 0,
+        maxBranches: 1,
         maxQuestions: 0,
         maxExamsPerMonth: 0,
         maxLectures: 0,
@@ -172,6 +173,7 @@ const PackageManagement = () => {
             // Automatically set capacity/limits to 0 for student package
             maxTeachers: isStudent ? 0 : 5,
             maxStudents: isStudent ? 0 : 100,
+            maxBranches: isStudent ? 0 : 1,
             maxQuestions: isStudent ? 0 : 1000,
             maxLectures: isStudent ? 0 : 10,
             maxExamsPerMonth: isStudent ? 10 : 20,
@@ -316,6 +318,7 @@ const PackageManagement = () => {
                                                  ] : [
                                                      { label: 'Max Teachers', key: 'maxTeachers', icon: Users },
                                                      { label: 'Max Students', key: 'maxStudents', icon: Users },
+                                                     { label: 'Max Branches', key: 'maxBranches', icon: Building2 },
                                                      { label: 'Max Questions', key: 'maxQuestions', icon: FileText },
                                                      { label: 'Exams / Month', key: 'maxExamsPerMonth', icon: Layout },
                                                      { label: 'Max Lectures', key: 'maxLectures', icon: CheckCircle },
@@ -591,6 +594,9 @@ const PackageManagement = () => {
                                             </div>
                                             <div className="flex items-center gap-2 text-slate-500 text-sm font-medium">
                                                 <Users size={16} className="text-teal-500" /> <span>{pkg.maxStudents} Students</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-slate-500 text-sm font-medium">
+                                                <Building2 size={16} className="text-emerald-500" /> <span>{pkg.maxBranches || 1} Branches</span>
                                             </div>
                                             <div className="flex items-center gap-2 text-slate-500 text-sm font-medium">
                                                 <FileText size={16} className="text-blue-500" /> <span>{pkg.maxQuestions} Questions/mo</span>

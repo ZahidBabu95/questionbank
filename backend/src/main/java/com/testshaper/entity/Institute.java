@@ -50,6 +50,9 @@ public class Institute extends BaseEntity {
     @Column(name = "logo_path")
     private String logoPath;
 
+    @Column(name = "branches", columnDefinition = "TEXT")
+    private String branches;
+
     @Column(name = "established_year")
     private Integer establishedYear;
 
@@ -84,6 +87,9 @@ public class Institute extends BaseEntity {
 
     @Column(name = "max_students")
     private Integer maxStudents = 50;
+
+    @Column(name = "max_branches")
+    private Integer maxBranches = 1;
 
     @Column(name = "max_questions")
     private Integer maxQuestions = 500;
@@ -126,6 +132,52 @@ public class Institute extends BaseEntity {
         if (gracePeriodDays == null) gracePeriodDays = 7;
         if (maxTeachers == null) maxTeachers = 5;
         if (maxStudents == null) maxStudents = 50;
+        if (maxBranches == null) maxBranches = 1;
+    }
+
+    public Integer getMaxBranches() {
+        if (subscriptionPackage != null && subscriptionPackage.getMaxBranches() != null) {
+            return subscriptionPackage.getMaxBranches();
+        }
+        if (maxBranches != null && maxBranches > 0) {
+            return maxBranches;
+        }
+        return 1;
+    }
+
+    public Integer getMaxTeachers() {
+        if (subscriptionPackage != null && subscriptionPackage.getMaxTeachers() != null) {
+            return subscriptionPackage.getMaxTeachers();
+        }
+        return maxTeachers != null ? maxTeachers : 5;
+    }
+
+    public Integer getMaxStudents() {
+        if (subscriptionPackage != null && subscriptionPackage.getMaxStudents() != null) {
+            return subscriptionPackage.getMaxStudents();
+        }
+        return maxStudents != null ? maxStudents : 50;
+    }
+
+    public Integer getMaxQuestions() {
+        if (subscriptionPackage != null && subscriptionPackage.getMaxQuestions() != null) {
+            return subscriptionPackage.getMaxQuestions();
+        }
+        return maxQuestions != null ? maxQuestions : 500;
+    }
+
+    public Integer getAiLimitPerMonth() {
+        if (subscriptionPackage != null && subscriptionPackage.getAiLimitPerMonth() != null) {
+            return subscriptionPackage.getAiLimitPerMonth();
+        }
+        return aiLimitPerMonth != null ? aiLimitPerMonth : 100000;
+    }
+
+    public Integer getStorageLimitMb() {
+        if (subscriptionPackage != null && subscriptionPackage.getStorageLimitMb() != null) {
+            return subscriptionPackage.getStorageLimitMb();
+        }
+        return storageLimitMb != null ? storageLimitMb : 500;
     }
 
     public enum InstituteType {

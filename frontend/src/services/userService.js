@@ -58,6 +58,16 @@ const userService = {
         return response.data;
     },
 
+    getAssignedSubjects: async (userId) => {
+        const response = await axios.get(`${API_URL}/${userId}/assigned-subjects`);
+        return response.data;
+    },
+
+    assignSubjects: async (userId, subjectIds) => {
+        const response = await axios.put(`${API_URL}/${userId}/assigned-subjects`, subjectIds);
+        return response.data;
+    },
+
     bulkActivate: async (ids) => {
         const response = await axios.post(`${API_URL}/bulk/activate`, ids);
         return response.data;

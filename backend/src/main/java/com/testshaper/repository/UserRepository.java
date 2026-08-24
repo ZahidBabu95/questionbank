@@ -23,6 +23,8 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
         // Fetch users by institute
         Page<User> findByInstituteId(UUID instituteId, Pageable pageable);
 
+        java.util.List<User> findByInstituteId(UUID instituteId);
+
         long countByInstituteId(UUID instituteId);
 
         // Search users with filters (Role, Active status, Account Locked) and Super

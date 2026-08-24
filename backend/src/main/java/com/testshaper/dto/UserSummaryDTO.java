@@ -23,9 +23,12 @@ public class UserSummaryDTO {
     private String instituteName;
     private String instituteNameEn;
     private String instituteNameBn;
+    private String instituteBranches;
+    private String userInstituteBranches;
     private Set<String> roles; // Only role names, NO permissions
     private String studentRoll;
     private UUID classId;
     private String className;
+    private Set<UUID> assignedSubjectIds;
     private LocalDateTime createdAt;
 }

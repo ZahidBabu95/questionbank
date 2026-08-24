@@ -2,6 +2,7 @@ package com.testshaper.service.impl;
 
 import com.testshaper.entity.Institute;
 import com.testshaper.entity.BillingPackage;
+import com.testshaper.entity.User;
 import com.testshaper.repository.InstituteRepository;
 import com.testshaper.repository.BillingPackageRepository;
 import com.testshaper.service.InstituteService;
@@ -197,9 +198,31 @@ public class InstituteServiceImpl implements InstituteService {
     }
 
     @Override
+    @Transactional
     public Institute getInstitute(UUID id) {
-        return instituteRepository.findById(id)
+        Institute institute = instituteRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Institute not found with ID: " + id));
+
+        boolean instNeedsSync = institute.getNameEn() == null || institute.getNameEn().isEmpty() 
+                || institute.getName() == null || institute.getName().endsWith("'s Workspace") || institute.getName().startsWith("REQ-");
+
+        if (instNeedsSync) {
+            java.util.List<User> instituteUsers = userRepository.findByInstituteId(institute.getId());
+            for (User u : instituteUsers) {
+                if (u.getUserInstituteNameEn() != null && !u.getUserInstituteNameEn().trim().isEmpty() 
+                        && !u.getUserInstituteNameEn().endsWith("'s Workspace")) {
+                    institute.setNameEn(u.getUserInstituteNameEn().trim());
+                    institute.setName(u.getUserInstituteNameEn().trim());
+                    if (u.getUserInstituteNameBn() != null && !u.getUserInstituteNameBn().trim().isEmpty()) {
+                        institute.setNameBn(u.getUserInstituteNameBn().trim());
+                    }
+                    institute = instituteRepository.save(institute);
+                    break;
+                }
+            }
+        }
+
+        return institute;
     }
 
     @Override
@@ -351,6 +374,7 @@ public class InstituteServiceImpl implements InstituteService {
         institute.setSubscriptionPackage(pkg);
         institute.setMaxTeachers(pkg.getMaxTeachers() != null ? pkg.getMaxTeachers() : 5);
         institute.setMaxStudents(pkg.getMaxStudents() != null ? pkg.getMaxStudents() : 50);
+        institute.setMaxBranches(pkg.getMaxBranches() != null ? pkg.getMaxBranches() : 1);
         institute.setAiLimitPerMonth(pkg.getAiLimitPerMonth() != null ? pkg.getAiLimitPerMonth() : 100000);
         institute.setMaxQuestions(pkg.getMaxQuestions() != null ? pkg.getMaxQuestions() : 500);
         institute.setStorageLimitMb(pkg.getStorageLimitMb() != null ? pkg.getStorageLimitMb() : 500);

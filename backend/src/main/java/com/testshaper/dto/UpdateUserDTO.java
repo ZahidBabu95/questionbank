@@ -19,7 +19,14 @@ public class UpdateUserDTO {
 
     private String phone;
 
-    private boolean isActive;
+    private Boolean active;
+    private Boolean isActive;
+
+    public Boolean getActiveStatus() {
+        if (active != null) return active;
+        if (isActive != null) return isActive;
+        return null;
+    }
 
     private UUID instituteId;
 
@@ -28,4 +35,6 @@ public class UpdateUserDTO {
     private UUID classId;
 
     private String studentRoll;
+
+    private String instituteBranches;
 }

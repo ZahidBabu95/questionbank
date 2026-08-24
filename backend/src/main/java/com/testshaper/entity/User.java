@@ -62,12 +62,23 @@ public class User extends BaseEntity {
     @Column(name = "user_institute_name_bn")
     private String userInstituteNameBn;
 
+    @Column(name = "user_institute_branches", columnDefinition = "TEXT")
+    private String userInstituteBranches;
+
     @Column(name = "student_roll")
     private String studentRoll;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_id")
     private AcademicClass academicClass;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "user_assigned_subjects",
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "class_subject_id")
+    )
+    private Set<ClassSubject> assignedSubjects = new HashSet<>();
 
     public Integer getContributionPoints() {
         return contributionPoints == null ? 0 : contributionPoints;

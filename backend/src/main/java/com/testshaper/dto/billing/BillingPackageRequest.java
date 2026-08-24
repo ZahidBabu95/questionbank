@@ -28,6 +28,7 @@ public class BillingPackageRequest {
 
     private Integer maxTeachers;
     private Integer maxStudents;
+    private Integer maxBranches;
     private Integer maxQuestions;
     private Integer maxExamsPerMonth;
     private Integer maxLectures;

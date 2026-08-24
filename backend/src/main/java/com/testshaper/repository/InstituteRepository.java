@@ -17,6 +17,8 @@ public interface InstituteRepository extends JpaRepository<Institute, UUID> {
 
     List<Institute> findAllByStatus(Institute.InstituteStatus status);
 
+    List<Institute> findAllBySubscriptionPackageId(UUID packageId);
+
     @Query("SELECT i FROM Institute i WHERE i.expiryDate < :date AND i.status = 'ACTIVE'")
     List<Institute> findExpiredInstitutes(java.time.LocalDate date);
 }

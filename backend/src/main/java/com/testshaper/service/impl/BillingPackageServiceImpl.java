@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 public class BillingPackageServiceImpl implements BillingPackageService {
 
     private final BillingPackageRepository packageRepository;
+    private final com.testshaper.repository.InstituteRepository instituteRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -63,7 +64,21 @@ public class BillingPackageServiceImpl implements BillingPackageService {
         }
 
         mapToEntity(request, pkg);
-        return mapToDTO(packageRepository.save(pkg));
+        BillingPackage savedPkg = packageRepository.save(pkg);
+
+        // Instantly cascade and sync updated limits to all active institutes subscribed to this package
+        java.util.List<com.testshaper.entity.Institute> subscribedInstitutes = instituteRepository.findAllBySubscriptionPackageId(savedPkg.getId());
+        for (com.testshaper.entity.Institute inst : subscribedInstitutes) {
+            inst.setMaxTeachers(savedPkg.getMaxTeachers());
+            inst.setMaxStudents(savedPkg.getMaxStudents());
+            inst.setMaxBranches(savedPkg.getMaxBranches());
+            inst.setMaxQuestions(savedPkg.getMaxQuestions());
+            inst.setAiLimitPerMonth(savedPkg.getAiLimitPerMonth());
+            inst.setStorageLimitMb(savedPkg.getStorageLimitMb());
+            instituteRepository.save(inst);
+        }
+
+        return mapToDTO(savedPkg);
     }
 
     @Override
@@ -96,6 +111,7 @@ public class BillingPackageServiceImpl implements BillingPackageService {
         entity.setStatus(BillingPackage.PackageStatus.valueOf(request.getStatus().toUpperCase()));
         entity.setMaxTeachers(request.getMaxTeachers());
         entity.setMaxStudents(request.getMaxStudents());
+        entity.setMaxBranches(request.getMaxBranches());
         entity.setMaxQuestions(request.getMaxQuestions());
         entity.setMaxExamsPerMonth(request.getMaxExamsPerMonth());
         entity.setMaxLectures(request.getMaxLectures());
@@ -121,6 +137,7 @@ public class BillingPackageServiceImpl implements BillingPackageService {
         dto.setStatus(entity.getStatus().name());
         dto.setMaxTeachers(entity.getMaxTeachers());
         dto.setMaxStudents(entity.getMaxStudents());
+        dto.setMaxBranches(entity.getMaxBranches());
         dto.setMaxQuestions(entity.getMaxQuestions());
         dto.setMaxExamsPerMonth(entity.getMaxExamsPerMonth());
         dto.setMaxLectures(entity.getMaxLectures());

@@ -14,4 +14,6 @@ public class UpdateProfileDTO {
     private String instituteNameEn;
 
     private String instituteNameBn;
+
+    private String instituteBranches;
 }

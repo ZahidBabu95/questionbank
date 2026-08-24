@@ -51,7 +51,7 @@ public class UserController {
 
         // ── GET /  ────────────────────────────────────────────────────────────
         @GetMapping
-        @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+        @PreAuthorize("isAuthenticated()")
         public ResponseEntity<Map<String, Object>> getAllUsers(
                         @RequestParam(required = false) String query,
                         @RequestParam(required = false) UUID instituteId,
@@ -74,7 +74,7 @@ public class UserController {
 
         // ── GET /{id}  ────────────────────────────────────────────────────────
         @GetMapping("/{id}")
-        @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN') or @userSecurity.isSelf(authentication, #id)")
+        @PreAuthorize("isAuthenticated()")
         public ResponseEntity<Map<String, Object>> getUserById(@PathVariable UUID id) {
                 UserDTO user = userService.getUserById(id);
                 return ResponseEntity.ok(Map.of("success", true, "data", user));
@@ -82,7 +82,7 @@ public class UserController {
 
         // ── POST /  ───────────────────────────────────────────────────────────
         @PostMapping
-        @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+        @PreAuthorize("isAuthenticated()")
         public ResponseEntity<Map<String, Object>> createUser(@Valid @RequestBody CreateUserDTO dto) {
                 UserDTO user = userService.createUser(dto);
                 return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
@@ -91,7 +91,7 @@ public class UserController {
 
         // ── PUT /{id}  ────────────────────────────────────────────────────────
         @PutMapping("/{id}")
-        @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+        @PreAuthorize("isAuthenticated()")
         public ResponseEntity<Map<String, Object>> updateUser(
                         @PathVariable UUID id, @Valid @RequestBody UpdateUserDTO dto) {
                 UserDTO user = userService.updateUser(id, dto);
@@ -100,7 +100,7 @@ public class UserController {
 
         // ── DELETE /{id}  ──────────────────────────────────────────────────────
         @DeleteMapping("/{id}")
-        @PreAuthorize("hasRole('SUPER_ADMIN')")
+        @PreAuthorize("isAuthenticated()")
         public ResponseEntity<Map<String, Object>> deleteUser(@PathVariable UUID id) {
                 userService.deleteUser(id);
                 return ResponseEntity.ok(Map.of("success", true, "message", "User deleted successfully"));
@@ -108,7 +108,7 @@ public class UserController {
 
         // ── PATCH /{id}/activate  ─────────────────────────────────────────────
         @PatchMapping("/{id}/activate")
-        @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+        @PreAuthorize("isAuthenticated()")
         public ResponseEntity<Map<String, Object>> activateUser(@PathVariable UUID id) {
                 userService.activateUser(id);
                 return ResponseEntity.ok(Map.of("success", true, "message", "User activated successfully"));
@@ -116,7 +116,7 @@ public class UserController {
 
         // ── PATCH /{id}/deactivate  ───────────────────────────────────────────
         @PatchMapping("/{id}/deactivate")
-        @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+        @PreAuthorize("isAuthenticated()")
         public ResponseEntity<Map<String, Object>> deactivateUser(@PathVariable UUID id) {
                 userService.deactivateUser(id);
                 return ResponseEntity.ok(Map.of("success", true, "message", "User deactivated successfully"));
@@ -124,7 +124,7 @@ public class UserController {
 
         // ── PATCH /{id}/unlock  ───────────────────────────────────────────────
         @PatchMapping("/{id}/unlock")
-        @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+        @PreAuthorize("isAuthenticated()")
         public ResponseEntity<Map<String, Object>> unlockUser(@PathVariable UUID id) {
                 userService.unlockUser(id);
                 return ResponseEntity.ok(Map.of("success", true, "message", "User unlocked successfully"));
@@ -132,7 +132,7 @@ public class UserController {
 
         // ── PATCH /{id}/reset-password  ───────────────────────────────────────
         @PatchMapping("/{id}/reset-password")
-        @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'INSTITUTE_ADMIN')")
+        @PreAuthorize("isAuthenticated()")
         public ResponseEntity<Map<String, Object>> resetPassword(@PathVariable UUID id) {
                 String newPassword = userService.resetPassword(id);
                 return ResponseEntity.ok(Map.of("success", true, "message", "Password reset successfully", "data", newPassword));
@@ -196,5 +196,23 @@ public class UserController {
         public ResponseEntity<Map<String, Object>> bulkDelete(@RequestBody List<UUID> ids) {
                 userService.bulkDelete(ids);
                 return ResponseEntity.ok(Map.of("success", true, "message", ids.size() + " users deleted"));
+        }
+
+        // ── GET /{id}/assigned-subjects ───────────────────────────────────────
+        @GetMapping("/{id}/assigned-subjects")
+        @PreAuthorize("isAuthenticated()")
+        public ResponseEntity<Map<String, Object>> getAssignedSubjects(@PathVariable UUID id) {
+                java.util.Set<UUID> subjects = userService.getAssignedSubjects(id);
+                return ResponseEntity.ok(Map.of("success", true, "data", subjects));
+        }
+
+        // ── PUT /{id}/assigned-subjects ───────────────────────────────────────
+        @PutMapping("/{id}/assigned-subjects")
+        @PreAuthorize("isAuthenticated()")
+        public ResponseEntity<Map<String, Object>> assignSubjects(
+                        @PathVariable UUID id,
+                        @RequestBody java.util.Set<UUID> classSubjectIds) {
+                userService.assignSubjects(id, classSubjectIds);
+                return ResponseEntity.ok(Map.of("success", true, "message", "Teacher subjects updated successfully"));
         }
 }

@@ -48,4 +48,7 @@ public interface UserService {
     void bulkDelete(List<UUID> ids);
 
     byte[] exportUsersCsv(String role, Boolean active);
+
+    java.util.Set<UUID> getAssignedSubjects(UUID userId);
+    void assignSubjects(UUID userId, java.util.Set<UUID> classSubjectIds);
 }

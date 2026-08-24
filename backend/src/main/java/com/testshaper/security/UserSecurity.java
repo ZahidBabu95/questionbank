@@ -24,14 +24,14 @@ public class UserSecurity {
     }
 
     public boolean isInstituteAdmin(UUID instituteId) {
+        if (instituteId == null) return false;
         org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) return false;
         
-        Object principal = authentication.getPrincipal();
-        if (principal instanceof CustomUserDetails) {
-            String tenantId = ((CustomUserDetails) principal).getTenantId();
-            return tenantId != null && tenantId.equals(instituteId.toString());
-        }
-        return false;
+        String email = authentication.getName();
+        return userRepository.findByEmail(email)
+                .map(User::getInstitute)
+                .map(inst -> inst != null && inst.getId().equals(instituteId))
+                .orElse(false);
     }
 }

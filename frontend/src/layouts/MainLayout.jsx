@@ -250,9 +250,11 @@ const MainLayout = () => {
     
     const isZeroPaddingRoute = isFullscreenWorkspace || location.pathname.startsWith('/questions');
 
-    const isPendingApproval = userData?.instituteStatus === 'INACTIVE' || userData?.instituteStatus === 'PENDING';
+    const isTeacherOrStudent = userRoles.includes('TEACHER') || userRoles.includes('ROLE_TEACHER') || userRoles.includes('STUDENT') || userRoles.includes('ROLE_STUDENT');
+
+    const isPendingApproval = !isTeacherOrStudent && (userData?.instituteStatus === 'INACTIVE' || userData?.instituteStatus === 'PENDING');
     const isSuspended = userData?.instituteStatus === 'SUSPENDED';
-    const isMissingInstituteInfo = !isSuperAdmin && !isDefaultInstitute && (!userData?.instituteNameEn || !userData?.instituteNameBn);
+    const isMissingInstituteInfo = !isTeacherOrStudent && !isSuperAdmin && !isDefaultInstitute && (!userData?.instituteNameEn || !userData?.instituteNameBn);
 
     if (!isSuperAdmin && !isDefaultInstitute && (isPendingApproval || isSuspended || isMissingInstituteInfo)) {
         return <WorkspaceStatusOverlay user={userData} onLogout={handleLogout} />;

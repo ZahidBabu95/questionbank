@@ -33,4 +33,6 @@ public class CreateUserDTO {
     private String studentRoll;
 
     private UUID packageId;
+
+    private String instituteBranches;
 }

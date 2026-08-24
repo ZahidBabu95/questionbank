@@ -13,6 +13,7 @@ import com.testshaper.repository.RoleRepository;
 import com.testshaper.repository.UserRepository;
 import com.testshaper.repository.BillingPackageRepository;
 import com.testshaper.entity.BillingPackage;
+import com.testshaper.repository.ClassSubjectRepository;
 import com.testshaper.service.SecuritySettingService;
 import com.testshaper.service.UserService;
 import com.testshaper.service.EmailService;
@@ -49,6 +50,7 @@ public class UserServiceImpl implements UserService {
     private final DynamicStorageService storageService;
     private final AcademicClassRepository academicClassRepository;
     private final BillingPackageRepository billingPackageRepository;
+    private final ClassSubjectRepository classSubjectRepository;
 
     @Override
     @Transactional
@@ -163,9 +165,13 @@ public class UserServiceImpl implements UserService {
                 boolean isStudent = dto.getRoles() != null && dto.getRoles().contains("STUDENT");
                 
                 if (isTeacher) {
-                    long currentTeachers = userRepository.countByInstituteIdAndRoleName(instituteIdToUse, "TEACHER");
                     Integer maxTeachers = institute.getMaxTeachers();
-                    if (maxTeachers != null && currentTeachers >= maxTeachers) {
+                    if (maxTeachers == null || maxTeachers <= 0) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                            "আপনার বর্তমান প্যাকেজে শিক্ষক যুক্ত করার সুবিধা অন্তর্ভুক্ত নেই। অনুগ্রহ করে প্যাকেজ আপগ্রেড করুন।");
+                    }
+                    long currentTeachers = userRepository.countByInstituteIdAndRoleName(instituteIdToUse, "TEACHER");
+                    if (currentTeachers >= maxTeachers) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                             "Teacher limit reached (" + maxTeachers + "). Please upgrade your package.");
                     }
@@ -182,6 +188,15 @@ public class UserServiceImpl implements UserService {
             }
             
             user.setInstitute(institute);
+            if (institute.getNameEn() != null) {
+                user.setUserInstituteNameEn(institute.getNameEn());
+            }
+            if (institute.getNameBn() != null) {
+                user.setUserInstituteNameBn(institute.getNameBn());
+            }
+            if (dto.getInstituteBranches() != null && !dto.getInstituteBranches().isEmpty()) {
+                user.setUserInstituteBranches(dto.getInstituteBranches());
+            }
         }
 
         // Handle Academic Class & Student Roll
@@ -195,24 +210,87 @@ public class UserServiceImpl implements UserService {
         }
 
         User savedUser = userRepository.save(user);
+        enrichInstituteBranding(savedUser);
         return userMapper.toDTO(savedUser);
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public UserDTO getUserById(@NonNull UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        enrichInstituteBranding(user);
         return userMapper.toDTO(user);
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public UserDTO getUserByEmail(@NonNull String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(
                         () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with email: " + email));
+        enrichInstituteBranding(user);
         return userMapper.toDTO(user);
+    }
+
+    private void enrichInstituteBranding(User user) {
+        if (user == null || user.getInstitute() == null) {
+            return;
+        }
+        Institute inst = user.getInstitute();
+        
+        boolean instNeedsSync = inst.getNameEn() == null || inst.getNameEn().isEmpty() 
+                || inst.getName() == null || inst.getName().endsWith("'s Workspace") || inst.getName().startsWith("REQ-");
+                
+        if (instNeedsSync) {
+            java.util.List<User> instituteUsers = userRepository.findByInstituteId(inst.getId());
+            for (User u : instituteUsers) {
+                if (u.getUserInstituteNameEn() != null && !u.getUserInstituteNameEn().trim().isEmpty() 
+                        && !u.getUserInstituteNameEn().endsWith("'s Workspace")) {
+                    inst.setNameEn(u.getUserInstituteNameEn().trim());
+                    inst.setName(u.getUserInstituteNameEn().trim());
+                    if (u.getUserInstituteNameBn() != null && !u.getUserInstituteNameBn().trim().isEmpty()) {
+                        inst.setNameBn(u.getUserInstituteNameBn().trim());
+                    }
+                    instituteRepository.save(inst);
+                    break;
+                }
+            }
+        }
+        
+        if (user.getUserInstituteNameEn() == null || user.getUserInstituteNameEn().isEmpty() 
+                || user.getUserInstituteNameEn().endsWith("'s Workspace")) {
+            if (inst.getNameEn() != null && !inst.getNameEn().isEmpty() && !inst.getNameEn().endsWith("'s Workspace")) {
+                user.setUserInstituteNameEn(inst.getNameEn());
+            } else if (inst.getName() != null && !inst.getName().endsWith("'s Workspace")) {
+                user.setUserInstituteNameEn(inst.getName());
+            }
+        }
+        if ((user.getUserInstituteNameBn() == null || user.getUserInstituteNameBn().isEmpty()) && inst.getNameBn() != null) {
+            user.setUserInstituteNameBn(inst.getNameBn());
+        }
+    }
+
+    private void checkTenantAccess(User targetUser) {
+        String currentEmail = SecurityContextHolder.getContext().getAuthentication() != null 
+                ? SecurityContextHolder.getContext().getAuthentication().getName() : null;
+        User currentUser = currentEmail != null ? userRepository.findByEmail(currentEmail).orElse(null) : null;
+        boolean isSuperAdmin = currentUser != null && currentUser.getRoles().stream().anyMatch(r -> r.getName().equals("SUPER_ADMIN"));
+        
+        if (!isSuperAdmin) {
+            if (currentUser == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated");
+            }
+            if (currentUser.getInstitute() != null && targetUser.getInstitute() != null) {
+                if (!currentUser.getInstitute().getId().equals(targetUser.getInstitute().getId())) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to manage this user");
+                }
+            } else if (currentUser.getInstitute() != null && targetUser.getInstitute() == null) {
+                targetUser.setInstitute(currentUser.getInstitute());
+            } else if (!currentUser.getId().equals(targetUser.getId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to manage this user");
+            }
+        }
     }
 
     @Override
@@ -220,6 +298,8 @@ public class UserServiceImpl implements UserService {
     public UserDTO updateUser(@NonNull UUID id, @NonNull UpdateUserDTO dto) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        checkTenantAccess(user);
 
         if (!user.getEmail().equals(dto.getEmail()) && userRepository.existsByEmail(dto.getEmail())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email already exists");
@@ -229,7 +309,9 @@ public class UserServiceImpl implements UserService {
         user.setName(dto.getName());
         user.setEmail(dto.getEmail());
         user.setPhone(dto.getPhone());
-        user.setActive(dto.isActive());
+        if (dto.getActiveStatus() != null) {
+            user.setActive(dto.getActiveStatus());
+        }
 
         // Update Roles
         if (dto.getRoles() != null) {
@@ -251,6 +333,10 @@ public class UserServiceImpl implements UserService {
             user.setInstitute(institute);
         }
 
+        // Update Branches
+        user.setUserInstituteBranches(dto.getInstituteBranches() != null && !dto.getInstituteBranches().trim().isEmpty()
+                ? dto.getInstituteBranches().trim() : null);
+
         // Update Academic Class & Student Roll
         if (dto.getClassId() != null) {
             com.testshaper.entity.AcademicClass academicClass = academicClassRepository.findById(dto.getClassId())
@@ -261,7 +347,9 @@ public class UserServiceImpl implements UserService {
         }
         user.setStudentRoll(dto.getStudentRoll());
 
-        return userMapper.toDTO(userRepository.save(user));
+        User saved = userRepository.save(user);
+        enrichInstituteBranding(saved);
+        return userMapper.toDTO(saved);
     }
 
     @Override
@@ -274,8 +362,28 @@ public class UserServiceImpl implements UserService {
         user.setPhone(dto.getPhone());
         user.setUserInstituteNameEn(dto.getInstituteNameEn());
         user.setUserInstituteNameBn(dto.getInstituteNameBn());
+
+        if (user.getInstitute() != null) {
+            if (dto.getInstituteNameEn() != null && !dto.getInstituteNameEn().trim().isEmpty()) {
+                user.getInstitute().setNameEn(dto.getInstituteNameEn().trim());
+                user.getInstitute().setName(dto.getInstituteNameEn().trim());
+            }
+            if (dto.getInstituteNameBn() != null && !dto.getInstituteNameBn().trim().isEmpty()) {
+                user.getInstitute().setNameBn(dto.getInstituteNameBn().trim());
+            }
+            if (dto.getInstituteBranches() != null) {
+                user.getInstitute().setBranches(dto.getInstituteBranches());
+            }
+            instituteRepository.save(user.getInstitute());
+        }
+
+        if (dto.getInstituteBranches() != null) {
+            user.setUserInstituteBranches(dto.getInstituteBranches());
+        }
         
-        return userMapper.toDTO(userRepository.save(user));
+        User saved = userRepository.save(user);
+        enrichInstituteBranding(saved);
+        return userMapper.toDTO(saved);
     }
 
     @Override
@@ -283,6 +391,8 @@ public class UserServiceImpl implements UserService {
     public void deleteUser(@NonNull UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        
+        checkTenantAccess(user);
         userRepository.delete(user);
     }
 
@@ -291,6 +401,8 @@ public class UserServiceImpl implements UserService {
     public void activateUser(@NonNull UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        
+        checkTenantAccess(user);
         user.setActive(true);
         if (user.getInstitute() != null) {
             user.getInstitute().setStatus(Institute.InstituteStatus.ACTIVE);
@@ -304,6 +416,8 @@ public class UserServiceImpl implements UserService {
     public void deactivateUser(@NonNull UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        
+        checkTenantAccess(user);
         user.setActive(false);
         userRepository.save(user);
     }
@@ -313,6 +427,8 @@ public class UserServiceImpl implements UserService {
     public void unlockUser(@NonNull UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        
+        checkTenantAccess(user);
         user.setAccountLocked(false);
         user.setFailedLoginAttempts(0);
         user.setLockTime(null);
@@ -324,6 +440,8 @@ public class UserServiceImpl implements UserService {
     public String resetPassword(@NonNull UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        
+        checkTenantAccess(user);
         String newPassword = "QS@" + (int)(Math.random() * 90000 + 10000); // e.g. QS@47293
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
@@ -489,5 +607,48 @@ public class UserServiceImpl implements UserService {
     private String q(String s) {
         if (s == null) return "";
         return "\"" + s.replace("\"", "\"\"") + "\"";
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Set<UUID> getAssignedSubjects(@NonNull UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        return user.getAssignedSubjects() != null
+                ? user.getAssignedSubjects().stream().map(com.testshaper.entity.ClassSubject::getId).collect(java.util.stream.Collectors.toSet())
+                : java.util.Collections.emptySet();
+    }
+
+    @Override
+    @Transactional
+    public void assignSubjects(@NonNull UUID userId, @NonNull java.util.Set<UUID> classSubjectIds) {
+        User targetUser = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        checkTenantAccess(targetUser);
+
+        // Scope check: Teachers can ONLY be assigned subjects that are ACTIVE in their Institute!
+        if (targetUser.getInstitute() != null) {
+            Institute inst = instituteRepository.findById(targetUser.getInstitute().getId())
+                    .orElse(targetUser.getInstitute());
+            java.util.Set<UUID> instituteSubjectIds = inst.getAssignedSubjects() != null
+                    ? inst.getAssignedSubjects().stream()
+                            .map(com.testshaper.entity.ClassSubject::getId)
+                            .collect(java.util.stream.Collectors.toSet())
+                    : java.util.Collections.emptySet();
+
+            // Filter requested IDs to strictly those belonging to the parent institute's active pool
+            java.util.Set<UUID> validSubjectIds = classSubjectIds.stream()
+                    .filter(instituteSubjectIds::contains)
+                    .collect(java.util.stream.Collectors.toSet());
+
+            java.util.List<com.testshaper.entity.ClassSubject> subjects = classSubjectRepository.findAllById(validSubjectIds);
+            targetUser.setAssignedSubjects(new java.util.HashSet<>(subjects));
+        } else {
+            java.util.List<com.testshaper.entity.ClassSubject> subjects = classSubjectRepository.findAllById(classSubjectIds);
+            targetUser.setAssignedSubjects(new java.util.HashSet<>(subjects));
+        }
+
+        userRepository.save(targetUser);
     }
 }

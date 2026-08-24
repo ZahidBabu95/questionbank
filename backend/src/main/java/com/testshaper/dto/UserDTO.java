@@ -20,6 +20,8 @@ public class UserDTO {
     private String instituteName;
     private String instituteNameEn;
     private String instituteNameBn;
+    private String instituteBranches;
+    private String userInstituteBranches;
     private String instituteMedium;
     private String instituteStatus;
     private String subscriptionPackage;
@@ -27,6 +29,7 @@ public class UserDTO {
     // Institute subscription and usage limits
     private Integer maxTeachers;
     private Integer maxStudents;
+    private Integer maxBranches;
     private Integer maxQuestions;
     private Integer questionsUsedCurrentMonth;
     private Integer aiLimitPerMonth;
@@ -45,6 +48,7 @@ public class UserDTO {
 
     private Set<String> roles;
     private Set<String> permissions;
+    private Set<UUID> assignedSubjectIds;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

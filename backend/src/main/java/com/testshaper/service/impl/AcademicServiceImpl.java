@@ -36,6 +36,7 @@ public class AcademicServiceImpl implements AcademicService {
     private final AcademicSessionRepository sessionRepository;
     private final com.testshaper.repository.InstituteRepository instituteRepository;
     private final com.testshaper.repository.QuestionRepository questionRepository;
+    private final com.testshaper.repository.UserRepository userRepository;
     private final jakarta.persistence.EntityManager entityManager;
 
     private String getTenant() {
@@ -56,20 +57,46 @@ public class AcademicServiceImpl implements AcademicService {
         if (fgacBypass.get()) {
             return false;
         }
-        String tenantId = TenantContext.getTenantId();
-        if (tenantId != null && !"DEFAULT".equals(tenantId)) {
-            try {
-                Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
-                return inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty();
-            } catch (Exception e) {
-                return false;
-            }
-        }
-        return false;
+        return !getFgacAllowedClassSubjectIds().isEmpty();
     }
 
     private java.util.Set<UUID> getFgacAllowedClassSubjectIds() {
         java.util.Set<UUID> allowed = new java.util.HashSet<>();
+        if (fgacBypass.get()) {
+            return allowed;
+        }
+
+        try {
+            String currentEmail = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication() != null 
+                    ? org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName() : null;
+            User currentUser = (currentEmail != null && userRepository != null) 
+                    ? userRepository.findByEmail(currentEmail).orElse(null) : null;
+
+            if (currentUser != null) {
+                boolean isTeacher = currentUser.getRoles().stream().anyMatch(r -> r.getName().equals("TEACHER"));
+                boolean isSuperAdmin = currentUser.getRoles().stream().anyMatch(r -> r.getName().equals("SUPER_ADMIN"));
+
+                if (!isSuperAdmin) {
+                    if (isTeacher && currentUser.getAssignedSubjects() != null && !currentUser.getAssignedSubjects().isEmpty()) {
+                        for (ClassSubject cs : currentUser.getAssignedSubjects()) {
+                            allowed.add(cs.getId());
+                        }
+                        return allowed;
+                    } else if (currentUser.getInstitute() != null) {
+                        Institute inst = instituteRepository.findById(currentUser.getInstitute().getId()).orElse(currentUser.getInstitute());
+                        if (inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
+                            for (ClassSubject cs : inst.getAssignedSubjects()) {
+                                allowed.add(cs.getId());
+                            }
+                            return allowed;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("FGAC user check warning: {}", e.getMessage());
+        }
+
         String tenantId = TenantContext.getTenantId();
         if (tenantId != null && !"DEFAULT".equals(tenantId)) {
             try {
@@ -88,32 +115,30 @@ public class AcademicServiceImpl implements AcademicService {
 
     private java.util.Set<UUID> getFgacAllowedClassIds() {
         java.util.Set<UUID> allowed = new java.util.HashSet<>();
-        String tenantId = TenantContext.getTenantId();
-        if (tenantId != null && !"DEFAULT".equals(tenantId)) {
-            try {
-                Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
-                if (inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
-                    for (ClassSubject cs : inst.getAssignedSubjects()) {
+        java.util.Set<UUID> allowedSubjects = getFgacAllowedClassSubjectIds();
+        if (!allowedSubjects.isEmpty()) {
+            for (UUID csId : allowedSubjects) {
+                classSubjectRepository.findById(csId).ifPresent(cs -> {
+                    if (cs.getAcademicClass() != null) {
                         allowed.add(cs.getAcademicClass().getId());
                     }
-                }
-            } catch (Exception e) { }
+                });
+            }
         }
         return allowed;
     }
 
     private java.util.Set<UUID> getFgacAllowedStreamIds() {
         java.util.Set<UUID> allowed = new java.util.HashSet<>();
-        String tenantId = TenantContext.getTenantId();
-        if (tenantId != null && !"DEFAULT".equals(tenantId)) {
-            try {
-                Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
-                if (inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
-                    for (ClassSubject cs : inst.getAssignedSubjects()) {
+        java.util.Set<UUID> allowedSubjects = getFgacAllowedClassSubjectIds();
+        if (!allowedSubjects.isEmpty()) {
+            for (UUID csId : allowedSubjects) {
+                classSubjectRepository.findById(csId).ifPresent(cs -> {
+                    if (cs.getAcademicClass() != null && cs.getAcademicClass().getStream() != null) {
                         allowed.add(cs.getAcademicClass().getStream().getId());
                     }
-                }
-            } catch (Exception e) { }
+                });
+            }
         }
         return allowed;
     }
@@ -646,24 +671,8 @@ public class AcademicServiceImpl implements AcademicService {
             // ---------------------------------------------------------
             // FINE-GRAINED ACADEMIC ACCESS CONTROL
             // ---------------------------------------------------------
-            java.util.Set<UUID> allowedClassSubjectIds = new java.util.HashSet<>();
-            boolean isRestricted = false;
-            if (!bypassRestrictions) {
-                String tenantId = TenantContext.getTenantId();
-                if (tenantId != null && !"DEFAULT".equals(tenantId)) {
-                    try {
-                        Institute inst = instituteRepository.findById(UUID.fromString(tenantId)).orElse(null);
-                        if (inst != null && inst.getAssignedSubjects() != null && !inst.getAssignedSubjects().isEmpty()) {
-                            isRestricted = true;
-                            for (ClassSubject cs : inst.getAssignedSubjects()) {
-                                allowedClassSubjectIds.add(cs.getId());
-                            }
-                        }
-                    } catch (Exception e) {
-                        log.error("Failed to parse tenant UUID for FGAC", e);
-                    }
-                }
-            }
+            java.util.Set<UUID> allowedClassSubjectIds = !bypassRestrictions ? getFgacAllowedClassSubjectIds() : java.util.Collections.emptySet();
+            boolean isRestricted = !bypassRestrictions && !allowedClassSubjectIds.isEmpty();
 
             // Pre-fetch question counts grouped by classSubject and type
             java.util.Map<UUID, java.util.Map<String, Long>> typeStatsMap = new java.util.HashMap<>();
