@@ -6,20 +6,23 @@ import settingsService from '../../../../../services/settingsService';
 import axios from '../../../../../utils/axios';
 import { useNexusEditor } from '../context/NexusEditorContext';
 import { DEFAULT_SETTINGS } from '../components/DocumentSettings';
-import { formatDuration, parseDurationToMinutes } from '../../../../../utils/formatUtils';
+import { formatDuration, parseDurationToMinutes, parseMarksToNumber } from '../../../../../utils/formatUtils';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
 const resolveInstituteName = (examLanguage, apiInstituteName) => {
+    if (apiInstituteName && typeof apiInstituteName === 'string' && apiInstituteName.trim() !== '') {
+        return apiInstituteName.trim();
+    }
     try {
         const u = JSON.parse(localStorage.getItem('user') || '{}');
         const lang = (examLanguage || '').toUpperCase();
         if (lang === 'ENGLISH') {
-            return u.instituteNameEn || u.instituteName || u.institute?.nameEn || u.institute?.name || apiInstituteName || '';
+            return u.instituteNameEn || u.instituteName || u.institute?.nameEn || u.institute?.name || '';
         }
-        return u.instituteNameBn || u.instituteName || u.institute?.nameBn || u.institute?.name || apiInstituteName || '';
+        return u.instituteNameBn || u.instituteName || u.institute?.nameBn || u.institute?.name || '';
     } catch (e) {
-        return apiInstituteName || '';
+        return '';
     }
 };
 
@@ -635,19 +638,25 @@ export const useExamManager = () => {
                             try {
                                 const parsedSettings = JSON.parse(res.data.docSettingsJson);
                                 if (parsedSettings && typeof parsedSettings === 'object') {
+                                    const examLang = parsedSettings.language || res.data.language || 'BENGALI';
+                                    const explicitInst = (parsedSettings.institute && String(parsedSettings.institute).trim() !== '') 
+                                        ? String(parsedSettings.institute).trim() 
+                                        : (res.data.instituteName && String(res.data.instituteName).trim() !== '') 
+                                            ? String(res.data.instituteName).trim() 
+                                            : '';
                                     if (!parsedSettings.pageSize && !parsedSettings.orientation) {
                                         const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
                                         const mergedSettings = {
                                             ...baseSettings,
                                             ...parsedSettings,
-                                            institute: resolveInstituteName(parsedSettings.language || res.data.language || baseSettings.language || 'BENGALI', parsedSettings.institute || res.data.instituteName || baseSettings.institute),
-                                            subject: res.data.subjectName || parsedSettings.subject || baseSettings.subject,
-                                            className: res.data.className || parsedSettings.className || baseSettings.className,
-                                            exam: res.data.title || parsedSettings.exam || baseSettings.exam,
-                                            time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, parsedSettings.language || res.data.language) : (parsedSettings.time || baseSettings.time),
-                                            totalMarks: res.data.totalMarks || parsedSettings.totalMarks || baseSettings.totalMarks,
+                                            institute: resolveInstituteName(examLang, explicitInst),
+                                            subject: parsedSettings.subject || res.data.subjectName || baseSettings.subject,
+                                            className: parsedSettings.className || res.data.className || baseSettings.className,
+                                            exam: parsedSettings.exam || res.data.title || baseSettings.exam,
+                                            time: parsedSettings.time || (res.data.durationMinutes ? formatDuration(res.data.durationMinutes, examLang) : baseSettings.time),
+                                            totalMarks: (parsedSettings.totalMarks !== undefined && parsedSettings.totalMarks !== null && parsedSettings.totalMarks !== '') ? parsedSettings.totalMarks : (res.data.totalMarks || baseSettings.totalMarks),
                                             year: parsedSettings.year || new Date().getFullYear().toString(),
-                                            language: parsedSettings.language || res.data.language || baseSettings.language || 'BENGALI',
+                                            language: examLang,
                                             sections: parsedSettings.sections && parsedSettings.sections.length > 0 
                                                 ? (dynamicSections.length > 0 ? [...parsedSettings.sections, ...dynamicSections] : parsedSettings.sections)
                                                 : (dynamicSections.length > 0 ? dynamicSections : (blueprintSections || baseSettings.sections))
@@ -655,8 +664,16 @@ export const useExamManager = () => {
                                         setDocSettings(mergedSettings);
                                     } else {
                                         if (dynamicSections.length > 0) parsedSettings.sections = [...(parsedSettings.sections || []), ...dynamicSections];
-                                        const examLang = parsedSettings.language || res.data.language || 'BENGALI';
-                                        parsedSettings.institute = resolveInstituteName(examLang, parsedSettings.institute || res.data.instituteName);
+                                        parsedSettings.institute = resolveInstituteName(examLang, explicitInst);
+                                        if (!parsedSettings.subject && res.data.subjectName) parsedSettings.subject = res.data.subjectName;
+                                        if (!parsedSettings.className && res.data.className) parsedSettings.className = res.data.className;
+                                        if (!parsedSettings.exam && res.data.title) parsedSettings.exam = res.data.title;
+                                        if ((parsedSettings.totalMarks === undefined || parsedSettings.totalMarks === null || parsedSettings.totalMarks === '') && res.data.totalMarks) {
+                                            parsedSettings.totalMarks = res.data.totalMarks;
+                                        }
+                                        if (!parsedSettings.time && res.data.durationMinutes) {
+                                            parsedSettings.time = formatDuration(res.data.durationMinutes, examLang);
+                                        }
                                         setDocSettings(parsedSettings);
                                     }
                                 } else {
@@ -665,33 +682,37 @@ export const useExamManager = () => {
                             } catch (e) {
                                 console.error("Failed to parse docSettingsJson, falling back:", e);
                                 const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
+                                const examLang = res.data.language || baseSettings.language || 'BENGALI';
+                                const explicitInst = (res.data.instituteName && String(res.data.instituteName).trim() !== '') ? String(res.data.instituteName).trim() : '';
                                 setDocSettings(prev => ({
                                     ...prev,
                                     ...baseSettings,
-                                    institute: resolveInstituteName(res.data.language || baseSettings.language || 'BENGALI', res.data.instituteName || baseSettings.institute || prev.institute),
+                                    institute: resolveInstituteName(examLang, explicitInst),
                                     subject: res.data.subjectName || baseSettings.subject || prev.subject,
                                     className: res.data.className || baseSettings.className || prev.className,
                                     exam: res.data.title || baseSettings.exam || prev.exam,
-                                    time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, res.data.language) : (baseSettings.time || prev.time),
+                                    time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, examLang) : (baseSettings.time || prev.time),
                                     totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                     year: new Date().getFullYear().toString(),
-                                    language: res.data.language || baseSettings.language || 'BENGALI',
+                                    language: examLang,
                                     sections: dynamicSections.length > 0 ? dynamicSections : (blueprintSections || baseSettings.sections || prev.sections)
                                 }));
                             }
                         } else {
                             const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
+                            const examLang = res.data.language || baseSettings.language || 'BENGALI';
+                            const explicitInst = (res.data.instituteName && String(res.data.instituteName).trim() !== '') ? String(res.data.instituteName).trim() : '';
                             setDocSettings(prev => ({
                                 ...prev,
                                 ...baseSettings,
-                                institute: resolveInstituteName(res.data.language || baseSettings.language || 'BENGALI', res.data.instituteName || baseSettings.institute || prev.institute),
+                                institute: resolveInstituteName(examLang, explicitInst),
                                 subject: res.data.subjectName || baseSettings.subject || prev.subject,
                                 className: res.data.className || baseSettings.className || prev.className,
                                 exam: res.data.title || baseSettings.exam || prev.exam,
-                                time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, res.data.language) : (baseSettings.time || prev.time),
+                                time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, examLang) : (baseSettings.time || prev.time),
                                 totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                 year: new Date().getFullYear().toString(),
-                                language: res.data.language || baseSettings.language || 'BENGALI',
+                                language: examLang,
                                 sections: dynamicSections.length > 0 ? dynamicSections : (blueprintSections || baseSettings.sections || prev.sections)
                             }));
                         }
@@ -725,27 +746,41 @@ export const useExamManager = () => {
                             try {
                                 const parsedSettings = JSON.parse(res.data.docSettingsJson);
                                 if (parsedSettings && typeof parsedSettings === 'object') {
+                                    const examLang = parsedSettings.language || res.data.language || 'BENGALI';
+                                    const explicitInst = (parsedSettings.institute && String(parsedSettings.institute).trim() !== '') 
+                                        ? String(parsedSettings.institute).trim() 
+                                        : (res.data.instituteName && String(res.data.instituteName).trim() !== '') 
+                                            ? String(res.data.instituteName).trim() 
+                                            : '';
                                     if (!parsedSettings.pageSize && !parsedSettings.orientation) {
                                         const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
                                         const mergedSettings = {
                                             ...baseSettings,
                                             ...parsedSettings,
-                                            institute: resolveInstituteName(parsedSettings.language || res.data.language || baseSettings.language || 'BENGALI', parsedSettings.institute || res.data.instituteName || baseSettings.institute),
-                                            subject: res.data.subjectName || parsedSettings.subject || baseSettings.subject,
-                                            className: res.data.className || parsedSettings.className || baseSettings.className,
-                                            exam: res.data.title || parsedSettings.exam || baseSettings.exam,
-                                            time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, parsedSettings.language || res.data.language) : (parsedSettings.time || baseSettings.time),
-                                            totalMarks: res.data.totalMarks || parsedSettings.totalMarks || baseSettings.totalMarks,
+                                            institute: resolveInstituteName(examLang, explicitInst),
+                                            subject: parsedSettings.subject || res.data.subjectName || baseSettings.subject,
+                                            className: parsedSettings.className || res.data.className || baseSettings.className,
+                                            exam: parsedSettings.exam || res.data.title || baseSettings.exam,
+                                            time: parsedSettings.time || (res.data.durationMinutes ? formatDuration(res.data.durationMinutes, examLang) : baseSettings.time),
+                                            totalMarks: (parsedSettings.totalMarks !== undefined && parsedSettings.totalMarks !== null && parsedSettings.totalMarks !== '') ? parsedSettings.totalMarks : (res.data.totalMarks || baseSettings.totalMarks),
                                             year: parsedSettings.year || new Date().getFullYear().toString(),
-                                            language: parsedSettings.language || res.data.language || baseSettings.language || 'BENGALI',
+                                            language: examLang,
                                             sections: parsedSettings.sections && parsedSettings.sections.length > 0 
                                                 ? (blueprintSections || baseSettings.sections)
                                                 : (blueprintSections || baseSettings.sections)
                                         };
                                         setDocSettings(mergedSettings);
                                     } else {
-                                        const examLang = parsedSettings.language || res.data.language || 'BENGALI';
-                                        parsedSettings.institute = resolveInstituteName(examLang, parsedSettings.institute || res.data.instituteName);
+                                        parsedSettings.institute = resolveInstituteName(examLang, explicitInst);
+                                        if (!parsedSettings.subject && res.data.subjectName) parsedSettings.subject = res.data.subjectName;
+                                        if (!parsedSettings.className && res.data.className) parsedSettings.className = res.data.className;
+                                        if (!parsedSettings.exam && res.data.title) parsedSettings.exam = res.data.title;
+                                        if ((parsedSettings.totalMarks === undefined || parsedSettings.totalMarks === null || parsedSettings.totalMarks === '') && res.data.totalMarks) {
+                                            parsedSettings.totalMarks = res.data.totalMarks;
+                                        }
+                                        if (!parsedSettings.time && res.data.durationMinutes) {
+                                            parsedSettings.time = formatDuration(res.data.durationMinutes, examLang);
+                                        }
                                         setDocSettings(parsedSettings);
                                     }
                                 } else {
@@ -754,33 +789,37 @@ export const useExamManager = () => {
                             } catch (e) {
                                 console.error("Failed to parse docSettingsJson, falling back:", e);
                                 const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
+                                const examLang = res.data.language || baseSettings.language || 'BENGALI';
+                                const explicitInst = (res.data.instituteName && String(res.data.instituteName).trim() !== '') ? String(res.data.instituteName).trim() : '';
                                 setDocSettings(prev => ({
                                     ...prev,
                                     ...baseSettings,
-                                    institute: resolveInstituteName(res.data.language || baseSettings.language || 'BENGALI', res.data.instituteName || baseSettings.institute || prev.institute),
+                                    institute: resolveInstituteName(examLang, explicitInst),
                                     subject: res.data.subjectName || baseSettings.subject || prev.subject,
                                     className: res.data.className || baseSettings.className || prev.className,
                                     exam: res.data.title || baseSettings.exam || prev.exam,
-                                    time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, res.data.language) : (baseSettings.time || prev.time),
+                                    time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, examLang) : (baseSettings.time || prev.time),
                                     totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                     year: new Date().getFullYear().toString(),
-                                    language: res.data.language || baseSettings.language || 'BENGALI',
+                                    language: examLang,
                                     sections: blueprintSections || baseSettings.sections || prev.sections
                                 }));
                             }
                         } else {
                             const baseSettings = subjectDefaultSettings || DEFAULT_SETTINGS;
+                            const examLang = res.data.language || baseSettings.language || 'BENGALI';
+                            const explicitInst = (res.data.instituteName && String(res.data.instituteName).trim() !== '') ? String(res.data.instituteName).trim() : '';
                             setDocSettings(prev => ({
                                 ...prev,
                                 ...baseSettings,
-                                institute: resolveInstituteName(res.data.language || baseSettings.language || 'BENGALI', res.data.instituteName || baseSettings.institute || prev.institute),
+                                institute: resolveInstituteName(examLang, explicitInst),
                                 subject: res.data.subjectName || baseSettings.subject || prev.subject,
                                 className: res.data.className || baseSettings.className || prev.className,
                                 exam: res.data.title || baseSettings.exam || prev.exam,
-                                time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, res.data.language) : (baseSettings.time || prev.time),
+                                time: res.data.durationMinutes ? formatDuration(res.data.durationMinutes, examLang) : (baseSettings.time || prev.time),
                                 totalMarks: res.data.totalMarks || baseSettings.totalMarks || prev.totalMarks,
                                 year: new Date().getFullYear().toString(),
-                                language: res.data.language || baseSettings.language || 'BENGALI',
+                                language: examLang,
                                 sections: blueprintSections || baseSettings.sections || prev.sections
                             }));
                         }
@@ -866,15 +905,20 @@ export const useExamManager = () => {
         setIsSavingDocument(true);
         try {
             const parsedMins = parseDurationToMinutes(docSettings.time);
+            const parsedMarks = parseMarksToNumber(docSettings.totalMarks);
             const payload = {
                 title: docSettings.exam || "Nexus Exam",
                 examCode: "NEXUS-" + Math.floor(Math.random() * 10000),
                 editorMode: editorMode,
                 rawContent: rawContent,
                 docSettingsJson: JSON.stringify(docSettings),
+                instituteName: docSettings.institute || undefined,
+                language: docSettings.language || 'Bangla',
+                examType: docSettings.examType || 'MODEL_TEST',
                 isAutoGenerated: !!id,
                 status: 'DRAFT',
-                ...(parsedMins !== null ? { durationMinutes: parsedMins } : {})
+                ...(parsedMins !== null ? { durationMinutes: parsedMins } : {}),
+                ...(parsedMarks !== null ? { totalMarks: parsedMarks } : {})
             };
 
             if (id) {
@@ -934,15 +978,20 @@ export const useExamManager = () => {
         autoSaveTimerRef.current = setTimeout(async () => {
             try {
                 const parsedMins = parseDurationToMinutes(docSettings.time);
+                const parsedMarks = parseMarksToNumber(docSettings.totalMarks);
                 const payload = {
                     title: docSettings.exam || "Nexus Exam",
                     examCode: "NEXUS-" + Math.floor(Math.random() * 10000),
                     editorMode: editorMode,
                     rawContent: rawContent,
                     docSettingsJson: JSON.stringify(docSettings),
+                    instituteName: docSettings.institute || undefined,
+                    language: docSettings.language || 'Bangla',
+                    examType: docSettings.examType || 'MODEL_TEST',
                     isAutoGenerated: true,
                     status: 'DRAFT',
-                    ...(parsedMins !== null ? { durationMinutes: parsedMins } : {})
+                    ...(parsedMins !== null ? { durationMinutes: parsedMins } : {}),
+                    ...(parsedMarks !== null ? { totalMarks: parsedMarks } : {})
                 };
                 const res = await examService.updateExam(id, payload);
                 invalidateExamCache(id);
@@ -1743,15 +1792,20 @@ export const useExamManager = () => {
         setIsSavingDocument(true);
         try {
             const parsedMins = parseDurationToMinutes(docSettings.time);
+            const parsedMarks = parseMarksToNumber(docSettings.totalMarks);
             const payload = {
                 title: title.trim(),
                 examCode: "NEXUS-" + Math.floor(Math.random() * 10000),
                 editorMode: editorMode,
                 rawContent: rawContent,
                 docSettingsJson: JSON.stringify(docSettings),
+                instituteName: docSettings.institute || undefined,
+                language: docSettings.language || 'Bangla',
+                examType: docSettings.examType || 'MODEL_TEST',
                 isAutoGenerated: false,
                 status: 'DRAFT',
-                ...(parsedMins !== null ? { durationMinutes: parsedMins } : {})
+                ...(parsedMins !== null ? { durationMinutes: parsedMins } : {}),
+                ...(parsedMarks !== null ? { totalMarks: parsedMarks } : {})
             };
             await examService.createManualExam(payload);
             alert(uiLang === 'bn' ? "নতুন ডকুমেন্ট হিসেবে সেভ হয়েছে!" : "Saved as a new Document successfully!");

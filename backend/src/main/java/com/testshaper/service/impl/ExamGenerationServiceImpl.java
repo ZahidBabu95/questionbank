@@ -322,6 +322,8 @@ public class ExamGenerationServiceImpl {
             exam.setDurationMinutes(dto.getDurationMinutes());
         if (dto.getTotalMarks() != null)
             exam.setTotalMarks(dto.getTotalMarks());
+        if (dto.getInstituteName() != null)
+            exam.setInstituteName(dto.getInstituteName());
         if (dto.getHeaderText() != null)
             exam.setHeaderText(dto.getHeaderText());
         if (dto.getFooterText() != null)
@@ -1171,6 +1173,7 @@ public class ExamGenerationServiceImpl {
         dto.setDurationMinutes(exam.getDurationMinutes());
         dto.setTotalMarks(exam.getTotalMarks());
         dto.setTotalQuestions(exam.getTotalQuestions());
+        dto.setInstituteName(exam.getInstituteName());
         dto.setCreatedBy(exam.getCreatedBy());
         dto.setCreatedAt(exam.getCreatedAt());
 

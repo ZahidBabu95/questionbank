@@ -18,6 +18,7 @@ public class ExamSummaryDTO {
     private Integer totalQuestions;
     private String subjectName;
     private String className;
+    private String instituteName;
     private String createdBy;
     private LocalDateTime createdAt;
     private Integer submissionCount;

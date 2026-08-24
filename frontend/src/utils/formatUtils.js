@@ -102,3 +102,18 @@ export const parseDurationToMinutes = (timeStr) => {
 
     return null;
 };
+
+export const parseMarksToNumber = (marksStr) => {
+    if (marksStr === null || marksStr === undefined) return null;
+    let str = marksStr.toString().trim();
+    if (!str) return null;
+    const bnToEn = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+    const englishDigitsStr = str.replace(/[০-৯]/g, m => bnToEn[m]);
+    const match = englishDigitsStr.match(/(\d+(\.\d+)?)/);
+    if (match) {
+        const val = parseFloat(match[1]);
+        return isNaN(val) ? null : val;
+    }
+    return null;
+};
+

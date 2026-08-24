@@ -94,14 +94,33 @@ public class ManualExamServiceImpl {
     public ExamDTO updateExam(UUID examId, ManualExamRequest req) {
         Exam exam = getExamOrThrow(examId);
 
-        exam.setTitle(req.getTitle());
-        exam.setExamType(req.getExamType());
-        exam.setDurationMinutes(req.getDurationMinutes());
-        exam.setTotalMarks(req.getTotalMarks());
-        exam.setLanguage(req.getLanguage());
-        exam.setInstructions(req.getInstructions());
-        exam.setInstituteName(req.getInstituteName());
-        exam.setHeaderText(req.getHeaderText());
+        if (req.getTitle() != null && !req.getTitle().isBlank()) {
+            exam.setTitle(req.getTitle());
+        }
+        if (req.getExamType() != null) {
+            exam.setExamType(req.getExamType());
+        }
+        if (req.getDurationMinutes() != null) {
+            exam.setDurationMinutes(req.getDurationMinutes());
+        }
+        if (req.getTotalMarks() != null) {
+            exam.setTotalMarks(req.getTotalMarks());
+        }
+        if (req.getLanguage() != null && !req.getLanguage().isBlank()) {
+            exam.setLanguage(req.getLanguage());
+        }
+        if (req.getInstructions() != null) {
+            exam.setInstructions(req.getInstructions());
+        }
+        if (req.getInstituteName() != null) {
+            exam.setInstituteName(req.getInstituteName());
+        }
+        if (req.getHeaderText() != null) {
+            exam.setHeaderText(req.getHeaderText());
+        }
+        if (req.getClassSubjectId() != null) {
+            classSubjectRepository.findById(req.getClassSubjectId()).ifPresent(exam::setClassSubject);
+        }
         exam.setShuffleQuestions(req.isShuffleQuestions());
         exam.setShuffleOptions(req.isShuffleOptions());
 

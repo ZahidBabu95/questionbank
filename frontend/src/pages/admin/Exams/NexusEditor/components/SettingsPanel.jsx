@@ -7,19 +7,23 @@ import { Lock, Unlock, AlignLeft, AlignCenter, AlignRight, AlignJustify, Trash2,
 export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang, documentQuestions }) {
     const t = UI_TEXT[uiLang];
     const [isEditMode, setIsEditMode] = React.useState(true);
+    const [isInstCustom, setIsInstCustom] = React.useState(false);
     const [sectionTabs, setSectionTabs] = React.useState({});
     const [collapsedSections, setCollapsedSections] = React.useState({});
 
     const profileInstituteName = React.useMemo(() => {
+        if (s.institute && typeof s.institute === 'string' && s.institute.trim() !== '') {
+            return s.institute.trim();
+        }
         try {
             const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
             const lang = (s.language || '').toUpperCase();
             if (lang === 'ENGLISH') {
-                return storedUser.instituteNameEn || storedUser.instituteName || storedUser.institute?.nameEn || storedUser.institute?.name || storedUser.name || s.institute || '';
+                return storedUser.instituteNameEn || storedUser.instituteName || storedUser.institute?.nameEn || storedUser.institute?.name || storedUser.name || '';
             }
-            return storedUser.instituteNameBn || storedUser.instituteName || storedUser.institute?.nameBn || storedUser.institute?.name || storedUser.name || s.institute || '';
+            return storedUser.instituteNameBn || storedUser.instituteName || storedUser.institute?.nameBn || storedUser.institute?.name || storedUser.name || '';
         } catch (e) {
-            return s.institute || '';
+            return '';
         }
     }, [s.language, s.institute]);
 
@@ -525,24 +529,37 @@ export default function SettingsPanel({ s, u, uMulti, activeTab, uiLang, documen
                                 <div className="w-1.5 h-4 bg-indigo-500 rounded-full"></div>
                                 <h3 className="text-xs font-bold text-slate-700 uppercase tracking-widest">{t.institute || 'Institute Details'}</h3>
                             </div>
-                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                <Lock size={10} />
-                                <span>{uiLang === 'bn' ? 'প্রোফাইল থেকে লকড' : 'Locked from Profile'}</span>
-                            </span>
+                            <button 
+                                type="button"
+                                onClick={() => setIsInstCustom(prev => !prev)}
+                                className="text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer"
+                                title={uiLang === 'bn' ? 'প্রতিষ্ঠানের নাম পরিবর্তন করতে ক্লিক করুন' : 'Click to customize institute name'}
+                            >
+                                {isInstCustom ? <Unlock size={10} className="text-emerald-600" /> : <Lock size={10} />}
+                                <span>{isInstCustom ? (uiLang === 'bn' ? 'কাস্টম এডিট মোড' : 'Custom Edit Mode') : (uiLang === 'bn' ? 'লকড (এডিট করতে ক্লিক করুন)' : 'Locked (Click to edit)')}</span>
+                            </button>
                         </div>
                         <div className="space-y-2">
                             <FL label={t.name} toggleKey="showInstitute" toggleVal={s.showInstitute!==false} onToggle={u}>
-                                <div className="relative group">
-                                    <input 
-                                        type="text" 
-                                        value={profileInstituteName || s.institute || ''} 
-                                        disabled={true} 
-                                        readOnly={true}
-                                        className="w-full text-[13px] px-2.5 py-1.5 border border-slate-200 rounded-md bg-slate-100/90 text-slate-700 font-bold cursor-not-allowed select-none pl-8 shadow-inner" 
-                                        title={uiLang === 'bn' ? 'প্রতিষ্ঠানের নাম পরিবর্তনযোগ্য নয় (প্রোফাইল থেকে সংগৃহীত)' : 'Institute name is locked and loaded from profile'}
+                                {isInstCustom ? (
+                                    <FieldDisplay 
+                                        isEdit={true} 
+                                        value={s.institute || profileInstituteName || ''} 
+                                        onChange={v => u("institute", v)} 
                                     />
-                                    <Lock size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                </div>
+                                ) : (
+                                    <div className="relative group">
+                                        <input 
+                                            type="text" 
+                                            value={s.institute || profileInstituteName || ''} 
+                                            disabled={true} 
+                                            readOnly={true}
+                                            className="w-full text-[13px] px-2.5 py-1.5 border border-slate-200 rounded-md bg-slate-100/90 text-slate-700 font-bold cursor-not-allowed select-none pl-8 shadow-inner" 
+                                            title={uiLang === 'bn' ? 'প্রতিষ্ঠানের নাম (এডিট করতে উপরের লক বাটনে ক্লিক করুন)' : 'Institute name (Click lock button to edit)'}
+                                        />
+                                        <Lock size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    </div>
+                                )}
                             </FL>
                             <FL label={t.board} toggleKey="showBoard" toggleVal={s.showBoard} onToggle={u}>
                                 <FieldDisplay isEdit={isEditMode} value={s.board} onChange={v=>u("board",v)} />
