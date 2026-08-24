@@ -115,6 +115,14 @@ public class DashboardServiceImpl implements DashboardService {
                         return questionRepository.countApprovedQuestions();
                 }
                 
+                // If user is a teacher with specific assigned subjects
+                if (currentUser.getAssignedSubjects() != null && !currentUser.getAssignedSubjects().isEmpty()) {
+                        java.util.List<UUID> subjectIds = currentUser.getAssignedSubjects().stream()
+                                        .map(com.testshaper.entity.ClassSubject::getId)
+                                        .collect(Collectors.toList());
+                        return questionRepository.countApprovedQuestionsForSubjects(subjectIds);
+                }
+
                 if (currentUser.getInstitute() != null) {
                         java.util.Set<com.testshaper.entity.ClassSubject> assignedSubjects = currentUser.getInstitute().getAssignedSubjects();
                         if (assignedSubjects != null && !assignedSubjects.isEmpty()) {
@@ -298,26 +306,31 @@ public class DashboardServiceImpl implements DashboardService {
 
                 User currentUser = getCurrentUser();
                 List<DashboardStatsDTO.SubjectQuestionStat> subjectQuestions = new ArrayList<>();
-                if (currentUser != null && currentUser.getInstitute() != null) {
-                        java.util.Set<com.testshaper.entity.ClassSubject> assignedSubjects = currentUser.getInstitute().getAssignedSubjects();
-                        if (assignedSubjects != null && !assignedSubjects.isEmpty()) {
-                                for (com.testshaper.entity.ClassSubject cs : assignedSubjects) {
-                                        String name = (cs.getSubject() != null) ? cs.getSubject().getName() : "Unassigned";
-                                        String className = (cs.getAcademicClass() != null) ? cs.getAcademicClass().getName() : "General";
-                                        String levelName = (cs.getAcademicClass() != null && cs.getAcademicClass().getStream() != null && cs.getAcademicClass().getStream().getLevel() != null) 
-                                                        ? cs.getAcademicClass().getStream().getLevel().getName() : "General";
-                                        Boolean isEng = (cs.getSubject() != null) ? cs.getSubject().isEnglishVersion() : false;
-                                        String version = isEng ? "English Version" : "Bangla Version";
-                                        long count = classSubjectQuestionCounts.getOrDefault(cs.getId(), 0L);
+                java.util.Set<com.testshaper.entity.ClassSubject> effectiveSubjects = null;
+                if (currentUser != null) {
+                        if (currentUser.getAssignedSubjects() != null && !currentUser.getAssignedSubjects().isEmpty()) {
+                                effectiveSubjects = currentUser.getAssignedSubjects();
+                        } else if (currentUser.getInstitute() != null && currentUser.getInstitute().getAssignedSubjects() != null) {
+                                effectiveSubjects = currentUser.getInstitute().getAssignedSubjects();
+                        }
+                }
+                if (effectiveSubjects != null && !effectiveSubjects.isEmpty()) {
+                        for (com.testshaper.entity.ClassSubject cs : effectiveSubjects) {
+                                String name = (cs.getSubject() != null) ? cs.getSubject().getName() : "Unassigned";
+                                String className = (cs.getAcademicClass() != null) ? cs.getAcademicClass().getName() : "General";
+                                String levelName = (cs.getAcademicClass() != null && cs.getAcademicClass().getStream() != null && cs.getAcademicClass().getStream().getLevel() != null) 
+                                                ? cs.getAcademicClass().getStream().getLevel().getName() : "General";
+                                Boolean isEng = (cs.getSubject() != null) ? cs.getSubject().isEnglishVersion() : false;
+                                String version = isEng ? "English Version" : "Bangla Version";
+                                long count = classSubjectQuestionCounts.getOrDefault(cs.getId(), 0L);
 
-                                        subjectQuestions.add(DashboardStatsDTO.SubjectQuestionStat.builder()
-                                                        .subjectName(name)
-                                                        .className(className)
-                                                        .levelName(levelName)
-                                                        .version(version)
-                                                        .count(count)
-                                                        .build());
-                                }
+                                subjectQuestions.add(DashboardStatsDTO.SubjectQuestionStat.builder()
+                                                .subjectName(name)
+                                                .className(className)
+                                                .levelName(levelName)
+                                                .version(version)
+                                                .count(count)
+                                                .build());
                         }
                 }
 
@@ -340,12 +353,18 @@ public class DashboardServiceImpl implements DashboardService {
                                         .anyMatch(r -> r.getName().equals("SUPER_ADMIN") || r.getName().equals("ROLE_SUPER_ADMIN"))
                                         || "admin".equalsIgnoreCase(currentUser.getEmail());
                         
-                        if (!isSuperAdmin && currentUser.getInstitute() != null) {
-                                java.util.Set<com.testshaper.entity.ClassSubject> assigned = currentUser.getInstitute().getAssignedSubjects();
-                                if (assigned != null && !assigned.isEmpty()) {
-                                        allowedClassSubjectIds = assigned.stream()
+                        if (!isSuperAdmin) {
+                                if (currentUser.getAssignedSubjects() != null && !currentUser.getAssignedSubjects().isEmpty()) {
+                                        allowedClassSubjectIds = currentUser.getAssignedSubjects().stream()
                                                         .map(com.testshaper.entity.ClassSubject::getId)
                                                         .collect(Collectors.toSet());
+                                } else if (currentUser.getInstitute() != null) {
+                                        java.util.Set<com.testshaper.entity.ClassSubject> assigned = currentUser.getInstitute().getAssignedSubjects();
+                                        if (assigned != null && !assigned.isEmpty()) {
+                                                allowedClassSubjectIds = assigned.stream()
+                                                                .map(com.testshaper.entity.ClassSubject::getId)
+                                                                .collect(Collectors.toSet());
+                                        }
                                 }
                         }
                 }

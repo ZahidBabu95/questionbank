@@ -566,6 +566,15 @@ const Dashboard = ({ view = 'overview' }) => {
         ? Math.round((activeLevelBooksWithQs / activeLevelTotalBooks) * 100) 
         : 0;
 
+    // Total approved questions across the user's active/accessible subjects
+    const totalActiveApprovedQuestions = useMemo(() => {
+        if (approvedQuestionsCount > 0) return approvedQuestionsCount;
+        if (subjectQuestions && subjectQuestions.length > 0) {
+            return subjectQuestions.reduce((sum, s) => sum + (Number(s.count) || 0), 0);
+        }
+        return 0;
+    }, [approvedQuestionsCount, subjectQuestions]);
+
     return (
         <motion.div 
             className="space-y-5 md:space-y-6 lg:space-y-7"
@@ -776,8 +785,8 @@ const Dashboard = ({ view = 'overview' }) => {
                         <KPICard title={t('db_kpi_active_institutes')} count={activeInstitutes.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} trend={instituteTrend || 0} icon={BookOpen} gradient="bg-gradient-to-br from-indigo-500 to-secondary" />
                         <KPICard 
                             title={t('db_kpi_approved_qs')} 
-                            count={(subjectQuestions?.length || 0).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
-                            subValue={globalQuestionsCount.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
+                            count={totalActiveApprovedQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
+                            subValue={globalQuestionsCount > 0 ? globalQuestionsCount.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US') : undefined}
                             trend={questionTrend || 0} 
                             icon={FileQuestion} 
                             gradient="bg-gradient-to-br from-violet-500 to-purple-600" 
@@ -845,8 +854,8 @@ const Dashboard = ({ view = 'overview' }) => {
                         />
                         <KPICard 
                             title={t('db_kpi_approved_qs')} 
-                            count={(subjectQuestions?.length || 0).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
-                            subValue={globalQuestionsCount.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')}
+                            count={totalActiveApprovedQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
+                            subValue={globalQuestionsCount > 0 ? globalQuestionsCount.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US') : undefined}
                             trend={0} 
                             icon={Layers} 
                             gradient="bg-gradient-to-br from-violet-500 to-purple-600" 
