@@ -370,74 +370,6 @@ const Dashboard = ({ view = 'overview' }) => {
         setLoadingBooklet(true);
         setBookletData(null);
 
-        if (typeof submissionId === 'string' && submissionId.startsWith('sub-mock-')) {
-            setTimeout(() => {
-                const mockBooklet = {
-                    studentName: submissionId === 'sub-mock-1' ? (currentLang === 'bn' ? 'তাহমিদ হাসান রনি' : 'Tahmid Hasan Roni') : (currentLang === 'bn' ? 'আফরিন সুলতানা' : 'Afrin Sultana'),
-                    studentRoll: submissionId === 'sub-mock-1' ? '১০১' : '১০২',
-                    className: currentLang === 'bn' ? '১০ম শ্রেণী' : 'Class 10',
-                    score: submissionId === 'sub-mock-1' ? 32 : 38,
-                    totalMarks: 40,
-                    answers: [
-                        {
-                            questionId: 'q-mock-1',
-                            questionText: currentLang === 'bn' ? 'কোন রশ্মির ভেদন ক্ষমতা সবচেয়ে বেশি?' : 'Which ray has the highest penetrating power?',
-                            stimulus: currentLang === 'bn' ? 'একটি তেজস্ক্রিয় পরীক্ষার সময় আলফা, বিটা এবং গামা রশ্মি নির্গত হয়।' : 'During a radioactive experiment, Alpha, Beta, and Gamma rays are emitted.',
-                            explanation: currentLang === 'bn' ? 'গামী রশ্মির চার্জ এবং ভর শূন্য হওয়ায় এর গতি ও ভেদন ক্ষমতা সবচেয়ে বেশি।' : 'Since Gamma rays have zero charge and mass, they have the highest speed and penetrating power.',
-                            selectedOptionId: 'opt-mock-3',
-                            isCorrect: true,
-                            isSkipped: false,
-                            marksObtained: 1,
-                            marks: 1,
-                            options: [
-                                { id: 'opt-mock-1', optionText: currentLang === 'bn' ? 'আলফা রশ্মি' : 'Alpha Ray', isCorrect: false },
-                                { id: 'opt-mock-2', optionText: currentLang === 'bn' ? 'বিটা রশ্মি' : 'Beta Ray', isCorrect: false },
-                                { id: 'opt-mock-3', optionText: currentLang === 'bn' ? 'গামা রশ্মি' : 'Gamma Ray', isCorrect: true },
-                                { id: 'opt-mock-4', optionText: currentLang === 'bn' ? 'এক্স-রে' : 'X-Ray', isCorrect: false }
-                            ]
-                        },
-                        {
-                            questionId: 'q-mock-2',
-                            questionText: currentLang === 'bn' ? 'নিউটনের গতির দ্বিতীয় সূত্র থেকে কীসের পরিমাপ পাওয়া যায়?' : 'What measurement is obtained from Newton\'s second law of motion?',
-                            stimulus: null,
-                            explanation: currentLang === 'bn' ? 'নিউটনের দ্বিতীয় সূত্র (F = ma) বলের গুণগত ও পরিমাণগত পরিমাপ প্রদান করে।' : 'Newton\'s second law (F = ma) provides the qualitative and quantitative measurement of force.',
-                            selectedOptionId: 'opt-mock-5',
-                            isCorrect: true,
-                            isSkipped: false,
-                            marksObtained: 1,
-                            marks: 1,
-                            options: [
-                                { id: 'opt-mock-5', optionText: currentLang === 'bn' ? 'বল (Force)' : 'Force', isCorrect: true },
-                                { id: 'opt-mock-6', optionText: currentLang === 'bn' ? 'ভরবেগ (Momentum)' : 'Momentum', isCorrect: false },
-                                { id: 'opt-mock-7', optionText: currentLang === 'bn' ? 'ত্বরণ (Acceleration)' : 'Acceleration', isCorrect: false },
-                                { id: 'opt-mock-8', optionText: currentLang === 'bn' ? 'জড়তা (Inertia)' : 'Inertia', isCorrect: false }
-                            ]
-                        },
-                        {
-                            questionId: 'q-mock-3',
-                            questionText: currentLang === 'bn' ? 'শব্দের বেগ কোন মাধ্যমে সবচেয়ে বেশি?' : 'In which medium is the speed of sound highest?',
-                            stimulus: null,
-                            explanation: currentLang === 'bn' ? 'কঠিন মাধ্যমে অণুগুলোর পারস্পরিক আকর্ষণ সবচেয়ে বেশি হওয়ায় শব্দ দ্রুত সঞ্চালিত হয়।' : 'Sound travels fastest in solid mediums because the molecular attraction is strongest.',
-                            selectedOptionId: 'opt-mock-10',
-                            isCorrect: false,
-                            isSkipped: false,
-                            marksObtained: 0,
-                            marks: 1,
-                            options: [
-                                { id: 'opt-mock-9', optionText: currentLang === 'bn' ? 'বায়বীয় (Gas)' : 'Gas', isCorrect: false },
-                                { id: 'opt-mock-10', optionText: currentLang === 'bn' ? 'তরল (Liquid)' : 'Liquid', isCorrect: false },
-                                { id: 'opt-mock-11', optionText: currentLang === 'bn' ? 'কঠিন (Solid)' : 'Solid', isCorrect: true },
-                                { id: 'opt-mock-12', optionText: currentLang === 'bn' ? 'শূন্যস্থান (Vacuum)' : 'Vacuum', isCorrect: false }
-                            ]
-                        }
-                    ]
-                };
-                setBookletData(mockBooklet);
-                setLoadingBooklet(false);
-            }, 500);
-            return;
-        }
-
         try {
             const res = await axios.get(`/v1/teacher/results/${submissionId}`);
             if (res.data) {
@@ -606,12 +538,7 @@ const Dashboard = ({ view = 'overview' }) => {
         return <StudentDashboard user={user} />;
     }
 
-    const mockExams = [
-        { id: 'mock-1', title: currentLang === 'bn' ? 'অধ্যায় ৩: অর্গানিক কেমিস্ট্রি কুইজ' : 'Chapter 3: Organic Chemistry Quiz', className: currentLang === 'bn' ? '১১শ শ্রেণী' : 'Class 11', subject: currentLang === 'bn' ? 'রসায়ন' : 'Chemistry', mode: 'ONLINE', progress: 100, count: '45/45' },
-        { id: 'mock-2', title: currentLang === 'bn' ? 'পদার্থবিজ্ঞান হাফ ইয়ার্লি মডেল টেস্ট' : 'Physics Half Yearly Model Test', className: currentLang === 'bn' ? '১০ম শ্রেণী' : 'Class 10', subject: currentLang === 'bn' ? 'পদার্থবিজ্ঞান' : 'Physics', mode: 'OMR', progress: 85, count: '34/40' },
-        { id: 'mock-3', title: currentLang === 'bn' ? 'তথ্য ও যোগাযোগ প্রযুক্তি উইকলি ক্লাস টেস্ট' : 'ICT Weekly Class Test', className: currentLang === 'bn' ? '৯ম শ্রেণী' : 'Class 9', subject: currentLang === 'bn' ? 'তথ্য ও যোগাযোগ প্রযুক্তি' : 'ICT', mode: 'OMR', progress: 40, count: '16/40' },
-    ];
-    const displayExams = recentExams.length > 0 ? recentExams : mockExams;
+    const displayExams = Array.isArray(recentExams) ? recentExams : [];
 
     // Helper lists for Academic Hierarchy Modal
     const levelsList = stats?.classStats
@@ -845,8 +772,8 @@ const Dashboard = ({ view = 'overview' }) => {
             <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
                 {activeRoleView === 'admin' && (
                     <>
-                        <KPICard title={t('db_kpi_total_users')} count={totalUsers.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} trend={userTrend} icon={Users} gradient="bg-gradient-to-br from-blue-500 to-primary" />
-                        <KPICard title={t('db_kpi_active_institutes')} count={activeInstitutes.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} trend={instituteTrend} icon={BookOpen} gradient="bg-gradient-to-br from-indigo-500 to-secondary" />
+                        <KPICard title={t('db_kpi_total_users')} count={totalUsers.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} trend={userTrend || 0} icon={Users} gradient="bg-gradient-to-br from-blue-500 to-primary" />
+                        <KPICard title={t('db_kpi_active_institutes')} count={activeInstitutes.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} trend={instituteTrend || 0} icon={BookOpen} gradient="bg-gradient-to-br from-indigo-500 to-secondary" />
                         <KPICard 
                             title={t('db_kpi_approved_qs')} 
                             count={(subjectQuestions?.length || 0).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
@@ -870,14 +797,14 @@ const Dashboard = ({ view = 'overview' }) => {
                     <>
                         <KPICard 
                             title={t('db_kpi_registered_students')} 
-                            count={Math.max(1, Math.round(totalUsers * 0.85)).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
-                            trend={userTrend} 
+                            count={(stats?.totalStudents ?? 0).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
+                            trend={0} 
                             icon={Users} 
                             gradient="bg-gradient-to-br from-blue-500 to-primary" 
                         />
                         <KPICard 
                             title={t('db_kpi_active_teachers')} 
-                            count={Math.max(1, Math.round(totalUsers * 0.15)).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
+                            count={(stats?.totalTeachers ?? 0).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
                             trend={0} 
                             icon={BookOpen} 
                             gradient="bg-gradient-to-br from-indigo-500 to-secondary" 
@@ -885,14 +812,14 @@ const Dashboard = ({ view = 'overview' }) => {
                         <KPICard 
                             title={t('db_kpi_total_questions_tenant')} 
                             count={totalQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
-                            trend={questionTrend || 0} 
+                            trend={0} 
                             icon={FileQuestion} 
                             gradient="bg-gradient-to-br from-violet-500 to-purple-600" 
                         />
                         <KPICard 
                             title={t('db_kpi_omr_evaluated')} 
-                            count={((examsConducted * 35) || 540).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
-                            trend={examTrend || 0} 
+                            count={(stats?.omrEvaluatedCount ?? examsConducted ?? 0).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
+                            trend={0} 
                             icon={FileText} 
                             gradient="bg-gradient-to-br from-emerald-500 to-teal-600" 
                             onClick={() => navigate('/omr/results')}
@@ -904,14 +831,14 @@ const Dashboard = ({ view = 'overview' }) => {
                         <KPICard 
                             title={t('db_kpi_contributed_qs')} 
                             count={totalQuestions.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
-                            trend={questionTrend || 0} 
+                            trend={0} 
                             icon={FileQuestion} 
                             gradient="bg-gradient-to-br from-blue-500 to-primary" 
                         />
                         <KPICard 
                             title={t('db_kpi_my_exams_count')} 
                             count={examsConducted.toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
-                            trend={examTrend || 0} 
+                            trend={0} 
                             icon={Activity} 
                             gradient="bg-gradient-to-br from-indigo-500 to-secondary" 
                             onClick={() => navigate('/exams/generate/saved')}
@@ -927,7 +854,7 @@ const Dashboard = ({ view = 'overview' }) => {
                         />
                         <KPICard 
                             title={t('db_kpi_omr_evaluated')} 
-                            count={((examsConducted * 24) || 128).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
+                            count={(stats?.omrEvaluatedCount ?? examsConducted ?? 0).toLocaleString(currentLang === 'bn' ? 'bn-BD' : 'en-US')} 
                             trend={0} 
                             icon={FileText} 
                             gradient="bg-gradient-to-br from-emerald-500 to-teal-600" 
@@ -1144,7 +1071,7 @@ const Dashboard = ({ view = 'overview' }) => {
 
 
             {/* ─── Online Exams & OMR Monitor ─── */}
-            {activeRoleView !== 'student' && (
+            {activeRoleView !== 'student' && displayExams && displayExams.length > 0 && (
                 <motion.div variants={itemVariants} className="bg-white/80 backdrop-blur-xl p-5 md:p-7 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-white">
                     <div className="flex items-center justify-between mb-6">
                         <div>
@@ -1292,7 +1219,7 @@ const Dashboard = ({ view = 'overview' }) => {
             )}
 
             {/* ─── Charts Section ─── */}
-            {activeRoleView !== 'student' && hasPerm('REPORTS', 'VIEW') && (
+            {activeRoleView !== 'student' && hasPerm('REPORTS', 'VIEW') && activityAnalytics && activityAnalytics.length > 0 && (
                 <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-6">
                     {/* Growth Chart */}
                     <div className="bg-white/80 backdrop-blur-xl p-5 md:p-7 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-white lg:col-span-2 relative overflow-hidden">
@@ -1435,7 +1362,7 @@ const Dashboard = ({ view = 'overview' }) => {
             )}
 
             {/* ─── Recent Activity ─── */}
-            {isSuperAdminUser && (
+            {isSuperAdminUser && recentActivities && recentActivities.length > 0 && (
             <motion.div variants={itemVariants} className="bg-white/80 backdrop-blur-xl p-5 md:p-7 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-white">
                 <div className="flex items-center justify-between mb-6">
                     <h3 className="text-sm md:text-base font-bold text-slate-900">{t('db_chart_recent')}</h3>
